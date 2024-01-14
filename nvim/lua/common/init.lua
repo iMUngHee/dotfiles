@@ -4,5 +4,5 @@
 --
 --]]
 
-require "general.options"
-require "general.mappings"
+require "common.options"
+require "common.mappings"
