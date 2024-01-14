@@ -5,10 +5,7 @@
 --
 --]]
 
-local g = vim.g
 local opt = vim.opt
-
-g.mapleader = " "
 
 opt.laststatus = 3
 opt.showmode = false

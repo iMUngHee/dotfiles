@@ -1,5 +1,11 @@
 return {
+  "nvim-lua/plenary.nvim",
 	"folke/neodev.nvim",
+  {
+    "folke/trouble.nvim",
+    config = function ()
+    end
+  },
 	{
 		"folke/which-key.nvim",
 		event = "VeryLazy"
@@ -21,7 +27,8 @@ return {
 		config = function ()
 			local configs = require "nvim-treesitter.configs"
 			configs.setup({
-				ensure_installed = { "lua" },
+				ensure_installed = { "lua", "vim", "vimdoc" },
+        auto_install = true,
 				highlight = {
 					enable = true,
 					use_languagetree = true,
@@ -30,4 +37,41 @@ return {
 			})
 		end
 	},
+  {
+    "neovim/nvim-lspconfig",
+    dependencies = {
+      "williamboman/mason.nvim",
+      "williamboman/mason-lspconfig.nvim",
+      "hrsh7th/cmp-nvim-lsp",
+      "hrsh7th/cmp-buffer",
+      "hrsh7th/cmp-path",
+      "hrsh7th/cmp-cmdline",
+      "hrsh7th/nvim-cmp",
+    },
+    config = function ()
+      local mason = require("mason")
+      local mason_lspconfig = require("mason-lspconfig")
+      local cmp = require("cmp")
+
+      mason.setup()
+      mason_lspconfig.setup({
+        ensure_installed= {
+          "lua_ls",
+        },
+        handlers = {
+          function (server_name)
+            local capabilities = require('cmp_nvim_lsp').default_capabilities()
+            require("lspconfig")[server_name].setup {
+              capabilities = capabilities
+            }
+          end,
+        }
+      })
+      cmp.setup({
+        sources = cmp.config.sources({
+          { name = 'nvim_lsp' }
+        }, { name = "buffer" })
+      })
+    end
+  },
 }
