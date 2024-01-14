@@ -1,4 +1,4 @@
-require "general"
+require "common"
 
 local lazypath = vim.fn.stdpath "data" .. "/lazy/lazy.nvim"
 
