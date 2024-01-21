@@ -1,5 +1,12 @@
+# macos
 .DS_Store
+iterm2/
 
+# backup file
 *.bak
 
+# tmux
 tmux/plugins/
+
+# personal
+thefuck/
