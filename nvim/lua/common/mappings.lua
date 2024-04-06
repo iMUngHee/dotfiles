@@ -9,6 +9,7 @@ local g = vim.g
 local keymap = vim.keymap
 
 g.mapleader = " "
+g.maplocalleader = " "
 
 -- Clear highlights
 keymap.set("n", "<ESC>", "<cmd> noh <CR>", { desc = "Clear highlights" })
