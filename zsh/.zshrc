@@ -1,4 +1,5 @@
 export ZSH="$HOME/.oh-my-zsh"
+export ZSH_CUSTOM="$ZDOTDIR/custom"
 export LANG=en_US.UTF-8
 
 ZSH_THEME="dracula"
@@ -10,7 +11,7 @@ plugins=(
 )
 prompt_context() {}
 
-source $ZSH/custom/plugins/zsh-syntax-highlighting/dracula_theme.sh
+source $ZSH_CUSTOM/plugins/zsh-syntax-highlighting/dracula_theme.sh
 
 source $ZSH/oh-my-zsh.sh
 

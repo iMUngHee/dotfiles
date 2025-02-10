@@ -1,4 +1,5 @@
 /*
+.DS_Store
 
 # Included list
 !alacritty/
@@ -15,3 +16,5 @@ tmux/plugins/
 # zsh
 zsh/*
 !zsh/.zshrc
+!zsh/custom
+zsh/**/.git
