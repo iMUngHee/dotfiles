@@ -11,7 +11,7 @@ plugins=(
 )
 prompt_context() {}
 
-source $ZSH_CUSTOM/plugins/zsh-syntax-highlighting/dracula_theme.sh
+source $ZSH_CUSTOM/themes/dracula_theme.sh
 
 source $ZSH/oh-my-zsh.sh
 
