@@ -2,13 +2,9 @@
 
 # Included list
 !alacritty/
-!alacritty/**
 !nvim/
-!nvim/**
 !tmux/
-!tmux/**
 !zsh/
-!zsh/**
 !.ideavimrc
 !.gitignore
 !README.md
