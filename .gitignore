@@ -1,17 +1,21 @@
-# macos
-.DS_Store
-iterm2/
+./*
 
-# backup file
-*.bak
+# Included list
+!./alacritty/
+!./alacritty/**
+!./nvim/
+!./nvim/**
+!./tmux/
+!./tmux/**
+!./zsh/
+!./zsh/**
+!./.ideavimrc
+!./.gitignore
+!./README.md
 
 # tmux
 tmux/plugins/
 
-# private
-thefuck/
-jgit/
-wireshark/
-
+# zsh
 zsh/*
 !zsh/.zshrc
