@@ -14,7 +14,8 @@ return {
     event = "VeryLazy"
   },
   {
-    'maxmx03/dracula.nvim',
+    'Mofiqul/dracula.nvim',
+    -- 'maxmx03/dracula.nvim',
     lazy = false,
     priority = 1000,
     config = function ()
@@ -30,7 +31,7 @@ return {
     config = function ()
       local configs = require "nvim-treesitter.configs"
       configs.setup({
-        ensure_installed = { "lua", "vim", "vimdoc" },
+        ensure_installed = { "c", "lua", "vim", "vimdoc" },
         auto_install = true,
         highlight = {
           enable = true,
@@ -45,11 +46,15 @@ return {
     dependencies = {
       "williamboman/mason.nvim",
       "williamboman/mason-lspconfig.nvim",
-      "hrsh7th/cmp-nvim-lsp",
-      "hrsh7th/cmp-buffer",
-      "hrsh7th/cmp-path",
-      "hrsh7th/cmp-cmdline",
-      "hrsh7th/nvim-cmp",
+
+      --
+
+      {
+        "L3MON4D3/LuaSnip",
+        dependencies = {
+          "rafamadriz/friendly-snippets",
+        }
+      },
       {
         "windwp/nvim-autopairs",
         opts = {
@@ -62,17 +67,27 @@ return {
           local cmp_autopairs = require "nvim-autopairs.completion.cmp"
           require("cmp").event:on("confirm_done", cmp_autopairs.on_confirm_done())
         end
-      }
+      },
+
+      --
+
+      "hrsh7th/nvim-cmp",
+      "hrsh7th/cmp-nvim-lsp",
+      "hrsh7th/cmp-buffer",
+      "hrsh7th/cmp-path",
     },
     config = function ()
       local mason = require("mason")
       local mason_lspconfig = require("mason-lspconfig")
       local cmp = require("cmp")
+      local luasnip = require "luasnip"
 
       mason.setup()
       mason_lspconfig.setup({
-        ensure_installed= {
+        ensure_installed = {
           "lua_ls",
+          "clangd",
+          "ts_ls",
         },
         handlers = {
           function (server_name)
@@ -83,10 +98,43 @@ return {
           end,
         }
       })
+
       cmp.setup({
-        sources = cmp.config.sources({
-          { name = 'nvim_lsp' }
-        }, { name = "buffer" }),
+        completion = { completeopt = "menu,menuone" },
+        snippet = {
+          expand = function(args)
+            luasnip.lsp_expand(args.body)
+          end,
+        },
+        window = {
+          -- completion = cmp.config.window.bordered(),
+          -- documentation = cmp.config.window.bordered(),
+        },
+        mapping = cmp.mapping.preset.insert({
+          ["<C-b>"] = cmp.mapping.scroll_docs(-4),
+          ["<C-f>"] = cmp.mapping.scroll_docs(4),
+          ["<C-i>"] = cmp.mapping.complete(),
+          ["<C-e>"] = cmp.mapping.close(),
+          ["<CR>"] = cmp.mapping(function(fallback)
+            if cmp.visible() then
+              cmp.confirm({ 
+                behavior = cmp.ConfirmBehavior.Replace,
+                select = true
+              })
+            else
+              fallback()
+            end
+          end, { "i", "s" }),
+        }),
+        sources = {
+          { name = "nvim_lsp" },
+          { name = "buffer" },
+          { name = "nvim_lua" },
+          { name = "path" },
+        },
+        experimental = {
+          ghost_text = true,
+        },
       })
     end
   },
