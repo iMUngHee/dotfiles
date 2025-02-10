@@ -1,12 +1,27 @@
 return {
   "nvim-lua/plenary.nvim",
   {
+    "catppuccin/nvim",
+    name = "catppuccin",
+    lazy = false,
+    priority = 1000,
+    config = function ()
+      local catppuccin = require "catppuccin"
+      catppuccin.setup()
+      vim.cmd.colorscheme "catppuccin"
+    end
+  },
+
+  -- NOTE: folke's stuffs
+  {
     "folke/neodev.nvim",
     opts = {}
   },
   {
     "folke/trouble.nvim",
     config = function ()
+      local trouble = require "trouble"
+      trouble.setup()
     end
   },
   {
@@ -14,16 +29,13 @@ return {
     event = "VeryLazy"
   },
   {
-    'Mofiqul/dracula.nvim',
-    -- 'maxmx03/dracula.nvim',
-    lazy = false,
-    priority = 1000,
+    "folke/todo-comments.nvim",
     config = function ()
-      local dracula = require 'dracula'
-      dracula.setup()
-      vim.cmd.colorscheme 'dracula'
+      local todo = require "todo-comments"
+      todo.setup()
     end
   },
+
   {
     "nvim-treesitter/nvim-treesitter",
     -- cmd = { "TSInstall", "TSBufEnable", "TSBufDisable", "TSModuleInfo" },
@@ -47,7 +59,7 @@ return {
       "williamboman/mason.nvim",
       "williamboman/mason-lspconfig.nvim",
 
-      --
+      -- TODO: Refactoring
 
       {
         "L3MON4D3/LuaSnip",
@@ -69,7 +81,7 @@ return {
         end
       },
 
-      --
+      -- TODO: Refactoring
 
       "hrsh7th/nvim-cmp",
       "hrsh7th/cmp-nvim-lsp",
