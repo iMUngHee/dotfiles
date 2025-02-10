@@ -22,7 +22,7 @@ opt.tabstop = 2
 opt.softtabstop = 2
 
 opt.list = true
-opt.listchars = { tab = "» ", trail = "·", nbsp = "␣", eol = "↵" }
+opt.listchars = { tab = "» ", trail = "·", nbsp = "_", eol = "↵" }
 
 opt.fillchars = { eob = " " }
 opt.ignorecase = true
