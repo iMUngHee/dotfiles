@@ -12,3 +12,6 @@ tmux/plugins/
 thefuck/
 jgit/
 wireshark/
+
+zsh/*
+!zsh/.zshrc
