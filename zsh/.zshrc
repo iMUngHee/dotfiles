@@ -1,5 +1,4 @@
-### Requried
-
+# Requried
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_CUSTOM="$ZDOTDIR/custom"
 export LANG=en_US.UTF-8
@@ -16,19 +15,21 @@ prompt_context() {}
 source $ZSH_CUSTOM/themes/dracula_theme.sh
 source $ZSH/oh-my-zsh.sh
 
-### Script
-
+# Script
 conditional_eval() {
-  if command -v "$1" > /dev/null; then
-    eval "$($2)"
+  local cmd="$1"
+  shift
+
+  if command -v "$cmd" > /dev/null; then
+    eval "$("$cmd" "$@")"
   fi
 }
 
-# fnm
-conditional_eval "fnm" "fnm env --use-on-cd"
+## fnm
+conditional_eval fnm env --use-on-cd
 
-# thefuck
-conditional_eval "thefuck" "thefuck --alias plz"
+## thefuck
+conditional_eval thefuck --alias plz
 
 # Export
 export BAT_THEME="Dracula"
