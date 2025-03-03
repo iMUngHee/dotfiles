@@ -1,3 +1,5 @@
+### Requried
+
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_CUSTOM="$ZDOTDIR/custom"
 export LANG=en_US.UTF-8
@@ -12,14 +14,21 @@ plugins=(
 prompt_context() {}
 
 source $ZSH_CUSTOM/themes/dracula_theme.sh
-
 source $ZSH/oh-my-zsh.sh
 
+### Script
+
+conditional_eval() {
+  if command -v "$1" > /dev/null; then
+    eval "$($2)"
+  fi
+}
+
 # fnm
-eval "$(fnm env --use-on-cd)"
+conditional_eval "fnm" "fnm env --use-on-cd"
 
 # thefuck
-eval $(thefuck --alias plz)
+conditional_eval "thefuck" "thefuck --alias plz"
 
 # Export
 export BAT_THEME="Dracula"
@@ -37,7 +46,8 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
-# loads private
-
-source $ZDOTDIR/private.sh
+# Loads private
+if [ -f "$ZDOTDIR/private.sh" ]; then
+  source "$ZDOTDIR/private.sh"
+fi
 
