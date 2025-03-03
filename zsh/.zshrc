@@ -1,3 +1,9 @@
+#
+# ~/.zshenv
+# export ZDOTDIR="$HOME/.config/zsh"
+# export ZSHRC_PATH="$ZDOTDIR/.zshrc"
+#
+
 # Requried
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_CUSTOM="$ZDOTDIR/custom"
