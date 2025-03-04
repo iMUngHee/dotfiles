@@ -99,7 +99,7 @@ return {
         ensure_installed = {
           "lua_ls",
           "clangd",
-          "ts_ls",
+          "ts_ls"
         },
         handlers = {
           function (server_name)
