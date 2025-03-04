@@ -1,6 +1,13 @@
+echo ">>> .zshrc loaded"
+
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_CUSTOM="$ZDOTDIR/custom"
 export LANG=en_US.UTF-8
+export BAT_THEME="Dracula"
 
 ZSH_THEME="dracula"
 
@@ -21,9 +28,7 @@ eval "$(fnm env --use-on-cd)"
 # thefuck
 eval $(thefuck --alias plz)
 
-# Export
-export BAT_THEME="Dracula"
-export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+# $PATH
 export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"
 
 # Alias
@@ -39,5 +44,8 @@ export NVM_DIR="$HOME/.nvm"
 
 # loads private
 
-source $ZDOTDIR/private.sh
+
+if [ -x $ZDOTDIR/private.sh ]; then
+  source $ZDOTDIR/private.sh
+fi
 
