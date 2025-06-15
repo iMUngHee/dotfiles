@@ -1,11 +1,12 @@
 return {
   "nvim-lua/plenary.nvim",
+
   {
     "catppuccin/nvim",
     name = "catppuccin",
     lazy = false,
     priority = 1000,
-    config = function ()
+    config = function()
       local catppuccin = require "catppuccin"
       catppuccin.setup()
       vim.cmd.colorscheme "catppuccin"
@@ -17,9 +18,10 @@ return {
     "folke/neodev.nvim",
     opts = {}
   },
+
   {
     "folke/trouble.nvim",
-    config = function ()
+    config = function()
       local trouble = require "trouble"
       trouble.setup()
     end
@@ -30,17 +32,26 @@ return {
   },
   {
     "folke/todo-comments.nvim",
-    config = function ()
+    config = function()
       local todo = require "todo-comments"
       todo.setup()
     end
   },
 
   {
+    "nvim-neo-tree/neo-tree.nvim",
+    branch = "v3.x",
+    dependencies = {
+      "nvim-tree/nvim-web-devicons", -- not strictly required, but recommended
+      "MunifTanjim/nui.nvim",
+    }
+  },
+
+  {
     "nvim-treesitter/nvim-treesitter",
     -- cmd = { "TSInstall", "TSBufEnable", "TSBufDisable", "TSModuleInfo" },
     build = ":TSUpdate",
-    config = function ()
+    config = function()
       local configs = require "nvim-treesitter.configs"
       configs.setup({
         ensure_installed = { "c", "lua", "vim", "vimdoc" },
@@ -58,6 +69,7 @@ return {
     dependencies = {
       "williamboman/mason.nvim",
       "williamboman/mason-lspconfig.nvim",
+      "WhoIsSethDaniel/mason-tool-installer.nvim",
 
       -- TODO: Refactoring
 
@@ -73,7 +85,7 @@ return {
           fast_wrap = {},
           disable_filetype = { "vim" },
         },
-        config = function (_, opts)
+        config = function(_, opts)
           require("nvim-autopairs").setup(opts)
 
           local cmp_autopairs = require "nvim-autopairs.completion.cmp"
@@ -88,27 +100,32 @@ return {
       "hrsh7th/cmp-buffer",
       "hrsh7th/cmp-path",
     },
-    config = function ()
+    config = function()
       local mason = require("mason")
       local mason_lspconfig = require("mason-lspconfig")
+      local mason_tool_installer = require("mason-tool-installer")
       local cmp = require("cmp")
       local luasnip = require "luasnip"
 
       mason.setup()
       mason_lspconfig.setup({
+        automatic_installation = false,
         ensure_installed = {
           "lua_ls",
           "clangd",
-          "ts_ls"
+          "ts_ls",
         },
         handlers = {
-          function (server_name)
+          function(server_name)
             local capabilities = require('cmp_nvim_lsp').default_capabilities()
             require("lspconfig")[server_name].setup {
               capabilities = capabilities
             }
           end,
         }
+      })
+      mason_tool_installer.setup({
+        ensure_installed = { "stylua" },
       })
 
       cmp.setup({
@@ -129,7 +146,7 @@ return {
           ["<C-e>"] = cmp.mapping.close(),
           ["<CR>"] = cmp.mapping(function(fallback)
             if cmp.visible() then
-              cmp.confirm({ 
+              cmp.confirm({
                 behavior = cmp.ConfirmBehavior.Replace,
                 select = true
               })
@@ -150,4 +167,17 @@ return {
       })
     end
   },
+
+  {
+    'stevearc/conform.nvim',
+    config = function()
+      require("conform").setup({
+        format_on_save = {
+          -- These options will be passed to conform.format()
+          timeout_ms = 500,
+          lsp_format = "fallback",
+        },
+      })
+    end
+  }
 }
