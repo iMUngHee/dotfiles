@@ -44,6 +44,7 @@ conditional_eval thefuck --alias plz
 
 # $PATH
 export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"
+export PATH="$(brew --prefix rustup)/bin:$PATH"
 
 # Alias
 alias buu="brew update;brew upgrade"
@@ -53,6 +54,7 @@ alias vi="nvim"
 alias ulock="open -a ScreenSaverEngine"
 
 # Loads private
-if [ -x $ZDOTDIR/private.sh ]; then
+if [ -r $ZDOTDIR/private.sh ]; then
+  echo "Loads $ZDOTDIR/private.sh"
 	source $ZDOTDIR/private.sh
 fi

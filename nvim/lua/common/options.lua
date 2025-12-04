@@ -7,6 +7,13 @@
 
 local opt = vim.opt
 
+opt.shell = vim.env.SHELL or "/bin/zsh"
+opt.shellcmdflag = "-ic"
+opt.shellxquote = ""
+
+opt.termguicolors = true
+opt.showtabline = 2
+
 opt.laststatus = 3
 opt.showmode = false
 
@@ -37,4 +44,3 @@ opt.ruler = false
 opt.undofile = true
 
 opt.updatetime = 250
-
