@@ -20,6 +20,11 @@ startup_mode = "Maximized"
 decorations_theme_variant = "Dark"
 option_as_alt = "OnlyLeft" # -- macOS only
 
+[[keyboard.bindings]]
+key    = "F"                       
+mods   = "Command|Control"        
+action = "ToggleFullscreen"  
+
 [font]
 normal = { family = "Hack Nerd Font Propo", style = "Regular" }
 size = 16

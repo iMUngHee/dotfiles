@@ -1,0 +1,6 @@
+-- TODO: 1. lsp - masonlsp - cmp
+-- TODO: 2. ui library
+-- TODO: 3. treesitter
+-- TODO: 4. keymap? (zc, gd, ...)
+-- TODO: 5. gitgitgit
+-- TODO: 6. misc
