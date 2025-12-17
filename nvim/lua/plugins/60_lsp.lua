@@ -1,6 +1,7 @@
 return {
 	{
 		"folke/lazydev.nvim",
+		lazy = false,
 		ft = "lua",
 		opts = {
 			library = {
@@ -10,27 +11,63 @@ return {
 	},
 	{
 		"williamboman/mason.nvim",
+		lazy = false,
 		build = ":MasonUpdate",
 		opts = {},
 	},
 	{
-		"williamboman/mason-lspconfig.nvim",
-		dependencies = { "mason.nvim", "neovim/nvim-lspconfig" },
-		opts = {
-			ensure_installed = { "lua_ls", "rust_analyzer", "clangd", "gopls" },
-			handlers = {
-				function(server)
-					local caps = require("cmp_nvim_lsp").default_capabilities()
-					require("lspconfig")[server].setup({ capabilities = caps })
-				end,
-			},
+		"neovim/nvim-lspconfig",
+		lazy = false,
+		dependencies = {
+			"williamboman/mason.nvim",
+			"williamboman/mason-lspconfig.nvim",
+			"hrsh7th/cmp-nvim-lsp",
 		},
+		config = function()
+			local lspconfig = require("lspconfig")
+			local caps = require("cmp_nvim_lsp").default_capabilities()
+
+			require("mason-lspconfig").setup({
+				ensure_installed = {
+					"lua_ls",
+					"rust_analyzer",
+					"clangd",
+					"gopls",
+					"helm_ls",
+					"docker_language_server",
+					"bashls",
+					"groovyls",
+				},
+				handlers = {
+					function(server)
+						lspconfig[server].setup({ capabilities = caps })
+					end,
+				},
+			})
+		end,
 	},
 	{
 		"pmizio/typescript-tools.nvim",
+		lazy = false,
 		dependencies = { "nvim-lua/plenary.nvim", "neovim/nvim-lspconfig" },
+		enabled = function()
+			return vim.fn.findfile(".flowconfig", ".;") == ""
+		end,
 		opts = {
 			settings = {
+				separate_diagnostic_server = true,
+				publish_diagnostic_on = "insert_leave",
+				expose_as_code_action = {
+					"add_missing_imports",
+					"remove_unused",
+					"organize_imports",
+					"fix_all",
+				},
+				jsx_close_tag = {
+					enable = true,
+					filetypes = { "javascriptreact", "typescriptreact" },
+				},
+				complete_function_calls = true,
 				tsserver_file_preferences = {
 					includeInlayParameterNameHints = "all",
 					includeCompletionsForModuleExports = true,
@@ -38,6 +75,9 @@ return {
 				},
 			},
 		},
+		config = function(_, opts)
+			require("typescript-tools").setup(opts)
+		end,
 	},
 	{
 		"hrsh7th/nvim-cmp",

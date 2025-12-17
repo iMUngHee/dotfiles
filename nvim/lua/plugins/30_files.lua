@@ -112,10 +112,10 @@ return {
 		event = "VeryLazy",
 		opts = {
 			manual_mode = false,
-			detection_methods = { "lsp", "pattern" },
+			detection_methods = { "pattern" },
 			patterns = {
 				".git",
-				"package.json",
+				-- "package.json",
 				"Cargo.toml",
 				"Makefile",
 				".project_root",

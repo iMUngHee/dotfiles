@@ -33,6 +33,9 @@ return {
 				-- stage/undo
 				map("n", "<leader>gs", gs.stage_hunk, "Stage Hunk")
 				map("n", "<leader>gu", gs.undo_stage_hunk, "Unstage Hunk")
+
+				-- preview
+				map("n", "<leader>gi", gs.preview_hunk_inline)
 			end,
 		},
 	},

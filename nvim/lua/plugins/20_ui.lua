@@ -126,7 +126,8 @@ return {
 			{ "<leader>bc", "<cmd>bp | bd #<CR>", desc = "Close current buffer" },
 			{ "<leader>bp", "<cmd>BufferLinePickClose<CR>", desc = "Pick close" },
 			{ "<leader>bo", "<cmd>BufferLineCloseOthers<CR>", desc = "Close others" },
-
+			{ "<leader>br", "<cmd>BufferLineCloseRight<CR>", desc = "Close buffers to the right" },
+			{ "<leader>bl", "<cmd>BufferLineCloseLeft<CR>", desc = "Close buffers to the left" },
 			{
 				"<leader>bu",
 				function()
@@ -219,10 +220,65 @@ return {
 		event = { "BufReadPost", "BufNewFile" },
 		opts = {
 			current_only = true,
-			signs_on_start = true,
-			winblend = 75,
-			diagnostics_error = { color = "#F38BA8" }, -- catppuccin red
-			diagnostics_hint = { color = "#89DCEB" },
+			base = "right",
+			column = 1,
+			winblend = 50,
+			hide_on_intersect = true,
+			signs_on_startup = {
+				"diagnostics",
+				"search",
+				"conflicts",
+				"git",
+			},
+			marks = false,
+			excluded_filetypes = {
+				"neo-tree",
+				"NvimTree",
+				"TelescopePrompt",
+				"mason",
+				"lazy",
+				"notify",
+				"noice",
+			},
+
+			diagnostics_error_symbol_color = "#F38BA8",
+			diagnostics_warn_symbol_color = "#F9E2AF",
+			diagnostics_hint_symbol_color = "#89DCEB",
+
+			git_add_symbol_color = "#A6E3A1",
+			git_change_symbol_color = "#F9E2AF",
+			git_delete_symbol_color = "#F38BA8",
+
+			search_symbol_color = "#F9E2AF",
+		},
+	},
+	{
+		"chentoast/marks.nvim",
+		event = "VeryLazy",
+		opts = {
+			default_mappings = false,
+			signs = true,
+			builtin_marks = { ".", "<", ">", "^" },
+			cyclic = true,
+			force_write_shada = false,
+			refresh_interval = 250,
+			sign_priority = { lower = 10, upper = 15, builtin = 8, bookmark = 20 },
+			excluded_filetypes = {
+				"qf",
+				"NvimTree",
+				"toggleterm",
+				"TelescopePrompt",
+				"alpha",
+				"netrw",
+			},
+			mappings = {
+				set = "m",
+				delete_line = "dm",
+				delete = "dM",
+				next = "m]",
+				prev = "m[",
+				preview = "m:",
+			},
 		},
 	},
 	{
