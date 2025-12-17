@@ -10,6 +10,7 @@ return {
 				"gofumpt",
 				"goimports",
 				"eslint_d",
+				"beautysh",
 			},
 		},
 	},
@@ -54,6 +55,8 @@ return {
 				rust = { "rustfmt" },
 				toml = {},
 				go = { "gofumpt", "goimports" },
+				sh = { "beautysh" },
+				bash = { "beautysh" },
 			},
 			format_on_save = {
 				lsp_fallback = true,
