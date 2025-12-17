@@ -21,6 +21,10 @@ return {
 				"html",
 				"css",
 				"go",
+				"helm",
+				"dockerfile",
+				"bash",
+				"groovy",
 			},
 			highlight = { enable = true },
 			indent = { enable = true },
@@ -56,6 +60,8 @@ return {
 		},
 		config = function(_, opts)
 			require("nvim-treesitter.configs").setup(opts)
+
+			vim.treesitter.language.register("bash", "sh")
 
 			vim.o.foldlevel = 99
 			vim.o.foldlevelstart = 99
