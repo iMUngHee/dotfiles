@@ -53,6 +53,9 @@ alias vim="nvim"
 alias vi="nvim"
 alias ulock="open -a ScreenSaverEngine"
 
+# Utils
+source $ZSH_CUSTOM/functions.zsh
+
 # Loads private
 if [ -r $ZDOTDIR/private.sh ]; then
   echo "Loads $ZDOTDIR/private.sh"

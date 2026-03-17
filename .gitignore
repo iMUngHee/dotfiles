@@ -3,12 +3,19 @@
 
 # Included list
 !alacritty/
+!ghostty/
 !nvim/
 !tmux/
 !zsh/
 !.ideavimrc
+!claude/
 !.gitignore
 !README.md
+
+# nvim
+nvim/.claude/
+nvim/lua/private/*
+!nvim/lua/private/README.md
 
 # tmux
 tmux/plugins/
@@ -18,3 +25,11 @@ zsh/*
 !zsh/.zshrc
 !zsh/custom
 zsh/**/.git
+
+# claude
+claude/hooks/.rtk-hook.sha256
+claude/notifier/ClaudeNotifier
+claude/memory/private/
+claude/MEMORY.private.md
+claude/*.lock
+claude/*.tmp
