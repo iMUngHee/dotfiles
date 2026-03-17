@@ -11,6 +11,11 @@ local keymap = vim.keymap
 g.mapleader = " "
 g.maplocalleader = " "
 
+-- Remove Neovim 0.11 default LSP mappings; replaced by LspAttach keymaps below
+for _, key in ipairs({ "grn", "gra", "grr", "gri", "grt" }) do
+  pcall(vim.keymap.del, "n", key)
+end
+
 -- Clear highlights
 keymap.set("n", "<ESC>", "<cmd> noh <CR>", { desc = "Clear highlights" })
 
@@ -20,40 +25,89 @@ keymap.set("i", "<C-l>", "<Right>", { desc = "Move Right" })
 keymap.set("i", "<C-j>", "<Down>", { desc = "Move Down" })
 keymap.set("i", "<C-k>", "<Up>", { desc = "Move Up" })
 
-vim.api.nvim_create_autocmd("LspAttach", {
-	group = vim.api.nvim_create_augroup("UserLspConfig", { clear = true }),
-	callback = function(ev)
-		local opts = { buffer = ev.buf, silent = true }
+-- Keep selection after indent
+keymap.set("v", "<", "<gv", { desc = "Indent left" })
+keymap.set("v", ">", ">gv", { desc = "Indent right" })
 
-		keymap.set("n", "gd", vim.lsp.buf.definition, vim.tbl_extend("force", opts, { desc = "Go to Definition" }))
-		keymap.set("n", "gD", vim.lsp.buf.declaration, vim.tbl_extend("force", opts, { desc = "Go to Declaration" }))
-		keymap.set("n", "gr", vim.lsp.buf.references, vim.tbl_extend("force", opts, { desc = "Go to References" }))
-		keymap.set(
-			"n",
-			"gI",
-			vim.lsp.buf.implementation,
-			vim.tbl_extend("force", opts, { desc = "Go to Implementation" })
-		)
-		keymap.set("n", "K", vim.lsp.buf.hover, vim.tbl_extend("force", opts, { desc = "Hover Documentation" }))
-		keymap.set("n", "<C-k>", vim.lsp.buf.signature_help, vim.tbl_extend("force", opts, { desc = "Signature Help" }))
-		keymap.set("n", "<leader>rn", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "Rename Symbol" }))
-		keymap.set(
-			{ "n", "v" },
-			"<leader>ca",
-			vim.lsp.buf.code_action,
-			vim.tbl_extend("force", opts, { desc = "Code Action" })
-		)
-		keymap.set("n", "]d", function()
-			vim.diagnostic.jump({ count = 1, float = true })
-		end, vim.tbl_extend("force", opts, { desc = "Next Diagnostic" }))
-		keymap.set("n", "[d", function()
-			vim.diagnostic.jump({ count = -1, float = true })
-		end, vim.tbl_extend("force", opts, { desc = "Prev Diagnostic" }))
-		keymap.set(
-			"n",
-			"gl",
-			vim.diagnostic.open_float,
-			vim.tbl_extend("force", opts, { desc = "Show Line Diagnostics" })
-		)
-	end,
+-- Override gx: open local files in buffer, URLs in browser
+keymap.set("n", "gx", function()
+  local urls = require("vim.ui")._get_urls()
+  for _, url in ipairs(urls) do
+    if url:match("^https?://") then
+      local cmd, err = vim.ui.open(url)
+      if cmd then
+        cmd:wait(1000)
+      end
+      if err then
+        vim.notify(err, vim.log.levels.ERROR)
+      end
+    else
+      local buf_dir = vim.fn.expand("%:p:h")
+      local abs = url:match("^/") and url or vim.fs.normalize(buf_dir .. "/" .. url)
+      if vim.uv.fs_stat(abs) then
+        vim.cmd.edit(vim.fn.fnameescape(abs))
+      else
+        vim.notify("File not found: " .. abs, vim.log.levels.WARN)
+      end
+    end
+  end
+end, { desc = "Open file in buffer or URL in browser" })
+
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = vim.api.nvim_create_augroup("UserLspConfig", { clear = true }),
+  callback = function(ev)
+    local opts = { buffer = ev.buf, silent = true }
+
+    keymap.set("n", "gd", vim.lsp.buf.definition, vim.tbl_extend("force", opts, { desc = "Go to Definition" }))
+    keymap.set("n", "gD", vim.lsp.buf.declaration, vim.tbl_extend("force", opts, { desc = "Go to Declaration" }))
+    keymap.set("n", "gr", function()
+      require("telescope.builtin").lsp_references()
+    end, vim.tbl_extend("force", opts, { desc = "Go to References" }))
+    keymap.set("n", "gI", vim.lsp.buf.implementation, vim.tbl_extend("force", opts, { desc = "Go to Implementation" }))
+    keymap.set("n", "K", vim.lsp.buf.hover, vim.tbl_extend("force", opts, { desc = "Hover Documentation" }))
+    keymap.set("n", "<C-k>", vim.lsp.buf.signature_help, vim.tbl_extend("force", opts, { desc = "Signature Help" }))
+    keymap.set("n", "<leader>rn", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "Rename Symbol" }))
+    keymap.set(
+      { "n", "v" },
+      "<leader>ca",
+      vim.lsp.buf.code_action,
+      vim.tbl_extend("force", opts, { desc = "Code Action" })
+    )
+    keymap.set("n", "]d", function()
+      vim.diagnostic.jump({ count = 1, float = true })
+    end, vim.tbl_extend("force", opts, { desc = "Next Diagnostic" }))
+    keymap.set("n", "[d", function()
+      vim.diagnostic.jump({ count = -1, float = true })
+    end, vim.tbl_extend("force", opts, { desc = "Prev Diagnostic" }))
+    keymap.set("n", "gl", vim.diagnostic.open_float, vim.tbl_extend("force", opts, { desc = "Show Line Diagnostics" }))
+  end,
 })
+
+-- Copy file reference for AI tools
+keymap.set("n", "<leader>L", function()
+  local path = vim.fn.expand("%:.")
+  if path == "" or vim.bo.buftype ~= "" then
+    vim.notify("No file path", vim.log.levels.WARN)
+    return
+  end
+  vim.fn.setreg("+", "@" .. path)
+  vim.notify("Copied: @" .. path)
+end, { desc = "Copy file ref to clipboard" })
+
+keymap.set("x", "<leader>L", function()
+  local path = vim.fn.expand("%:.")
+  if path == "" or vim.bo.buftype ~= "" then
+    vim.notify("No file path", vim.log.levels.WARN)
+    return
+  end
+  local s = vim.fn.line("v")
+  local e = vim.fn.line(".")
+  if s > e then
+    s, e = e, s
+  end
+  -- Format: @path#LstartLine-endLine (Claude Code file reference)
+  local ref = (s == e) and ("@" .. path .. "#L" .. s) or ("@" .. path .. "#L" .. s .. "-" .. e)
+  vim.fn.setreg("+", ref)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+  vim.notify("Copied: " .. ref)
+end, { desc = "Copy file ref with lines to clipboard" })
