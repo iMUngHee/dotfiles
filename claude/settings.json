@@ -1,0 +1,153 @@
+{
+  "env": {
+    "DISABLE_AUTOUPDATER": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bun run*)",
+      "Bash(bun test*)",
+      "Bash(cargo build*)",
+      "Bash(cargo test*)",
+      "Bash(cat*)",
+      "Bash(ccusage*)",
+      "Bash(cd*)",
+      "Bash(chmod*)",
+      "Bash(claude*)",
+      "Bash(cp*)",
+      "Bash(echo*)",
+      "Bash(gh api*)",
+      "Bash(gh repo*)",
+      "Bash(gh search*)",
+      "Bash(git blame*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git status*)",
+      "Bash(go build*)",
+      "Bash(go test*)",
+      "Bash(ls*)",
+      "Bash(npm info*)",
+      "Bash(npm list*)",
+      "Bash(npm run*)",
+      "Bash(nvim*)",
+      "Bash(open*)",
+      "Bash(osascript*)",
+      "Bash(pbpaste*)",
+      "Bash(pkill*)",
+      "Bash(pnpm build*)",
+      "Bash(pnpm run*)",
+      "Bash(pnpm test*)",
+      "Bash(printf*)",
+      "Bash(python3*)",
+      "Bash(rtk cc-economics*)",
+      "Bash(rtk discover*)",
+      "Bash(rtk gain*)",
+      "Bash(rtk hook-audit*)",
+      "Bash(rtk init*)",
+      "Bash(rtk learn*)",
+      "Bash(rtk session*)",
+      "Bash(rtk verify*)",
+      "Bash(which*)",
+      "Glob",
+      "Grep",
+      "Read",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:claude.ai)",
+      "WebFetch(domain:claude.com)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www-cdn.anthropic.com)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:www.claude.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:www.rtk-ai.app)",
+      "WebFetch(domain:x.com)",
+      "WebSearch"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/rtk-rewrite.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/protect-files.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[post-compact context restore] branch: $(git branch --show-current 2>/dev/null || echo 'N/A') | recent commits: $(git log --oneline -3 2>/dev/null | tr '\\n' ';')\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/notify.sh stop"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/notify.sh approval"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/notify.sh approval"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "$HOME/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "lua-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "jdtls-lsp@claude-plugins-official": true,
+    "kotlin-lsp@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true
+  },
+  "language": "한국어",
+  "effortLevel": "high",
+  "spinnerTipsEnabled": false
+}

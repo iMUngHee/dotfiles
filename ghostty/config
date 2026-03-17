@@ -1,0 +1,30 @@
+#
+# Ghostty Config
+# @see - https://ghostty.org/docs/config
+#
+
+# Theme (Ghostty has built-in Dracula theme)
+theme = dracula
+
+# Window
+# window-decoration = false # conflict with "toggle_fullscreen"
+maximize = true
+macos-titlebar-style = hidden
+
+# macOS Option key as Alt (left only)
+macos-option-as-alt = left
+
+# Font
+font-family = FiraCode Nerd Font
+font-size = 16
+
+# Cursor
+shell-integration-features = no-cursor
+cursor-style = block
+
+# Clipboard (OSC52 - enabled by default in Ghostty)
+clipboard-read = allow
+clipboard-write = allow
+
+# Keybindings
+keybind = super+ctrl+f=toggle_fullscreen

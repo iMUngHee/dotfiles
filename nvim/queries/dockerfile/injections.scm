@@ -1,5 +1,5 @@
-; @see: https://github.com/nvim-treesitter/nvim-treesitter/pull/6574
-; @see: https://github.com/camdencheek/tree-sitter-dockerfile/pull/52
+; Dockerfile shell injection — highlights RUN/COPY heredoc blocks as bash.
+; Upstream fix pending: nvim-treesitter#6574, tree-sitter-dockerfile#52
 
 ((comment) @injection.content
   (#set! injection.language "comment"))
