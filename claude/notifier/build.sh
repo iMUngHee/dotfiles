@@ -13,7 +13,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 swiftc "$SCRIPT_DIR/notifier.swift" \
     -o "$APP_DIR/Contents/MacOS/ClaudeNotifier" \
-    -framework Foundation \
+    -framework AppKit \
     -framework UserNotifications
 
 cp "$SCRIPT_DIR/Info.plist"   "$APP_DIR/Contents/"
