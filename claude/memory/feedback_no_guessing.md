@@ -1,14 +1,20 @@
 ---
-name: No guessing in debugging
-description: Verify root cause with tools before fixing unknown bugs — includes checking git diff/status before asking the user
+name: No unverified assumptions
+description: Verify assumptions with tools before acting — applies to debugging, environment identification, data boundaries, and any work based on unconfirmed premises
 type: feedback
 ---
 
-Do not modify code based on guesses. If the cause is unknown, use tools to confirm it first.
+Do not act based on unverified assumptions. If something is assumed but not confirmed, verify it first.
 
-**Why:** Made multiple wrong guesses fixing a tree-sitter parsing bug; it was only resolved after directly checking ERROR node positions with `nvim --headless`. Guesswork wastes time and erodes trust.
+**Why:** (1) Made multiple wrong guesses fixing a tree-sitter parsing bug; resolved only after directly checking ERROR node positions with `nvim --headless`. (2) Ran 5 iterations of a Kafka scan script because the target environment (ad1 vs ar2) was never confirmed — a single question would have prevented all rework. Unverified assumptions waste time and erode trust.
 
-**How to apply:** When encountering unclear bugs (parsing errors, rendering issues, unexpected runtime behavior), verify the actual error location and cause using relevant tools (tree-sitter CLI, nvim headless, logs, debugger, etc.) before touching the code. Never modify code with "this might be the issue" reasoning.
+**How to apply:** Before starting work that depends on an assumption (environment, data range, API behavior, user intent), verify it with a tool or a direct question. Examples:
+- Debugging: verify actual error location before touching code
+- External input (screenshots, URLs): confirm which environment/system it comes from
+- Data boundaries (offsets, counts, limits): probe actual values instead of trusting UI snapshots
+- API/tool behavior: test with one call before building logic around expected behavior
+
+Never proceed with "this is probably X" reasoning when verification is available.
 
 **Corollary — don't ask what you can verify:** If the answer is available via `git diff`, `git status`, `git log`, or any other tool, use the tool instead of asking 대협. Asking "did you change this?" when `git diff` would show it immediately is wasted effort.
 
