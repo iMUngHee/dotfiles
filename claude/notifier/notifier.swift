@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import UserNotifications
 
 class NotifierDelegate: NSObject, UNUserNotificationCenterDelegate {
@@ -131,6 +131,9 @@ class NotifierDelegate: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+
 let delegate = NotifierDelegate()
 delegate.start()
-RunLoop.main.run()
+app.run()
