@@ -19,6 +19,11 @@ swiftc "$SCRIPT_DIR/notifier.swift" \
 cp "$SCRIPT_DIR/Info.plist"   "$APP_DIR/Contents/"
 cp "$SCRIPT_DIR/AppIcon.icns" "$APP_DIR/Contents/Resources/"
 
+# ── 1b. Code-sign (ad-hoc) ──
+# Without proper signing, macOS revokes notification permissions on reboot
+# because Gatekeeper re-validates and rejects the linker-signed binary.
+codesign --force --deep --sign - "$APP_DIR"
+
 echo "Built: $APP_DIR"
 
 # ── 2. LaunchAgent plist ──
