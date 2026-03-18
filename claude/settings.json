@@ -148,6 +148,10 @@
     "swift-lsp@claude-plugins-official": true
   },
   "language": "한국어",
+  "spinnerTipsEnabled": false,
   "effortLevel": "high",
-  "spinnerTipsEnabled": false
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  }
 }
