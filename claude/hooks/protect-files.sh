@@ -6,7 +6,7 @@ if [[ -z "$FILE" ]]; then
   exit 0
 fi
 
-PROTECTED_PATTERNS=(".env" "-secret" "credentials" ".pem" ".key" ".p12" ".pfx")
+PROTECTED_PATTERNS=(".env" "-secret" "credentials" ".pem" ".key" ".p12" ".pfx" "package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "go.sum" "bun.lock")
 
 for pattern in "${PROTECTED_PATTERNS[@]}"; do
   if [[ "$FILE" == *"$pattern"* ]]; then
