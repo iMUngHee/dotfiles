@@ -33,3 +33,4 @@ claude/memory/private/
 claude/MEMORY.private.md
 claude/*.lock
 claude/*.tmp
+claude/.claude

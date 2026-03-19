@@ -35,11 +35,13 @@ fi
 ln -sfn "$REPO_DIR/hooks" "$CLAUDE_DIR/hooks"
 cp /tmp/.rtk-hook.sha256.bak "$CLAUDE_DIR/hooks/.rtk-hook.sha256" 2>/dev/null || true
 
-# commands/
-if [ -d "$CLAUDE_DIR/commands" ] && [ ! -L "$CLAUDE_DIR/commands" ]; then
-    rm -rf "$CLAUDE_DIR/commands"
-fi
-ln -sfn "$REPO_DIR/commands" "$CLAUDE_DIR/commands"
+# commands/, rules/, skills/
+for dir in commands rules skills; do
+    if [ -d "$CLAUDE_DIR/$dir" ] && [ ! -L "$CLAUDE_DIR/$dir" ]; then
+        rm -rf "$CLAUDE_DIR/$dir"
+    fi
+    [ -d "$REPO_DIR/$dir" ] && ln -sfn "$REPO_DIR/$dir" "$CLAUDE_DIR/$dir"
+done
 
 # ── 3. Merge: settings.json (repo keys override, local-only keys preserved) ──
 echo "Deploying settings.json..."
