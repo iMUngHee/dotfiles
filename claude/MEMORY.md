@@ -7,4 +7,5 @@
 - [Format-level instructions](memory/feedback_prompt_format.md) — use concrete output format, not abstract behavioral directives
 - [Global memory path](memory/feedback_global_memory_path.md) — save to ~/.claude/memory/, not projects/\<key\>/memory/
 - [Markdown text via clipboard](memory/feedback_markdown_clipboard.md) — use pbcopy instead of rendering inline when user needs to copy markdown
+- [Reverse grep after modification](memory/feedback_reverse_grep.md) — grep for references to modified files to catch sync issues
 

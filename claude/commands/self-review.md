@@ -56,6 +56,7 @@ Review whether CLAUDE.md rules were followed in this session.
 | All persistent files in English | ✓/✗ | ... |
 | Format-level instructions | ✓/✗/— | ... |
 | Global memory path | ✓/✗/— | ... |
+| Markdown text via clipboard | ✓/✗/— | ... |
 
 ### Verdict
 
