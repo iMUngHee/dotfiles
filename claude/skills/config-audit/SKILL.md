@@ -1,6 +1,6 @@
 ---
 name: config-audit
-description: "Claude Code dotfiles architecture and audit. Use when creating, editing, or moving files in ~/.config/claude/ or ~/.claude/, when working with memory files, settings.json, commands, skills, or hooks, or when discussing the dotfiles sync setup."
+description: "Claude Code dotfiles architecture and audit. Use when creating, editing, moving, analyzing, or reviewing files in ~/.config/claude/ or ~/.claude/, when working with memory files, settings.json, commands, skills, or hooks, or when discussing the dotfiles sync setup."
 user-invocable: false
 allowed-tools: Bash, Read, Glob
 ---
@@ -40,3 +40,6 @@ When invoked, verify:
 3. **MEMORY.md index**: every reference has a file, no orphan files
 4. **Commands & skills**: list with descriptions
 5. **Settings divergence**: `diff <(jq -S . ~/.config/claude/settings.json) <(jq -S . ~/.claude/settings.json)`
+6. **MEMORY.md divergence**: `diff <(cat ~/.config/claude/MEMORY.md ~/.config/claude/MEMORY.private.md) ~/.claude/MEMORY.md` — deployed is a merged copy, not a symlink
+7. **Cross-file sync**: `self-review.md` checklist matches DEVGUARD.md sections and MEMORY.md feedback entries
+8. **Dead references**: all `memory/*.md` links in MEMORY.md and MEMORY.private.md resolve to existing files

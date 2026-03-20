@@ -44,7 +44,12 @@ Read `.github/PULL_REQUEST_TEMPLATE.md` if it exists. Follow the template struct
 ### 5. Generate and copy
 
 1. Write the PR body as markdown
-2. Copy to clipboard: `printf '%s' '<body>' | pbcopy`
+2. Copy to clipboard with `dangerouslyDisableSandbox: true` (pbcopy requires it):
+   ```bash
+   pbcopy << 'EOF'
+   <body>
+   EOF
+   ```
 3. Confirm to the user that it's on the clipboard
 
 ## Rules

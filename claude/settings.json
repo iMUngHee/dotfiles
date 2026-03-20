@@ -34,7 +34,6 @@
       "Bash(npm run*)",
       "Bash(nvim*)",
       "Bash(open*)",
-      "Bash(osascript*)",
       "Bash(pbpaste*)",
       "Bash(pkill -x ClaudeNotifier*)",
       "Bash(pnpm build*)",
