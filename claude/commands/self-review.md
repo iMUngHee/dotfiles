@@ -44,9 +44,12 @@ Review whether CLAUDE.md rules were followed in this session.
 | Design Gate — Incremental Approval | ✓/✗ | ... |
 | Implementation Planning | ✓/✗ | ... |
 | Subagent Trust — Before dispatch (scope, constraints, rules) | ✓/✗ | ... |
-| Subagent Trust — After results (verify key claims) | ✓/✗ | ... |
+| Subagent Trust — After results (verify modifications; cross-verify research) | ✓/✗ | ... |
+| Test Awareness | ✓/✗/— | ... |
+| TDD Discipline | ✓/✗/— | ... |
 | Debugging Escalation (3-Strike) | ✓/✗/— | ... |
 | Code Review Honesty | ✓/✗/— | ... |
+| Parallel Dispatch Criteria | ✓/✗/— | ... |
 
 ### MEMORY.md Feedback Rules
 
@@ -56,7 +59,7 @@ Review whether CLAUDE.md rules were followed in this session.
 | All persistent files in English | ✓/✗ | ... |
 | Format-level instructions | ✓/✗/— | ... |
 | Global memory path | ✓/✗/— | ... |
-| Markdown text via clipboard | ✓/✗/— | ... |
+| Reverse grep after modification | ✓/✗/— | ... |
 
 ### Verdict
 
