@@ -2,7 +2,7 @@
 
 ## Feedback
 
-- [No unverified assumptions](memory/feedback_no_guessing.md) — verify assumptions (environment, data boundaries, API behavior) before acting
+- [No unverified assumptions](memory/feedback_no_guessing.md) — include evidence (source code, docs, command output) when presenting technical claims
 - [All persistent files in English](memory/feedback_memory_english.md) — all ~/.claude/ files must be written in English to reduce token usage
 - [Format-level instructions](memory/feedback_prompt_format.md) — use concrete output format, not abstract behavioral directives
 - [Global memory path](memory/feedback_global_memory_path.md) — save to ~/.claude/memory/, not projects/\<key\>/memory/
@@ -10,5 +10,5 @@
 
 ## Workflow
 
-- [Code review for feature branches](memory/workflow_code_review.md) — use git show per-commit, not branch diff, to avoid misattributing sync-merged changes
+- Code review for feature branches → `/code-review` skill — use git show per-commit, not branch diff
 

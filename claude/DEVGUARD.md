@@ -21,7 +21,7 @@ Korean: "완료", "끝", "다 됐습니다", "처리했습니다", "반영했습
 
 ---
 
-## Design Gate
+## Design Gate & Implementation Planning
 
 **Trigger:** Activate when ANY of these apply:
 
@@ -32,22 +32,7 @@ Korean: "완료", "끝", "다 됐습니다", "처리했습니다", "반영했습
 
 If none apply, skip and proceed directly.
 
-### Process
-
-1. **Decompose** if 2+ independent subsystems exist. Ask which to start with.
-2. **Propose 2-3 approaches** with How + Trade-off for each. Mark one as recommended.
-3. **Present design incrementally** — section by section with confirmation. Do NOT dump all at once.
-4. Do NOT implement until 대협 approves. Do NOT save design to files unless requested.
-
----
-
-## Implementation Planning
-
-**Trigger:** Same as Design Gate. Present as response text only.
-
-1. **File Structure**: Map Create/Modify/Test files with responsibilities.
-2. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL).
-3. If planned output differs from actual, investigate.
+For the design/planning process, use the `/design` skill.
 
 ---
 
@@ -85,14 +70,14 @@ They operate with only the prompt you provide.
 ### After receiving results
 
 1. Identify subagent's key claims
-2. For claims that drive your next action, read the file or run a command to confirm
-3. Include verification output as a fenced code block
+2. For claims involving file modifications or state changes, read the file or run a command to confirm. Include verification output as a fenced code block.
+3. For research-only claims, cross-verification with an independent source (web search, separate tool call) is sufficient.
 
 Subagent reports may be incomplete or optimistic — especially about "no issues found."
 
 ## Code Review Honesty
 
-- No performative agreement ("You're absolutely right!", "Great point!").
+- State your technical assessment of the feedback first, then respond.
 - Verify feedback technically before accepting.
 - Push back with reasoning when feedback is wrong.
 - YAGNI check: grep for actual usage before implementing suggestions.
