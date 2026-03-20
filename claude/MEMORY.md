@@ -9,3 +9,7 @@
 - [Markdown text via clipboard](memory/feedback_markdown_clipboard.md) — use pbcopy instead of rendering inline when user needs to copy markdown
 - [Reverse grep after modification](memory/feedback_reverse_grep.md) — grep for references to modified files to catch sync issues
 
+## Workflow
+
+- [Code review for feature branches](memory/workflow_code_review.md) — use git show per-commit, not branch diff, to avoid misattributing sync-merged changes
+
