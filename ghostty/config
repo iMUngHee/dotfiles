@@ -3,8 +3,8 @@
 # @see - https://ghostty.org/docs/config
 #
 
-# Theme (Ghostty has built-in Dracula theme)
-theme = dracula
+# Theme
+theme = Catppuccin Mocha
 
 # Window
 # window-decoration = false # conflict with "toggle_fullscreen"
