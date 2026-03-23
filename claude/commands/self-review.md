@@ -39,6 +39,7 @@ Review whether CLAUDE.md rules were followed in this session.
 |------|--------|----------|
 | Verification Before Completion | ✓/✗ | ... |
 | Forbidden completion words | ✓/✗ | ... |
+| Rationalization Resistance | ✓/✗ | ... |
 | Design Gate trigger | ✓/✗ | ... |
 | Design Gate — Approach Proposal | ✓/✗ | ... |
 | Design Gate — Incremental Approval | ✓/✗ | ... |

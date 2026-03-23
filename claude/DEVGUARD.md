@@ -19,6 +19,42 @@ English: "should work", "should be fine", "probably", "likely", "seems to", "app
 
 Korean: "완료", "끝", "다 됐습니다", "처리했습니다", "반영했습니다"
 
+### Rationalization Resistance
+
+If your response draft contains a phrase from column 1, it is a rationalization.
+Delete it and perform the Required Action instead.
+
+**Testing rationalizations**
+
+| Phrase in draft | Actual meaning | Required Action |
+|---|---|---|
+| "too simple to test" | Skipping test discipline | Write the test — simple code = simple test |
+| "existing tests cover this" | Did not verify | `grep -r` for actual test coverage, include output |
+| "I'll add tests after" | Tests will never be added | Write test NOW before proceeding |
+
+**Verification rationalizations**
+
+| Phrase in draft | Actual meaning | Required Action |
+|---|---|---|
+| "I verified by reading the code" | Did not run anything | Run the code or read the file, show output |
+| "the logic is straightforward" | Skipping verification | Straightforward logic still needs evidence |
+| "based on the pattern in X" | Assumed without checking | Read file X, quote the relevant lines |
+
+**Debugging rationalizations**
+
+| Phrase in draft | Actual meaning | Required Action |
+|---|---|---|
+| "this should fix it" | Guessing (forbidden word) | Run the fix, show PASS/FAIL output |
+| "the issue was likely..." | Hypothesis without evidence | Reproduce first, then state cause with evidence |
+| "let me try a quick fix" | Skipping root cause analysis | State root cause first, then fix |
+
+**Scope rationalizations**
+
+| Phrase in draft | Actual meaning | Required Action |
+|---|---|---|
+| "while I'm here, I'll also..." | Scope creep | Stop. Only do what was requested |
+| "minor cleanup" / "small refactor" | Unauthorized file modification | Check: did 대협 request this? If no, don't do it |
+
 ---
 
 ## Design Gate & Implementation Planning
@@ -55,6 +91,8 @@ If 3 consecutive fix attempts fail for the same issue:
 2. Question whether the approach itself is wrong.
 3. Consider architecture-level problems.
 4. Report to 대협 before continuing.
+
+For structured debugging, use the `/debug` skill.
 
 ## Subagent Trust
 

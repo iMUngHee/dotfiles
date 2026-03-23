@@ -89,6 +89,7 @@ short_model=$(echo "$model" \
 # --- Context bar ---
 if [ -n "$used_pct" ]; then
     used_int=$(printf "%.0f" "$used_pct")
+    echo "$used_int" > /tmp/claude-context-pct
     filled=$(( used_int * 10 / 100 ))
     empty=$(( 10 - filled ))
     bar=$(printf '%0.s|' $(seq 1 $filled) 2>/dev/null)$(printf '%0.s.' $(seq 1 $empty) 2>/dev/null)
