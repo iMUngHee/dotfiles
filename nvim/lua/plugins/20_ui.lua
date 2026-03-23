@@ -8,7 +8,7 @@ return {
     dependencies = { "nvim-web-devicons" },
     opts = {
       options = {
-        theme = "catppuccin-mocha",
+        theme = "dracula-nvim",
         component_separators = "│",
         section_separators = "",
       },
@@ -64,7 +64,7 @@ return {
       })
     end,
     opts = function()
-      local p = require("catppuccin.palettes").get_palette("mocha")
+      local p = require("dracula.palette")
       return {
         options = {
           mode = "buffers",
@@ -230,7 +230,7 @@ return {
     "dstein64/nvim-scrollview",
     event = { "BufReadPost", "BufNewFile" },
     opts = function()
-      local p = require("catppuccin.palettes").get_palette("mocha")
+      local p = require("dracula.palette")
       return {
         current_only = true,
         base = "right",
@@ -255,7 +255,7 @@ return {
 
         diagnostics_error_symbol_color = p.red,
         diagnostics_warn_symbol_color = p.yellow,
-        diagnostics_hint_symbol_color = p.sky,
+        diagnostics_hint_symbol_color = p.cyan,
 
         git_add_symbol_color = p.green,
         git_change_symbol_color = p.yellow,

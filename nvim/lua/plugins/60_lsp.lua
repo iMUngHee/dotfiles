@@ -35,8 +35,11 @@ return {
       vim.lsp.enable("sourcekit")
 
       require("mason-lspconfig").setup({
-        automatic_enable = true,
+        automatic_enable = {
+          exclude = { "ts_ls" }, -- typescript-tools.nvim handles TS/JS
+        },
         ensure_installed = {
+          "ts_ls", -- provides tsserver binary for typescript-tools.nvim (fnm-independent)
           "lua_ls",
           "rust_analyzer",
           "clangd",
