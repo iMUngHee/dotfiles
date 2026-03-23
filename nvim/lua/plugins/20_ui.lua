@@ -8,7 +8,7 @@ return {
     dependencies = { "nvim-web-devicons" },
     opts = {
       options = {
-        theme = "dracula-nvim",
+        theme = "catppuccin-mocha",
         component_separators = "│",
         section_separators = "",
       },
@@ -64,7 +64,7 @@ return {
       })
     end,
     opts = function()
-      local p = require("dracula.palette")
+      local C = require("catppuccin.palettes").get_palette("mocha")
       return {
         options = {
           mode = "buffers",
@@ -87,25 +87,25 @@ return {
         },
 
         highlights = {
-          error = { fg = p.red },
-          error_visible = { fg = p.red },
-          error_selected = { fg = p.red, bold = true, italic = true },
+          error = { fg = C.red },
+          error_visible = { fg = C.red },
+          error_selected = { fg = C.red, bold = true, italic = true },
 
-          error_diagnostic = { fg = p.red },
-          error_diagnostic_visible = { fg = p.red },
-          error_diagnostic_selected = { fg = p.red, bold = true, italic = true },
+          error_diagnostic = { fg = C.red },
+          error_diagnostic_visible = { fg = C.red },
+          error_diagnostic_selected = { fg = C.red, bold = true, italic = true },
 
-          warning = { fg = p.yellow },
-          warning_visible = { fg = p.yellow },
-          warning_selected = { fg = p.yellow, bold = true, italic = true },
+          warning = { fg = C.yellow },
+          warning_visible = { fg = C.yellow },
+          warning_selected = { fg = C.yellow, bold = true, italic = true },
 
-          warning_diagnostic = { fg = p.yellow },
-          warning_diagnostic_visible = { fg = p.yellow },
-          warning_diagnostic_selected = { fg = p.yellow, bold = true, italic = true },
+          warning_diagnostic = { fg = C.yellow },
+          warning_diagnostic_visible = { fg = C.yellow },
+          warning_diagnostic_selected = { fg = C.yellow, bold = true, italic = true },
 
-          modified = { fg = p.green },
-          modified_visible = { fg = p.green },
-          modified_selected = { fg = p.green, bold = true, italic = true },
+          modified = { fg = C.green },
+          modified_visible = { fg = C.green },
+          modified_selected = { fg = C.green, bold = true, italic = true },
         },
       }
     end,
@@ -230,7 +230,7 @@ return {
     "dstein64/nvim-scrollview",
     event = { "BufReadPost", "BufNewFile" },
     opts = function()
-      local p = require("dracula.palette")
+      local C = require("catppuccin.palettes").get_palette("mocha")
       return {
         current_only = true,
         base = "right",
@@ -253,15 +253,15 @@ return {
           "noice",
         },
 
-        diagnostics_error_symbol_color = p.red,
-        diagnostics_warn_symbol_color = p.yellow,
-        diagnostics_hint_symbol_color = p.cyan,
+        diagnostics_error_symbol_color = C.red,
+        diagnostics_warn_symbol_color = C.yellow,
+        diagnostics_hint_symbol_color = C.teal,
 
-        git_add_symbol_color = p.green,
-        git_change_symbol_color = p.yellow,
-        git_delete_symbol_color = p.red,
+        git_add_symbol_color = C.green,
+        git_change_symbol_color = C.yellow,
+        git_delete_symbol_color = C.red,
 
-        search_symbol_color = p.yellow,
+        search_symbol_color = C.yellow,
       }
     end,
   },
