@@ -2,7 +2,6 @@
 .DS_Store
 
 # Included list
-!alacritty/
 !ghostty/
 !nvim/
 !tmux/

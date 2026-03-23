@@ -12,19 +12,29 @@ fi
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_CUSTOM="$ZDOTDIR/custom"
 export LANG=en_US.UTF-8
-export BAT_THEME="Dracula"
+export BAT_THEME="Catppuccin Mocha"
 
-ZSH_THEME="dracula"
+ZSH_THEME=""
 
 plugins=(
 	git
 	zsh-autosuggestions
 	zsh-syntax-highlighting
 )
-prompt_context() {}
 
-source $ZSH_CUSTOM/themes/dracula_theme.sh
+source $ZSH_CUSTOM/themes/catppuccin_mocha-zsh-syntax-highlighting.zsh
 source $ZSH/oh-my-zsh.sh
+
+# Custom prompt: full path + git + newline arrow (Catppuccin Mocha truecolor)
+# Must be AFTER oh-my-zsh source (lib/theme-and-appearance.zsh overwrites defaults)
+_c() { printf "%%{\\e[38;2;%d;%d;%dm%%}" "$1" "$2" "$3"; }
+PROMPT="$(_c 137 180 250)%~%f \$(git_prompt_info)
+%(?:$(_c 166 227 161):$(_c 243 139 168))➜%f "
+ZSH_THEME_GIT_PROMPT_PREFIX="$(_c 203 166 247)git:($(_c 166 227 161)"
+ZSH_THEME_GIT_PROMPT_SUFFIX="%f "
+ZSH_THEME_GIT_PROMPT_DIRTY="$(_c 203 166 247)) $(_c 249 226 175)✗"
+ZSH_THEME_GIT_PROMPT_CLEAN="$(_c 203 166 247)) $(_c 166 227 161)✔"
+unfunction _c 2>/dev/null
 
 # Script
 conditional_eval() {
@@ -52,6 +62,13 @@ alias l="eza -alH --icons --git --color=always"
 alias vim="nvim"
 alias vi="nvim"
 alias ulock="open -a ScreenSaverEngine"
+
+# Preserve working directory across Claude Code sessions
+claude() {
+  local start_dir="$PWD"
+  command claude "$@"
+  cd "$start_dir"
+}
 
 # Utils
 source $ZSH_CUSTOM/functions.zsh

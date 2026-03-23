@@ -100,5 +100,14 @@ return {
   {
     "HiPhish/rainbow-delimiters.nvim",
     event = "BufReadPost",
+    config = function()
+      vim.g.rainbow_delimiters = {
+        query = {
+          [""] = "rainbow-delimiters",
+          tsx = "rainbow-parens",
+          javascript = "rainbow-parens",
+        },
+      }
+    end,
   },
 }
