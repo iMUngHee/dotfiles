@@ -143,6 +143,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/context-monitor.sh"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
