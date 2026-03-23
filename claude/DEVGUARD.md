@@ -4,8 +4,6 @@
 
 **No completion claim without showing evidence in the same message.**
 
-This applies to ALL work: code edits, bug fixes, refactoring, file creation — everything.
-
 ### What you MUST do after work
 
 - File edit → **read the file back** and include a **fenced code block** showing the result
@@ -21,41 +19,23 @@ Korean: "완료", "끝", "다 됐습니다", "처리했습니다", "반영했습
 
 ### Rationalization Resistance
 
-If your response draft contains a phrase from column 1, it is a rationalization.
-Delete it and perform the Required Action instead.
+If your draft contains any phrase below, delete it and perform the action instead.
 
-**Testing rationalizations**
+- "too simple to test" → Write the test — simple code = simple test
+- "existing tests cover this" → `grep -r` for actual test coverage, include output
+- "I'll add tests after" → Write test NOW before proceeding
+- "I verified by reading the code" → Run the code or read the file, show output
+- "the logic is straightforward" → Straightforward logic still needs evidence
+- "based on the pattern in X" → Read file X, quote the relevant lines
+- "this should fix it" → Run the fix, show PASS/FAIL output
+- "the issue was likely..." → Reproduce first, then state cause with evidence
+- "let me try a quick fix" → State root cause first, then fix
+- "while I'm here, I'll also..." → Stop. Only do what was requested
+- "minor cleanup" / "small refactor" → Check: did 대협 request this? If no, don't do it
 
-| Phrase in draft | Actual meaning | Required Action |
-|---|---|---|
-| "too simple to test" | Skipping test discipline | Write the test — simple code = simple test |
-| "existing tests cover this" | Did not verify | `grep -r` for actual test coverage, include output |
-| "I'll add tests after" | Tests will never be added | Write test NOW before proceeding |
+## Skill Compliance
 
-**Verification rationalizations**
-
-| Phrase in draft | Actual meaning | Required Action |
-|---|---|---|
-| "I verified by reading the code" | Did not run anything | Run the code or read the file, show output |
-| "the logic is straightforward" | Skipping verification | Straightforward logic still needs evidence |
-| "based on the pattern in X" | Assumed without checking | Read file X, quote the relevant lines |
-
-**Debugging rationalizations**
-
-| Phrase in draft | Actual meaning | Required Action |
-|---|---|---|
-| "this should fix it" | Guessing (forbidden word) | Run the fix, show PASS/FAIL output |
-| "the issue was likely..." | Hypothesis without evidence | Reproduce first, then state cause with evidence |
-| "let me try a quick fix" | Skipping root cause analysis | State root cause first, then fix |
-
-**Scope rationalizations**
-
-| Phrase in draft | Actual meaning | Required Action |
-|---|---|---|
-| "while I'm here, I'll also..." | Scope creep | Stop. Only do what was requested |
-| "minor cleanup" / "small refactor" | Unauthorized file modification | Check: did 대협 request this? If no, don't do it |
-
----
+If a user request matches a registered skill's trigger condition, invoke the skill instead of performing the action manually. Do not bypass skills by reimplementing their behavior with raw tool calls.
 
 ## Design Gate & Implementation Planning
 
@@ -70,8 +50,6 @@ If none apply, skip and proceed directly.
 
 For the design/planning process, use the `/design` skill.
 
----
-
 ## Test Awareness
 
 In a test-enabled project, if your response adds or modifies a function/class but does not include test code, append:
@@ -85,33 +63,17 @@ Follow strict RED-GREEN-REFACTOR: write failing test → run and watch fail → 
 
 ## Debugging Escalation (3-Strike Rule)
 
-If 3 consecutive fix attempts fail for the same issue:
-
-1. **Stop patching.**
-2. Question whether the approach itself is wrong.
-3. Consider architecture-level problems.
-4. Report to 대협 before continuing.
+If 3 consecutive fix attempts fail for the same issue: (1) Stop patching (2) Question whether the approach itself is wrong (3) Consider architecture-level problems (4) Report to 대협 before continuing.
 
 For structured debugging, use the `/debug` skill.
 
 ## Subagent Trust
 
-Subagents do NOT inherit CLAUDE.md, PERSONAL.md, or DEVGUARD.md.
-They operate with only the prompt you provide.
+Subagents do NOT inherit CLAUDE.md, PERSONAL.md, or DEVGUARD.md. They operate with only the prompt you provide.
 
-### Before dispatch
+Before dispatch: (1) Define exact scope (files, line ranges, what to change vs flag) (2) State explicit constraints (what NOT to modify) (3) For modifications: include relevant project rules in the prompt.
 
-1. Define exact scope (files, line ranges, what to change vs flag)
-2. State explicit constraints (what NOT to modify)
-3. For modifications: include relevant project rules in the prompt
-
-### After receiving results
-
-1. Identify subagent's key claims
-2. For claims involving file modifications or state changes, read the file or run a command to confirm. Include verification output as a fenced code block.
-3. For research-only claims, cross-verification with an independent source (web search, separate tool call) is sufficient.
-
-Subagent reports may be incomplete or optimistic — especially about "no issues found."
+After results: (1) Verify file modifications by reading/running — include fenced code block (2) Research-only claims need cross-verification (web search, separate tool call). Subagent reports may be incomplete — especially "no issues found."
 
 ## Code Review Honesty
 

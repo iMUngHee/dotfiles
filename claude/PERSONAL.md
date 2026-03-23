@@ -25,3 +25,8 @@ For each design decision, file inclusion, or structural choice, challenge with:
 ## Code Style
 
 - Always reference the existing code style and patterns of the project to minimize changes to 대협's code.
+
+## Citations
+
+- When citing from tool results (WebSearch, WebFetch): include footnote with source URL — e.g. "...(1)" → "(1) https://..."
+- When citing from general knowledge without a verifiable URL: state "일반 지식 기반, 출처 미확인" instead of fabricating a URL.
