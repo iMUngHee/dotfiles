@@ -1,19 +1,22 @@
 return {
   {
     "nvim-treesitter/nvim-treesitter",
+    branch = "main",
     build = ":TSUpdate",
-    event = { "BufReadPost", "BufNewFile" },
-    dependencies = {
-      "nvim-treesitter/nvim-treesitter-textobjects",
-    },
-    opts = {
-      ensure_installed = {
+    config = function()
+      require("nvim-treesitter").setup({
+        install_dir = vim.fn.stdpath("data") .. "/site",
+      })
+      require("nvim-treesitter").install({
         "lua",
         "vim",
         "vimdoc",
+        "markdown",
+        "markdown_inline",
+        "c",
         "javascript",
         "typescript",
-        "c",
+        "tsx",
         "rust",
         "json",
         "toml",
@@ -28,57 +31,23 @@ return {
         "jsdoc",
         "java",
         "kotlin",
-      },
-      highlight = { enable = true },
-      indent = { enable = true },
-      incremental_selection = {
-        enable = true,
-        keymaps = {
-          init_selection = "gnn",
-          node_incremental = "<C-k>",
-          scope_incremental = false,
-          node_decremental = "<C-j>",
-        },
-      },
-      textobjects = {
-        select = {
-          enable = true,
-          lookahead = true,
-          keymaps = {
-            ["af"] = "@function.outer",
-            ["if"] = "@function.inner",
-            ["ac"] = "@class.outer",
-            ["ic"] = "@class.inner",
-            ["ai"] = "@conditional.outer",
-            ["ii"] = "@conditional.inner",
-          },
-        },
-        move = {
-          enable = true,
-          set_jumps = true,
-          goto_next_start = { ["]f"] = "@function.outer", ["]c"] = "@class.outer" },
-          goto_previous_start = { ["[f"] = "@function.outer", ["[c"] = "@class.outer" },
-        },
-      },
-    },
-    config = function(_, opts)
-      require("nvim-treesitter.configs").setup(opts)
+      })
 
       vim.treesitter.language.register("bash", "sh")
 
       vim.o.foldlevel = 99
       vim.o.foldlevelstart = 99
 
-      vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
-        group = vim.api.nvim_create_augroup("TSFolding", { clear = true }),
-        callback = function()
-          local buf = vim.api.nvim_get_current_buf()
-          if vim.bo[buf].buftype ~= "" then
+      local augroup = vim.api.nvim_create_augroup("TSBuiltin", { clear = true })
+
+      vim.api.nvim_create_autocmd("FileType", {
+        group = augroup,
+        callback = function(ev)
+          if vim.bo[ev.buf].buftype ~= "" then
             return
           end
-          local status, parser = pcall(vim.treesitter.get_parser, buf)
-
-          if status and parser then
+          local lang = vim.treesitter.language.get_lang(vim.bo[ev.buf].filetype)
+          if lang and pcall(vim.treesitter.start, ev.buf, lang) then
             vim.opt_local.foldmethod = "expr"
             vim.opt_local.foldexpr = "v:lua.vim.treesitter.foldexpr()"
           else
@@ -96,6 +65,11 @@ return {
       max_lines = 3,
       multiline_threshold = 5,
     },
+  },
+  {
+    "windwp/nvim-ts-autotag",
+    event = "InsertEnter",
+    opts = {},
   },
   {
     "HiPhish/rainbow-delimiters.nvim",
