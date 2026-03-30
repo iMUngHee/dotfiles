@@ -13,6 +13,7 @@ export ZSH="$HOME/.oh-my-zsh"
 export ZSH_CUSTOM="$ZDOTDIR/custom"
 export LANG=en_US.UTF-8
 export BAT_THEME="Catppuccin Mocha"
+export EDITOR=nvim
 
 ZSH_THEME=""
 
