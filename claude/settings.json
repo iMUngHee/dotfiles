@@ -3,7 +3,8 @@
     "DISABLE_AUTOUPDATER": "1",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
     "DISABLE_TELEMETRY": "1",
-    "DISABLE_ERROR_REPORTING": "1"
+    "DISABLE_ERROR_REPORTING": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "permissions": {
     "allow": [
@@ -151,6 +152,15 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/context-monitor.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/typecheck-after-edit.sh"
           }
         ]
       }

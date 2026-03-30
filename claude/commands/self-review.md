@@ -40,6 +40,7 @@ Review whether CLAUDE.md rules were followed in this session.
 | Verification Before Completion | ✓/✗ | ... |
 | Forbidden completion words | ✓/✗ | ... |
 | Rationalization Resistance | ✓/✗ | ... |
+| Scope Resolution | ✓/✗/— | ... |
 | Design Gate trigger | ✓/✗ | ... |
 | Design Gate — Approach Proposal | ✓/✗ | ... |
 | Design Gate — Incremental Approval | ✓/✗ | ... |
@@ -48,6 +49,7 @@ Review whether CLAUDE.md rules were followed in this session.
 | Subagent Trust — After results (verify modifications; cross-verify research) | ✓/✗ | ... |
 | Test Awareness | ✓/✗/— | ... |
 | TDD Discipline | ✓/✗/— | ... |
+| Diagnostic Discipline | ✓/✗/— | ... |
 | Debugging Escalation (3-Strike) | ✓/✗/— | ... |
 | Code Review Honesty | ✓/✗/— | ... |
 | Parallel Dispatch Criteria | ✓/✗/— | ... |
