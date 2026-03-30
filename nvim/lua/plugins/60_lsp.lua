@@ -35,11 +35,10 @@ return {
       vim.lsp.enable("sourcekit")
 
       require("mason-lspconfig").setup({
-        automatic_enable = {
-          exclude = { "ts_ls" }, -- typescript-tools.nvim handles TS/JS
-        },
+        automatic_enable = true,
         ensure_installed = {
-          "ts_ls", -- provides tsserver binary for typescript-tools.nvim (fnm-independent)
+          "ts_ls",
+          "eslint", -- ESLint LSP: real-time diagnostics + code actions (replaces nvim-lint eslint_d)
           "lua_ls",
           "rust_analyzer",
           "clangd",
@@ -55,45 +54,6 @@ return {
           "kotlin_lsp",
         },
       })
-    end,
-  },
-  {
-    "pmizio/typescript-tools.nvim",
-    ft = { "javascript", "typescript", "javascriptreact", "typescriptreact" },
-    dependencies = { "nvim-lua/plenary.nvim", "neovim/nvim-lspconfig" },
-    enabled = function()
-      return vim.fn.findfile(".flowconfig", ".;") == ""
-    end,
-    opts = {
-      settings = {
-        separate_diagnostic_server = true,
-        publish_diagnostic_on = "insert_leave",
-        expose_as_code_action = {
-          "add_missing_imports",
-          "remove_unused",
-          "organize_imports",
-          "fix_all",
-        },
-        jsx_close_tag = {
-          enable = true,
-          filetypes = { "javascriptreact", "typescriptreact" },
-        },
-        complete_function_calls = true,
-        javascript = {
-          implicitProjectConfiguration = {
-            checkJs = true,
-            noImplicitAny = false,
-          },
-        },
-        tsserver_file_preferences = {
-          includeInlayParameterNameHints = "all",
-          includeCompletionsForModuleExports = true,
-          quotePreference = "auto",
-        },
-      },
-    },
-    config = function(_, opts)
-      require("typescript-tools").setup(opts)
     end,
   },
   {
