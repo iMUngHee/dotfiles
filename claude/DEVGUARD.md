@@ -33,6 +33,15 @@ If your draft contains any phrase below, delete it and perform the action instea
 - "while I'm here, I'll also..." → Stop. Only do what was requested
 - "minor cleanup" / "small refactor" → Check: did 대협 request this? If no, don't do it
 
+## Scope Resolution
+
+When the user's request is ambiguous about scope:
+
+- **Review / "어떰?" / "어떻게 생각해?"** → only LOCAL changes on the current branch via `git diff`
+- **"정리해" / "리팩터해"** → only explicitly named files/symbols. Report related files and wait for approval
+- **"왜 이래?" / "왜 안 돼?"** → explain root cause first. Suggest workarounds only when asked
+- When scope is unclear, ask a one-sentence clarifying question before proceeding
+
 ## Skill Compliance
 
 If a user request matches a registered skill's trigger condition, invoke the skill instead of performing the action manually. Do not bypass skills by reimplementing their behavior with raw tool calls.
@@ -60,6 +69,15 @@ In a test-enabled project, if your response adds or modifies a function/class bu
 When TDD is required: **No production code without a failing test first.** No exceptions.
 
 Follow strict RED-GREEN-REFACTOR: write failing test → run and watch fail → simplest passing code → run and watch pass → refactor while green → commit. Never skip running tests.
+
+## Diagnostic Discipline
+
+When investigating any issue (bug, config problem, unexpected behavior):
+
+1. **State hypothesis BEFORE investigating**: "Hypothesis: [X] because [observable evidence]"
+2. **Simplest, most local cause first**: config issue → check that file first (never blame framework). Runtime error → direct cause from the error message first
+3. **One hypothesis at a time**: do not move to the next hypothesis before verifying the current one
+4. **Wrong? Full reset**: do not patch on top of a wrong hypothesis — restart analysis from scratch
 
 ## Debugging Escalation (3-Strike Rule)
 

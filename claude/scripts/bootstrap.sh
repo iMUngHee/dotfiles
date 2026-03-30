@@ -57,12 +57,10 @@ else
     cp "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json"
 fi
 
-# ── 4. MEMORY.md (merge base + private) ──
-echo "Deploying MEMORY.md..."
-{
-    cat "$REPO_DIR/MEMORY.md"
-    [ -f "$REPO_DIR/MEMORY.private.md" ] && cat "$REPO_DIR/MEMORY.private.md"
-} > "$CLAUDE_DIR/MEMORY.md"
+# ── 4. MEMORY files (deploy separately for @ includes) ──
+echo "Deploying MEMORY files..."
+cp "$REPO_DIR/MEMORY.md" "$CLAUDE_DIR/MEMORY.md"
+[ -f "$REPO_DIR/MEMORY.private.md" ] && cp "$REPO_DIR/MEMORY.private.md" "$CLAUDE_DIR/MEMORY.private.md"
 
 # ── 5. Symlink: memory directory (global, not under projects/) ──
 echo "Linking memory..."

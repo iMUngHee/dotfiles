@@ -55,8 +55,8 @@ if [ ${#NEW_FILES[@]} -gt 0 ]; then
     fi
 fi
 
-# NOTE: MEMORY.md is NOT synced back.
-# The deployed ~/.claude/MEMORY.md is a merged file (base + private).
+# NOTE: MEMORY.md and MEMORY.private.md are NOT synced back.
+# They are deployed as separate files to ~/.claude/ (@ includes resolve from there).
 # Edit MEMORY.md or MEMORY.private.md in the repo directly.
 
 if [ "$changed" = false ]; then

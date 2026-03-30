@@ -2,6 +2,7 @@
 @PERSONAL.md
 @DEVGUARD.md
 @MEMORY.md
+@MEMORY.private.md
 
 ## Automated by Hooks (do not do manually)
 
