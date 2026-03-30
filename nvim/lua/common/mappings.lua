@@ -12,7 +12,7 @@ g.mapleader = " "
 g.maplocalleader = " "
 
 -- Remove Neovim 0.11 default LSP mappings; replaced by LspAttach keymaps below
-for _, key in ipairs({ "grn", "gra", "grr", "gri", "grt" }) do
+for _, key in ipairs({ "grn", "gra", "grr", "gri", "grt", "grx" }) do
   pcall(vim.keymap.del, "n", key)
 end
 
@@ -80,23 +80,41 @@ vim.api.nvim_create_autocmd("LspAttach", {
       vim.diagnostic.jump({ count = -1, float = true })
     end, vim.tbl_extend("force", opts, { desc = "Prev Diagnostic" }))
     keymap.set("n", "gl", vim.diagnostic.open_float, vim.tbl_extend("force", opts, { desc = "Show Line Diagnostics" }))
+    keymap.set("n", "gy", vim.lsp.buf.type_definition, vim.tbl_extend("force", opts, { desc = "Go to Type Definition" }))
+    keymap.set("n", "<leader>cx", vim.lsp.codelens.run, vim.tbl_extend("force", opts, { desc = "Run CodeLens" }))
   end,
 })
 
--- Copy file reference for AI tools
-keymap.set("n", "<leader>L", function()
-  local path = vim.fn.expand("%:.")
-  if path == "" or vim.bo.buftype ~= "" then
+-- Copy file reference for AI tools (<leader>l = project root, <leader>L = home)
+local function file_ref_path(scope)
+  local abs = vim.fn.expand("%:p")
+  if abs == "" or vim.bo.buftype ~= "" then
+    return nil
+  end
+  if scope == "home" then
+    return vim.fn.fnamemodify(abs, ":~")
+  end
+  local root = vim.fs.root(0, ".git") or vim.fn.getcwd()
+  local resolved = vim.fn.resolve(abs)
+  if resolved:sub(1, #root) == root then
+    return resolved:sub(#root + 2)
+  end
+  return vim.fn.expand("%:.")
+end
+
+local function copy_file_ref(scope)
+  local path = file_ref_path(scope)
+  if not path then
     vim.notify("No file path", vim.log.levels.WARN)
     return
   end
   vim.fn.setreg("+", "@" .. path)
   vim.notify("Copied: @" .. path)
-end, { desc = "Copy file ref to clipboard" })
+end
 
-keymap.set("x", "<leader>L", function()
-  local path = vim.fn.expand("%:.")
-  if path == "" or vim.bo.buftype ~= "" then
+local function copy_file_ref_lines(scope)
+  local path = file_ref_path(scope)
+  if not path then
     vim.notify("No file path", vim.log.levels.WARN)
     return
   end
@@ -105,9 +123,13 @@ keymap.set("x", "<leader>L", function()
   if s > e then
     s, e = e, s
   end
-  -- Format: @path#LstartLine-endLine (Claude Code file reference)
   local ref = (s == e) and ("@" .. path .. "#L" .. s) or ("@" .. path .. "#L" .. s .. "-" .. e)
   vim.fn.setreg("+", ref)
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
   vim.notify("Copied: " .. ref)
-end, { desc = "Copy file ref with lines to clipboard" })
+end
+
+keymap.set("n", "<leader>l", function() copy_file_ref("project") end, { desc = "Copy file ref (project root) to clipboard" })
+keymap.set("x", "<leader>l", function() copy_file_ref_lines("project") end, { desc = "Copy file ref (project root) with lines to clipboard" })
+keymap.set("n", "<leader>L", function() copy_file_ref("home") end, { desc = "Copy file ref (home) to clipboard" })
+keymap.set("x", "<leader>L", function() copy_file_ref_lines("home") end, { desc = "Copy file ref (home) with lines to clipboard" })

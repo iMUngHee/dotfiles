@@ -14,7 +14,7 @@ return {
       },
 
       sections = {
-        lualine_c = { { "filename", path = 1 } },
+        lualine_c = { { "filename", path = 1 }, "diagnostics" },
         lualine_x = { "encoding", "fileformat", "filetype" },
       },
     },
@@ -157,6 +157,9 @@ return {
         end,
         desc = "Reopen last closed buffer (stack)",
       },
+      { "<leader>tc", "<cmd>tabclose<CR>", desc = "Close tab" },
+      { "<leader>to", "<cmd>tabonly<CR>", desc = "Close other tabs" },
+
       {
         "<leader>bU",
         function()
