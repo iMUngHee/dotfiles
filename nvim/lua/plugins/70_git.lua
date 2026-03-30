@@ -29,6 +29,9 @@ return {
 
         -- line blame toggle
         map("n", "<leader>gb", gs.toggle_current_line_blame, "Toggle Blame")
+        map("n", "<leader>gB", function()
+          gs.blame_line({ full = true })
+        end, "Blame Line (full)")
 
         -- stage/undo
         map("n", "<leader>gs", gs.stage_hunk, "Stage Hunk")
