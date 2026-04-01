@@ -173,6 +173,11 @@ return {
   {
     "nvimdev/dashboard-nvim",
     event = "VimEnter",
+    init = function()
+      -- Stub out register_lsp_root to prevent async cache writes that corrupt
+      -- on exit (project feature is disabled but hyper theme calls it anyway).
+      require("dashboard.events").register_lsp_root = function() end
+    end,
     opts = {
       theme = "hyper",
       shortcut_type = "number",
