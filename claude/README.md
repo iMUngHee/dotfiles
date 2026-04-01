@@ -7,26 +7,29 @@ Portable [Claude Code](https://claude.ai/code) configuration synced via git.
 ```
 claude/
 ├── scripts/
-│   ├── bootstrap.sh          # Deploy config to ~/.claude/
-│   └── sync-back.sh          # Sync local changes back to repo
+│   ├── bootstrap.sh            # Deploy config to ~/.claude/
+│   ├── sync-back.sh            # Sync local changes back to repo
+│   └── record-quota-reset.sh   # Manual quota reset time recording
 ├── notifier/
-│   ├── notifier.swift         # macOS notification daemon source
-│   ├── build.sh               # Build + launchd registration
+│   ├── notifier.swift          # macOS notification daemon source
+│   ├── build.sh                # Build + launchd registration
 │   ├── Info.plist
 │   └── AppIcon.icns
 ├── extensions/
-│   └── statusline.sh          # Claude Code status line (model, context, cost, usage)
-├── hooks/                     # Claude Code hooks (RTK rewrite, file protection, notifications)
-├── commands/                  # Slash commands (/diagram, /clean-permissions)
-├── memory/                    # Global long-term memory files
-│   └── private/               # Work-only memories (gitignored)
-├── CLAUDE.md                  # Entry point — loads all other configs
-├── PERSONAL.md                # Collaboration rules
-├── DEVGUARD.md                # Development guardrails
-├── RTK.md                     # RTK (Rust Token Killer) reference
-├── MEMORY.md                  # Memory index (public)
-├── MEMORY.private.md          # Memory index (work-only, gitignored)
-└── settings.json              # Claude Code settings (permissions, hooks, plugins)
+│   └── statusline.sh           # Status line (model, context, cost, usage, CCS profile)
+├── hooks/                      # Claude Code hooks (RTK rewrite, file protection, notifications,
+│                               #   quota switch: on-rate-limit.sh, check-quota-switch.sh)
+├── commands/                   # Slash commands (/diagram, /copy, /clean-permissions, /self-review)
+├── skills/                     # Multi-step skills (/design, /debug, /verify, /code-review, ...)
+├── memory/                     # Global long-term memory files
+│   └── private/                # Work-only memories (gitignored)
+├── CLAUDE.md                   # Entry point — loads all other configs
+├── PERSONAL.md                 # Collaboration rules
+├── DEVGUARD.md                 # Development guardrails
+├── RTK.md                      # RTK (Rust Token Killer) reference
+├── MEMORY.md                   # Memory index (public)
+├── MEMORY.private.md           # Memory index (work-only, gitignored)
+└── settings.json               # Claude Code settings (permissions, hooks, plugins)
 ```
 
 ## Prerequisites
@@ -47,10 +50,11 @@ cd ~/.config/claude
 Bootstrap will:
 
 1. Symlink config files and directories to `~/.claude/`
-2. Merge `settings.json` (repo keys override, local-only keys like `model` preserved)
-3. Merge `MEMORY.md` + `MEMORY.private.md` (if exists) into `~/.claude/MEMORY.md`
-4. Symlink `memory/` to `~/.claude/memory/`
-5. Build ClaudeNotifier (optional, skipped if `swiftc` not found)
+2. Copy executable scripts to `~/.claude/scripts/` (excluding bootstrap/sync-back)
+3. Merge `settings.json` (repo keys override, local-only keys like `model` preserved)
+4. Deploy `MEMORY.md` + `MEMORY.private.md` (if exists) to `~/.claude/`
+5. Symlink `memory/` to `~/.claude/memory/`
+6. Build ClaudeNotifier (optional, skipped if `swiftc` not found)
 
 ## Sync
 
