@@ -12,7 +12,6 @@
       "Bash(bun test*)",
       "Bash(cargo build*)",
       "Bash(cargo test*)",
-      "Bash(cat*)",
       "Bash(ccusage*)",
       "Bash(cd*)",
       "Bash(chmod*)",
@@ -77,8 +76,16 @@
       "Read(~/.docker/config.json)",
       "Read(~/.npmrc)",
       "Read(~/.pypirc)",
-      "Read(~/.git-credentials)"
-    ]
+      "Read(~/.git-credentials)",
+      "Read(~/.bash_history)",
+      "Read(~/.zsh_history)",
+      "Read(~/.netrc)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)"
+    ],
+    "disableBypassPermissionsMode": "disable"
   },
   "hooks": {
     "PreToolUse": [
@@ -147,7 +154,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/notify.sh stop"
+            "command": "$HOME/.claude/hooks/notify.sh stop",
+            "timeout": 10000
           }
         ]
       }
@@ -158,7 +166,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/notify.sh approval"
+            "command": "$HOME/.claude/hooks/notify.sh approval",
+            "timeout": 10000
           }
         ]
       }
@@ -169,14 +178,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/notify.sh approval"
+            "command": "$HOME/.claude/hooks/notify.sh approval",
+            "timeout": 10000
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "",
+        "matcher": "Edit|Write|Bash|Agent|NotebookEdit|MultiEdit",
         "hooks": [
           {
             "type": "command",
@@ -190,6 +200,26 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/typecheck-after-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/log-tool-failure.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/prompt-guard.sh"
           }
         ]
       }
@@ -214,6 +244,8 @@
   "effortLevel": "high",
   "sandbox": {
     "enabled": true,
-    "autoAllowBashIfSandboxed": true
-  }
+    "autoAllowBashIfSandboxed": true,
+    "failIfUnavailable": true
+  },
+  "cleanupPeriodDays": 14
 }

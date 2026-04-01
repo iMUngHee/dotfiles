@@ -18,9 +18,8 @@ claude/
 ├── extensions/
 │   └── statusline.sh           # Status line (model, context, cost, usage, CCS profile)
 ├── hooks/                      # Claude Code hooks (RTK rewrite, file protection, notifications,
-│                               #   quota switch: on-rate-limit.sh, check-quota-switch.sh)
-├── commands/                   # Slash commands (/diagram, /copy, /clean-permissions, /self-review)
-├── skills/                     # Multi-step skills (/design, /debug, /verify, /code-review, ...)
+│                               #   prompt guard, tool failure log, quota switch)
+├── skills/                     # Skills (/design, /debug, /verify, /code-review, /diagram, /copy, ...)
 ├── memory/                     # Global long-term memory files
 │   └── private/                # Work-only memories (gitignored)
 ├── CLAUDE.md                   # Entry point — loads all other configs

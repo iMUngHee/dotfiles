@@ -1,5 +1,7 @@
 ---
+name: copy
 description: "Copy markdown or text to clipboard via pbcopy. Use when asked to copy something to clipboard."
+disable-model-invocation: true
 allowed-tools: Bash
 ---
 

@@ -4,11 +4,16 @@ description: "Generate PR body from branch changes and copy to clipboard. Use wh
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob
 model: sonnet
+disable-model-invocation: true
 ---
 
 Generate the PR body for the current branch.
 
 Base branch: $ARGUMENTS (if empty, infer from branch naming or ask)
+
+## Current Context
+- Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
+- PR template: !`cat .github/PULL_REQUEST_TEMPLATE.md 2>/dev/null || echo "No template found"`
 
 ## Steps
 

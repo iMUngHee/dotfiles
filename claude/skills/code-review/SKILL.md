@@ -10,6 +10,10 @@ Review the current branch's PR changes per-commit.
 
 Base branch: $ARGUMENTS (if empty, infer from branch naming or ask)
 
+## Current Context
+- Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
+- Commits on branch: !`git log --oneline main..HEAD 2>/dev/null || git log --oneline -10 2>/dev/null || echo "N/A"`
+
 ## Steps
 
 ### 1. Identify unique commits

@@ -10,6 +10,10 @@ Verify that the completed work actually achieves its goal.
 
 Goal: $ARGUMENTS (if empty, infer from recent commits or ask)
 
+## Current Context
+- Recent commits: !`git log --oneline -5 2>/dev/null || echo "N/A"`
+- Changed files: !`git diff --stat HEAD~5 2>/dev/null || echo "N/A"`
+
 ## Approach: Goal-backward
 
 Do NOT check "were tasks completed." Instead ask:
