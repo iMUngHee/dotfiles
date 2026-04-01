@@ -43,7 +43,17 @@ for dir in commands rules skills; do
     [ -d "$REPO_DIR/$dir" ] && ln -sfn "$REPO_DIR/$dir" "$CLAUDE_DIR/$dir"
 done
 
-# ── 3. Merge: settings.json (repo keys override, local-only keys preserved) ──
+# ── 3. Scripts: copy executable scripts ──
+echo "Deploying scripts..."
+mkdir -p "$CLAUDE_DIR/scripts"
+for f in "$REPO_DIR/scripts/"*.sh; do
+    [ "$(basename "$f")" = "bootstrap.sh" ] && continue
+    [ "$(basename "$f")" = "sync-back.sh" ] && continue
+    cp "$f" "$CLAUDE_DIR/scripts/"
+    chmod +x "$CLAUDE_DIR/scripts/$(basename "$f")"
+done
+
+# ── 4. Merge: settings.json (repo keys override, local-only keys preserved) ──
 echo "Deploying settings.json..."
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
     jq -s '
@@ -57,12 +67,12 @@ else
     cp "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json"
 fi
 
-# ── 4. MEMORY files (deploy separately for @ includes) ──
+# ── 5. MEMORY files (deploy separately for @ includes) ──
 echo "Deploying MEMORY files..."
 cp "$REPO_DIR/MEMORY.md" "$CLAUDE_DIR/MEMORY.md"
 [ -f "$REPO_DIR/MEMORY.private.md" ] && cp "$REPO_DIR/MEMORY.private.md" "$CLAUDE_DIR/MEMORY.private.md"
 
-# ── 5. Symlink: memory directory (global, not under projects/) ──
+# ── 6. Symlink: memory directory (global, not under projects/) ──
 echo "Linking memory..."
 if [ -d "$CLAUDE_DIR/memory" ] && [ ! -L "$CLAUDE_DIR/memory" ]; then
     rm -rf "$CLAUDE_DIR/memory.bak"
@@ -70,7 +80,7 @@ if [ -d "$CLAUDE_DIR/memory" ] && [ ! -L "$CLAUDE_DIR/memory" ]; then
 fi
 ln -sfn "$REPO_DIR/memory" "$CLAUDE_DIR/memory"
 
-# ── 6. Build ClaudeNotifier (optional, requires swiftc) ──
+# ── 7. Build ClaudeNotifier (optional, requires swiftc) ──
 if command -v swiftc &>/dev/null; then
     echo
     echo "Building ClaudeNotifier..."
