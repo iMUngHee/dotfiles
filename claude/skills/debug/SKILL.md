@@ -10,6 +10,11 @@ Systematically debug the given issue.
 
 Issue: $ARGUMENTS (if empty, ask the user for the error or symptom)
 
+## Current Context
+- Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
+- Recent commits: !`git log --oneline -5 2>/dev/null || echo "N/A"`
+- Uncommitted changes: !`git status --short 2>/dev/null || echo "N/A"`
+
 ## Phases
 
 ### 1. Reproduce

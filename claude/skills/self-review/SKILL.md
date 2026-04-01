@@ -1,6 +1,8 @@
 ---
+name: self-review
 description: "Self-review CLAUDE.md rule compliance for the current session"
 allowed-tools: Read, Grep, Glob
+model: opus
 ---
 
 Review whether CLAUDE.md rules were followed in this session.

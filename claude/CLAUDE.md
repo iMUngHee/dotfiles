@@ -1,3 +1,5 @@
+# Claude Code Global Config — ~/.config/claude/
+
 @RTK.md
 @PERSONAL.md
 @DEVGUARD.md
@@ -11,6 +13,8 @@
 - **Notifications**: Task completion and approval requests trigger macOS notifications automatically. Do not use osascript for notifications.
 - **Context monitor**: At 50% and 65% context usage, warnings are injected via PostToolUse hook. Heed the warnings — autocompact triggers at 70%.
 - **Post-compact context**: After compaction, git branch, recent commits, and modified files are automatically injected. Do not re-query basic git state after compact.
+- **Prompt guard**: User prompts are scanned for accidentally pasted secrets (API keys, tokens, private keys). If blocked, remove the secret and retry.
+- **Tool failure log**: Bash tool failures are logged to `~/.claude/tool-failures.log` for debugging pattern analysis. No action required.
 
 ## After Compaction
 

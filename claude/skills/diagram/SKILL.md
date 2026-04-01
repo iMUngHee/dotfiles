@@ -1,7 +1,9 @@
 ---
-description: Generate Mermaid diagrams for architecture, flows, and data structures. Copies to clipboard for mermaid.live or excalidraw import.
+name: diagram
+description: "Generate Mermaid diagrams for architecture, flows, and data structures. Copies to clipboard for mermaid.live or excalidraw import."
 argument-hint: "[diagram description]"
-allowed-tools: Bash, Write
+allowed-tools: Bash
+disable-model-invocation: true
 model: sonnet
 ---
 

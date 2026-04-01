@@ -16,7 +16,7 @@ Two-directory setup:
 ### Deployment
 
 - `~/.config/claude/scripts/bootstrap.sh` deploys repo → `~/.claude/`
-  - Symlinks: `CLAUDE.md`, `RTK.md`, `PERSONAL.md`, `DEVGUARD.md`, `hooks/`, `commands/`, `skills/`, `memory/`, `statusline.sh`
+  - Symlinks: `CLAUDE.md`, `RTK.md`, `PERSONAL.md`, `DEVGUARD.md`, `hooks/`, `skills/`, `memory/`, `statusline.sh`
   - Copies: `settings.json` (repo keys override, local keys preserved), `MEMORY.md`, `MEMORY.private.md` (deployed separately)
 - `~/.config/claude/scripts/sync-back.sh` syncs `~/.claude/` → repo
   - Syncs `settings.json` (only repo-tracked keys)
@@ -29,7 +29,6 @@ Two-directory setup:
 3. `MEMORY.md` uses markdown links (summary index, files NOT auto-loaded)
 4. `MEMORY.private.md` uses `@` includes (files directly loaded into context) — no frontmatter in referenced files
 5. Skills use directory structure: `skills/<name>/SKILL.md`
-6. Commands use flat files: `commands/<name>.md`
 
 ## Audit checklist
 
@@ -41,5 +40,5 @@ When invoked, verify:
 4. **Commands & skills**: list with descriptions
 5. **Settings divergence**: `diff <(jq -S . ~/.config/claude/settings.json) <(jq -S . ~/.claude/settings.json)`
 6. **MEMORY.md divergence**: `diff ~/.config/claude/MEMORY.md ~/.claude/MEMORY.md` and `diff ~/.config/claude/MEMORY.private.md ~/.claude/MEMORY.private.md` — deployed as separate copies
-7. **Cross-file sync**: `self-review.md` checklist matches DEVGUARD.md sections and MEMORY.md feedback entries
+7. **Cross-file sync**: `/self-review` skill checklist matches DEVGUARD.md sections and MEMORY.md feedback entries
 8. **Dead references**: all `memory/*.md` links in MEMORY.md and MEMORY.private.md resolve to existing files
