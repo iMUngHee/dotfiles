@@ -23,78 +23,10 @@
 #
 # Queries actual usage via OAuth API (/api/oauth/usage), cache TTL 5 min
 
-# --- Quota cache ---
+# --- Constants ---
 USAGE_CACHE="$HOME/.claude/statusline_usage_cache.json"
 LOCK_FILE="${USAGE_CACHE}.lock"
 CACHE_TTL=300
-
-fetch_usage() {
-    # CCS: find the Keychain entry matching the active profile's subscriptionType
-    CCS_CFG="$HOME/.ccs/config.yaml"
-    if [ -f "$CCS_CFG" ]; then
-        CCS_DEFAULT=$(sed -n 's/^default: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$CCS_CFG")
-    fi
-    if [ -n "$CCS_DEFAULT" ]; then
-        # Search all Claude Code-credentials* entries for matching subscriptionType
-        security dump-keychain 2>/dev/null \
-            | sed -n 's/.*"svce"<blob>="\(Claude Code-credentials[^"]*\)".*/\1/p' \
-            | while IFS= read -r svc; do
-            cj=$(security find-generic-password -s "$svc" -w 2>/dev/null)
-            st=$(echo "$cj" | jq -r '.claudeAiOauth.subscriptionType // empty')
-            if [ "$st" = "$CCS_DEFAULT" ]; then
-                echo "$cj" > "$TMPDIR/ccs_cred.tmp"
-                echo "$st" > "$TMPDIR/ccs_sub.tmp"
-                break
-            fi
-        done
-        if [ -f "$TMPDIR/ccs_cred.tmp" ]; then
-            cred_json=$(cat "$TMPDIR/ccs_cred.tmp")
-            SUB_TYPE=$(cat "$TMPDIR/ccs_sub.tmp")
-            rm -f "$TMPDIR/ccs_cred.tmp" "$TMPDIR/ccs_sub.tmp"
-        fi
-    fi
-    # Fallback: default Keychain entry (standalone claude, no CCS)
-    if [ -z "$cred_json" ]; then
-        cred_json=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
-        SUB_TYPE=$(echo "$cred_json" | jq -r '.claudeAiOauth.subscriptionType // empty')
-    fi
-    TOKEN=$(echo "$cred_json" | jq -r '.claudeAiOauth.accessToken // empty')
-    if [ -n "$TOKEN" ]; then
-        resp=$(curl -sf --max-time 10 \
-                "https://api.anthropic.com/api/oauth/usage" \
-                -H "authorization: Bearer $TOKEN" \
-                -H "anthropic-beta: oauth-2025-04-20" \
-            -H "anthropic-version: 2023-06-01" 2>/dev/null)
-        if [ -n "$resp" ]; then
-            echo "$resp" | jq --argjson ts "$(date +%s)" --arg st "$SUB_TYPE" \
-                '. + {cached_at: $ts, subscription_type: $st}' \
-                > "${USAGE_CACHE}.tmp" 2>/dev/null \
-                && mv "${USAGE_CACHE}.tmp" "$USAGE_CACHE"
-        fi
-    fi
-    rm -f "$LOCK_FILE"
-}
-
-# --- --refresh / -r: invalidate cache, fetch immediately, and exit ---
-if [ "$1" = "--refresh" ] || [ "$1" = "-r" ]; then
-    rm -f "$USAGE_CACHE" "$LOCK_FILE"
-    fetch_usage
-    if [ -f "$USAGE_CACHE" ]; then
-        echo "Usage refreshed."
-    else
-        echo "Failed to fetch usage (no OAuth token or network error)."
-    fi
-    exit 0
-fi
-
-input=$(cat)
-
-# --- Parse JSON in one pass ---
-eval "$(echo "$input" | jq -r '
-  "model=" + (.model.display_name // "Unknown" | @sh),
-  "used_pct=" + (.context_window.used_percentage // "" | tostring | @sh),
-  "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh)
-')"
 
 # --- Colors ---
 RESET=$'\033[0m'
@@ -105,29 +37,130 @@ GREEN=$'\033[32m'
 YELLOW=$'\033[33m'
 RED=$'\033[31m'
 
+color_by_pct() {
+    if   [ "$1" -ge 80 ]; then printf '%s' "$RED"
+    elif [ "$1" -ge 50 ]; then printf '%s' "$YELLOW"
+    else                        printf '%s' "$GREEN"
+    fi
+}
+
+# --- Credential resolution ---
+# Sets: cred_json, SUB_TYPE
+resolve_credentials() {
+    local ccs_cfg="$HOME/.ccs/config.yaml" ccs_default=""
+
+    if [ -f "$ccs_cfg" ]; then
+        ccs_default=$(sed -n 's/^default: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$ccs_cfg")
+    fi
+
+    if [ -n "$ccs_default" ]; then
+        # CCS active: search suffixed entries only (unsuffixed = orphaned pre-CCS token)
+        # Prefer non-expired token; fall back to expired if none valid
+        local now_ms=$(date +%s)000 fallback_cred="" fallback_sub=""
+        while IFS= read -r svc; do
+            local cj st exp
+            cj=$(security find-generic-password -s "$svc" -w 2>/dev/null)
+            st=$(echo "$cj" | jq -r '.claudeAiOauth.subscriptionType // empty')
+            if [ "$st" = "$ccs_default" ]; then
+                exp=$(echo "$cj" | jq -r '.claudeAiOauth.expiresAt // 0')
+                if [ "$exp" -gt "$now_ms" ] 2>/dev/null; then
+                    cred_json="$cj"; SUB_TYPE="$st"; return
+                elif [ -z "$fallback_cred" ]; then
+                    fallback_cred="$cj"; fallback_sub="$st"
+                fi
+            fi
+        done < <(security dump-keychain 2>/dev/null \
+            | sed -n 's/.*"svce"<blob>="\(Claude Code-credentials-[^"]\{1,\}\)".*/\1/p')
+
+        if [ -n "$fallback_cred" ]; then
+            cred_json="$fallback_cred"; SUB_TYPE="$fallback_sub"; return
+        fi
+    fi
+
+    # Fallback: standalone Claude (no CCS)
+    cred_json=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+    SUB_TYPE=$(echo "$cred_json" | jq -r '.claudeAiOauth.subscriptionType // empty')
+}
+
+# --- Fetch usage from API ---
+# Sets: FETCH_ERROR (empty on success)
+fetch_usage() {
+    FETCH_ERROR=""
+    cred_json="" SUB_TYPE=""
+    resolve_credentials
+
+    local token
+    token=$(echo "$cred_json" | jq -r '.claudeAiOauth.accessToken // empty')
+    if [ -z "$token" ]; then
+        FETCH_ERROR="no_token"; rm -f "$LOCK_FILE"; return
+    fi
+
+    local resp_file="$TMPDIR/statusline_resp.$$.tmp" http_code
+    http_code=$(curl -s -o "$resp_file" -w "%{http_code}" --max-time 10 \
+        "https://api.anthropic.com/api/oauth/usage" \
+        -H "authorization: Bearer $token" \
+        -H "anthropic-beta: oauth-2025-04-20" \
+        -H "anthropic-version: 2023-06-01" 2>/dev/null)
+
+    if [ "$http_code" = "200" ]; then
+        jq --argjson ts "$(date +%s)" --arg st "$SUB_TYPE" \
+            '. + {cached_at: $ts, subscription_type: $st}' \
+            "$resp_file" > "${USAGE_CACHE}.$$.tmp" 2>/dev/null \
+            && mv "${USAGE_CACHE}.$$.tmp" "$USAGE_CACHE"
+    elif [ "$http_code" = "429" ]; then
+        FETCH_ERROR="rate_limited"
+    elif [ -n "$http_code" ] && [ "$http_code" != "000" ]; then
+        FETCH_ERROR="http_${http_code}"
+    else
+        FETCH_ERROR="network"
+    fi
+
+    rm -f "$resp_file" "$LOCK_FILE"
+}
+
+# --- --refresh / -r: force fetch and exit ---
+if [ "$1" = "--refresh" ] || [ "$1" = "-r" ]; then
+    rm -f "$LOCK_FILE"
+    fetch_usage
+    if [ -n "$FETCH_ERROR" ]; then
+        case "$FETCH_ERROR" in
+            rate_limited) echo "Rate limited (429). Retry later." ;;
+            no_token)     echo "No OAuth token found in Keychain." ;;
+            network)      echo "Network error (timeout or unreachable)." ;;
+            *)            echo "Fetch failed ($FETCH_ERROR)." ;;
+        esac
+        [ -f "$USAGE_CACHE" ] && echo "(stale cache preserved)"
+    elif [ -f "$USAGE_CACHE" ]; then
+        echo "Usage refreshed."
+    else
+        echo "Failed to fetch usage."
+    fi
+    exit 0
+fi
+
+# === Status line mode: read JSON from stdin ===
+input=$(cat)
+
+eval "$(echo "$input" | jq -r '
+  "model=" + (.model.display_name // "Unknown" | @sh),
+  "used_pct=" + (.context_window.used_percentage // "" | tostring | @sh),
+  "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh)
+')"
+
 # --- Model (shorten) ---
 short_model=$(echo "$model" \
-        | sed 's/^Claude //' \
-        | sed 's/^Sonnet /S/' \
-        | sed 's/^Haiku /H/' \
-        | sed 's/^Opus /O/' \
-        | sed 's/ Sonnet / S/' \
-        | sed 's/ Haiku / H/' \
-    | sed 's/ Opus / O/')
+    | sed 's/^Claude //; s/^Sonnet /S/; s/^Haiku /H/; s/^Opus /O/; s/ Sonnet$/S/; s/ Haiku$/H/; s/ Opus$/O/; s/ Sonnet / S/; s/ Haiku / H/; s/ Opus / O/')
 
 # --- Context bar ---
 if [ -n "$used_pct" ]; then
     used_int=$(printf "%.0f" "$used_pct")
-    echo "$used_int" > /tmp/claude-context-pct
+    echo "$used_int" > /tmp/claude-context-pct  # shared with hooks
     filled=$(( used_int * 10 / 100 ))
     empty=$(( 10 - filled ))
-    bar=$(printf '%0.s|' $(seq 1 $filled) 2>/dev/null)$(printf '%0.s.' $(seq 1 $empty) 2>/dev/null)
-
-    if   [ "$used_int" -ge 80 ]; then bar_color="$RED"
-    elif [ "$used_int" -ge 50 ]; then bar_color="$YELLOW"
-    else                               bar_color="$GREEN"
-    fi
-    ctx_part="${bar_color}[${bar}]${RESET} ${DIM}${used_int}%${RESET}"
+    bar=""
+    [ "$filled" -gt 0 ] && bar=$(printf '%0.s|' $(seq 1 $filled))
+    [ "$empty" -gt 0 ] && bar="${bar}$(printf '%0.s.' $(seq 1 $empty))"
+    ctx_part="$(color_by_pct "$used_int")[${bar}]${RESET} ${DIM}${used_int}%${RESET}"
 else
     ctx_part="${DIM}[ctx:--]${RESET}"
 fi
@@ -135,48 +168,46 @@ fi
 # --- Session cost ---
 cost_part=""
 if awk -v c="$session_cost" 'BEGIN{exit !(c+0>0)}'; then
-    cost_fmt=$(printf "%.3f" "$session_cost")
-    cost_part=" ${DIM}\$${cost_fmt}${RESET}"
+    cost_part=" ${DIM}\$$(printf "%.3f" "$session_cost")${RESET}"
 fi
 
-# --- Quota usage (check cache and refresh) ---
+# --- Quota: background refresh with cache ---
 quota_part=""
+_now=$(date +%s)
 
 refresh_needed=true
 if [ -f "$USAGE_CACHE" ]; then
     cached_at=$(jq -r '.cached_at // 0' "$USAGE_CACHE" 2>/dev/null)
-    age=$(( $(date +%s) - ${cached_at:-0} ))
-    [ "$age" -lt "$CACHE_TTL" ] && refresh_needed=false
+    [ $(( _now - ${cached_at:-0} )) -lt "$CACHE_TTL" ] && refresh_needed=false
 fi
 
 if [ "$refresh_needed" = true ]; then
     if [ -f "$USAGE_CACHE" ]; then
-        # Background refresh if cache exists (lock to prevent duplicates, remove stale lock after 30s)
+        # Background refresh; stale lock cleanup after 30s
         if [ -f "$LOCK_FILE" ]; then
-            lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_FILE" 2>/dev/null || echo 0) ))
+            lock_age=$(( _now - $(stat -f %m "$LOCK_FILE" 2>/dev/null || echo 0) ))
             [ "$lock_age" -gt 30 ] && rm -f "$LOCK_FILE"
         fi
         if ( set -o noclobber; echo $$ > "$LOCK_FILE" ) 2>/dev/null; then
             fetch_usage &
         fi
     else
-        # Synchronous fetch if no cache (show immediately on first run)
-        fetch_usage
+        fetch_usage  # synchronous on first run
     fi
 fi
 
-# Read quota data from cache
+# --- Read cached quota data ---
 if [ -f "$USAGE_CACHE" ]; then
     eval "$(jq -r '
-    "sub_type=" + (.subscription_type // "" | @sh),
-    "fh_util=" + (.five_hour.utilization // 0 | tostring | @sh),
-    "fh_reset=" + (.five_hour.resets_at // "" | @sh),
-    "sd_util=" + (.seven_day.utilization // 0 | tostring | @sh),
-    "eu_enabled=" + (.extra_usage.is_enabled // false | tostring | @sh),
-    "eu_limit=" + (.extra_usage.monthly_limit // 0 | tostring | @sh),
-    "eu_used=" + (.extra_usage.used_credits // 0 | tostring | @sh),
-    "eu_util=" + (.extra_usage.utilization // 0 | tostring | @sh)
-  ' "$USAGE_CACHE" 2>/dev/null)"
+      "sub_type=" + (.subscription_type // "" | @sh),
+      "fh_util=" + (.five_hour.utilization // 0 | tostring | @sh),
+      "fh_reset=" + (.five_hour.resets_at // "" | @sh),
+      "sd_util=" + (.seven_day.utilization // 0 | tostring | @sh),
+      "eu_enabled=" + (.extra_usage.is_enabled // false | tostring | @sh),
+      "eu_limit=" + (.extra_usage.monthly_limit // 0 | tostring | @sh),
+      "eu_used=" + (.extra_usage.used_credits // 0 | tostring | @sh),
+      "eu_util=" + (.extra_usage.utilization // 0 | tostring | @sh)
+    ' "$USAGE_CACHE" 2>/dev/null)"
 
     # Plan label
     case "$sub_type" in
@@ -187,28 +218,18 @@ if [ -f "$USAGE_CACHE" ]; then
         *)          plan_label="${sub_type:-?}" ;;
     esac
 
-    # 5-hour quota
+    # 5-hour quota with reset countdown
     fh_pct=$(awk -v u="$fh_util" 'BEGIN{printf "%.0f", u}')
-    if   [ "$fh_pct" -ge 80 ]; then fh_col="$RED"
-    elif [ "$fh_pct" -ge 50 ]; then fh_col="$YELLOW"
-    else                              fh_col="$GREEN"
-    fi
-    fh_part="${fh_col}5h:${fh_pct}%${RESET}"
+    fh_part="$(color_by_pct "$fh_pct")5h:${fh_pct}%${RESET}"
 
-    # Reset countdown (show whenever resets_at is in the future)
     if [ -n "$fh_reset" ]; then
-        reset_ts="${fh_reset%%.*}"
-        reset_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$reset_ts" +%s 2>/dev/null)
+        reset_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${fh_reset%%.*}" +%s 2>/dev/null)
         if [ -n "$reset_epoch" ]; then
-            now=$(date +%s)
-            diff=$(( reset_epoch - now ))
-            if [ "$diff" -gt 0 ]; then
-                hours=$(( diff / 3600 ))
-                mins=$(( (diff % 3600) / 60 ))
-                if [ "$hours" -gt 0 ]; then
-                    fh_part="${fh_part} ${DIM}↻${hours}h${mins}m${RESET}"
-                else
-                    fh_part="${fh_part} ${DIM}↻${mins}m${RESET}"
+            remaining=$(( reset_epoch - _now ))
+            if [ "$remaining" -gt 0 ]; then
+                h=$(( remaining / 3600 )) m=$(( (remaining % 3600) / 60 ))
+                if [ "$h" -gt 0 ]; then fh_part="${fh_part} ${DIM}↻${h}h${m}m${RESET}"
+                else                     fh_part="${fh_part} ${DIM}↻${m}m${RESET}"
                 fi
             fi
         fi
@@ -216,11 +237,7 @@ if [ -f "$USAGE_CACHE" ]; then
 
     # 7-day quota
     sd_pct=$(awk -v u="$sd_util" 'BEGIN{printf "%.0f", u}')
-    if   [ "$sd_pct" -ge 80 ]; then sd_col="$RED"
-    elif [ "$sd_pct" -ge 50 ]; then sd_col="$YELLOW"
-    else                              sd_col="$GREEN"
-    fi
-    sd_part="${sd_col}7d:${sd_pct}%${RESET}"
+    sd_part="$(color_by_pct "$sd_pct")7d:${sd_pct}%${RESET}"
 
     quota_part=" ${DIM}│${RESET} ${CYAN}${BOLD}${plan_label}${RESET} ${fh_part} ${DIM}·${RESET} ${sd_part}"
 
@@ -229,20 +246,11 @@ if [ -f "$USAGE_CACHE" ]; then
         used_dollars=$(awk -v u="$eu_used" 'BEGIN{printf "%.2f", u/100}')
         remain_dollars=$(awk -v l="$eu_limit" -v u="$eu_used" 'BEGIN{printf "%.2f", (l-u)/100}')
         util_pct=$(awk -v u="$eu_util" 'BEGIN{printf "%.1f", u}')
-        util_pct_int=$(printf "%.0f" "$util_pct")
-
-        if   [ "$util_pct_int" -ge 80 ]; then ucol="$RED"
-        elif [ "$util_pct_int" -ge 50 ]; then ucol="$YELLOW"
-        else                                   ucol="$GREEN"
-        fi
-
-        quota_part="${quota_part} ${DIM}·${RESET} ${ucol}M.${util_pct}%${RESET} ${DIM}U.\$${used_dollars} R.\$${remain_dollars}${RESET}"
+        util_int=$(printf "%.0f" "$util_pct")
+        quota_part="${quota_part} ${DIM}·${RESET} $(color_by_pct "$util_int")M.${util_pct}%${RESET} ${DIM}U.\$${used_dollars} R.\$${remain_dollars}${RESET}"
     fi
 fi
 
 # --- Assemble ---
 printf "${CYAN}${BOLD}%s${RESET}  %s%s%s\n" \
-    "$short_model" \
-    "$ctx_part" \
-    "$cost_part" \
-    "$quota_part"
+    "$short_model" "$ctx_part" "$cost_part" "$quota_part"
