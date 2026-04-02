@@ -19,13 +19,13 @@
 //   10  Login required (browser opened, waiting for user to login)
 //
 // Auth:
-//   Browser profiles are persisted per-domain in ~/.config/claude/.spa-auth/<domain>/
+//   Browser profiles are persisted per-domain in <script-dir>/.spa-auth/<domain>/
 
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const AUTH_DIR = path.join(require('os').homedir(), '.config', 'claude', '.spa-auth');
+const AUTH_DIR = path.join(__dirname, '.spa-auth');
 
 // --- Args ---
 const args = process.argv.slice(2);
