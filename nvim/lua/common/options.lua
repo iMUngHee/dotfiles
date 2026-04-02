@@ -36,6 +36,7 @@ opt.softtabstop = 2
 opt.list = true
 opt.listchars = { tab = "» ", trail = "·", nbsp = "_", eol = "↵" }
 
+opt.shortmess:append("I")
 opt.fillchars = { eob = " " }
 opt.ignorecase = true
 opt.smartcase = true

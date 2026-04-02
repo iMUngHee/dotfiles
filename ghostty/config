@@ -21,6 +21,8 @@ font-size = 16
 # Cursor
 shell-integration-features = no-cursor
 cursor-style = block
+custom-shader = cursor_smear.glsl
+custom-shader-animation = always
 
 # Clipboard (OSC52 - enabled by default in Ghostty)
 clipboard-read = allow
