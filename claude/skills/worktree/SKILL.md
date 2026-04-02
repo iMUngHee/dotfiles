@@ -81,3 +81,4 @@ Branch is kept for later checkout (review feedback, etc.).
 - Do NOT create worktrees outside `.claude/worktrees/`.
 - Always pull base branch to latest before creating the worktree.
 - If dependency install fails, do not silently continue. Report the error.
+- **Sandbox**: All Bash commands in this skill (git fetch, git worktree add, pnpm install, cp .env, build) require `dangerouslyDisableSandbox: true` because they write to `.git/config`, `.env` files, and `node_modules/` which are outside the default sandbox write-allow list.
