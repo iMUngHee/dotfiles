@@ -12,14 +12,16 @@ Arguments: $ARGUMENTS
 
 ## Script
 
-`~/.config/claude/skills/spa-fetch/spa-fetch.js`
+`spa-fetch.js` in this skill's base directory (shown above as "Base directory for this skill: ...").
+
+All bash commands below use `<base-dir>` as a placeholder — substitute the actual base directory path.
 
 ## Steps
 
 ### 1. Headless fetch
 
 ```bash
-node ~/.config/claude/skills/spa-fetch/spa-fetch.js <url> [css-selector] [--html]; echo "EXIT:$?"
+node <base-dir>/spa-fetch.js <url> [css-selector] [--html]; echo "EXIT:$?"
 ```
 
 Use `dangerouslyDisableSandbox: true` and `timeout: 45000`.
@@ -35,7 +37,7 @@ Check the `EXIT:` line in stdout to determine the result:
 Run the login browser in background:
 
 ```bash
-node ~/.config/claude/skills/spa-fetch/spa-fetch.js --open-login <url>
+node <base-dir>/spa-fetch.js --open-login <url>
 ```
 
 Use `dangerouslyDisableSandbox: true`, `timeout: 300000`, and `run_in_background: true`.
@@ -49,8 +51,34 @@ When user confirms, retry step 1.
 
 Present the fetched content, or use it for the requested analysis.
 
+### 4. Deep exploration (optional)
+
+If the fetched content is a list/table and the user wants detail from individual items:
+
+1. Write a custom Playwright script to `$TMPDIR`
+2. Reuse the auth profile at `<base-dir>/.spa-auth/<domain>/`
+3. Require Playwright from `<base-dir>/node_modules/playwright`
+4. Use `chromium.launchPersistentContext(profileDir, { headless: true })` for session reuse
+
+Boilerplate:
+
+```js
+const { chromium } = require('<base-dir>/node_modules/playwright');
+const path = require('path');
+const profileDir = path.join('<base-dir>', '.spa-auth', '<domain>');
+
+(async () => {
+  const ctx = await chromium.launchPersistentContext(profileDir, { headless: true, timeout: 30000 });
+  const page = ctx.pages()[0] || await ctx.newPage();
+  // ... navigate, interact, extract
+  await ctx.close();
+})();
+```
+
+Use `dangerouslyDisableSandbox: true` and appropriate timeout.
+
 ## Rules
 
 - Always use `dangerouslyDisableSandbox: true`
 - Do NOT combine --open-login with fetch in a single call
-- If script not found, run `cd ~/.config/claude/skills/spa-fetch && npm install`
+- If script not found, run `cd <base-dir> && npm install`
