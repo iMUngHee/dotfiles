@@ -7,3 +7,6 @@
 [submodule "alacritty/dracula"]
 	path = alacritty/dracula
 	url = https://github.com/dracula/alacritty
+[submodule "ghostty/shaders"]
+	path = ghostty/shaders
+	url = https://github.com/sahaj-b/ghostty-cursor-shaders
