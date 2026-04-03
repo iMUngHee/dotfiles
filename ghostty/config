@@ -17,16 +17,23 @@ macos-option-as-alt = left
 # Font
 font-family = FiraCode Nerd Font
 font-size = 16
+font-thicken = true
+adjust-cell-height = 15%
 
 # Cursor
 shell-integration-features = no-cursor
 cursor-style = block
+cursor-style-blink = false
 custom-shader = cursor_smear.glsl
 custom-shader-animation = always
 
 # Clipboard (OSC52 - enabled by default in Ghostty)
 clipboard-read = allow
 clipboard-write = allow
+
+# QoL
+mouse-hide-while-typing = true
+window-padding-balance = true
 
 # Keybindings
 keybind = super+ctrl+f=toggle_fullscreen
