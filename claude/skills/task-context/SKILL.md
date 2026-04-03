@@ -2,6 +2,7 @@
 name: task-context
 description: "Manage per-task document links and inject context into sessions. Manual invocation only — do NOT auto-trigger."
 argument-hint: "get <KEY> | add <KEY> <URL> [LABEL] | remove <KEY> <MATCH> | annotate <KEY> | list | manage"
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, WebFetch
 model: sonnet
 ---
 
@@ -76,7 +77,7 @@ List all registered task keys.
 
 1. List task keys:
    ```bash
-   ls ~/.config/claude/skills/task-context/tasks/*.md 2>/dev/null | grep -v '.meta.md' | xargs -I{} basename {} .md
+   ls ~/.config/claude/skills/task-context/tasks/*.md 2>/dev/null | grep -v '\.meta\.md$' | xargs -I{} basename {} .md
    ```
 2. Output the result. If empty, report no tasks.
 
@@ -94,7 +95,10 @@ Open the web GUI for link management.
    ```bash
    lsof -ti:8484 2>/dev/null
    ```
-   If output is non-empty, kill stale process first: `lsof -ti:8484 | xargs kill 2>/dev/null` and wait 1 second.
+   If output is non-empty, kill stale process first:
+   ```bash
+   kill $(lsof -ti:8484 2>/dev/null) 2>/dev/null; sleep 1
+   ```
 
 3. Start server in background:
    ```bash
@@ -112,7 +116,7 @@ Open the web GUI for link management.
 
 6. When user confirms, kill server:
    ```bash
-   lsof -ti:8484 | xargs kill 2>/dev/null
+   kill $(lsof -ti:8484 2>/dev/null) 2>/dev/null
    ```
 
 
@@ -166,7 +170,7 @@ Users may manually edit descriptions — `annotate` overwrites all, but `add`/`m
 
 ## Rules
 
-- **All Bash commands in this skill use `dangerouslyDisableSandbox: true`** — the skill operates on local files and localhost only
+- All Bash commands are pre-authorized via `allowed-tools` frontmatter — no user confirmation needed
 - Do NOT modify link files (`.md`) directly during `manage` — the web GUI handles writes
 - Meta files (`.meta.md`) are managed exclusively by the skill, never by server.ts/GUI
 - `get` merges link + meta files and outputs markdown, not JSON

@@ -56,7 +56,7 @@ const server = createServer(async (req, res) => {
     const files = await readdir(TASKS_DIR);
     const tasks = await Promise.all(
       files
-        .filter((f) => f.endsWith(".md"))
+        .filter((f) => f.endsWith(".md") && !f.endsWith(".meta.md"))
         .map(async (f) => {
           const key = f.replace(/\.md$/, "");
           const content = await readFile(join(TASKS_DIR, f), "utf-8");
@@ -95,6 +95,7 @@ const server = createServer(async (req, res) => {
     if (method === "DELETE") {
       try {
         await unlink(filePath);
+        await unlink(join(TASKS_DIR, `${key}.meta.md`)).catch(() => {});
         res.writeHead(204);
         return res.end();
       } catch {
