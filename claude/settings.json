@@ -9,6 +9,10 @@
   },
   "permissions": {
     "allow": [
+      "Bash(awk*)",
+      "Bash(basename*)",
+      "Bash(brew info*)",
+      "Bash(brew list*)",
       "Bash(bun run*)",
       "Bash(bun test*)",
       "Bash(cargo build*)",
@@ -18,18 +22,41 @@
       "Bash(chmod*)",
       "Bash(claude*)",
       "Bash(cp*)",
+      "Bash(curl*)",
+      "Bash(date*)",
+      "Bash(diff*)",
+      "Bash(dirname*)",
+      "Bash(du*)",
       "Bash(echo*)",
+      "Bash(env*)",
+      "Bash(file*)",
+      "Bash(find*)",
       "Bash(gh api*)",
       "Bash(gh repo*)",
       "Bash(gh search*)",
       "Bash(git blame*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
       "Bash(git diff*)",
+      "Bash(git fetch*)",
       "Bash(git log*)",
+      "Bash(git ls-files*)",
+      "Bash(git remote*)",
+      "Bash(git rev-parse*)",
       "Bash(git show*)",
+      "Bash(git stash list*)",
+      "Bash(git stash show*)",
       "Bash(git status*)",
+      "Bash(git switch*)",
+      "Bash(git tag*)",
       "Bash(go build*)",
       "Bash(go test*)",
+      "Bash(go version*)",
+      "Bash(jq*)",
       "Bash(ls*)",
+      "Bash(mkdir*)",
+      "Bash(node --version*)",
+      "Bash(npm audit*)",
       "Bash(npm info*)",
       "Bash(npm list*)",
       "Bash(npm run*)",
@@ -41,7 +68,9 @@
       "Bash(pnpm run*)",
       "Bash(pnpm test*)",
       "Bash(printf*)",
+      "Bash(pwd*)",
       "Bash(python3*)",
+      "Bash(readlink*)",
       "Bash(rtk cc-economics*)",
       "Bash(rtk discover*)",
       "Bash(rtk gain*)",
@@ -50,24 +79,25 @@
       "Bash(rtk learn*)",
       "Bash(rtk session*)",
       "Bash(rtk verify*)",
+      "Bash(rustc --version*)",
+      "Bash(sed*)",
+      "Bash(sort*)",
+      "Bash(stat*)",
+      "Bash(touch*)",
+      "Bash(tree*)",
+      "Bash(uname*)",
+      "Bash(uniq*)",
+      "Bash(wc*)",
+      "Bash(wget*)",
       "Bash(which*)",
+      "Bash(whoami*)",
+      "Edit",
       "Glob",
       "Grep",
       "Read",
-      "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:claude.ai)",
-      "WebFetch(domain:claude.com)",
-      "WebFetch(domain:deepwiki.com)",
-      "WebFetch(domain:gist.github.com)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:www-cdn.anthropic.com)",
-      "WebFetch(domain:www.anthropic.com)",
-      "WebFetch(domain:www.claude.com)",
-      "WebFetch(domain:www.npmjs.com)",
-      "WebFetch(domain:www.rtk-ai.app)",
-      "WebFetch(domain:x.com)",
-      "WebSearch"
+      "WebFetch",
+      "WebSearch",
+      "Write"
     ],
     "deny": [
       "Read(~/.ssh/**)",
@@ -86,7 +116,8 @@
       "Read(**/secrets/**)",
       "Read(**/credentials/**)"
     ],
-    "disableBypassPermissionsMode": "disable"
+    "disableBypassPermissionsMode": "disable",
+    "defaultMode": "acceptEdits"
   },
   "hooks": {
     "PreToolUse": [
@@ -155,8 +186,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/notify.sh stop",
-            "timeout": 10000
+            "command": "$HOME/.claude/hooks/stop-handler.sh",
+            "timeout": 45000
           }
         ]
       }
@@ -187,20 +218,20 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/post-edit-pipeline.sh"
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write|Bash|Agent|NotebookEdit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/context-monitor.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/typecheck-after-edit.sh"
           }
         ]
       },
