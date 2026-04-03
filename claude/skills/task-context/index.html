@@ -439,6 +439,7 @@
       const url = $('inUrl').value.trim();
       const label = $('inLabel').value.trim() || autoLabel(url);
       if (!url || !selTask || !/^https?:\/\//i.test(url)) return;
+      if (selTask.links.some(l => l.url === url)) { alert('이미 등록된 URL입니다.'); return; }
       selTask.links.push({label, url});
       await save();
       $('inUrl').value = '';
