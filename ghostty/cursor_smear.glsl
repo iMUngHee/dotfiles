@@ -1,14 +1,23 @@
 // --- CONFIGURATION ---
 vec4 TRAIL_COLOR = iCurrentCursorColor; // can change to eg: vec4(0.2, 0.6, 1.0, 0.5);
-const float DURATION = 0.15; // total animation time
+const float DURATION = 0.2; // total animation time
 const float TRAIL_SIZE = 0.9; // 0.0 = all corners move together. 1.0 = max smear (leading corners jump instantly)
 const float THRESHOLD_MIN_DISTANCE = 1.0; // min distance to show trail (units of cursor height)
 const float BLUR = 2.5; // blur size in pixels (for antialiasing)
 const float TRAIL_THICKNESS = 1.0;  // 1.0 = full cursor height, 0.0 = zero height, >1.0 = funky aah
-const float TRAIL_THICKNESS_X = 0.9;
+const float TRAIL_THICKNESS_X = 1.0;
 
 const float FADE_ENABLED = 1.0; // 1.0 to enable fade gradient along the trail, 0.0 to disable
-const float FADE_EXPONENT = 2.5; // exponent for fade gradient along the trail
+const float FADE_EXPONENT = 3.5; // exponent for fade gradient along the trail
+
+const float ROUND_RADIUS = 0.002;   // trail corner rounding
+
+// --- RAINBOW ---
+const float RAINBOW_ENABLED = 1.0;
+const float RAINBOW_SPEED = 4.5;    // hue cycle speed
+const float RAINBOW_SPREAD = 2.5;   // hue spread along trail (higher = more colors visible)
+const float RAINBOW_SATURATION = 0.4;
+const float RAINBOW_BRIGHTNESS = 1.0;
 
 // --- CONSTANTS for easing functions ---
 const float PI = 3.14159265359;
@@ -32,10 +41,10 @@ const float SPRING_DAMPING = 0.9;
 //     return 1.0 - (1.0 - x) * (1.0 - x);
 // }
 
-// EaseOutCubic
-float ease(float x) {
-    return 1.0 - pow(1.0 - x, 3.0);
-}
+// // EaseOutCubic
+// float ease(float x) {
+//     return 1.0 - pow(1.0 - x, 3.0);
+// }
 
 // // EaseOutQuart
 // float ease(float x) {
@@ -62,10 +71,10 @@ float ease(float x) {
 //     return sqrt(1.0 - pow(x - 1.0, 2.0));
 // }
 
-// // EaseOutBack
-// float ease(float x) {
-//     return 1.0 + C3_BACK * pow(x - 1.0, 3.0) + C1_BACK * pow(x - 1.0, 2.0);
-// }
+// EaseOutBack
+float ease(float x) {
+    return 1.0 + C3_BACK * pow(x - 1.0, 3.0) + C1_BACK * pow(x - 1.0, 2.0);
+}
 
 // // EaseOutElastic
 // float ease(float x) {
@@ -82,6 +91,11 @@ float ease(float x) {
 //     float osc = cos(freq * 6.283185 * x) + (SPRING_DAMPING * sqrt(SPRING_STIFFNESS) / freq) * sin(freq * 6.283185 * x);
 //     return 1.0 - decay * osc;
 // }
+
+vec3 hsv2rgb(vec3 c) {
+    vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
 
 float getSdfRectangle(in vec2 p, in vec2 xy, in vec2 b)
 {
@@ -260,31 +274,33 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord){
         vec2 v_bl = mix(cp_bl, cc_bl, prog_bl);
 
         // DRAWING THE TRAIL
-        float sdfTrail = getSdfConvexQuad(vu, v_tl, v_tr, v_br, v_bl);
+        float sdfTrail = getSdfConvexQuad(vu, v_tl, v_tr, v_br, v_bl) - ROUND_RADIUS;
 
         // --- FADE GRADIENT CALCULATION ---
         vec2 fragVec = vu - centerCP;
-        
+
         // project fragment onto movement vector, normalize to [0, 1]
         // 0.0 at tail, 1.0 at head
         // tiny epsilon to avoid division by zero if moveVec is (0,0)
         float fadeProgress = clamp(dot(fragVec, moveVec) / (dot(moveVec, moveVec) + 1e-6), 0.0, 1.0);
 
         vec4 trail = TRAIL_COLOR;
-        
+
+        // rainbow color along trail
+        if (RAINBOW_ENABLED > 0.5) {
+            float hue = fract(iTime * RAINBOW_SPEED + fadeProgress * RAINBOW_SPREAD);
+            trail.rgb = hsv2rgb(vec3(hue, RAINBOW_SATURATION, RAINBOW_BRIGHTNESS));
+        }
+
         float effectiveBlur = BLUR;
         if (BLUR < 2.5) {
           // no antialising on horizontal/vertical movement, fixes 'pulse' like thing on end cursor
           float isDiagonal = abs(s.x) * abs(s.y); // 1.0 if diagonal, 0.0 if H/V
-          float effectiveBlur = mix(0.0, BLUR, isDiagonal);
+          effectiveBlur = mix(0.0, BLUR, isDiagonal);
         }
         float shapeAlpha = antialising(sdfTrail, effectiveBlur); // shape mask
 
         if (FADE_ENABLED > 0.5) {
-            // apply fade gradient along the trail
-            // float fadeStart = 0.2;
-            // float easedProgress = smoothstep(fadeStart, 1.0, fadeProgress);
-            // easedProgress = pow(2.0, 10.0 * (fadeProgress - 1.0));
             float easedProgress = pow(fadeProgress, FADE_EXPONENT);
             trail.a *= easedProgress;
         }
