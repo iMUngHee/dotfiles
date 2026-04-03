@@ -20,22 +20,34 @@ local function find_files_with_case(prompt)
 end
 
 local function live_grep_with_case(prompt)
-  local opts = { cwd = require("utils.root").get(), hidden = true }
+  local lga_actions = require("telescope-live-grep-args.actions")
+  local opts = {
+    cwd = require("utils.root").get(),
+    mappings = {
+      i = {
+        ["<C-k>"] = lga_actions.quote_prompt(),
+        ["<C-g>"] = lga_actions.quote_prompt({ postfix = " --iglob " }),
+        ["<C-t>"] = lga_actions.quote_prompt({ postfix = " -t " }),
+      },
+    },
+  }
 
   if prompt then
     opts.default_text = prompt
   end
 
   if _ignore_case then
-    opts.additional_args = { "--ignore-case" }
+    opts.additional_args = function()
+      return { "--ignore-case" }
+    end
   end
 
-  require("telescope.builtin").live_grep(opts)
+  require("telescope").extensions.live_grep_args.live_grep_args(opts)
 end
 
 local pickers_by_title = {
   ["Find Files"] = find_files_with_case,
-  ["Live Grep"] = live_grep_with_case,
+  ["Live Grep (Args)"] = live_grep_with_case,
 }
 
 local function toggle_case(prompt_bufnr)
@@ -87,6 +99,7 @@ return {
         build = "make",
         cond = vim.fn.executable("make") == 1,
       },
+      { "nvim-telescope/telescope-live-grep-args.nvim", version = "^1.0.0" },
     },
     opts = {
       defaults = {
@@ -113,6 +126,7 @@ return {
       telescope.setup(opts)
 
       pcall(telescope.load_extension, "fzf")
+      pcall(telescope.load_extension, "live_grep_args")
       pcall(telescope.load_extension, "projects")
     end,
   },

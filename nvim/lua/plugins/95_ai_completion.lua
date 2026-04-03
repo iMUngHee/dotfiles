@@ -97,7 +97,9 @@ return {
       vim.api.nvim_create_autocmd("BufEnter", {
         group = vim.api.nvim_create_augroup("minuet_buf_trigger", { clear = true }),
         callback = function()
-          vim.b.minuet_virtual_text_auto_trigger = vim.bo.buftype == ""
+          vim.schedule(function()
+            vim.b.minuet_virtual_text_auto_trigger = vim.bo.buftype == ""
+          end)
         end,
       })
     end,
