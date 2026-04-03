@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # PostToolUse hook: inject context usage warnings before autocompact (70%)
 
-PCT_FILE="/tmp/claude-context-pct"
-MARKER_DIR="/tmp/claude-context-markers"
+PCT_FILE="/tmp/claude/context-pct"
+MARKER_DIR="/tmp/claude/context-markers"
 
 # No metrics yet (statusline hasn't run) → silent exit
 [[ ! -f "$PCT_FILE" ]] && exit 0
