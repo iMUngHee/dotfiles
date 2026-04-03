@@ -26,6 +26,15 @@ For each design decision, file inclusion, or structural choice, challenge with:
 
 - Always reference the existing code style and patterns of the project to minimize changes to 대협's code.
 
+## Interactive Decision Points
+
+When multiple valid approaches exist or the request is ambiguous, present options via `AskUserQuestion` instead of asking in plain text.
+
+- Use `preview` to show code snippets or layout comparisons side-by-side
+- 2-4 options with clear trade-off descriptions
+- Place recommended option first with "(Recommended)" suffix
+- Do NOT use for: clear instructions, single obvious approach, simple yes/no
+
 ## Citations
 
 - When citing from tool results (WebSearch, WebFetch): include footnote with source URL — e.g. "...(1)" → "(1) https://..."

@@ -244,7 +244,7 @@
   "spinnerTipsEnabled": false,
   "effortLevel": "high",
   "sandbox": {
-    "enabled": true,
+    "enabled": false,
     "autoAllowBashIfSandboxed": true,
     "failIfUnavailable": true
   },
