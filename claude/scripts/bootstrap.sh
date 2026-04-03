@@ -35,8 +35,8 @@ fi
 ln -sfn "$REPO_DIR/hooks" "$CLAUDE_DIR/hooks"
 cp /tmp/.rtk-hook.sha256.bak "$CLAUDE_DIR/hooks/.rtk-hook.sha256" 2>/dev/null || true
 
-# commands/, rules/, skills/
-for dir in commands rules skills; do
+# commands/, rules/, skills/, agents/
+for dir in commands rules skills agents; do
     if [ -d "$CLAUDE_DIR/$dir" ] && [ ! -L "$CLAUDE_DIR/$dir" ]; then
         rm -rf "$CLAUDE_DIR/$dir"
     fi
