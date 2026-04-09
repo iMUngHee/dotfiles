@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# PostToolUse hook: log tool failures for debugging and pattern analysis
+# PostToolUseFailure hook: log tool failures for debugging and pattern analysis
+# Triggered only on tool failures (no grep filtering needed)
 # Always exits 0 — informational only, never blocks
 # Requires: jq
 
@@ -9,11 +10,6 @@ MAX_SIZE=$((1024 * 1024))  # 1MB
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // "unknown"')
 RESPONSE=$(echo "$INPUT" | jq -r '.tool_response // empty')
-
-# Only log failures: skip if response doesn't look like an error
-if ! echo "$RESPONSE" | grep -qiE '(error|fail|exception|denied|refused|not found|ENOENT|EACCES|panic|fatal)'; then
-  exit 0
-fi
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 ERROR_SUMMARY=$(echo "$RESPONSE" | head -5)
