@@ -1,2 +1,4 @@
 .spa-auth/
 skills/spa-fetch/node_modules/
+skills-private/
+memory/private/

@@ -35,13 +35,30 @@ fi
 ln -sfn "$REPO_DIR/hooks" "$CLAUDE_DIR/hooks"
 cp /tmp/.rtk-hook.sha256.bak "$CLAUDE_DIR/hooks/.rtk-hook.sha256" 2>/dev/null || true
 
-# commands/, rules/, skills/, agents/
-for dir in commands rules skills agents; do
+# commands/, rules/, agents/ — wholesale symlinks
+for dir in commands rules agents; do
     if [ -d "$CLAUDE_DIR/$dir" ] && [ ! -L "$CLAUDE_DIR/$dir" ]; then
         rm -rf "$CLAUDE_DIR/$dir"
     fi
     [ -d "$REPO_DIR/$dir" ] && ln -sfn "$REPO_DIR/$dir" "$CLAUDE_DIR/$dir"
 done
+
+# skills/ — individual symlinks (allows public + private overlay)
+if [ -L "$CLAUDE_DIR/skills" ]; then
+    rm "$CLAUDE_DIR/skills"
+fi
+mkdir -p "$CLAUDE_DIR/skills"
+find "$CLAUDE_DIR/skills" -maxdepth 1 -type l -delete
+for d in "$REPO_DIR"/skills/*/; do
+    [ -d "$d" ] || continue
+    ln -sfn "$d" "$CLAUDE_DIR/skills/$(basename "$d")"
+done
+if [ -d "$REPO_DIR/skills-private" ]; then
+    for d in "$REPO_DIR"/skills-private/*/; do
+        [ -d "$d" ] || continue
+        ln -sfn "$d" "$CLAUDE_DIR/skills/$(basename "$d")"
+    done
+fi
 
 # ── 3. Scripts: copy executable scripts ──
 echo "Deploying scripts..."
