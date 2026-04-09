@@ -16,15 +16,19 @@ claude/
 │   ├── Info.plist
 │   └── AppIcon.icns
 ├── extensions/
-│   └── statusline.sh           # Status line (model, context, cost, usage, CCS profile)
+│   └── statusline.sh           # Status line (model, context, cost, quota/proxy status)
 ├── hooks/                      # Claude Code hooks (RTK rewrite, file protection, notifications,
-│                               #   prompt guard, tool failure log, quota switch)
-├── skills/                     # Skills (/design, /debug, /verify, /code-review, /diagram, /copy, ...)
+│                               #   prompt guard, tool failure log, quota switch, subagent trust)
+├── skills/                     # Public skills (/design, /debug, /verify, /code-review, ...)
+├── skills-private/             # Private skills (gitignored, overlaid into skills/ by bootstrap)
+├── rules/                      # Path-scoped instruction rules (testing, diagnostics, ...)
+├── agents/                     # Agent definitions (pre-commit-verifier, ...)
+├── commands/                   # Custom slash commands
 ├── memory/                     # Global long-term memory files
 │   └── private/                # Work-only memories (gitignored)
 ├── CLAUDE.md                   # Entry point — loads all other configs
 ├── PERSONAL.md                 # Collaboration rules
-├── DEVGUARD.md                 # Development guardrails
+├── DEVGUARD.md                 # Development guardrails (core rules; extras in rules/)
 ├── RTK.md                      # RTK (Rust Token Killer) reference
 ├── MEMORY.md                   # Memory index (public)
 ├── MEMORY.private.md           # Memory index (work-only, gitignored)
@@ -48,12 +52,13 @@ cd ~/.config/claude
 
 Bootstrap will:
 
-1. Symlink config files and directories to `~/.claude/`
-2. Copy executable scripts to `~/.claude/scripts/` (excluding bootstrap/sync-back)
-3. Merge `settings.json` (repo keys override, local-only keys like `model` preserved)
-4. Deploy `MEMORY.md` + `MEMORY.private.md` (if exists) to `~/.claude/`
-5. Symlink `memory/` to `~/.claude/memory/`
-6. Build ClaudeNotifier (optional, skipped if `swiftc` not found)
+1. Symlink config files and directories to `~/.claude/` (`commands/`, `rules/`, `agents/` as wholesale symlinks)
+2. Create per-skill symlinks in `~/.claude/skills/` from `skills/` + `skills-private/` (private overlays public)
+3. Copy executable scripts to `~/.claude/scripts/` (excluding bootstrap/sync-back)
+4. Merge `settings.json` (repo keys override, local-only keys like `model` preserved)
+5. Deploy `MEMORY.md` + `MEMORY.private.md` (if exists) to `~/.claude/`
+6. Symlink `memory/` to `~/.claude/memory/`
+7. Build ClaudeNotifier (optional, skipped if `swiftc` not found)
 
 ## Sync
 
@@ -77,8 +82,8 @@ Git hooks handle sync automatically:
 | Synced (git) | Local-only |
 |---|---|
 | Config files (md, json) | `model` in settings.json |
-| Hooks, commands, extensions | `policy-limits.json` |
-| Public memory files | `memory/private/` |
+| Hooks, commands, rules, agents, extensions | `policy-limits.json` |
+| Public skills + memory files | `skills-private/`, `memory/private/` |
 | Notifier source | `MEMORY.private.md` |
 | settings.json (base permissions) | Locally-added permissions |
 
@@ -87,3 +92,7 @@ Git hooks handle sync automatically:
 Work-specific memory files live in `memory/private/` and are gitignored. `MEMORY.private.md` holds their index (also gitignored). Bootstrap merges both indexes at deploy time.
 
 When `sync-back.sh` detects new memory files not referenced in either index, it prompts to classify them as public or private.
+
+## Private skills
+
+Private skills live in `skills-private/<name>/SKILL.md` and are gitignored. Bootstrap overlays them into `~/.claude/skills/` alongside public skills via individual symlinks. If a private skill has the same name as a public one, the private version wins.
