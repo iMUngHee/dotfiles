@@ -4,6 +4,7 @@ description: "Systematic debugging for issues with unclear root cause. Use when 
 argument-hint: "[error description or reproduction steps]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
 model: opus
+effort: max
 ---
 
 Systematically debug the given issue.

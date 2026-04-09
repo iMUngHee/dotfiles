@@ -57,6 +57,15 @@ Read `.github/PULL_REQUEST_TEMPLATE.md` if it exists. Follow the template struct
    ```
 3. Confirm to the user that it's on the clipboard
 
+## Style
+
+- Start 변경 내용 section with bullets directly — no plain-text preamble or summary sentence
+- Concise bullets only — do not enumerate every function/type added; focus on key changes
+- Use `→` for before/after descriptions
+- Include concrete values (constants, positions) but keep it terse
+- Flat bullet list — no sub-headings like server/client/cleanup
+- Read 2-3 recently merged PRs on the same base branch to match the author's style
+
 ## Rules
 
 - Only describe changes from unique commits (Step 2)

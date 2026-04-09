@@ -30,6 +30,7 @@ Check the `EXIT:` line in stdout to determine the result:
 
 - **EXIT:0**: success — go to step 3
 - **EXIT:10**: login required — go to step 2
+- **EXIT:11**: bot detection (Cloudflare/CAPTCHA) — go to step 2 (establish browser session first)
 - **EXIT:1**: error — report to user
 
 ### 2. Login flow (only if exit code 10)
@@ -68,7 +69,12 @@ const path = require('path');
 const profileDir = path.join('<base-dir>', '.spa-auth', '<domain>');
 
 (async () => {
-  const ctx = await chromium.launchPersistentContext(profileDir, { headless: true, timeout: 30000 });
+  const ctx = await chromium.launchPersistentContext(profileDir, {
+    headless: true,
+    timeout: 30000,
+    args: ['--disable-blink-features=AutomationControlled'],
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  });
   const page = ctx.pages()[0] || await ctx.newPage();
   // ... navigate, interact, extract
   await ctx.close();

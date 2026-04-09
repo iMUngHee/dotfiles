@@ -4,6 +4,7 @@ description: "Worktree creation with dependency setup. Use when asked to create 
 argument-hint: "<target-branch> [base-branch]"
 allowed-tools: Bash, Read, Glob, Grep
 model: opus
+disable-model-invocation: true
 ---
 
 Create and set up a git worktree for isolated development.

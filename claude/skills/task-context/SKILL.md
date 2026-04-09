@@ -4,6 +4,7 @@ description: "Manage per-task document links and inject context into sessions. M
 argument-hint: "get <KEY> | add <KEY> <URL> [LABEL] | remove <KEY> <MATCH> | annotate <KEY> | list | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, WebFetch
 model: sonnet
+disable-model-invocation: true
 ---
 
 Manage per-task document links. Stored as markdown in `~/.config/claude/skills/task-context/tasks/`.
