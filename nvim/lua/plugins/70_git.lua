@@ -20,7 +20,7 @@ return {
       on_attach = function(bufnr)
         local gs = package.loaded.gitsigns
         local map = function(mode, lhs, rhs, desc)
-          vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, silent = true, desc = desc })
+          vim.keymap.set(mode, lhs, rhs, { buf = bufnr, silent = true, desc = desc })
         end
 
         -- hunk navigation

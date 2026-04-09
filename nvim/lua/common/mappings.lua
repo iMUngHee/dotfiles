@@ -56,7 +56,7 @@ end, { desc = "Open file in buffer or URL in browser" })
 vim.api.nvim_create_autocmd("LspAttach", {
   group = vim.api.nvim_create_augroup("UserLspConfig", { clear = true }),
   callback = function(ev)
-    local opts = { buffer = ev.buf, silent = true }
+    local opts = { buf = ev.buf, silent = true }
 
     keymap.set("n", "gd", vim.lsp.buf.definition, vim.tbl_extend("force", opts, { desc = "Go to Definition" }))
     keymap.set("n", "gD", vim.lsp.buf.declaration, vim.tbl_extend("force", opts, { desc = "Go to Declaration" }))
@@ -74,13 +74,18 @@ vim.api.nvim_create_autocmd("LspAttach", {
       vim.tbl_extend("force", opts, { desc = "Code Action" })
     )
     keymap.set("n", "]d", function()
-      vim.diagnostic.jump({ count = 1, float = true })
+      vim.diagnostic.jump({ count = 1, on_jump = vim.diagnostic.open_float })
     end, vim.tbl_extend("force", opts, { desc = "Next Diagnostic" }))
     keymap.set("n", "[d", function()
-      vim.diagnostic.jump({ count = -1, float = true })
+      vim.diagnostic.jump({ count = -1, on_jump = vim.diagnostic.open_float })
     end, vim.tbl_extend("force", opts, { desc = "Prev Diagnostic" }))
     keymap.set("n", "gl", vim.diagnostic.open_float, vim.tbl_extend("force", opts, { desc = "Show Line Diagnostics" }))
-    keymap.set("n", "gy", vim.lsp.buf.type_definition, vim.tbl_extend("force", opts, { desc = "Go to Type Definition" }))
+    keymap.set(
+      "n",
+      "gy",
+      vim.lsp.buf.type_definition,
+      vim.tbl_extend("force", opts, { desc = "Go to Type Definition" })
+    )
     keymap.set("n", "<leader>cx", vim.lsp.codelens.run, vim.tbl_extend("force", opts, { desc = "Run CodeLens" }))
   end,
 })
@@ -129,7 +134,15 @@ local function copy_file_ref_lines(scope)
   vim.notify("Copied: " .. ref)
 end
 
-keymap.set("n", "<leader>l", function() copy_file_ref("project") end, { desc = "Copy file ref (project root) to clipboard" })
-keymap.set("x", "<leader>l", function() copy_file_ref_lines("project") end, { desc = "Copy file ref (project root) with lines to clipboard" })
-keymap.set("n", "<leader>L", function() copy_file_ref("home") end, { desc = "Copy file ref (home) to clipboard" })
-keymap.set("x", "<leader>L", function() copy_file_ref_lines("home") end, { desc = "Copy file ref (home) with lines to clipboard" })
+keymap.set("n", "<leader>l", function()
+  copy_file_ref("project")
+end, { desc = "Copy file ref (project root) to clipboard" })
+keymap.set("x", "<leader>l", function()
+  copy_file_ref_lines("project")
+end, { desc = "Copy file ref (project root) with lines to clipboard" })
+keymap.set("n", "<leader>L", function()
+  copy_file_ref("home")
+end, { desc = "Copy file ref (home) to clipboard" })
+keymap.set("x", "<leader>L", function()
+  copy_file_ref_lines("home")
+end, { desc = "Copy file ref (home) with lines to clipboard" })
