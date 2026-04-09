@@ -4,6 +4,7 @@ description: "Design and plan implementation for multi-file changes or architect
 argument-hint: "[task description]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
 model: opus
+effort: max
 ---
 
 Design and plan implementation for the given task.

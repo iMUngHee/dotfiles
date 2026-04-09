@@ -4,6 +4,7 @@ description: "Review PR changes per-commit to avoid misattributing sync-merged c
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob, Grep
 model: sonnet
+effort: max
 ---
 
 Review the current branch's PR changes per-commit.

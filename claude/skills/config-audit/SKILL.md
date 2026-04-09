@@ -2,6 +2,10 @@
 name: config-audit
 description: "Claude Code dotfiles architecture and audit. Use when creating, editing, moving, analyzing, or reviewing files in ~/.config/claude/ or ~/.claude/, when working with memory files, settings.json, commands, skills, or hooks, or when discussing the dotfiles sync setup."
 allowed-tools: Bash, Read, Glob
+paths:
+  - "~/.claude/**"
+  - "~/.config/claude/**"
+  - ".claude/**"
 ---
 
 ## Architecture
@@ -16,7 +20,8 @@ Two-directory setup:
 ### Deployment
 
 - `~/.config/claude/scripts/bootstrap.sh` deploys repo → `~/.claude/`
-  - Symlinks: `CLAUDE.md`, `RTK.md`, `PERSONAL.md`, `DEVGUARD.md`, `hooks/`, `skills/`, `memory/`, `statusline.sh`
+  - Symlinks: `CLAUDE.md`, `RTK.md`, `PERSONAL.md`, `DEVGUARD.md`, `hooks/`, `commands/`, `rules/`, `agents/`, `memory/`, `statusline.sh`
+  - Skills: individual symlinks per skill (public `skills/*/` + private `skills-private/*/` overlay)
   - Copies: `settings.json` (repo keys override, local keys preserved), `MEMORY.md`, `MEMORY.private.md` (deployed separately)
 - `~/.config/claude/scripts/sync-back.sh` syncs `~/.claude/` → repo
   - Syncs `settings.json` (only repo-tracked keys)
@@ -28,7 +33,8 @@ Two-directory setup:
 2. `~/.claude/memory/` is a symlink to `~/.config/claude/memory/` — same physical files
 3. `MEMORY.md` uses markdown links (summary index, files NOT auto-loaded)
 4. `MEMORY.private.md` uses `@` includes (files directly loaded into context) — no frontmatter in referenced files
-5. Skills use directory structure: `skills/<name>/SKILL.md`
+5. Skills use directory structure: `skills/<name>/SKILL.md` (public) or `skills-private/<name>/SKILL.md` (private, gitignored)
+6. `skills-private/` and `memory/private/` are gitignored — never committed to repo
 
 ## Audit checklist
 
