@@ -161,7 +161,7 @@ lua/
 after/
   lsp/                    -- Neovim 0.11+ native per-server LSP config
     lua_ls.lua
-    sourcekit.lua         -- Restricts filetypes to swift/objc (clangd handles c/cpp)
+    sourcekit.lua         -- swift/objc only (clangd handles c/cpp), shares .build scratch path
     cspell_ls.lua         -- Custom root_dir to avoid attaching to non-project buffers
     jdtls.lua             -- JDK 17+ required; lombok support, jdt:// classfile handler
 queries/
