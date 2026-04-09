@@ -19,11 +19,10 @@ claude/
 │   └── statusline.sh           # Status line (model, context, cost, quota/proxy status)
 ├── hooks/                      # Claude Code hooks (RTK rewrite, file protection, notifications,
 │                               #   prompt guard, tool failure log, quota switch, subagent trust)
-├── skills/                     # Public skills (/design, /debug, /verify, /code-review, ...)
+├── skills/                     # Public skills (/design, /debug, /verify, /retro, /code-review, ...)
 ├── skills-private/             # Private skills (gitignored, overlaid into skills/ by bootstrap)
-├── rules/                      # Path-scoped instruction rules (testing, diagnostics, ...)
+├── rules/                      # Path-scoped instruction rules (testing, diagnostics, rationalization, ...)
 ├── agents/                     # Agent definitions (pre-commit-verifier, ...)
-├── commands/                   # Custom slash commands
 ├── memory/                     # Global long-term memory files
 │   └── private/                # Work-only memories (gitignored)
 ├── CLAUDE.md                   # Entry point — loads all other configs
