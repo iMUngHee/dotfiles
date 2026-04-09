@@ -54,6 +54,7 @@ opt.inccommand = "split"
 opt.updatetime = 250
 opt.timeoutlen = 300
 
+opt.pumborder = "rounded"
 opt.signcolumn = "yes"
 opt.scrolloff = 8
 opt.splitright = true
@@ -70,7 +71,7 @@ vim.api.nvim_create_autocmd("FileType", {
       if vim.api.nvim_buf_is_valid(args.buf) then
         vim.api.nvim_buf_delete(args.buf, { force = true })
       end
-    end, { buffer = args.buf, silent = true })
+    end, { buf = args.buf, silent = true })
   end,
 })
 
@@ -79,6 +80,6 @@ vim.api.nvim_create_autocmd("FileType", {
   pattern = "qf",
   callback = function()
     vim.bo.buflisted = false
-    vim.keymap.set("n", "<CR>", "<CR><cmd>cclose<CR>", { buffer = true, silent = true })
+    vim.keymap.set("n", "<CR>", "<CR><cmd>cclose<CR>", { buf = 0, silent = true })
   end,
 })

@@ -4,6 +4,9 @@ return {
     cmd = "Trouble",
     opts = {
       focus = true,
+      keys = {
+        ["<cr>"] = "jump_close",
+      },
     },
     keys = {
       {
