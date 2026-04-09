@@ -12,7 +12,7 @@ Review whether CLAUDE.md rules were followed in this session.
 
 ## Instructions
 
-1. Read all linked files: `~/.claude/CLAUDE.md` → `RTK.md`, `PERSONAL.md`, `DEVGUARD.md`, `MEMORY.md`
+1. Read all linked files: `~/.claude/CLAUDE.md` → `RTK.md`, `PERSONAL.md`, `DEVGUARD.md`, `MEMORY.md`, and `rules/rationalization.md`
 
 2. For each rule, evaluate against the conversation history. Fill the table with:
    - **✓** followed (cite evidence)

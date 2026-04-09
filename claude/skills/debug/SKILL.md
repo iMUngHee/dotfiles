@@ -1,10 +1,11 @@
 ---
 name: debug
-description: "Systematic debugging for issues with unclear root cause. Use when a bug's cause is not obvious, when a fix attempt has failed, or when the 3-strike rule (DEVGUARD.md) triggers escalation."
+description: "Systematic debugging for issues with unclear root cause. Use when a bug's cause is not obvious, when a fix attempt has failed, or when the 3-strike rule (rules/diagnostics.md) triggers escalation."
 argument-hint: "[error description or reproduction steps]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
 model: opus
 effort: max
+disable-model-invocation: true
 ---
 
 Systematically debug the given issue.

@@ -24,4 +24,4 @@ If no evidence is available, prefix the claim with **"Unverified hypothesis:"** 
 
 **One fix at a time:** When debugging, change ONE variable per attempt. No "while I'm here" side fixes. If multiple things look wrong, fix and verify each independently. Mixing changes makes it impossible to tell what actually fixed (or broke) it.
 
-**3-Strike Escalation:** See DEVGUARD.md "Debugging Escalation (3-Strike Rule)" section.
+**3-Strike Escalation:** See `rules/diagnostics.md` "Debugging Escalation (3-Strike Rule)" section.

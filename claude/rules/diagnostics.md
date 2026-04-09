@@ -1,3 +1,24 @@
+---
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.jsx"
+  - "**/*.py"
+  - "**/*.go"
+  - "**/*.rs"
+  - "**/*.java"
+  - "**/*.kt"
+  - "**/*.swift"
+  - "**/*.c"
+  - "**/*.cpp"
+  - "**/*.h"
+  - "**/*.lua"
+  - "**/*.sh"
+  - "**/*.vue"
+  - "**/*.svelte"
+---
+
 # Diagnostic Discipline
 
 When investigating any issue (bug, config problem, unexpected behavior):

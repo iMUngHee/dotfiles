@@ -2,14 +2,25 @@
 name: design
 description: "Design and plan implementation for multi-file changes or architecture decisions. Use when asked to design, plan, or architect a solution."
 argument-hint: "[task description]"
-allowed-tools: Bash, Read, Glob, Grep, Agent
+allowed-tools: Bash, Read, Write, Glob, Grep, Agent
 model: opus
 effort: max
+disable-model-invocation: true
 ---
 
 Design and plan implementation for the given task.
 
 Task: $ARGUMENTS (if empty, ask the user)
+
+## Context Discovery
+
+Before starting, search for existing plan artifacts that may be relevant:
+
+```bash
+ls .claude/plans/ 2>/dev/null && grep -li "<relevant keywords>" .claude/plans/*.md 2>/dev/null
+```
+
+If related plans exist, read them for context (prior decisions, lessons learned).
 
 ## Steps
 
@@ -37,8 +48,40 @@ After design approval, present the implementation plan as response text:
 2. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL)
 3. If planned output differs from actual during implementation, investigate
 
+### 5. Persist plan artifact
+
+After 대협 approves the design (Step 3 approval = signal to persist):
+
+1. Create `.claude/plans/` directory if it does not exist
+2. Save as `.claude/plans/YYYY-MM-DD-<slug>.md` with this format:
+
+```yaml
+---
+title: <plan title>
+date: YYYY-MM-DD
+status: approved
+branch: <current git branch>
+files_affected:
+  - <file paths from implementation plan>
+---
+```
+
+Followed by the approved design content (Goal, Approach, Implementation Steps, Decisions).
+
+Include an empty section at the end:
+
+```markdown
+## Post-Implementation Notes
+<!-- Filled by /retro if run after implementation -->
+```
+
+3. Confirm the saved path to 대협.
+
+**Status values**: `approved` (just saved) → `implemented` (updated by /retro) → `abandoned` (if plan was dropped)
+
 ## Rules
 
 - Do NOT implement until user approves the design
-- Do NOT save design to files unless explicitly requested
-- Present as response text only — no file writes during design phase
+- Plan artifact is saved ONLY after explicit design approval (Step 3)
+- No file writes during design exploration (Steps 1-3)
+- If 대협 declines to save, skip Step 5 — the plan remains conversation-only
