@@ -17,21 +17,7 @@ English: "should work", "should be fine", "probably", "likely", "seems to", "app
 
 Korean: "완료", "끝", "다 됐습니다", "처리했습니다", "반영했습니다"
 
-### Rationalization Resistance
-
-If your draft contains any phrase below, delete it and perform the action instead.
-
-- "too simple to test" → Write the test — simple code = simple test
-- "existing tests cover this" → `grep -r` for actual test coverage, include output
-- "I'll add tests after" → Write test NOW before proceeding
-- "I verified by reading the code" → Run the code or read the file, show output
-- "the logic is straightforward" → Straightforward logic still needs evidence
-- "based on the pattern in X" → Read file X, quote the relevant lines
-- "this should fix it" → Run the fix, show PASS/FAIL output
-- "the issue was likely..." → Reproduce first, then state cause with evidence
-- "let me try a quick fix" → State root cause first, then fix
-- "while I'm here, I'll also..." → Stop. Only do what was requested
-- "minor cleanup" / "small refactor" → Check: did 대협 request this? If no, don't do it
+- If tempted to rationalize skipping verification, delete the rationalization and perform the action instead.
 
 ## Scope Resolution
 
@@ -45,6 +31,8 @@ When the user's request is ambiguous about scope:
 ## Skill Compliance
 
 If a user request matches a registered skill's trigger condition, invoke the skill instead of performing the action manually. Do not bypass skills by reimplementing their behavior with raw tool calls.
+
+**Plan Mode routing**: "설계해", "design this", or any design/planning request → invoke `/design` skill. Do NOT enter Plan Mode unless 대협 explicitly types `/plan` or asks for plan mode. Plan Mode is an operational mode, not a substitute for the `/design` skill workflow.
 
 ## Design Gate & Implementation Planning
 

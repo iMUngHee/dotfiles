@@ -4,6 +4,7 @@ description: "Goal-backward verification for completed features. Use after finis
 argument-hint: "[feature or goal description]"
 allowed-tools: Bash, Read, Glob, Grep
 model: opus
+disable-model-invocation: true
 ---
 
 Verify that the completed work actually achieves its goal.
@@ -13,6 +14,22 @@ Goal: $ARGUMENTS (if empty, infer from recent commits or ask)
 ## Current Context
 - Recent commits: !`git log --oneline -5 2>/dev/null || echo "N/A"`
 - Changed files: !`git diff --stat HEAD~5 2>/dev/null || echo "N/A"`
+
+## Plan delta (optional)
+
+Check if a plan artifact exists for the current branch:
+
+```bash
+branch=$(git branch --show-current 2>/dev/null)
+ls .claude/plans/ 2>/dev/null && grep -li "branch: $branch" .claude/plans/*.md 2>/dev/null
+```
+
+If found, compare planned vs actual:
+- **Planned files**: `files_affected` from plan frontmatter
+- **Actual files**: `git diff --name-only <base>..HEAD`
+- Report delta as informational (files added/removed vs plan). Do NOT block on delta — plans evolve during implementation.
+
+If no plan found, skip this section entirely.
 
 ## Approach: Goal-backward
 

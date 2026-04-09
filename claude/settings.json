@@ -71,6 +71,7 @@
       "Bash(pwd*)",
       "Bash(python3*)",
       "Bash(readlink*)",
+      "Bash(rtk *)",
       "Bash(rtk cc-economics*)",
       "Bash(rtk discover*)",
       "Bash(rtk gain*)",
