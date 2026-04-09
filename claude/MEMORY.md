@@ -9,6 +9,7 @@
 - [Reverse grep after modification](memory/feedback_reverse_grep.md) — grep for references to modified files to catch sync issues
 - [PR body formatting](memory/feedback_pr_body_format.md) — no numbered sub-headings in PR bodies, use flat bullet lists
 - [Team vs subagent](memory/feedback_team_vs_subagent.md) — never conflate team agents (TeamCreate+teammates) with subagents (.claude/agents/)
+- [CLAUDE.md in English](memory/feedback_claude_md_english.md) — project CLAUDE.md content must be English, matching the rest of the file
 
 ## Workflow
 
