@@ -114,7 +114,15 @@
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(**/secrets/**)",
-      "Read(**/credentials/**)"
+      "Read(**/credentials/**)",
+      "Write(**/.env)",
+      "Write(**/.env.*)",
+      "Write(**/secrets/**)",
+      "Write(**/credentials/**)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/secrets/**)",
+      "Edit(**/credentials/**)"
     ],
     "disableBypassPermissionsMode": "disable",
     "defaultMode": "acceptEdits"
@@ -126,7 +134,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/rtk-rewrite.sh"
+            "command": "$HOME/.claude/hooks/rtk-rewrite.sh",
+            "statusMessage": "Optimizing command..."
           }
         ]
       },
@@ -135,7 +144,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/protect-files.sh"
+            "command": "$HOME/.claude/hooks/protect-files.sh",
+            "statusMessage": "Checking file safety..."
           }
         ]
       }
@@ -187,7 +197,8 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/stop-handler.sh",
-            "timeout": 45000
+            "timeout": 45000,
+            "statusMessage": "Running type checker..."
           }
         ]
       }
@@ -222,7 +233,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/post-edit-pipeline.sh"
+            "command": "$HOME/.claude/hooks/post-edit-pipeline.sh",
+            "statusMessage": "Formatting & checking..."
           }
         ]
       },
@@ -234,15 +246,6 @@
             "command": "$HOME/.claude/hooks/context-monitor.sh"
           }
         ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/log-tool-failure.sh"
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
@@ -251,7 +254,40 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/prompt-guard.sh"
+            "command": "$HOME/.claude/hooks/prompt-guard.sh",
+            "statusMessage": "Scanning for secrets..."
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/log-tool-failure.sh",
+            "statusMessage": "Logging tool failure..."
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/log-instructions.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/subagent-stop-reminder.sh"
           }
         ]
       }
@@ -279,5 +315,8 @@
     "autoAllowBashIfSandboxed": true,
     "failIfUnavailable": true
   },
-  "cleanupPeriodDays": 14
+  "cleanupPeriodDays": 14,
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "alwaysThinkingEnabled": true,
+  "includeGitInstructions": false
 }
