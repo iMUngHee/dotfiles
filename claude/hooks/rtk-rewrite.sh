@@ -25,15 +25,23 @@ fi
 
 # Version guard: rtk rewrite was added in 0.23.0.
 # Older binaries: warn once and exit cleanly (no silent failure).
-RTK_VERSION=$(rtk --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-if [ -n "$RTK_VERSION" ]; then
-  MAJOR=$(echo "$RTK_VERSION" | cut -d. -f1)
-  MINOR=$(echo "$RTK_VERSION" | cut -d. -f2)
-  # Require >= 0.23.0
-  if [ "$MAJOR" -eq 0 ] && [ "$MINOR" -lt 23 ]; then
-    echo "[rtk] WARNING: rtk $RTK_VERSION is too old (need >= 0.23.0). Upgrade: cargo install rtk" >&2
-    exit 0
+# Cache: skip the full version check if stamp is younger than 1 hour.
+STAMP="/tmp/rtk-version-ok-$(id -u)"
+if [[ -f "$STAMP" ]] && (( $(date +%s) - $(stat -f%m "$STAMP" 2>/dev/null || echo 0) < 3600 )); then
+  : # version already verified this session
+else
+  RTK_VERSION=$(rtk --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  if [ -n "$RTK_VERSION" ]; then
+    MAJOR="${RTK_VERSION%%.*}"
+    REST="${RTK_VERSION#*.}"
+    MINOR="${REST%%.*}"
+    # Require >= 0.23.0
+    if [ "$MAJOR" -eq 0 ] && [ "$MINOR" -lt 23 ]; then
+      echo "[rtk] WARNING: rtk $RTK_VERSION is too old (need >= 0.23.0). Upgrade: cargo install rtk" >&2
+      exit 0
+    fi
   fi
+  touch "$STAMP"
 fi
 
 INPUT=$(cat)
@@ -70,8 +78,7 @@ case $EXIT_CODE in
     ;;
 esac
 
-ORIGINAL_INPUT=$(echo "$INPUT" | jq -c '.tool_input')
-UPDATED_INPUT=$(echo "$ORIGINAL_INPUT" | jq --arg cmd "$REWRITTEN" '.command = $cmd')
+UPDATED_INPUT=$(echo "$INPUT" | jq -c --arg cmd "$REWRITTEN" '.tool_input | .command = $cmd')
 
 if [ "$EXIT_CODE" -eq 3 ]; then
   # Ask: rewrite the command, omit permissionDecision so Claude Code prompts.

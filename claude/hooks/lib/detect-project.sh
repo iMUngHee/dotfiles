@@ -25,14 +25,18 @@ detect_checker() {
 
   case "$file" in
     *.ts|*.tsx)
-      if [[ -f "$root/tsconfig.json" ]]; then
+      if [[ -f "$root/tsconfig.json" ]] && [[ -f "$root/node_modules/.bin/tsc" ]]; then
         CHECK_CMD="npx tsc --noEmit --pretty 2>&1"
         LANG_LABEL="tsc"
       fi
-      command -v npx &>/dev/null && FMT_CMD="npx prettier --write"
+      if command -v npx &>/dev/null && [[ -f "$root/node_modules/.bin/prettier" ]]; then
+        FMT_CMD="npx prettier --write"
+      fi
       ;;
     *.js|*.jsx|*.json|*.css|*.scss)
-      command -v npx &>/dev/null && FMT_CMD="npx prettier --write"
+      if command -v npx &>/dev/null && [[ -f "$root/node_modules/.bin/prettier" ]]; then
+        FMT_CMD="npx prettier --write"
+      fi
       ;;
     *.go)
       if [[ -f "$root/go.mod" ]]; then
