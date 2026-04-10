@@ -102,29 +102,29 @@
       "Write"
     ],
     "deny": [
-      "Read(~/.ssh/**)",
-      "Read(~/.gnupg/**)",
-      "Read(~/.aws/**)",
-      "Read(~/.kube/**)",
-      "Read(~/.docker/config.json)",
-      "Read(~/.npmrc)",
-      "Read(~/.pypirc)",
-      "Read(~/.git-credentials)",
-      "Read(~/.bash_history)",
-      "Read(~/.zsh_history)",
-      "Read(~/.netrc)",
-      "Read(**/.env)",
-      "Read(**/.env.*)",
-      "Read(**/secrets/**)",
-      "Read(**/credentials/**)",
-      "Write(**/.env)",
-      "Write(**/.env.*)",
-      "Write(**/secrets/**)",
-      "Write(**/credentials/**)",
       "Edit(**/.env)",
       "Edit(**/.env.*)",
+      "Edit(**/credentials/**)",
       "Edit(**/secrets/**)",
-      "Edit(**/credentials/**)"
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/credentials/**)",
+      "Read(**/secrets/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.bash_history)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.git-credentials)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.kube/**)",
+      "Read(~/.netrc)",
+      "Read(~/.npmrc)",
+      "Read(~/.pypirc)",
+      "Read(~/.ssh/**)",
+      "Read(~/.zsh_history)",
+      "Write(**/.env)",
+      "Write(**/.env.*)",
+      "Write(**/credentials/**)",
+      "Write(**/secrets/**)"
     ],
     "disableBypassPermissionsMode": "disable",
     "defaultMode": "acceptEdits"
@@ -329,5 +329,9 @@
   "cleanupPeriodDays": 14,
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "alwaysThinkingEnabled": true,
-  "includeGitInstructions": false
+  "includeGitInstructions": false,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  }
 }
