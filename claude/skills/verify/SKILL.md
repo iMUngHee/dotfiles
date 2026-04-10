@@ -4,7 +4,7 @@ description: "Goal-backward verification for completed features. Use after finis
 argument-hint: "[feature or goal description]"
 allowed-tools: Bash, Read, Glob, Grep
 model: opus
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Verify that the completed work actually achieves its goal.

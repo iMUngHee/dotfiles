@@ -1,7 +1,7 @@
 ---
 name: mcp-builder
 description: "Guide for building MCP servers that connect LLMs to external services. Use when creating or modifying MCP servers in TypeScript or Python."
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch
 effort: max
 ---

@@ -48,3 +48,5 @@ When invoked, verify:
 6. **MEMORY.md divergence**: `diff ~/.config/claude/MEMORY.md ~/.claude/MEMORY.md` and `diff ~/.config/claude/MEMORY.private.md ~/.claude/MEMORY.private.md` — deployed as separate copies
 7. **Cross-file sync**: `/self-review` skill checklist matches DEVGUARD.md sections and MEMORY.md feedback entries
 8. **Dead references**: all `memory/*.md` links in MEMORY.md and MEMORY.private.md resolve to existing files
+9. **Scripts divergence**: `diff ~/.config/claude/scripts/<name>.sh ~/.claude/scripts/<name>.sh` for copy-deployed scripts (not symlinked)
+10. **Gitignore completeness**: `MEMORY.private.md`, `.claude/`, `skills/*/node_modules/`, `hooks/.rtk-hook.sha256` are all listed in `.gitignore`

@@ -3,7 +3,7 @@ name: diagram
 description: "Generate Mermaid diagrams for architecture, flows, and data structures. Copies to clipboard for mermaid.live or excalidraw import."
 argument-hint: "[diagram description]"
 allowed-tools: Bash
-disable-model-invocation: true
+disable-model-invocation: false
 model: sonnet
 ---
 

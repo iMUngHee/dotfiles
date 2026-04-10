@@ -5,7 +5,7 @@ argument-hint: "[error description or reproduction steps]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
 model: opus
 effort: max
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Systematically debug the given issue.

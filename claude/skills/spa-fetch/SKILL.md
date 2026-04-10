@@ -4,7 +4,7 @@ description: "Fetch rendered content from SPA sites using Playwright. Use when W
 argument-hint: "<url> [css-selector] [--html]"
 allowed-tools: Bash, Read, AskUserQuestion
 model: sonnet
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Fetch rendered content from a JavaScript-heavy SPA site.

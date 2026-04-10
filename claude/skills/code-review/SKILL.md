@@ -5,7 +5,7 @@ argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob, Grep
 model: sonnet
 effort: max
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Review the current branch's PR changes per-commit.
