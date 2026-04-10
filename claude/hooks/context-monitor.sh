@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # PostToolUse hook: inject context usage warnings before autocompact (70%)
 
-PCT_FILE="/tmp/claude/context-pct"
-MARKER_DIR="/tmp/claude/context-markers"
+INPUT=$(cat)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+SESSION_ID="${SESSION_ID//[^a-zA-Z0-9_-]/}"
+SID_DIR="/tmp/claude/sessions/${SESSION_ID:-default}"
+
+PCT_FILE="$SID_DIR/context-pct"
+MARKER_DIR="$SID_DIR/context-markers"
 
 # No metrics yet (statusline hasn't run) → silent exit
 [[ ! -f "$PCT_FILE" ]] && exit 0
@@ -13,7 +18,7 @@ PCT=$(cat "$PCT_FILE" 2>/dev/null)
 mkdir -p "$MARKER_DIR"
 
 if [[ "$PCT" -ge 65 ]] && [[ ! -f "$MARKER_DIR/critical" ]]; then
-  touch "$MARKER_DIR/critical"
+  touch "$MARKER_DIR/critical" "$MARKER_DIR/half"
   echo "[context monitor] Context ${PCT}% used — autocompact imminent at 70%."
   echo "Finish current step. Summarize: task status, key decisions, modified files."
   exit 0
