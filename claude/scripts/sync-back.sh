@@ -8,8 +8,12 @@ changed=false
 
 # ── settings.json (extract repo-tracked keys only, exclude local-only like model) ──
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
-    jq -s '.[0] as $repo | .[1] | with_entries(select(.key | IN($repo | keys[])))' \
-        "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" \
+    jq -s '
+      .[0] as $repo | .[1] |
+      with_entries(select(.key | IN($repo | keys[]))) |
+      .permissions.allow = ([.permissions.allow[] | select(IN($repo.permissions.allow[]))]) |
+      .permissions.deny  = ([.permissions.deny[]  | select(IN($repo.permissions.deny[]))])
+    ' "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" \
         > "$REPO_DIR/settings.json.tmp"
     if ! diff -q "$REPO_DIR/settings.json" "$REPO_DIR/settings.json.tmp" &>/dev/null; then
         mv "$REPO_DIR/settings.json.tmp" "$REPO_DIR/settings.json"
@@ -30,7 +34,7 @@ NEW_FILES=()
 for f in "$REPO_DIR"/memory/*.md; do
     [ -f "$f" ] || continue
     fname=$(basename "$f")
-    if echo "$KNOWN_FILES" | /usr/bin/grep -qx "$fname"; then
+    if echo "$KNOWN_FILES" | /usr/bin/grep -Fqx "$fname"; then
         continue
     fi
     NEW_FILES+=("$fname")
