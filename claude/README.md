@@ -17,8 +17,8 @@ claude/
 │   └── AppIcon.icns
 ├── extensions/
 │   └── statusline.sh           # Status line (model, context, cost, quota/proxy status)
-├── hooks/                      # Claude Code hooks (RTK rewrite, file protection, notifications,
-│                               #   prompt guard, tool failure log, quota switch, subagent trust)
+├── hooks/                      # Claude Code hooks — see Hooks section below
+│   └── lib/                    # Shared helpers (detect-project.sh)
 ├── skills/                     # Public skills (/design, /debug, /verify, /retro, /code-review, ...)
 ├── skills-private/             # Private skills (gitignored, overlaid into skills/ by bootstrap)
 ├── rules/                      # Path-scoped instruction rules (testing, diagnostics, rationalization, ...)
@@ -54,7 +54,7 @@ Bootstrap will:
 1. Symlink config files and directories to `~/.claude/` (`commands/`, `rules/`, `agents/` as wholesale symlinks)
 2. Create per-skill symlinks in `~/.claude/skills/` from `skills/` + `skills-private/` (private overlays public)
 3. Copy executable scripts to `~/.claude/scripts/` (excluding bootstrap/sync-back)
-4. Merge `settings.json` (repo keys override, local-only keys like `model` preserved)
+4. Merge `settings.json` (`permissions.allow` and `permissions.deny` union-merged, repo keys override, local-only keys like `model` preserved)
 5. Deploy `MEMORY.md` + `MEMORY.private.md` (if exists) to `~/.claude/`
 6. Symlink `memory/` to `~/.claude/memory/`
 7. Build ClaudeNotifier (optional, skipped if `swiftc` not found)
@@ -91,6 +91,26 @@ Git hooks handle sync automatically:
 Work-specific memory files live in `memory/private/` and are gitignored. `MEMORY.private.md` holds their index (also gitignored). Bootstrap merges both indexes at deploy time.
 
 When `sync-back.sh` detects new memory files not referenced in either index, it prompts to classify them as public or private.
+
+## Hooks
+
+All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`) to avoid cross-session interference.
+
+| Hook | Event | Purpose |
+|------|-------|---------|
+| `rtk-rewrite.sh` | PreToolUse (Bash) | Rewrite commands through RTK for token savings (version check cached 1h) |
+| `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files) — fail-closed if jq missing |
+| `prompt-guard.sh` | PreUserPromptSubmit | Scan prompts for accidentally pasted secrets (single combined regex) |
+| `notify.sh` | Stop | macOS notification on task completion or approval request |
+| `stop-handler.sh` | Stop | Final gate — run type checker on modified files before completion |
+| `on-rate-limit.sh` | StopFailure | Auto-switch CCS quota account on rate limit |
+| `check-quota-switch.sh` | SessionStart, SessionClear | Check quota reset time, switch back if elapsed |
+| `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format (prettier/gofmt/rustfmt) + type check after edits (30s debounce) |
+| `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage, autocompact triggers at 70% |
+| `compact-restore.sh` | PostToolUse (Compact) | Inject git branch, recent commits, modified files after compaction |
+| `subagent-stop-reminder.sh` | SubagentStop | Inject DEVGUARD subagent trust reminder |
+| `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
+| `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
 
 ## Private skills
 
