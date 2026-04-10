@@ -114,7 +114,7 @@ case "$MODE" in
         INPUT=$(cat)
         # Suppress stop notification right after approval (waiting for permission)
         # Event order: PermissionRequest/Notification -> Stop (async)
-        sleep 1
+        sleep 0.2
         if has_recent_approval; then
             exit 0
         fi
