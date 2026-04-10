@@ -5,7 +5,7 @@ argument-hint: "[task description]"
 allowed-tools: Bash, Read, Write, Glob, Grep, Agent
 model: opus
 effort: max
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Design and plan implementation for the given task.

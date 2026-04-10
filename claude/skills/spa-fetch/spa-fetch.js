@@ -52,7 +52,13 @@ if (!url) {
 }
 
 // --- Helpers ---
-const targetDomain = new URL(url).hostname;
+let targetDomain;
+try {
+  targetDomain = new URL(url).hostname;
+} catch {
+  console.error(`[spa-fetch] Invalid URL: "${url}"`);
+  process.exit(1);
+}
 
 function profileDirFor(domain) {
   const dir = path.join(AUTH_DIR, domain);
@@ -116,53 +122,56 @@ async function openLoginMode() {
     launchOptions(false),
   );
 
-  const page = context.pages()[0] || (await context.newPage());
-  await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+  try {
+    const page = context.pages()[0] || (await context.newPage());
+    await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
 
-  // Poll until URL settles on target domain after SSO completes.
-  // waitForURL is not used — it throws on SSO intermediate redirects (ERR_ADDRESS_UNREACHABLE).
-  // We require the URL to stay on target domain for 2 consecutive checks to avoid false positives
-  // where the page briefly touches the SSO provider before being redirected away again.
-  if (isLoginPage(page.url())) {
-    console.error("[spa-fetch] Browser opened — waiting for login...");
-    const deadline = Date.now() + 300000; // 5 min
-    let stableCount = 0;
-    while (Date.now() < deadline) {
-      await page.waitForTimeout(1000);
-      try {
-        const current = page.url();
-        const onTarget =
-          new URL(current).hostname === targetDomain && !isLoginPage(current);
-        if (onTarget) {
-          stableCount++;
-          if (stableCount >= 2) break;
-        } else {
+    // Poll until URL settles on target domain after SSO completes.
+    // waitForURL is not used — it throws on SSO intermediate redirects (ERR_ADDRESS_UNREACHABLE).
+    // We require the URL to stay on target domain for 2 consecutive checks to avoid false positives
+    // where the page briefly touches the SSO provider before being redirected away again.
+    if (isLoginPage(page.url())) {
+      console.error("[spa-fetch] Browser opened — waiting for login...");
+      const deadline = Date.now() + 300000; // 5 min
+      let stableCount = 0;
+      while (Date.now() < deadline) {
+        await page.waitForTimeout(1000);
+        try {
+          const current = page.url();
+          const onTarget =
+            new URL(current).hostname === targetDomain && !isLoginPage(current);
+          if (onTarget) {
+            stableCount++;
+            if (stableCount >= 2) break;
+          } else {
+            stableCount = 0;
+          }
+        } catch {
           stableCount = 0;
         }
-      } catch {
-        stableCount = 0;
       }
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(1000);
     }
-    await page.waitForLoadState("networkidle").catch(() => {});
-    await page.waitForTimeout(1000);
-  }
 
-  // Persist session-only cookies so headless fetch can reuse them.
-  // Sites using session-only cookies (no expires/max-age) lose auth on browser close.
-  const cookies = await context.cookies();
-  const expiry = Math.floor(Date.now() / 1000) + 86400; // 24h from now
-  const sessionCookies = cookies
-    .filter((c) => c.expires === -1)
-    .map((c) => ({ ...c, expires: expiry }));
-  if (sessionCookies.length > 0) {
-    await context.addCookies(sessionCookies);
-    console.error(
-      `[spa-fetch] Persisted ${sessionCookies.length} session cookies (24h expiry).`,
-    );
-  }
+    // Persist session-only cookies so headless fetch can reuse them.
+    // Sites using session-only cookies (no expires/max-age) lose auth on browser close.
+    const cookies = await context.cookies();
+    const expiry = Math.floor(Date.now() / 1000) + 86400; // 24h from now
+    const sessionCookies = cookies
+      .filter((c) => c.expires === -1)
+      .map((c) => ({ ...c, expires: expiry }));
+    if (sessionCookies.length > 0) {
+      await context.addCookies(sessionCookies);
+      console.error(
+        `[spa-fetch] Persisted ${sessionCookies.length} session cookies (24h expiry).`,
+      );
+    }
 
-  console.error("[spa-fetch] Login successful — session saved.");
-  await context.close();
+    console.error("[spa-fetch] Login successful — session saved.");
+  } finally {
+    await context.close().catch(() => {});
+  }
 }
 
 // --- Fetch mode: headless with anti-detection, fallback on networkidle timeout ---

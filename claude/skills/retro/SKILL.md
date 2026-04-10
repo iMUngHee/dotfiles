@@ -4,7 +4,7 @@ description: "Post-work knowledge hygiene: consolidate, prune, and selectively g
 argument-hint: "[commit range, e.g. HEAD~3, or blank for HEAD~5]"
 allowed-tools: Bash, Read, Write, Glob, Grep, Edit
 model: sonnet
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Analyze the recent work and improve the system through consolidation — not accumulation.

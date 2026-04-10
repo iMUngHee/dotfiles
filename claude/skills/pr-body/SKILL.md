@@ -4,7 +4,7 @@ description: "Generate PR body from branch changes and copy to clipboard. Use wh
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob
 model: sonnet
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Generate the PR body for the current branch.
