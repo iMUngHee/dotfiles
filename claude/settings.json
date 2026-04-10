@@ -62,6 +62,7 @@
       "Bash(npm run*)",
       "Bash(nvim*)",
       "Bash(open*)",
+      "Bash(pbcopy*)",
       "Bash(pbpaste*)",
       "Bash(pkill -x ClaudeNotifier*)",
       "Bash(pnpm build*)",
@@ -136,17 +137,19 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/rtk-rewrite.sh",
-            "statusMessage": "Optimizing command..."
+            "statusMessage": "Optimizing command...",
+            "timeout": 5000
           }
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "Bash|Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/protect-files.sh",
-            "statusMessage": "Checking file safety..."
+            "statusMessage": "Checking file safety...",
+            "timeout": 5000
           }
         ]
       }
@@ -157,7 +160,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/on-rate-limit.sh"
+            "command": "$HOME/.claude/hooks/on-rate-limit.sh",
+            "timeout": 10000
           }
         ]
       }
@@ -177,7 +181,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/check-quota-switch.sh"
+            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
+            "timeout": 10000
           }
         ]
       },
@@ -186,7 +191,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/check-quota-switch.sh"
+            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
+            "timeout": 10000
           }
         ]
       }
@@ -230,12 +236,13 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/post-edit-pipeline.sh",
-            "statusMessage": "Formatting & checking..."
+            "statusMessage": "Formatting & checking...",
+            "timeout": 60000
           }
         ]
       },
@@ -256,7 +263,8 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/prompt-guard.sh",
-            "statusMessage": "Scanning for secrets..."
+            "statusMessage": "Scanning for secrets...",
+            "timeout": 5000
           }
         ]
       }
@@ -275,6 +283,7 @@
     ],
     "InstructionsLoaded": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
@@ -285,6 +294,7 @@
     ],
     "SubagentStop": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
