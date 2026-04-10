@@ -224,7 +224,8 @@ if [ "$1" = "--refresh" ] || [ "$1" = "-r" ]; then
     if [ "$MODE" = "proxy" ]; then
         check_proxy_health
         echo "Profile: ${PROFILE_NAME:-proxy}"
-        echo "Backend: ${BACKEND_MODEL:-$_amodel}"
+        BACKEND_MODEL=$(_resolve_backend "${ANTHROPIC_MODEL:-}")
+        echo "Backend: ${BACKEND_MODEL:-unknown}"
         echo "Proxy:   ${PROXY_HEALTH} (${PROXY_URL})"
         exit 0
     fi
@@ -251,7 +252,8 @@ eval "$(echo "$input" | jq -r '
   "model=" + (.model.display_name // "Unknown" | @sh),
   "model_id=" + (.model.id // "" | @sh),
   "used_pct=" + (.context_window.used_percentage // "" | tostring | @sh),
-  "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh)
+  "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh),
+  "session_id=" + (.session_id // "" | @sh)
 ')"
 _now=$(date +%s)
 
@@ -318,8 +320,10 @@ fi
 # Context bar
 if [ -n "$used_pct" ]; then
     used_int=$(printf "%.0f" "$used_pct")
-    mkdir -p /tmp/claude 2>/dev/null
-    echo "$used_int" > /tmp/claude/context-pct
+    session_id="${session_id//[^a-zA-Z0-9_-]/}"
+    _sid_dir="/tmp/claude/sessions/${session_id:-default}"
+    mkdir -p "$_sid_dir" 2>/dev/null
+    echo "$used_int" > "$_sid_dir/context-pct"
     filled=$(( used_int * 10 / 100 )); empty=$(( 10 - filled ))
     bar=""; [ "$filled" -gt 0 ] && bar=$(printf '%0.s|' $(seq 1 $filled))
             [ "$empty"  -gt 0 ] && bar="${bar}$(printf '%0.s.' $(seq 1 $empty))"

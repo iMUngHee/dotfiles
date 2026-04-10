@@ -19,11 +19,13 @@ INPUT=$(cat)
 
 # Extract session_id for retry counter (fallback to PPID if unavailable)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+SESSION_ID="${SESSION_ID//[^a-zA-Z0-9_-]/}"
 [[ -z "$SESSION_ID" ]] && SESSION_ID="$PPID"
 COUNTER_FILE="/tmp/claude-final-gate-${SESSION_ID}"
 
 # --- Helper: run existing notify.sh and exit ---
 run_notify_and_exit() {
+  rm -f "$TMPOUT" 2>/dev/null
   "$HOOK_DIR/notify.sh" stop <<< "$INPUT"
   exit 0
 }
@@ -57,7 +59,7 @@ if [[ -z "$CHECK_CMD" ]]; then
 fi
 
 # --- Run checker ---
-TMPOUT="/tmp/claude-final-gate-output"
+TMPOUT="/tmp/claude-final-gate-output-${SESSION_ID}"
 portable_timeout "$CHECKER_TIMEOUT" bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1
 EXIT_CODE=$?
 
@@ -88,4 +90,5 @@ echo $(( CURRENT_COUNT + 1 )) > "$COUNTER_FILE"
 OUTPUT=$(head -20 "$TMPOUT")
 echo "[final-gate] ${LANG_LABEL} check failed (attempt $(( CURRENT_COUNT + 1 ))/${MAX_RETRIES}). Fix and retry."
 [[ -n "$OUTPUT" ]] && echo "$OUTPUT"
+rm -f "$TMPOUT" 2>/dev/null
 exit 2

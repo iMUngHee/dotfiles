@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-rm -rf /tmp/claude/context-markers 2>/dev/null
-rm -f /tmp/claude/context-pct 2>/dev/null
+INPUT=$(cat)
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+SESSION_ID="${SESSION_ID//[^a-zA-Z0-9_-]/}"
+SID_DIR="/tmp/claude/sessions/${SESSION_ID:-default}"
+rm -rf "$SID_DIR/context-markers" 2>/dev/null
+rm -f "$SID_DIR/context-pct" 2>/dev/null
 BRANCH=$(git branch --show-current 2>/dev/null || echo 'N/A')
 COMMITS=$(git log --oneline -3 2>/dev/null | tr '\n' ';' | sed 's/;$//')
 MODIFIED=$(git diff --name-only 2>/dev/null | head -10 | tr '\n' ', ' | sed 's/,$//')
