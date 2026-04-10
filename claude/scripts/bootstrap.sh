@@ -76,7 +76,8 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
     jq -s '
       .[0] as $local | .[1] as $repo |
       $local * $repo |
-      .permissions.allow = (($local.permissions.allow // []) + ($repo.permissions.allow // []) | unique)
+      .permissions.allow = (($local.permissions.allow // []) + ($repo.permissions.allow // []) | unique) |
+      .permissions.deny = (($local.permissions.deny // []) + ($repo.permissions.deny // []) | unique)
     ' "$CLAUDE_DIR/settings.json" "$REPO_DIR/settings.json" \
         > "$CLAUDE_DIR/settings.json.tmp" \
         && mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
