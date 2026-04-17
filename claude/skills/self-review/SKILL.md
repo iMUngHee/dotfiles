@@ -1,28 +1,36 @@
 ---
 name: self-review
-description: "Self-review CLAUDE.md rule compliance for the current session"
+description: "Self-review rule compliance for the current session"
 allowed-tools: Read, Grep, Glob
 model: opus
 disable-model-invocation: true
 ---
 
-Review whether CLAUDE.md rules were followed in this session.
-
-<!-- Keep checklist in sync with PERSONAL.md, DEVGUARD.md, and MEMORY.md -->
+Review whether rules were followed in this session.
 
 ## Instructions
 
-1. Read all linked files: `~/.claude/CLAUDE.md` → `RTK.md`, `PERSONAL.md`, `DEVGUARD.md`, `MEMORY.md`, and `rules/rationalization.md`
+1. Read all rule files fresh (do not rely on memory):
+   - `~/.config/claude/PERSONAL.md`
+   - `~/.config/claude/DEVGUARD.md`
+   - `~/.config/claude/rules/rationalization.md`
+   - `~/.config/claude/rules/subagent-trust.md`
+   - `~/.config/claude/rules/testing.md`
+   - `~/.config/claude/rules/diagnostics.md`
+   - `~/.config/claude/rules/code-review.md`
+   - `~/.config/claude/MEMORY.md` (feedback entries only)
 
-2. For each rule, evaluate against the conversation history. Fill the table with:
+2. For each rule, evaluate against the conversation history:
    - **✓** followed (cite evidence)
    - **✗** violated (cite the specific action/message)
    - **—** not triggered (explain why)
 
-3. Output in this exact format:
+3. For each **✗**, analyze actionability.
+
+4. Output in this exact format:
 
 ````
-## Self-Review: CLAUDE.md Compliance
+## Self-Review: Rule Compliance
 
 ### PERSONAL.md
 
@@ -35,43 +43,74 @@ Review whether CLAUDE.md rules were followed in this session.
 | Critical Analysis — Simplification | ✓/✗ | ... |
 | Critical Analysis — Side effects | ✓/✗ | ... |
 | Code Style | ✓/✗ | ... |
+| Interactive Decision Points (AskUserQuestion) | ✓/✗/— | ... |
 
 ### DEVGUARD.md
 
 | Rule | Result | Evidence |
 |------|--------|----------|
-| Verification Before Completion | ✓/✗ | ... |
-| Forbidden completion words | ✓/✗ | ... |
-| Rationalization Resistance | ✓/✗ | ... |
+| Verification Before Completion (fenced code block) | ✓/✗ | ... |
+| Forbidden completion words (without evidence) | ✓/✗ | ... |
 | Scope Resolution | ✓/✗/— | ... |
-| Design Gate trigger | ✓/✗ | ... |
-| Design Gate — Approach Proposal | ✓/✗ | ... |
-| Design Gate — Incremental Approval | ✓/✗ | ... |
-| Implementation Planning | ✓/✗ | ... |
-| Subagent Trust — Before dispatch (scope, constraints, rules) | ✓/✗ | ... |
-| Subagent Trust — After results (verify modifications; cross-verify research) | ✓/✗ | ... |
-| Test Awareness | ✓/✗/— | ... |
-| TDD Discipline | ✓/✗/— | ... |
-| Diagnostic Discipline | ✓/✗/— | ... |
-| Debugging Escalation (3-Strike) | ✓/✗/— | ... |
-| Code Review Honesty | ✓/✗/— | ... |
-| Parallel Dispatch Criteria | ✓/✗/— | ... |
+| Skill Compliance (/design vs EnterPlanMode) | ✓/✗/— | ... |
+| Design Gate trigger (3+ files / arch / ambiguous) | ✓/✗/— | ... |
 
-### MEMORY.md Feedback Rules
+### rules/rationalization.md
 
 | Rule | Result | Evidence |
 |------|--------|----------|
-| No guessing in debugging | ✓/✗/— | ... |
+| No rationalization phrases used | ✓/✗ | ... |
+
+### rules/subagent-trust.md
+
+| Rule | Result | Evidence |
+|------|--------|----------|
+| Before dispatch — scope, constraints, rules in prompt | ✓/✗/— | ... |
+| After results — git diff review, cross-verify claims | ✓/✗/— | ... |
+
+### rules/testing.md
+
+| Rule | Result | Evidence |
+|------|--------|----------|
+| Test Awareness (⚠️ warning if no tests) | ✓/✗/— | ... |
+| TDD Discipline (if required) | ✓/✗/— | ... |
+
+### rules/diagnostics.md
+
+| Rule | Result | Evidence |
+|------|--------|----------|
+| Hypothesis before investigating | ✓/✗/— | ... |
+| Simplest cause first | ✓/✗/— | ... |
+| 3-Strike escalation | ✓/✗/— | ... |
+
+### rules/code-review.md
+
+| Rule | Result | Evidence |
+|------|--------|----------|
+| Code Review Honesty (verify before accepting) | ✓/✗/— | ... |
+| Parallel Dispatch Criteria | ✓/✗/— | ... |
+
+### MEMORY.md Feedback
+
+| Rule | Result | Evidence |
+|------|--------|----------|
+| No unverified assumptions | ✓/✗/— | ... |
 | All persistent files in English | ✓/✗ | ... |
 | Format-level instructions | ✓/✗/— | ... |
 | Global memory path | ✓/✗/— | ... |
 | Reverse grep after modification | ✓/✗/— | ... |
+| PR body formatting | ✓/✗/— | ... |
+| Team vs subagent distinction | ✓/✗/— | ... |
 
-### Verdict
+### Actionability
 
 **Followed**: N / **Violated**: N / **Not triggered**: N
 
-[Key lesson from this session — one sentence]
+| Violation | Fix | Feasibility |
+|-----------|-----|-------------|
+| ... | hook / rule change / code change | 즉시 가능 / 규모별 분기 / 불가 (구조적 한계 — reason) |
+
+If no violations, omit the table.
 ````
 
 Be brutally honest. Do not soften or omit violations.
