@@ -55,6 +55,10 @@ Before reporting any issue:
 1. Identify which commit introduced it
 2. If the commit is NOT unique (i.e., from a sync merge), do NOT flag it
 
+### 5. Next step (optional)
+
+After fixes are committed, suggest running `/pr-body` to generate the PR description.
+
 ## Rules
 
 - Only review changes from unique commits (Step 1)
