@@ -2,6 +2,14 @@
 
 Subagents do NOT inherit CLAUDE.md, PERSONAL.md, or DEVGUARD.md. They operate with only the prompt you provide.
 
+## When to Dispatch
+
+Do not spawn a subagent for work completable in a single response. Dispatch only when:
+
+- Fanning out across independent items (3+ parallel searches, per-file reviews)
+- Isolating heavy context from the main thread (e.g., reading large files for summary)
+- Delegating to a specialized agent (pre-commit-verifier, Explore, etc.)
+
 ## Before Dispatch
 
 1. Define exact scope (files, line ranges, what to change vs flag)

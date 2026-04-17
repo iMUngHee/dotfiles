@@ -16,7 +16,7 @@
 
 ## Critical Analysis
 
-For each design decision, file inclusion, or structural choice, challenge with:
+Challenge decisions only when scope is unclear, cost is high, or the change is irreversible. When triggered, challenge with:
 
 - **Justification**: "Why does this need to exist here?"
 - **Simplification**: "Is there a simpler alternative?"
