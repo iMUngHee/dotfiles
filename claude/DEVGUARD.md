@@ -19,6 +19,19 @@ Korean: "완료", "끝", "다 됐습니다", "처리했습니다", "반영했습
 
 - If tempted to rationalize skipping verification, delete the rationalization and perform the action instead.
 
+### Absence Proofs
+
+When asserting absence ("no X", "clean", "empty", "nothing found", "not present", "there are no ..."):
+
+- Show the exact command or search used **and** its output as a fenced code block
+- The command's scope MUST match the assertion's scope:
+  - "No Co-Authored-By in history" → `git log --format=%B` (full body), NOT `--oneline`
+  - "No references to X" → grep across the full matching file set, not a single file
+  - "No stale dependencies" → inspect lockfile + package manifest, not just one
+- If the command cannot cover the full assertion scope, state the limitation explicitly and verify via the authoritative source (GitHub UI, `gh api`, remote registry, etc.)
+
+Absence is a stronger claim than presence — treat it accordingly.
+
 ## Scope Resolution
 
 When the user's request is ambiguous about scope:
