@@ -58,10 +58,13 @@ Apply via `:::className` or `class nodeId className`.
 ALWAYS follow these rules — excalidraw's "Mermaid to Excalidraw" will break otherwise:
 
 - **No HTML tags**: `<b>`, `<br/>`, `<i>` render as literal text. Plain text only.
-- **No `\n` in node text**: Line breaks inside labels not supported. Keep single-line or split into separate nodes.
+- **NEVER use `\n` in node text**: `\n` renders as literal "\n" text, NOT a line break. This is a hard constraint — there is no workaround for line breaks inside a single node.
+  - BAD: `A[scrollTop=500px\n즉시 설정]`  → displays "\n" as text
+  - GOOD: `A[scrollTop=500px, 즉시 설정]` → comma-separated single line
+  - GOOD: split into two nodes `A[scrollTop=500px]` → `B[즉시 설정]`
 - **No markdown in nodes**: `**bold**`, `_italic_` won't render.
 
-For multi-line content, use separate nodes stacked vertically or subgraph titles.
+If content is too long for one line: shorten wording, use comma separation, or split into separate connected nodes. Never use `\n`.
 
 ## Style Guide
 
