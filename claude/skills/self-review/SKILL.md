@@ -51,6 +51,7 @@ Review whether rules were followed in this session.
 |------|--------|----------|
 | Verification Before Completion (fenced code block) | ✓/✗ | ... |
 | Forbidden completion words (without evidence) | ✓/✗ | ... |
+| Absence Proofs (scope match + fenced evidence) | ✓/✗/— | ... |
 | Scope Resolution | ✓/✗/— | ... |
 | Skill Compliance (/design vs EnterPlanMode) | ✓/✗/— | ... |
 | Design Gate trigger (3+ files / arch / ambiguous) | ✓/✗/— | ... |
