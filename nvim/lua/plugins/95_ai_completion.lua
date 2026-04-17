@@ -15,8 +15,8 @@ return {
         provider = "openai_fim_compatible",
         notify = "warn",
         n_completions = 1,
-        throttle = 300,
-        debounce = 150,
+        throttle = 200,
+        debounce = 250,
         context_window = 32000,
         request_timeout = 5,
         provider_options = {
