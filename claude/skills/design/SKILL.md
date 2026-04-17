@@ -40,17 +40,17 @@ Mark one as recommended.
 
 Present design section by section with confirmation. Do NOT dump all sections at once. Wait for approval before moving to the next section.
 
-### 4. Implementation plan
+### 4. Implementation plan (presentation only — no execution yet)
 
-After design approval, present the implementation plan as response text:
+After design approval, present the implementation plan as response text. **Do NOT begin executing edits in this step.**
 
 1. **File Structure**: Map Create/Modify/Test files with responsibilities
 2. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL)
 3. If planned output differs from actual during implementation, investigate
 
-### 5. Persist plan artifact
+### 5. Persist plan artifact (BEFORE implementation)
 
-After 대협 approves the design (Step 3 approval = signal to persist):
+After 대협 approves the design (Step 3 approval = signal to persist) and **before any file writes that implement the plan**:
 
 1. Create `.claude/plans/` directory if it does not exist
 2. Save as `.claude/plans/YYYY-MM-DD-<slug>.md` with this format:
@@ -83,5 +83,6 @@ Include an empty section at the end:
 
 - Do NOT implement until user approves the design
 - Plan artifact is saved ONLY after explicit design approval (Step 3)
+- **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they look up plans by branch) and loses the pre-drift intent snapshot
 - No file writes during design exploration (Steps 1-3)
 - If 대협 declines to save, skip Step 5 — the plan remains conversation-only
