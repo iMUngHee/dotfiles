@@ -2,10 +2,14 @@
   "env": {
     "DISABLE_AUTOUPDATER": "1",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
-    "DISABLE_TELEMETRY": "1",
-    "DISABLE_ERROR_REPORTING": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "ENABLE_CLAUDEAI_MCP_SERVERS": "false"
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
+    "CLAUDE_CODE_ENABLE_AWAY_SUMMARY": "1",
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "BASH_MAX_TIMEOUT_MS": "900000"
   },
   "permissions": {
     "allow": [
@@ -320,7 +324,7 @@
   },
   "language": "한국어",
   "spinnerTipsEnabled": false,
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "sandbox": {
     "enabled": false,
     "autoAllowBashIfSandboxed": true,
