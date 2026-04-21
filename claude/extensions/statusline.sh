@@ -303,17 +303,21 @@ render_cost() {
 }
 
 render_fresh() {
-    local total fresh fresh_pct color
-    total=$(( ${input_tk:-0} + ${cache_read:-0} + ${cache_create:-0} ))
+    local in_u cc_u cr_u total fresh fresh_pct color
+    # Cost-weighted fresh ratio. Weights from Anthropic prompt-cache pricing:
+    #   input_tokens          ×1.0   (base)
+    #   cache_creation_tokens ×1.25  (5m TTL write surcharge)
+    #   cache_read_tokens     ×0.1   (10× cheaper)
+    # Multiplied by 100 to keep integer arithmetic.
+    in_u=$(( ${input_tk:-0} * 100 ))
+    cc_u=$(( ${cache_create:-0} * 125 ))
+    cr_u=$(( ${cache_read:-0} * 10 ))
+    total=$(( in_u + cc_u + cr_u ))
     [ "$total" -eq 0 ] && return
-    # Fresh = non-cached input share (input_tokens + cache_creation) / total.
-    # Hit-rate (cache_read / total) sits at 95~99% in steady state — flat and
-    # uninformative. Fresh % stays low (1~3%) on routine turns and spikes when
-    # large new context enters (skill invoke, file load, etc.).
-    fresh=$(( input_tk + cache_create ))
+    fresh=$(( in_u + cc_u ))
     fresh_pct=$(( fresh * 100 / total ))
-    if   [ "$fresh_pct" -ge 10 ]; then color="$RED"
-    elif [ "$fresh_pct" -ge 3 ];  then color="$YELLOW"
+    if   [ "$fresh_pct" -ge 60 ]; then color="$RED"
+    elif [ "$fresh_pct" -ge 15 ]; then color="$YELLOW"
     else                                color="$GREEN"
     fi
     printf ' 🌱 %s%d%%%s' "$color" "$fresh_pct" "$RESET"
