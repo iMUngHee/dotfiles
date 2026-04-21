@@ -302,19 +302,21 @@ render_cost() {
     printf ' %s$%.3f%s' "$DIM" "$session_cost" "$RESET"
 }
 
-render_cache() {
-    local total icon color pct
+render_fresh() {
+    local total fresh fresh_pct color
     total=$(( ${input_tk:-0} + ${cache_read:-0} + ${cache_create:-0} ))
     [ "$total" -eq 0 ] && return
-    pct=$(( cache_read * 100 / total ))
-    if [ "$pct" -ge 50 ]; then icon="🔥"
-    else                       icon="🧊"
+    # Fresh = non-cached input share (input_tokens + cache_creation) / total.
+    # Hit-rate (cache_read / total) sits at 95~99% in steady state — flat and
+    # uninformative. Fresh % stays low (1~3%) on routine turns and spikes when
+    # large new context enters (skill invoke, file load, etc.).
+    fresh=$(( input_tk + cache_create ))
+    fresh_pct=$(( fresh * 100 / total ))
+    if   [ "$fresh_pct" -ge 10 ]; then color="$RED"
+    elif [ "$fresh_pct" -ge 3 ];  then color="$YELLOW"
+    else                                color="$GREEN"
     fi
-    if   [ "$pct" -ge 70 ]; then color="$GREEN"
-    elif [ "$pct" -ge 40 ]; then color="$YELLOW"
-    else                          color="$RED"
-    fi
-    printf ' %s %s%d%%%s' "$icon" "$color" "$pct" "$RESET"
+    printf ' 🌱 %s%d%%%s' "$color" "$fresh_pct" "$RESET"
 }
 
 render_plan() {
@@ -410,4 +412,4 @@ else                           check_proxy_health
 fi
 
 render_model; printf '\n'
-render_context; render_cost; render_cache; render_plan; render_quota; render_ccs_hint; printf '\n'
+render_context; render_cost; render_fresh; render_plan; render_quota; render_ccs_hint; printf '\n'
