@@ -77,11 +77,29 @@ function ensureChromium() {
   }
 }
 
+// Login detection: match on URL pattern, not hostname equality.
+// SSO flows often land content on a different hostname than the initial URL
+// (e.g. a CDN mirror or regional alias). Only the login step itself —
+// not every cross-domain hop — should be treated as "login required".
 function isLoginPage(pageUrl) {
-  const current = new URL(pageUrl);
-  if (current.hostname !== targetDomain) return true;
-  const loginPatterns = ["/login", "/auth", "/signin", "/sso", "/fastid"];
-  return loginPatterns.some((p) => current.pathname.toLowerCase().includes(p));
+  let current;
+  try {
+    current = new URL(pageUrl);
+  } catch {
+    return true;
+  }
+  const loginPathPatterns = ["/login", "/auth", "/signin", "/sso", "/fastid"];
+  if (loginPathPatterns.some((p) => current.pathname.toLowerCase().includes(p)))
+    return true;
+  const loginHostPatterns = [
+    /^auth[.-]/,
+    /^sso[.-]/,
+    /^login[.-]/,
+    /[.-]auth\./,
+    /[.-]sso\./,
+    /[.-]login\./,
+  ];
+  return loginHostPatterns.some((p) => p.test(current.hostname));
 }
 
 function isBotChallenge(bodyText) {
@@ -137,10 +155,10 @@ async function openLoginMode() {
       while (Date.now() < deadline) {
         await page.waitForTimeout(1000);
         try {
-          const current = page.url();
-          const onTarget =
-            new URL(current).hostname === targetDomain && !isLoginPage(current);
-          if (onTarget) {
+          // Done when the page has left all login/SSO hops for 2 consecutive
+          // checks — regardless of final hostname (SSO may land on a mirror
+          // or alias domain different from the original host).
+          if (!isLoginPage(page.url())) {
             stableCount++;
             if (stableCount >= 2) break;
           } else {
