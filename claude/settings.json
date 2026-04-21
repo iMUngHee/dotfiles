@@ -77,14 +77,6 @@
       "Bash(python3*)",
       "Bash(readlink*)",
       "Bash(rtk *)",
-      "Bash(rtk cc-economics*)",
-      "Bash(rtk discover*)",
-      "Bash(rtk gain*)",
-      "Bash(rtk hook-audit*)",
-      "Bash(rtk init*)",
-      "Bash(rtk learn*)",
-      "Bash(rtk session*)",
-      "Bash(rtk verify*)",
       "Bash(rustc --version*)",
       "Bash(sed*)",
       "Bash(sort*)",
@@ -258,6 +250,16 @@
             "command": "$HOME/.claude/hooks/context-monitor.sh"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/log-tool-sizes.sh",
+            "timeout": 2000
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -269,6 +271,11 @@
             "command": "$HOME/.claude/hooks/prompt-guard.sh",
             "statusMessage": "Scanning for secrets...",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/inject-context.sh",
+            "timeout": 3000
           }
         ]
       }

@@ -1,6 +1,6 @@
 ---
 name: mcp-builder
-description: "Guide for building MCP servers that connect LLMs to external services. Use when creating or modifying MCP servers in TypeScript or Python."
+description: "Guide for building MCP servers that connect LLMs to external services. TRIGGER when: creating or modifying an MCP server in TypeScript or Python; implementing MCP tools, resources, or transports; asked about MCP protocol design. SKIP: using existing MCP servers (consult server-specific docs); non-MCP API clients; prompt engineering unrelated to MCP."
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch
 effort: max

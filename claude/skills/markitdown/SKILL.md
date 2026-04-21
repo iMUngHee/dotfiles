@@ -1,6 +1,6 @@
 ---
 name: markitdown
-description: "Convert local files or public URLs to Markdown via markitdown CLI. Best for DOCX/PPTX/XLSX. Weak on complex PDFs."
+description: "Convert local files or public URLs to Markdown via markitdown CLI; best for DOCX/PPTX/XLSX. TRIGGER when: asked to convert .docx/.pptx/.xlsx/.html or a public URL to markdown; user says 'extract text from this file'. SKIP: complex PDFs with tables (use PyMuPDF4LLM or Read tool); authenticated/internal URLs (download first, re-invoke with local path); image-only files without OCR."
 argument-hint: "<file-path|public-URL>"
 allowed-tools: Bash, Read, Write
 ---

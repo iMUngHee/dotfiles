@@ -1,6 +1,6 @@
 ---
 name: debug
-description: "Systematic debugging for issues with unclear root cause. Use when a bug's cause is not obvious, when a fix attempt has failed, or when the 3-strike rule (rules/diagnostics.md) triggers escalation."
+description: "Systematic debugging for issues with unclear root cause. TRIGGER when: a bug's cause is not obvious; a fix attempt has failed; rules/diagnostics.md 3-strike escalation fires; user reports 'not working' / 'broken' / '왜 안 돼' without clear reason. SKIP: typos or syntax errors with explicit error messages; style/lint fixes; feature requests."
 argument-hint: "[error description or reproduction steps]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
 model: opus
@@ -42,6 +42,10 @@ Narrow to root cause with evidence at each step.
 4. If hypothesis wrong, state why and form next hypothesis
 
 Escalation: 3 failed hypotheses — STOP. Report findings to 대협 per 3-strike rule.
+
+### When to spawn Explore subagent
+
+If isolating the cause requires reading 3+ files across different modules, spawn an internal `Explore` subagent via the Agent tool to gather context. Summarize findings back into Phase 2 hypothesis. Keep the main thread focused on hypothesis tracking — do NOT outsource hypothesis judgment itself (3-strike rule requires main-thread discipline).
 
 Output gate: "Root cause: [specific line/condition] because [evidence from step 3]"
 

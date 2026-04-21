@@ -48,6 +48,20 @@ Read the project's CLAUDE.md (if it exists in the project root) for architecture
 - **Layer boundary violations**: If architecture rules define layers (e.g., domain/application/infrastructure), verify imports respect the declared direction
 - **Dependency direction**: Changed files should not introduce imports that violate declared module boundaries
 
+### 4. Change Size
+
+Measure the total size of the pending change:
+
+```bash
+git diff --numstat HEAD~1 2>/dev/null | awk '{a+=$1; r+=$2} END {print a+r}'
+```
+
+Thresholds (insertions + deletions combined):
+- **warn** if > 400 lines — suggest splitting the change
+- **fail** if > 1200 lines — recommend splitting before PR
+
+Report the exact count. A large change passes only if genuinely inseparable; otherwise flag with a splitting recommendation.
+
 ## Output Format
 
 ```
@@ -66,6 +80,11 @@ Read the project's CLAUDE.md (if it exists in the project root) for architecture
 ### Architecture
 - ✅ PASS: No circular dependencies detected
 - ❌ FAIL: src/domain/user.ts:3 — imports from infrastructure layer (src/infra/db.ts)
+
+### Change Size
+- ✅ PASS: 247 lines changed (under 400 warn threshold)
+- ⚠️ WARN: 520 lines changed — consider splitting before PR
+- ❌ FAIL: 1834 lines changed — split before PR (over 1200 fail threshold)
 
 ### Summary
 X passed, Y failed, Z warnings

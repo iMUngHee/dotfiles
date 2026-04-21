@@ -1,6 +1,6 @@
 ---
 name: design
-description: "Design and plan implementation for multi-file changes or architecture decisions. Use when asked to design, plan, or architect a solution."
+description: "Design and plan implementation for multi-file changes or architecture decisions. TRIGGER when: asked to design, plan, or architect a solution; change expected across 3+ files; new architecture decision; scope ambiguous; user says '설계해' / 'design this'. SKIP: single-file bug fixes; renames or typos; small refactors with clear scope."
 argument-hint: "[task description]"
 allowed-tools: Bash, Read, Write, Glob, Grep, Agent
 model: opus

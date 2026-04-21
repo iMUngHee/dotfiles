@@ -1,6 +1,6 @@
 ---
 name: diagram
-description: "Generate Mermaid diagrams for architecture, flows, and data structures. Copies to clipboard for mermaid.live or excalidraw import."
+description: "Generate Mermaid diagrams for architecture, flows, and data structures; copies DSL to clipboard for mermaid.live or excalidraw import. TRIGGER when: asked for a diagram, flowchart, sequence diagram, ERD, or visual representation of code/architecture; user says '그려줘' / 'visualize' / 'diagram this'. SKIP: static images; non-Mermaid chart types (bar/line/pie charts); ASCII art; screenshots of existing UI."
 argument-hint: "[diagram description]"
 allowed-tools: Bash
 disable-model-invocation: false

@@ -205,7 +205,10 @@ parse_stdin() {
       "model_id=" + (.model.id // "" | @sh),
       "used_pct=" + (.context_window.used_percentage // "" | tostring | @sh),
       "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh),
-      "session_id=" + (.session_id // "" | @sh)
+      "session_id=" + (.session_id // "" | @sh),
+      "cache_read=" + (.context_window.current_usage.cache_read_input_tokens // 0 | tostring),
+      "cache_create=" + (.context_window.current_usage.cache_creation_input_tokens // 0 | tostring),
+      "input_tk=" + (.context_window.current_usage.input_tokens // 0 | tostring)
     ')"
     _now=$(date +%s)
 }
@@ -299,6 +302,40 @@ render_cost() {
     printf ' %s$%.3f%s' "$DIM" "$session_cost" "$RESET"
 }
 
+render_cache() {
+    local total icon color pct
+    total=$(( ${input_tk:-0} + ${cache_read:-0} + ${cache_create:-0} ))
+    [ "$total" -eq 0 ] && return
+    pct=$(( cache_read * 100 / total ))
+    if [ "$pct" -ge 50 ]; then icon="🔥"
+    else                       icon="🧊"
+    fi
+    if   [ "$pct" -ge 70 ]; then color="$GREEN"
+    elif [ "$pct" -ge 40 ]; then color="$YELLOW"
+    else                          color="$RED"
+    fi
+    printf ' %s %s%d%%%s' "$icon" "$color" "$pct" "$RESET"
+}
+
+render_plan() {
+    local branch plans_dir plan_file status color
+    branch=$(git -C "$PWD" branch --show-current 2>/dev/null) || return
+    [ -z "$branch" ] && return
+    plans_dir="$PWD/.claude/plans"
+    [ -d "$plans_dir" ] || return
+    plan_file=$(grep -l "^branch: $branch\$" "$plans_dir"/*.md 2>/dev/null | head -1)
+    [ -z "$plan_file" ] && return
+    status=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$plan_file")
+    [ -z "$status" ] && return
+    case "$status" in
+        approved)    color="$YELLOW"; status="appr" ;;
+        implemented) color="$GREEN";  status="impl" ;;
+        abandoned)   color="$DIM";    status="abnd" ;;
+        *)           color="$CYAN"   ;;
+    esac
+    printf ' %s📋%s %s%s%s' "$DIM" "$RESET" "$color" "$status" "$RESET"
+}
+
 render_quota() {
     if [ "$MODE" = "proxy" ]; then
         local label
@@ -373,4 +410,4 @@ else                           check_proxy_health
 fi
 
 render_model; printf '\n'
-render_context; render_cost; render_quota; render_ccs_hint; printf '\n'
+render_context; render_cost; render_cache; render_plan; render_quota; render_ccs_hint; printf '\n'
