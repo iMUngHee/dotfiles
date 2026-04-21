@@ -1,6 +1,6 @@
 ---
 name: retro
-description: "Post-work knowledge hygiene: consolidate, prune, and selectively grow memory/rules. Use after completing significant work, or when the system feels cluttered."
+description: "Post-work knowledge hygiene: consolidate, prune, and selectively grow memory/rules. TRIGGER when: user asks for retrospective or knowledge cleanup; after completing significant work; system feels cluttered. SKIP: mid-task context — use only during idle or end-of-session; do NOT auto-invoke while actively coding."
 argument-hint: "[commit range, e.g. HEAD~3, or blank for HEAD~5]"
 allowed-tools: Bash, Read, Write, Glob, Grep, Edit
 model: sonnet

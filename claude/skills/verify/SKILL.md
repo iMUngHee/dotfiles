@@ -1,8 +1,8 @@
 ---
 name: verify
-description: "Goal-backward verification for completed features. Use after finishing a feature, before creating a PR, or when asked to verify work is actually working."
+description: "Goal-backward verification for completed features. TRIGGER when: a feature is finished and needs confirmation; before creating a PR; asked to verify work; user says '확인해' / 'verify'. SKIP: intermediate progress checks (use /debug if stuck); code review comments (use /code-review); pre-code planning (use /design)."
 argument-hint: "[feature or goal description]"
-allowed-tools: Bash, Read, Glob, Grep
+allowed-tools: Bash, Read, Glob, Grep, Agent
 model: opus
 disable-model-invocation: false
 ---
@@ -30,6 +30,27 @@ If found, compare planned vs actual:
 - Report delta as informational (files added/removed vs plan). Do NOT block on delta — plans evolve during implementation.
 
 If no plan found, skip this section entirely.
+
+## When to dispatch to `verifier` agent
+
+For broad verification that would bloat the main context with many file reads or test runs, spawn the `verifier` subagent via the Agent tool. Run the steps below inline only when the goal is narrow.
+
+Use **inline** when:
+- Goal is scoped to a single function or file
+- 2–3 truth conditions expected
+- Level 1–2 depth is sufficient
+
+Dispatch to **`verifier`** when:
+- Goal spans multiple modules
+- 5+ truth conditions expected
+- Level 3/4 requires grep across 10+ files or running a test suite
+
+Dispatch via:
+```
+Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")
+```
+
+Return the agent's report directly — do NOT re-run checks inline after dispatch.
 
 ## Approach: Goal-backward
 

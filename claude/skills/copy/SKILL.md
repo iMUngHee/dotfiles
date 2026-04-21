@@ -1,6 +1,6 @@
 ---
 name: copy
-description: "Copy markdown or text to clipboard via pbcopy. Use when asked to copy something to clipboard."
+description: "Copy markdown or text to clipboard via pbcopy. TRIGGER when: user says 'copy to clipboard' / '클립보드에 복사' / 'put that on my clipboard'. SKIP: writing to file (use Write tool); sending to external service (use service-specific tool); saving logs (use shell redirect)."
 allowed-tools: Bash
 ---
 

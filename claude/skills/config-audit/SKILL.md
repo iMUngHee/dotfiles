@@ -1,6 +1,6 @@
 ---
 name: config-audit
-description: "Claude Code dotfiles architecture and audit. Use when creating, editing, moving, analyzing, or reviewing files in ~/.config/claude/ or ~/.claude/, when working with memory files, settings.json, commands, skills, or hooks, or when discussing the dotfiles sync setup."
+description: "Claude Code dotfiles architecture and audit. TRIGGER when: creating, editing, moving, analyzing, or reviewing files in ~/.config/claude/ or ~/.claude/; working with memory files, settings.json, commands, skills, or hooks; discussing the dotfiles sync/symlink setup. SKIP: project-local .claude/ config (handled by regular skills); unrelated dotfiles (zsh, vim, etc.); runtime debugging of Claude Code binary."
 allowed-tools: Bash, Read, Glob
 paths:
   - "~/.claude/**"

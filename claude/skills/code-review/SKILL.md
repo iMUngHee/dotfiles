@@ -1,8 +1,8 @@
 ---
 name: code-review
-description: "Review PR changes per-commit to avoid misattributing sync-merged changes. Use when asked to review a PR, code review, or check branch changes."
+description: "Review PR changes per-commit to avoid misattributing sync-merged changes. TRIGGER when: asked to review a PR, code review, or check branch changes; asked to 'review diff' or 'look at this PR'. SKIP: feedback on uncommitted single-file edits (use /verify); general code quality review with no PR context."
 argument-hint: "[base-branch]"
-allowed-tools: Bash, Read, Glob, Grep
+allowed-tools: Bash, Read, Glob, Grep, Agent
 model: sonnet
 effort: max
 disable-model-invocation: false
@@ -15,6 +15,27 @@ Base branch: $ARGUMENTS (if empty, infer from branch naming or ask)
 ## Current Context
 - Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
 - Commits on branch: !`git log --oneline main..HEAD 2>/dev/null || git log --oneline -10 2>/dev/null || echo "N/A"`
+
+## When to dispatch to `reviewer` agent
+
+For PRs with many commits or a large diff, spawn the `reviewer` subagent via the Agent tool to keep per-commit analysis out of the main context. Run the steps below inline only for small PRs.
+
+Use **inline** when:
+- 1–2 unique commits
+- Diff under ~200 lines
+- Review scope is narrow (single feature or fix)
+
+Dispatch to **`reviewer`** when:
+- 3+ unique commits
+- Diff exceeds ~400 lines
+- Multiple modules touched
+
+Dispatch via:
+```
+Agent(subagent_type: "reviewer", description: "<short>", prompt: "Base branch: <base>. Focus: <optional>. Branch: <current>.")
+```
+
+Return the agent's report directly — do NOT re-run per-commit analysis inline after dispatch.
 
 ## Steps
 

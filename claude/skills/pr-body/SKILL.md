@@ -1,6 +1,6 @@
 ---
 name: pr-body
-description: "Generate PR body from branch changes and copy to clipboard. Use when asked to write a PR body, PR description, merge request description, or prepare a pull request."
+description: "Generate PR body from branch changes and copy to clipboard. TRIGGER when: asked to write a PR body, PR description, merge request description, or prepare a pull request; asked to 'describe this PR'. SKIP: commit message authoring; release notes spanning multiple PRs."
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob
 model: sonnet
