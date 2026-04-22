@@ -83,7 +83,7 @@ For each insight, assign an action with this priority order:
 | Priority | Action | When |
 |----------|--------|------|
 | 1 | **Consolidate** existing memory/rule (merge 2→1, sharpen wording) | Two items overlap or one is a subset of another |
-| 2 | **Update** plan artifact (Post-Implementation Notes, status→implemented) | Plan exists for this branch |
+| 2 | **Update** plan artifact (Post-Implementation Notes, status→done) | Plan exists for this branch |
 | 3 | **Delete** stale memory/rule | Item is now derivable from code, or the project context changed |
 | 4 | **Add** new memory/rule | Same pattern observed 3+ times THIS SESSION, not derivable from code |
 | 5 | **Skip** | Derivable from code/git, or one-off occurrence |

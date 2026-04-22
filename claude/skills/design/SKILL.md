@@ -59,7 +59,7 @@ After 대협 approves the design (Step 3 approval = signal to persist) and **bef
 ---
 title: <plan title>
 date: YYYY-MM-DD
-status: approved
+status: active
 branch: <current git branch>
 files_affected:
   - <file paths from implementation plan>
@@ -77,7 +77,7 @@ Include an empty section at the end:
 
 3. Confirm the saved path to 대협.
 
-**Status values**: `approved` (just saved) → `implemented` (updated by /retro) → `abandoned` (if plan was dropped)
+**Status values**: `active` (just saved, in progress) → `done` (updated by /retro after implementation) → `dropped` (if plan was abandoned)
 
 ## Rules
 
