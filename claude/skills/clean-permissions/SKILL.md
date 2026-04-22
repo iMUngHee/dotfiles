@@ -3,6 +3,7 @@ name: clean-permissions
 description: "Review and clean up accumulated one-off permission entries in the project's settings.local.json"
 disable-model-invocation: true
 allowed-tools: Read, Bash, Edit, Write, Glob
+model: sonnet
 ---
 
 Clean up the project-level `settings.local.json` permission allow list.

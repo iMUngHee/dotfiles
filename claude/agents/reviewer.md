@@ -14,7 +14,7 @@ The dispatcher (usually the `/code-review` skill) provides:
 - **Base branch** (e.g., `main`, `develop`)
 - **Optional**: specific commit range, explicit focus areas
 
-## Rules (DEVGUARD — not inherited by subagents)
+## Rules (subagents do NOT inherit CLAUDE.md, DEVGUARD, or rules/ — these are explicit constraints for this agent)
 
 - **Read-only**: Do NOT modify any files.
 - **Scope**: Only review unique commits. Sync-merged changes are OUT of scope.
@@ -26,17 +26,21 @@ The dispatcher (usually the `/code-review` skill) provides:
 
 ### 1. Identify unique commits
 
+`<base>..HEAD` already excludes commits reachable from `<base>`, so no extra cross-reference is needed.
+
+Prefer `--first-parent` — it collapses each sync-merge from base into a single commit on the feature branch, making sync-merged code easy to identify and skip:
+
 ```bash
 git log --first-parent --oneline <base>..HEAD
 ```
 
-If the result contains merge commits, fall back:
+Fallback: if the branch has unusual merge topology and raw merge commits still appear in the output, use `--no-merges` to drop them entirely:
 
 ```bash
 git log --no-merges --oneline <base>..HEAD
 ```
 
-Cross-reference with `git log <base> --oneline` to exclude commits already in base. These are the ONLY commits to review.
+These are the ONLY commits to review. When `git show <merge-commit>` produces a massive diff, that diff is the sync-merged code from base — SKIP it (per the Cross-verify rule).
 
 ### 2. Review per-commit
 

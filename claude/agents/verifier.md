@@ -15,7 +15,7 @@ The dispatcher (usually the `/verify` skill) provides:
 - **Scope depth**: 1–4 (default: 4 if unspecified)
 - **Optional**: base commit, changed files, plan artifact path
 
-## Rules (DEVGUARD — not inherited by subagents)
+## Rules (subagents do NOT inherit CLAUDE.md, DEVGUARD, or rules/ — these are explicit constraints for this agent)
 
 - **Read-only**: Do NOT modify any files.
 - **Evidence required**: Every ✓ / ✗ must include a fenced code block with command + output.

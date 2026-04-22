@@ -1,9 +1,10 @@
 ---
 name: frontend-design
-description: Create distinctive, production-grade frontend interfaces with high design quality. TRIGGER when: asked to build web components, pages, artifacts, posters, or applications (websites, landing pages, dashboards, React components, HTML/CSS layouts); asked to style, beautify, or design a web UI. SKIP: backend-only changes; CLI tools; non-visual refactoring; Python/Go/Rust work without frontend impact; static documentation rendering.
+description: "Create distinctive, production-grade frontend interfaces with high design quality. TRIGGER when: asked to build web components, pages, artifacts, posters, or applications (websites, landing pages, dashboards, React components, HTML/CSS layouts); asked to style, beautify, or design a web UI ('UI 만들어' / '화면 짜줘'). SKIP: backend-only changes; CLI tools; non-visual refactoring; Python/Go/Rust work without frontend impact; static documentation rendering."
 argument-hint: "[frontend requirements description]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 model: opus
+disable-model-invocation: false
 license: Complete terms in LICENSE.txt
 ---
 

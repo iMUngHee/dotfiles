@@ -23,9 +23,11 @@ Arguments: $ARGUMENTS
 
 ### 2. Fetch and create worktree
 
+Chain with `&&` so a failed fetch (e.g., network offline) does NOT fall through to creating a worktree from a stale ref:
+
 ```
-git fetch origin
-git worktree add -b <target-branch> .claude/worktrees/<target-branch> origin/<base-branch>
+git fetch origin && \
+  git worktree add -b <target-branch> .claude/worktrees/<target-branch> origin/<base-branch>
 ```
 
 If `origin/<base-branch>` does not exist (no remote or local-only branch), fall back to local ref:

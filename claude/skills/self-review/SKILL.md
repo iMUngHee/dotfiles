@@ -19,6 +19,7 @@ Review whether rules were followed in this session.
    - `~/.config/claude/rules/diagnostics.md`
    - `~/.config/claude/rules/code-review.md`
    - `~/.config/claude/MEMORY.md` (feedback entries only)
+   - `~/.config/claude/MEMORY.private.md` (if present — feedback entries only)
 
 2. For each rule, evaluate against the conversation history:
    - **✓** followed (cite evidence)
@@ -44,6 +45,7 @@ Review whether rules were followed in this session.
 | Critical Analysis — Side effects | ✓/✗ | ... |
 | Code Style | ✓/✗ | ... |
 | Interactive Decision Points (AskUserQuestion) | ✓/✗/— | ... |
+| Citations (cite source URL or mark "일반 지식 기반") | ✓/✗/— | ... |
 
 ### DEVGUARD.md
 
@@ -91,17 +93,13 @@ Review whether rules were followed in this session.
 | Code Review Honesty (verify before accepting) | ✓/✗/— | ... |
 | Parallel Dispatch Criteria | ✓/✗/— | ... |
 
-### MEMORY.md Feedback
+### MEMORY.md / MEMORY.private.md Feedback
+
+For each feedback entry listed in MEMORY.md (and MEMORY.private.md if present), add one row. Use the entry title from the memory index as the Rule name so new entries are picked up automatically without editing this template.
 
 | Rule | Result | Evidence |
 |------|--------|----------|
-| No unverified assumptions | ✓/✗/— | ... |
-| All persistent files in English | ✓/✗ | ... |
-| Format-level instructions | ✓/✗/— | ... |
-| Global memory path | ✓/✗/— | ... |
-| Reverse grep after modification | ✓/✗/— | ... |
-| PR body formatting | ✓/✗/— | ... |
-| Team vs subagent distinction | ✓/✗/— | ... |
+| <memory entry title> | ✓/✗/— | ... |
 
 ### Actionability
 

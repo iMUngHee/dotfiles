@@ -45,6 +45,23 @@ if [[ -z "$CHANGED_FILES" ]]; then
   run_notify_and_exit
 fi
 
+# Dedup (unstaged and staged lists can overlap)
+CHANGED_FILES=$(echo "$CHANGED_FILES" | sort -u)
+
+# --- Stage 0: Auto-format modified files (covers post-edit-pipeline debounce gaps) ---
+FORMATTED=0
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+  [[ -f "$file" ]] || continue
+  detect_checker "$file" "$PROJECT_ROOT"
+  [[ -z "$FMT_CMD" ]] && continue
+  BEFORE=$(md5 -q "$file" 2>/dev/null)
+  portable_timeout 5 bash -c "$FMT_CMD \"\$1\"" _ "$file" &>/dev/null
+  AFTER=$(md5 -q "$file" 2>/dev/null)
+  [[ "$BEFORE" != "$AFTER" ]] && FORMATTED=$((FORMATTED + 1))
+done <<< "$CHANGED_FILES"
+(( FORMATTED > 0 )) && echo "[final-gate] auto-formatted ${FORMATTED} file(s)"
+
 # --- Detect project type from changed files ---
 CHECK_CMD=""
 for file in $CHANGED_FILES; do

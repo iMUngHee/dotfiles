@@ -1,8 +1,10 @@
 ---
 name: markitdown
-description: "Convert local files or public URLs to Markdown via markitdown CLI; best for DOCX/PPTX/XLSX. TRIGGER when: asked to convert .docx/.pptx/.xlsx/.html or a public URL to markdown; user says 'extract text from this file'. SKIP: complex PDFs with tables (use PyMuPDF4LLM or Read tool); authenticated/internal URLs (download first, re-invoke with local path); image-only files without OCR."
+description: "Convert local files or public URLs to Markdown via markitdown CLI; best for DOCX/PPTX/XLSX. TRIGGER when: asked to convert .docx/.pptx/.xlsx/.html or a public URL to markdown; user says 'extract text from this file' / '마크다운으로 변환해줘'. SKIP: complex PDFs with tables (use PyMuPDF4LLM or Read tool); authenticated/internal URLs (use /spa-fetch to download first, then re-invoke with the local path); image-only files without OCR."
 argument-hint: "<file-path|public-URL>"
 allowed-tools: Bash, Read, Write
+model: sonnet
+disable-model-invocation: false
 ---
 
 Convert a document to Markdown via markitdown CLI.
@@ -27,8 +29,10 @@ Local files and public URLs only. For authenticated or internal services, downlo
 
 ## Execution
 
+Pass the target from `$ARGUMENTS` directly:
+
 ```bash
-markitdown "$TARGET" 2>&1
+markitdown "$ARGUMENTS" 2>&1
 ```
 
 If output exceeds 200 lines, save to `/tmp/markitdown_<basename>.md` and report the path.

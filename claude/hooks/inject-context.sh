@@ -23,16 +23,20 @@ if [[ -n "$BRANCH" && -d "$PROJECT_DIR/.claude/plans" ]]; then
   done < <(grep -l "^branch: $BRANCH\$" "$PROJECT_DIR/.claude/plans/"*.md 2>/dev/null | sort -r)
 
   # Prefer an `active` plan (in-progress). Fall back to the most recent otherwise.
+  # Guard against empty array — `"${plans[@]}"` under `set -u` in bash 3.2 (macOS)
+  # is treated as unbound when the array has zero elements.
   PLAN_FILE=""
-  for f in "${plans[@]}"; do
-    s=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$f")
-    if [[ "$s" == "active" ]]; then
-      PLAN_FILE="$f"
-      break
+  if (( ${#plans[@]} > 0 )); then
+    for f in "${plans[@]}"; do
+      s=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$f")
+      if [[ "$s" == "active" ]]; then
+        PLAN_FILE="$f"
+        break
+      fi
+    done
+    if [[ -z "$PLAN_FILE" ]]; then
+      PLAN_FILE="${plans[0]}"
     fi
-  done
-  if [[ -z "$PLAN_FILE" && ${#plans[@]} -gt 0 ]]; then
-    PLAN_FILE="${plans[0]}"
   fi
 
   if [[ -n "$PLAN_FILE" ]]; then

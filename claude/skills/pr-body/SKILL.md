@@ -1,6 +1,6 @@
 ---
 name: pr-body
-description: "Generate PR body from branch changes and copy to clipboard. TRIGGER when: asked to write a PR body, PR description, merge request description, or prepare a pull request; asked to 'describe this PR'. SKIP: commit message authoring; release notes spanning multiple PRs."
+description: "Generate PR body from branch changes and copy to clipboard. TRIGGER when: asked to write a PR body, PR description, merge request description, or prepare a pull request; asked to 'describe this PR' / 'PR 설명 써줘' / 'PR 본문 만들어'. SKIP: commit message authoring; release notes spanning multiple PRs."
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob
 model: sonnet
@@ -25,11 +25,21 @@ Infer from branch naming:
 
 ### 2. Identify unique commits
 
+`<base>..HEAD` already excludes commits reachable from `<base>`, so no extra cross-reference is needed.
+
+Prefer `--first-parent` — it collapses each sync-merge from base into a single commit on the feature branch, making sync-merged code easy to identify and skip:
+
 ```bash
 git log --first-parent --oneline <base>..HEAD
 ```
 
-These are the ONLY commits to consider. Ignore sync-merged commits.
+Fallback: if the branch has unusual merge topology and raw merge commits still appear in the output, use `--no-merges` to drop them entirely:
+
+```bash
+git log --no-merges --oneline <base>..HEAD
+```
+
+These are the ONLY commits to consider. When `git show <merge-commit>` produces a massive diff, that diff is the sync-merged code from base — SKIP it (do not summarize sync-merged changes in the PR body).
 
 ### 3. Review per-commit changes
 
