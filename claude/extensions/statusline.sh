@@ -333,13 +333,14 @@ render_plan() {
     [ -z "$plan_file" ] && return
     status=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$plan_file")
     [ -z "$status" ] && return
+    local icon
     case "$status" in
-        approved)    color="$YELLOW"; status="appr" ;;
-        implemented) color="$GREEN";  status="impl" ;;
-        abandoned)   color="$DIM";    status="abnd" ;;
-        *)           color="$CYAN"   ;;
+        active)  color="$YELLOW"; icon="📋" ;;
+        done)    color="$GREEN";  icon="✅" ;;
+        dropped) color="$DIM";    icon="🗑️" ;;
+        *)       color="$CYAN";   icon="📋" ;;
     esac
-    printf ' %s📋%s %s%s%s' "$DIM" "$RESET" "$color" "$status" "$RESET"
+    printf ' %s %s%s%s' "$icon" "$color" "$status" "$RESET"
 }
 
 render_quota() {

@@ -16,13 +16,38 @@ BRANCH=$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || echo "")
 CONTEXT=""
 
 if [[ -n "$BRANCH" && -d "$PROJECT_DIR/.claude/plans" ]]; then
-  # Find a plan whose frontmatter matches this branch
-  PLAN_FILE=$(grep -l "^branch: $BRANCH\$" "$PROJECT_DIR/.claude/plans/"*.md 2>/dev/null | head -1)
+  # Collect plans matching this branch, sorted newest-first by filename (YYYY-MM-DD prefix)
+  plans=()
+  while IFS= read -r f; do
+    plans+=("$f")
+  done < <(grep -l "^branch: $BRANCH\$" "$PROJECT_DIR/.claude/plans/"*.md 2>/dev/null | sort -r)
+
+  # Prefer an `active` plan (in-progress). Fall back to the most recent otherwise.
+  PLAN_FILE=""
+  for f in "${plans[@]}"; do
+    s=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$f")
+    if [[ "$s" == "active" ]]; then
+      PLAN_FILE="$f"
+      break
+    fi
+  done
+  if [[ -z "$PLAN_FILE" && ${#plans[@]} -gt 0 ]]; then
+    PLAN_FILE="${plans[0]}"
+  fi
+
   if [[ -n "$PLAN_FILE" ]]; then
     TITLE=$(awk '/^title:/ { sub(/^title: ?/, ""); print; exit }' "$PLAN_FILE")
     STATUS=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$PLAN_FILE")
     REL_PATH=${PLAN_FILE#"$PROJECT_DIR/"}
-    CONTEXT="Active plan for branch '$BRANCH': \"$TITLE\" [${STATUS:-?}] — $REL_PATH"
+    case "$STATUS" in
+      active)  LABEL="Active plan" ;;
+      done)    LABEL="Recently completed plan" ;;
+      dropped) LABEL="" ;;  # dropped plans carry no active context — skip injection
+      *)       LABEL="Plan" ;;
+    esac
+    if [[ -n "$LABEL" ]]; then
+      CONTEXT="$LABEL for branch '$BRANCH': \"$TITLE\" [${STATUS:-?}] — $REL_PATH"
+    fi
   fi
 fi
 
