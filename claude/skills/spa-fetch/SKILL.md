@@ -1,6 +1,6 @@
 ---
 name: spa-fetch
-description: "Fetch rendered content from SPA sites using Playwright. TRIGGER when: WebFetch fails on JS-rendered pages; asked to fetch/read an SPA or authenticated internal site; page requires login or Cloudflare/bot bypass. SKIP: static HTML (use WebFetch first); API endpoints (use curl/MCP); official Anthropic/Claude docs (WebFetch handles these)."
+description: "Fetch rendered content from SPA sites using Playwright. TRIGGER when: WebFetch fails on JS-rendered pages; asked to fetch/read an SPA or authenticated internal site ('이 페이지 긁어줘' / '페이지 가져와'); page requires login or Cloudflare/bot bypass. SKIP: static HTML (use WebFetch first); API endpoints (use curl/MCP); official Anthropic/Claude docs (WebFetch handles these)."
 argument-hint: "<url> [css-selector] [--html]"
 allowed-tools: Bash, Read, AskUserQuestion
 model: sonnet
@@ -45,9 +45,9 @@ node <base-dir>/spa-fetch.js --open-login <url>
 Use `dangerouslyDisableSandbox: true`, `timeout: 300000`, and `run_in_background: true`.
 
 Then **immediately** use AskUserQuestion:
-> 로그인이 필요합니다. 브라우저가 열렸으니 로그인해주세요. 로그인 완료 후 자동으로 닫힙니다. 닫히면 알려주세요.
+> 로그인이 필요합니다. 브라우저가 열렸으니 5분 내 로그인해주세요 (timeout 300s — 초과 시 background process가 종료되어 인증이 저장되지 않습니다). 로그인 완료 후 자동으로 닫힙니다. 닫히면 알려주세요.
 
-When user confirms, retry step 1.
+When user confirms, retry step 1. If step 1 still returns EXIT:10, the background process likely timed out before login completed — re-run step 2 and prompt the user again.
 
 ### 3. Output
 

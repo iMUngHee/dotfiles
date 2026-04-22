@@ -329,7 +329,18 @@ render_plan() {
     [ -z "$branch" ] && return
     plans_dir="$PWD/.claude/plans"
     [ -d "$plans_dir" ] || return
-    plan_file=$(grep -l "^branch: $branch\$" "$plans_dir"/*.md 2>/dev/null | head -1)
+
+    # Match inject-context.sh: prefer `active` plan; otherwise newest by filename.
+    # Plans are sorted desc (YYYY-MM-DD prefix → newest first).
+    plan_file=""
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        local s
+        s=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$f")
+        if [ "$s" = "active" ]; then plan_file="$f"; break; fi
+        [ -z "$plan_file" ] && plan_file="$f"
+    done < <(grep -l "^branch: $branch\$" "$plans_dir"/*.md 2>/dev/null | sort -r)
+
     [ -z "$plan_file" ] && return
     status=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$plan_file")
     [ -z "$status" ] && return

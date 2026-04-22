@@ -11,12 +11,8 @@
 - [Team vs subagent](memory/feedback_team_vs_subagent.md) — never conflate team agents (TeamCreate+teammates) with subagents (.claude/agents/)
 - [Auto memory intentionally disabled](memory/feedback_auto_memory_disabled.md) — off by design to prevent context bloat; do not recommend enabling
 - [Workflow skills auto-invokable by design](memory/feedback_workflow_skills_auto_invokable.md) — design/verify/debug/code-review/pr-body/retro keep disable-model-invocation false; do not propose flipping
-
+- [Code review per-commit](memory/feedback_code_review_per_commit.md) — feature-branch reviews walk commit-by-commit via git show, never branch-wide diff
 
 ## Project
 
 - [Context compression eval](memory/project_context_compression_eval.md) — measuring tool response sizes until 2026-04-28, then deciding Context Mode vs self-built MCP vs reject
-
-## Workflow
-
-- Code review for feature branches → `/code-review` skill — use git show per-commit, not branch diff

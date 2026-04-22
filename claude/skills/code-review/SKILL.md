@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Review PR changes per-commit to avoid misattributing sync-merged changes. TRIGGER when: asked to review a PR, code review, or check branch changes; asked to 'review diff' or 'look at this PR'. SKIP: feedback on uncommitted single-file edits (use /verify); general code quality review with no PR context."
+description: "Review PR changes per-commit to avoid misattributing sync-merged changes. TRIGGER when: asked to review a PR, code review, or check branch changes; asked to 'review diff' / 'look at this PR' / '리뷰해줘' / 'PR 봐줘'. SKIP: feedback on uncommitted single-file edits (use /verify); general code quality review with no PR context."
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
 model: sonnet
@@ -41,19 +41,21 @@ Return the agent's report directly — do NOT re-run per-commit analysis inline 
 
 ### 1. Identify unique commits
 
+`<base>..HEAD` already excludes commits reachable from `<base>`, so no extra cross-reference is needed.
+
+Prefer `--first-parent` — it collapses each sync-merge from base into a single commit on the feature branch, making sync-merged code easy to identify and skip:
+
 ```bash
 git log --first-parent --oneline <base>..HEAD
 ```
 
-If only merge commits, extract non-merge commits:
+Fallback: if the branch has unusual merge topology and raw merge commits still appear in the output, use `--no-merges` to drop them entirely:
 
 ```bash
 git log --no-merges --oneline <base>..HEAD
 ```
 
-Cross-reference with `git log <base> --oneline` to filter commits already in base.
-
-These are the ONLY commits to review. Ignore sync-merged changes.
+These are the ONLY commits to review. When `git show <merge-commit>` produces a massive diff, that diff is the sync-merged code from base — SKIP it (per Step 4 Cross-verify).
 
 ### 2. Review per-commit
 

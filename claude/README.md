@@ -100,14 +100,14 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 |------|-------|---------|
 | `rtk-rewrite.sh` | PreToolUse (Bash) | Rewrite commands through RTK for token savings (version check cached 1h) |
 | `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files) — fail-closed if jq missing |
-| `prompt-guard.sh` | PreUserPromptSubmit | Scan prompts for accidentally pasted secrets (single combined regex) |
+| `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets (single combined regex) |
 | `notify.sh` | Stop | macOS notification on task completion or approval request |
-| `stop-handler.sh` | Stop | Final gate — run type checker on modified files before completion |
+| `stop-handler.sh` | Stop | Final gate — auto-format modified files, then run type checker before completion |
 | `on-rate-limit.sh` | StopFailure | Auto-switch CCS quota account on rate limit |
 | `check-quota-switch.sh` | SessionStart, SessionClear | Check quota reset time, switch back if elapsed |
 | `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format (prettier/gofmt/rustfmt) + type check after edits (30s debounce) |
 | `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage, autocompact triggers at 70% |
-| `compact-restore.sh` | PostToolUse (Compact) | Inject git branch, recent commits, modified files after compaction |
+| `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files after compaction |
 | `subagent-stop-reminder.sh` | SubagentStop | Inject DEVGUARD subagent trust reminder |
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
 | `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |

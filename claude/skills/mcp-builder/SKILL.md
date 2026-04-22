@@ -1,8 +1,9 @@
 ---
 name: mcp-builder
-description: "Guide for building MCP servers that connect LLMs to external services. TRIGGER when: creating or modifying an MCP server in TypeScript or Python; implementing MCP tools, resources, or transports; asked about MCP protocol design. SKIP: using existing MCP servers (consult server-specific docs); non-MCP API clients; prompt engineering unrelated to MCP."
+description: "Guide for building MCP servers that connect LLMs to external services. TRIGGER when: creating or modifying an MCP server in TypeScript or Python ('MCP 서버 만들어' / 'MCP 구현'); implementing MCP tools, resources, or transports; asked about MCP protocol design. SKIP: using existing MCP servers (consult server-specific docs); non-MCP API clients; prompt engineering unrelated to MCP."
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch
+model: opus
 effort: max
 ---
 
@@ -14,7 +15,7 @@ Build MCP (Model Context Protocol) servers that enable LLMs to interact with ext
 
 ### 1.1 Load Framework Docs
 
-**MCP Protocol**: start from `https://modelcontextprotocol.io/sitemap.xml`, fetch pages with `.md` suffix.
+**MCP Protocol**: fetch `https://modelcontextprotocol.io/sitemap.xml` via WebFetch to discover doc URLs, then fetch each page with `.md` appended to its path (e.g., `/docs/concepts/tools` → WebFetch `https://modelcontextprotocol.io/docs/concepts/tools.md`). Only fetch pages relevant to the server you're building — skip unrelated sections.
 
 **SDK docs** (fetch via WebFetch):
 - TypeScript: `https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/main/README.md`
