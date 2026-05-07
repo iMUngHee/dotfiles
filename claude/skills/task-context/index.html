@@ -23,6 +23,7 @@
       --dn: #ef4444;
       --dn2: #f87171;
       --dn-bg: rgba(239,68,68,.1);
+      --wn: #f59e0b;
       --r: 10px;
       --rs: 6px;
       --tr: 150ms ease;
@@ -81,6 +82,7 @@
       align-items: center;
       margin-bottom: 2px;
       border: 1px solid transparent;
+      gap: 8px;
     }
 
     .task-item:hover { background: var(--sf2); }
@@ -92,7 +94,22 @@
 
     .task-item.active .task-name { color: var(--ac2); }
 
-    .task-name { font-size: 13px; font-weight: 500; }
+    .task-name {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .star {
+      color: var(--wn);
+      font-size: 12px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
 
     .badge {
       font-size: 11px;
@@ -101,6 +118,7 @@
       padding: 1px 8px;
       border-radius: 10px;
       font-weight: 500;
+      flex-shrink: 0;
     }
 
     .task-item.active .badge {
@@ -122,9 +140,20 @@
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--bd);
+      gap: 12px;
     }
 
-    .main-hd h2 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+    .main-hd-l { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .main-hd-r { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    .main-hd h2 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .links-wrap {
       flex: 1;
@@ -143,9 +172,9 @@
       border: 1px solid var(--bd);
       border-radius: var(--r);
       padding: 14px 18px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 14px;
       transition: border-color var(--tr);
       animation: cardIn 180ms ease;
@@ -157,28 +186,74 @@
       width: 8px; height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
+      margin-top: 7px;
     }
 
-    .link-body { flex: 1; min-width: 0; }
+    .link-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
 
-    .link-label {
-      font-size: 11px;
+    .link-label-input {
+      font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: .06em;
-      margin-bottom: 3px;
+      background: transparent;
+      border: none;
+      color: var(--ac2);
+      padding: 1px 0;
+      outline: none;
+      width: 100%;
     }
 
-    .link-url {
+    .link-label-input:focus { color: var(--tx); }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      align-items: start;
+      gap: 10px;
       font-size: 13px;
-      color: var(--tx2);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
-    .link-url a { color: inherit; text-decoration: none; }
-    .link-url a:hover { color: var(--tx); text-decoration: underline; }
+    .field-key {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--tx3);
+      padding-top: 6px;
+    }
+
+    .field-input {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--rs);
+      color: var(--tx2);
+      font-size: 13px;
+      padding: 4px 8px;
+      width: 100%;
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      line-height: 1.5;
+      transition: border-color var(--tr), background var(--tr);
+    }
+
+    .field-input:hover { background: var(--sf2); }
+    .field-input:focus {
+      background: var(--bg);
+      border-color: var(--ac);
+      color: var(--tx);
+    }
+
+    .field-input.url { font-size: 12px; color: var(--tx3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .field-input.url:focus { white-space: normal; overflow: auto; text-overflow: clip; }
+    textarea.field-input { min-height: 28px; }
 
     .btn-x {
       padding: 4px 7px;
@@ -191,31 +266,40 @@
       font-size: 14px;
       line-height: 1;
       flex-shrink: 0;
+      margin-top: 2px;
     }
 
     .btn-x:hover { background: var(--dn-bg); color: var(--dn); }
 
     /* ── Add link bar ── */
     .add-bar {
-      padding: 16px 36px;
+      padding: 14px 36px 18px;
       border-top: 1px solid var(--bd);
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr 130px auto;
       gap: 8px;
-      align-items: flex-end;
+      align-items: end;
+    }
+
+    .add-bar .row2 {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
 
     .fg { display: flex; flex-direction: column; gap: 4px; }
 
     .fg label {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--tx3);
       text-transform: uppercase;
       letter-spacing: .06em;
       font-weight: 600;
     }
 
-    input[type="text"], input[type="url"] {
-      padding: 9px 12px;
+    input[type="text"], input[type="url"], textarea {
+      padding: 8px 11px;
       border-radius: var(--rs);
       border: 1px solid var(--bd);
       background: var(--bg);
@@ -223,19 +307,20 @@
       font-size: 13px;
       outline: none;
       transition: border-color var(--tr);
+      font-family: inherit;
     }
 
-    input:focus { border-color: var(--ac); }
-    input::placeholder { color: var(--tx3); }
+    .add-bar input:focus, .add-bar textarea:focus { border-color: var(--ac); }
+    input::placeholder, textarea::placeholder { color: var(--tx3); }
 
     /* ── Buttons ── */
     .btn {
-      padding: 9px 18px;
+      padding: 8px 16px;
       border-radius: var(--rs);
       border: 1px solid var(--bd2);
       background: var(--sf2);
       color: var(--tx);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       cursor: pointer;
       transition: all var(--tr);
@@ -261,6 +346,18 @@
     }
 
     .btn-dn:hover { background: var(--dn-bg); }
+
+    .btn-star {
+      background: transparent;
+      border-color: var(--bd2);
+      color: var(--tx2);
+    }
+
+    .btn-star.on {
+      color: var(--wn);
+      border-color: var(--wn);
+      background: rgba(245,158,11,.08);
+    }
 
     /* ── Empty ── */
     .empty {
@@ -322,6 +419,29 @@
       gap: 8px;
     }
 
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 18px;
+      border-radius: var(--rs);
+      background: var(--sf2);
+      border: 1px solid var(--bd2);
+      color: var(--tx);
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5);
+      z-index: 200;
+      animation: cardIn 180ms ease;
+      max-width: 380px;
+    }
+
+    .toast.err {
+      border-color: var(--dn);
+      background: var(--dn-bg);
+      color: var(--dn2);
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -339,22 +459,37 @@
         <div class="empty-icon">&mdash;</div>
         <p>Select a task or create a new one</p>
       </div>
-      <div id="detail" class="hidden">
+      <div id="detail" class="hidden" style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
         <div class="main-hd">
-          <h2 id="taskTitle"></h2>
-          <button class="btn btn-dn btn-sm" onclick="delTask()">Delete Task</button>
+          <div class="main-hd-l">
+            <h2 id="taskTitle"></h2>
+          </div>
+          <div class="main-hd-r">
+            <button class="btn btn-star btn-sm" id="btnStar" onclick="toggleCurrent()" title="Set as current task">★ Set Current</button>
+            <button class="btn btn-dn btn-sm" onclick="delTask()">Delete</button>
+          </div>
         </div>
         <div class="links-wrap" id="linksWrap"></div>
         <div class="add-bar">
-          <div class="fg" style="flex:1">
+          <div class="fg">
             <label>URL</label>
             <input type="url" id="inUrl" placeholder="https://..." oninput="onUrl(this.value)">
           </div>
-          <div class="fg" style="width:120px">
+          <div class="fg">
             <label>Label</label>
             <input type="text" id="inLabel" placeholder="Auto">
           </div>
           <button class="btn btn-ac" onclick="addLink()">Add</button>
+          <div class="row2">
+            <div class="fg">
+              <label>Triggers (optional)</label>
+              <input type="text" id="inTriggers" placeholder="키워드, 콤마, 분리">
+            </div>
+            <div class="fg">
+              <label>Summary (optional)</label>
+              <input type="text" id="inSummary" placeholder="한 줄 설명 (비워두면 나중에 페치)">
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -371,9 +506,11 @@
     </div>
   </div>
 
+  <div id="toast" class="toast hidden"></div>
+
   <script>
     const API = '/api/tasks';
-    let tasks = [], selKey = null, selTask = null;
+    let tasks = [], selKey = null, selTask = null, current = null;
 
     const COLORS = {
       jira:'#4a9af5', wiki:'#22c55e', pr:'#f59e0b', figma:'#a855f7',
@@ -391,20 +528,52 @@
       return 'Link';
     }
 
+    function uniqueLabel(base, taken) {
+      const lower = new Set(taken.map(s => s.toLowerCase()));
+      if (!lower.has(base.toLowerCase())) return base;
+      for (let n = 2; n < 100; n++) {
+        const cand = `${base}-${n}`;
+        if (!lower.has(cand.toLowerCase())) return cand;
+      }
+      return `${base}-${Date.now()}`;
+    }
+
     function dotColor(label) {
-      return COLORS[label.toLowerCase()] || COLORS.link;
+      const key = label.toLowerCase().split(/[-\s]/)[0];
+      return COLORS[key] || COLORS.link;
     }
 
     function onUrl(v) {
       const el = $('inLabel');
-      if (!el.dataset.manual) el.value = v ? autoLabel(v) : '';
+      if (!el.dataset.manual) {
+        const taken = (selTask?.links ?? []).map(l => l.label);
+        el.value = v ? uniqueLabel(autoLabel(v), taken) : '';
+      }
     }
 
     function $(id) { return document.getElementById(id); }
 
+    function toast(msg, type) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = 'toast' + (type === 'err' ? ' err' : '');
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.add('hidden'), 3500);
+    }
+
+    async function loadCurrent() {
+      try {
+        const r = await fetch('/api/current');
+        const d = await r.json();
+        current = d.current;
+      } catch { current = null; }
+    }
+
     async function load() {
+      await loadCurrent();
       tasks = await (await fetch(API)).json();
       renderList();
+      renderStarBtn();
     }
 
     async function select(key) {
@@ -412,16 +581,18 @@
       selTask = await (await fetch(`${API}/${key}`)).json();
       renderList();
       renderDetail();
+      renderStarBtn();
     }
 
     async function mkTask() {
       const raw = $('inKey').value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
       if (!raw) return;
-      await fetch(`${API}/${raw}`, {
+      const r = await fetch(`${API}/${raw}`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({links:[]})
       });
+      if (!r.ok) { toast(`생성 실패: HTTP ${r.status}`, 'err'); return; }
       hideModal();
       await load();
       select(raw);
@@ -435,33 +606,91 @@
       renderDetail();
     }
 
+    async function toggleCurrent() {
+      if (!selKey) return;
+      const next = current === selKey ? null : selKey;
+      const r = await fetch('/api/current', {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({current: next})
+      });
+      if (!r.ok) { toast(`current 변경 실패: HTTP ${r.status}`, 'err'); return; }
+      const d = await r.json();
+      current = d.current;
+      renderList();
+      renderStarBtn();
+      toast(current ? `Current: ${current}` : 'Current cleared');
+    }
+
     async function addLink() {
       const url = $('inUrl').value.trim();
       const label = $('inLabel').value.trim() || autoLabel(url);
-      if (!url || !selTask || !/^https?:\/\//i.test(url)) return;
-      if (selTask.links.some(l => l.url === url)) { alert('이미 등록된 URL입니다.'); return; }
-      selTask.links.push({label, url});
-      await save();
+      const triggers = $('inTriggers').value.split(',').map(s => s.trim()).filter(Boolean);
+      const summary = $('inSummary').value.trim();
+      if (!url || !selTask || !/^https?:\/\//i.test(url)) {
+        toast('유효한 URL을 입력하세요', 'err'); return;
+      }
+      if (selTask.links.some(l => l.url === url)) {
+        toast('이미 등록된 URL입니다', 'err'); return;
+      }
+      if (selTask.links.some(l => l.label.toLowerCase() === label.toLowerCase())) {
+        toast(`라벨 중복: ${label}`, 'err'); return;
+      }
+      selTask.links.push({label, url, triggers, summary});
+      const ok = await save();
+      if (!ok) { selTask.links.pop(); return; }
       $('inUrl').value = '';
       $('inLabel').value = '';
       $('inLabel').dataset.manual = '';
+      $('inTriggers').value = '';
+      $('inSummary').value = '';
       renderDetail();
       $('inUrl').focus();
     }
 
     async function rmLink(i) {
-      selTask.links.splice(i, 1);
-      await save();
+      const removed = selTask.links.splice(i, 1)[0];
+      const ok = await save();
+      if (!ok) selTask.links.splice(i, 0, removed);
       renderDetail();
     }
 
+    async function updateField(i, key, value) {
+      const link = selTask.links[i];
+      const prev = link[key];
+      const next = key === 'triggers'
+        ? value.split(',').map(s => s.trim()).filter(Boolean)
+        : value.trim();
+      if (JSON.stringify(prev) === JSON.stringify(next)) return;
+      link[key] = next;
+      const ok = await save();
+      if (!ok) {
+        link[key] = prev;
+        renderDetail();
+      }
+    }
+
     async function save() {
-      await fetch(`${API}/${selKey}`, {
+      const r = await fetch(`${API}/${selKey}`, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({links: selTask.links})
       });
-      await load();
+      if (!r.ok) {
+        let msg = `HTTP ${r.status}`;
+        try { msg = (await r.json()).error || msg; } catch {}
+        toast(msg, 'err');
+        return false;
+      }
+      const d = await r.json();
+      selTask.links = d.links;
+      await loadServerList();
+      return true;
+    }
+
+    async function loadServerList() {
+      tasks = await (await fetch(API)).json();
+      renderList();
     }
 
     function renderList() {
@@ -471,10 +700,19 @@
         return;
       }
       el.innerHTML = tasks.map(t => `
-        <div class="task-item${t.key===selKey?' active':''}" onclick="select('${t.key}')">
-          <span class="task-name">${t.key}</span>
+        <div class="task-item${t.key===selKey?' active':''}" onclick="select('${esc(t.key)}')">
+          <span class="task-name">${esc(t.key)}</span>
+          ${current === t.key ? '<span class="star">★</span>' : ''}
           <span class="badge">${t.linkCount}</span>
         </div>`).join('');
+    }
+
+    function renderStarBtn() {
+      const b = $('btnStar');
+      if (!b || !selKey) return;
+      const on = current === selKey;
+      b.classList.toggle('on', on);
+      b.textContent = on ? '★ Current' : '★ Set Current';
     }
 
     function renderDetail() {
@@ -491,8 +729,26 @@
         <div class="link-card">
           <div class="link-dot" style="background:${dotColor(l.label)}"></div>
           <div class="link-body">
-            <div class="link-label" style="color:${dotColor(l.label)}">${esc(l.label)}</div>
-            <div class="link-url"><a href="${safeHref(l.url)}" target="_blank" rel="noopener">${esc(l.url)}</a></div>
+            <input class="link-label-input" style="color:${dotColor(l.label)}"
+              value="${esc(l.label)}" data-i="${i}" data-k="label"
+              onblur="updateField(${i},'label',this.value)">
+            <div class="field-row">
+              <span class="field-key">URL</span>
+              <input class="field-input url" value="${esc(l.url)}"
+                onblur="updateField(${i},'url',this.value)">
+            </div>
+            <div class="field-row">
+              <span class="field-key">Triggers</span>
+              <input class="field-input" value="${esc((l.triggers||[]).join(', '))}"
+                placeholder="키워드, 콤마, 분리"
+                onblur="updateField(${i},'triggers',this.value)">
+            </div>
+            <div class="field-row">
+              <span class="field-key">Summary</span>
+              <textarea class="field-input" rows="2"
+                placeholder="한 줄 설명"
+                onblur="updateField(${i},'summary',this.value)">${esc(l.summary || '')}</textarea>
+            </div>
           </div>
           <button class="btn-x" onclick="rmLink(${i})">&#x2715;</button>
         </div>`).join('');
@@ -500,12 +756,8 @@
 
     function esc(s) {
       const d = document.createElement('div');
-      d.textContent = s;
+      d.textContent = s == null ? '' : String(s);
       return d.innerHTML;
-    }
-
-    function safeHref(url) {
-      return /^https?:\/\//i.test(url) ? esc(url) : '#';
     }
 
     function showModal() {
@@ -526,6 +778,8 @@
 
     $('inUrl').addEventListener('keydown', e => { if (e.key === 'Enter') addLink(); });
     $('inLabel').addEventListener('keydown', e => { if (e.key === 'Enter') addLink(); });
+    $('inTriggers').addEventListener('keydown', e => { if (e.key === 'Enter') addLink(); });
+    $('inSummary').addEventListener('keydown', e => { if (e.key === 'Enter') addLink(); });
 
     load();
   </script>
