@@ -17,7 +17,7 @@ Task: $ARGUMENTS (if empty, ask the user)
 Before starting, search for existing plan artifacts that may be relevant:
 
 ```bash
-ls .claude/plans/ 2>/dev/null && grep -l "<relevant keywords>" .claude/plans/*.md 2>/dev/null
+ls {{PLAN_DIR}}/ 2>/dev/null && grep -l "<relevant keywords>" {{PLAN_DIR}}/*.md 2>/dev/null
 ```
 
 Match against the `description:` frontmatter field for highest signal-to-noise. Read related plans for context (prior decisions, lessons learned).
@@ -53,9 +53,9 @@ After design approval, present the implementation plan as response text. **Do NO
 
 After 대협 approves the design (Step 3 approval = signal to persist) and **before any file writes that implement the plan**:
 
-1. **Generate id slug** — kebab-case from title (lowercase, hyphens for spaces, ASCII only). Scan `.claude/plans/*.md` for existing `id:` fields. On collision, append `-2`, `-3`, etc.
+1. **Generate id slug** — kebab-case from title (lowercase, hyphens for spaces, ASCII only). Scan `{{PLAN_DIR}}/*.md` for existing `id:` fields. On collision, append `-2`, `-3`, etc.
 
-2. **Check `.claude/state/current.txt` for conflict** — If the file exists and points to a plan with `status: draft` or `status: active`, present three options to 대협:
+2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If the file exists and points to a plan with `status: draft` or `status: active`, present three options to 대협:
    - **(a)** Mark the existing plan `done` and swap to the new one
    - **(b)** Demote the existing plan to `draft` (preserved but not pointed-at) and proceed
    - **(c)** Cancel the new plan creation
@@ -64,9 +64,9 @@ After 대협 approves the design (Step 3 approval = signal to persist) and **bef
 
    > **Note**: `current.txt` is a *pointer* file naming the in-flight plan. It is unrelated to the `status: active` value — a plan can be pointed-at while still in `draft`. Do not conflate "writing to `current.txt`" with "promoting status to active".
 
-3. **Create `.claude/plans/` directory** if it does not exist.
+3. **Create `{{PLAN_DIR}}/` directory** if it does not exist.
 
-4. **Save plan as `.claude/plans/YYYY-MM-DD-<id>.md`** with this English frontmatter:
+4. **Save plan as `{{PLAN_DIR}}/YYYY-MM-DD-<id>.md`** with this English frontmatter:
 
 ```yaml
 ---
@@ -82,10 +82,10 @@ files_affected:
 
 Followed by the approved design content (Goal, Approach, Decisions, Implementation Steps).
 
-5. **Create `.claude/state/` directory if needed and update `.claude/state/current.txt`** with the new plan's repo-relative path on a single line. **The plan's `status` stays `draft` — this step only points at it; promotion to `active` happens later via the `승인` trigger.**
+5. **Create `{{STATE_DIR}}/` directory if needed and update `{{STATE_DIR}}/current.txt`** with the new plan's repo-relative path on a single line. **The plan's `status` stays `draft` — this step only points at it; promotion to `active` happens later via the `승인` trigger.**
 
    ```
-   .claude/plans/2026-05-07-<id>.md
+   {{PLAN_DIR}}/2026-05-07-<id>.md
    ```
 
 6. **Append empty Post-Implementation section** to the plan:
@@ -127,5 +127,5 @@ After `current.txt` points to a `draft` plan, watch for explicit user replies th
 - Trigger fires ONLY when `state/current.txt` points to a plan with status `draft` or `active`. If `current.txt` is empty or missing, treat user reply as normal conversation — do NOT modify any plan file.
 - NEVER infer status changes from context (e.g., "looks done", "I think we finished"). Status changes ONLY on the explicit trigger words above (or `/retro` for the `done` path).
 - NEVER change status silently. Always confirm in the response: "✅ status: draft → active".
-- After `취소` (status → dropped), **truncate `.claude/state/current.txt` to empty** so no plan is pointed at. Same convention applies to `/retro`'s `done` transition (handled inside retro/SKILL.md). The state pointer is non-empty ONLY while a `draft` or `active` plan exists.
+- After `취소` (status → dropped), **truncate `{{STATE_DIR}}/current.txt` to empty** so no plan is pointed at. Same convention applies to `/retro`'s `done` transition (handled inside retro/SKILL.md). The state pointer is non-empty ONLY while a `draft` or `active` plan exists.
 - Use the `Edit` tool with a precise multi-line `old_string` (e.g., the full frontmatter block around the `status:` line) to avoid mismatches when other plans share the same status value.
