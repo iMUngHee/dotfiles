@@ -1,12 +1,26 @@
 #!/bin/bash
+# claude/scripts/sync-back.sh — pull repo-tracked keys back from
+# ~/.claude/settings.json, drop the now-defunct memory classify prompt
+# (memory directory location IS the classification under the 3-tier model),
+# add AGENTS.manifest drift detection.
+# --strict: fail on manifest drift instead of WARN.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$REPO_DIR/.." && pwd)"
+AI_DIR="$ROOT_DIR/ai"
 CLAUDE_DIR="$HOME/.claude"
+
+STRICT=0
+for arg in "$@"; do
+    case "$arg" in
+        --strict) STRICT=1 ;;
+    esac
+done
 
 changed=false
 
-# ── settings.json (extract repo-tracked keys only, exclude local-only like model) ──
+# ── 1. settings.json — keep only repo-tracked keys ──
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
     jq -s '
       .[0] as $repo | .[1] |
@@ -24,44 +38,35 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
     fi
 fi
 
-# ── New memory files → prompt to classify ──
-# Collect filenames already referenced in MEMORY.md or MEMORY.private.md
-KNOWN_FILES=$(/usr/bin/grep -oh 'memory/[^)]*\.md' \
-    "$REPO_DIR/MEMORY.md" "$REPO_DIR/MEMORY.private.md" 2>/dev/null \
-    | sed 's|.*/||' | sort -u)
+# ── 2. AGENTS.manifest drift detection ──
+MANIFEST="$AI_DIR/AGENTS.manifest"
+if [ -f "$MANIFEST" ]; then
+    listed=$(/usr/bin/grep -v '^[[:space:]]*\(#\|$\)' "$MANIFEST" | sort -u)
+    actual=$(cd "$AI_DIR" && find . -type f -name '*.md' \
+        -not -path './skills/*' \
+        -not -path './scripts/*' \
+        -not -path './lib/*' \
+        | sed 's|^\./||' | sort -u)
+    missing=$(comm -23 <(echo "$actual") <(echo "$listed"))
+    stale=$(comm -13 <(echo "$actual") <(echo "$listed"))
 
-NEW_FILES=()
-for f in "$REPO_DIR"/memory/*.md; do
-    [ -f "$f" ] || continue
-    fname=$(basename "$f")
-    if echo "$KNOWN_FILES" | /usr/bin/grep -Fqx "$fname"; then
-        continue
+    if [ -n "$missing" ]; then
+        echo "WARN: ai/ files NOT in AGENTS.manifest:"
+        echo "$missing" | sed 's/^/  /'
     fi
-    NEW_FILES+=("$fname")
-done
-
-if [ ${#NEW_FILES[@]} -gt 0 ]; then
-    echo "New memory files found:"
-    for i in "${!NEW_FILES[@]}"; do
-        echo "  [$i] ${NEW_FILES[$i]}"
-    done
-    if [ -t 0 ]; then
-        read -p "Enter indices to move to private (e.g. '0 2'), or press Enter to keep public: " indices
-        for idx in $indices; do
-            fname="${NEW_FILES[$idx]}"
-            mkdir -p "$REPO_DIR/memory/private"
-            mv "$REPO_DIR/memory/$fname" "$REPO_DIR/memory/private/$fname"
-            echo "Moved to private: $fname"
-            changed=true
-        done
-    else
-        echo "Non-interactive mode — skipping classification. Run sync-back.sh manually to classify."
+    if [ -n "$stale" ]; then
+        echo "WARN: AGENTS.manifest references missing files:"
+        echo "$stale" | sed 's/^/  /'
+    fi
+    if [ -n "$missing$stale" ] && [ "$STRICT" -eq 1 ]; then
+        echo "FAIL: --strict mode — manifest drift treated as error"
+        exit 1
     fi
 fi
 
-# NOTE: MEMORY.md and MEMORY.private.md are NOT synced back.
-# They are deployed as separate files to ~/.claude/ (@ includes resolve from there).
-# Edit MEMORY.md or MEMORY.private.md in the repo directly.
+# Note: MEMORY.md is auto-generated — never sync back.
+# Memory classification prompt removed: directory location (ai/memory vs
+# claude/memory vs ai/memory/private) is the classification under 3-tier.
 
 if [ "$changed" = false ]; then
     echo "Nothing to sync."
