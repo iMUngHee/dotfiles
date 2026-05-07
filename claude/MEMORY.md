@@ -12,7 +12,5 @@
 - [Auto memory intentionally disabled](memory/feedback_auto_memory_disabled.md) — off by design to prevent context bloat; do not recommend enabling
 - [Workflow skills auto-invokable by design](memory/feedback_workflow_skills_auto_invokable.md) — design/verify/debug/code-review/pr-body/retro keep disable-model-invocation false; do not propose flipping
 - [Code review per-commit](memory/feedback_code_review_per_commit.md) — feature-branch reviews walk commit-by-commit via git show, never branch-wide diff
+- [Raw URLs in output](memory/feedback_raw_urls.md) — share links as bare URLs, never Markdown link syntax, so CLI rendering does not hide the href
 
-## Project
-
-- [Context compression eval](memory/project_context_compression_eval.md) — measuring tool response sizes until 2026-04-28, then deciding Context Mode vs self-built MCP vs reject
