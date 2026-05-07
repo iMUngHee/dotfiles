@@ -24,7 +24,7 @@
 
 ## Verification Dispatch
 
-When verification is needed before commit or PR, dispatch the `pre-commit-verifier` agent via the Agent tool. It performs security scan, test coverage review, and architecture guard on changed files. Pass `git diff --name-only` output as context. Follow DEVGUARD "Subagent Trust" rules: review the agent's findings before acting on them.
+When verification is needed before commit or PR, dispatch the `pre-commit-verifier` agent via the Agent tool. It performs security scan, test coverage review, architecture guard, change-size check, scope-creep check (against the active plan), convention drift, and correctness sanity on changed files. Pass `git diff --name-only` output as context. Follow DEVGUARD "Subagent Trust" rules: review the agent's findings before acting on them.
 
 ## After Compaction
 
