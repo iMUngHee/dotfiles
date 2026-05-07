@@ -55,10 +55,11 @@ git log --oneline <range>
 git diff --stat <range>
 ```
 
-Also check for plan artifacts:
+Also check for the active plan artifact via the state pointer:
 ```bash
-branch=$(git branch --show-current 2>/dev/null)
-grep -li "branch: $branch" .claude/plans/*.md 2>/dev/null
+state_file=".claude/state/current.txt"
+[ -f "$state_file" ] && plan=$(awk 'NF { print; exit }' "$state_file") \
+  && [ -f "$plan" ] && echo "$plan"
 ```
 
 If a plan exists, read it — the delta between plan and reality is a key input.
@@ -116,7 +117,7 @@ Wait for 대협 to approve by number (e.g., "1,2,3" or "all" or "none").
 Only apply approved items:
 
 - **Consolidate**: Write merged file, delete the redundant file, update MEMORY.md index
-- **Update**: Edit the plan artifact (status, Post-Implementation Notes)
+- **Update**: Edit the plan artifact — set `status: active → done` (or `dropped` if explicitly abandoned by 대협) AND fill `## Post-Implementation Notes` with key outcomes, design pivots, and findings. **Then truncate `.claude/state/current.txt` to empty** so the active-task pointer reflects reality (no plan is currently active). This is the canonical path to mark a plan `done` (the `design` skill does NOT carry a `완료` natural-language trigger).
 - **Delete**: Remove file, update MEMORY.md index
 - **Add**: Write new file (to memory/ or memory/private/ based on classification), update MEMORY.md or MEMORY.private.md index
 
