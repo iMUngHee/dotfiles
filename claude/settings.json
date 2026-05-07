@@ -250,16 +250,6 @@
             "command": "$HOME/.claude/hooks/context-monitor.sh"
           }
         ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/log-tool-sizes.sh",
-            "timeout": 2000
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
