@@ -324,33 +324,25 @@ render_fresh() {
 }
 
 render_plan() {
-    local branch plans_dir plan_file status color
-    branch=$(git -C "$PWD" branch --show-current 2>/dev/null) || return
-    [ -z "$branch" ] && return
-    plans_dir="$PWD/.claude/plans"
-    [ -d "$plans_dir" ] || return
+    local state_file plan_path plan_full status color icon
+    state_file="$PWD/.claude/state/current.txt"
+    [ -f "$state_file" ] || return
 
-    # Match inject-context.sh: prefer `active` plan; otherwise newest by filename.
-    # Plans are sorted desc (YYYY-MM-DD prefix → newest first).
-    plan_file=""
-    while IFS= read -r f; do
-        [ -z "$f" ] && continue
-        local s
-        s=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$f")
-        if [ "$s" = "active" ]; then plan_file="$f"; break; fi
-        [ -z "$plan_file" ] && plan_file="$f"
-    done < <(grep -l "^branch: $branch\$" "$plans_dir"/*.md 2>/dev/null | sort -r)
+    plan_path=$(awk 'NF { print; exit }' "$state_file")
+    [ -z "$plan_path" ] && return
 
-    [ -z "$plan_file" ] && return
-    status=$(awk '/^status:/ { sub(/^status: ?/, ""); print; exit }' "$plan_file")
-    [ -z "$status" ] && return
-    local icon
+    plan_full="$PWD/$plan_path"
+    [ -f "$plan_full" ] || return
+
+    # Strip inline `# ...` comments and trailing whitespace (defense in depth).
+    status=$(awk '/^status:/ { sub(/^status: ?/, ""); sub(/[[:space:]]*#.*$/, ""); sub(/[[:space:]]+$/, ""); print; exit }' "$plan_full")
+
     case "$status" in
-        active)  color="$YELLOW"; icon="📋" ;;
-        done)    color="$GREEN";  icon="✅" ;;
-        dropped) color="$DIM";    icon="🗑️" ;;
-        *)       color="$CYAN";   icon="📋" ;;
+        draft)  color="$DIM";    icon="⚙️" ;;
+        active) color="$YELLOW"; icon="▶️" ;;
+        *)      return ;;  # done | dropped | empty | unknown → no widget
     esac
+
     printf ' %s %s%s%s' "$icon" "$color" "$status" "$RESET"
 }
 
