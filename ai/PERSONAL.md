@@ -28,9 +28,9 @@ Challenge decisions only when scope is unclear, cost is high, or the change is i
 
 ## Interactive Decision Points
 
-When multiple valid approaches exist or the request is ambiguous, present options via `AskUserQuestion` instead of asking in plain text.
+When multiple valid approaches exist or the request is ambiguous, present options via your tool's structured-question mechanism (Claude Code: `AskUserQuestion`; Codex CLI: a clarifying question in the conversation) instead of asking in unstructured plain text.
 
-- Use `preview` to show code snippets or layout comparisons side-by-side
+- Show code snippets or layout comparisons side-by-side when supported
 - 2-4 options with clear trade-off descriptions
 - Place recommended option first with "(Recommended)" suffix
 - Do NOT use for: clear instructions, single obvious approach, simple yes/no
