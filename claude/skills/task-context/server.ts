@@ -5,27 +5,73 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const TASKS_DIR = join(__dirname, "tasks");
+const CURRENT_FILE = join(TASKS_DIR, ".current");
 const PORT = 8484;
 
 await mkdir(TASKS_DIR, { recursive: true });
 
-function parseTaskMd(content: string): { label: string; url: string }[] {
-  const links: { label: string; url: string }[] = [];
-  for (const line of content.split("\n")) {
-    const m = line.match(/^-\s+\[([^\]]+)\]\s+(.+)$/);
-    if (m) links.push({ label: m[1], url: m[2].trim() });
+interface Link {
+  label: string;
+  url: string;
+  triggers: string[];
+  summary: string;
+}
+
+function parseTaskMd(content: string): Link[] {
+  const links: Link[] = [];
+  const lines = content.split("\n");
+  let cur: Link | null = null;
+
+  for (const raw of lines) {
+    const line = raw.replace(/\r$/, "");
+    const top = line.match(/^-\s+\*\*([^*]+)\*\*\s*$/);
+    if (top) {
+      if (cur) links.push(cur);
+      cur = { label: top[1].trim(), url: "", triggers: [], summary: "" };
+      continue;
+    }
+    const sub = line.match(/^\s{2,}-\s+([A-Za-z]+):\s*(.*)$/);
+    if (sub && cur) {
+      const key = sub[1].toLowerCase();
+      const value = sub[2].trim();
+      if (key === "url") cur.url = value;
+      else if (key === "triggers") {
+        cur.triggers = value
+          ? value.split(",").map((t) => t.trim()).filter(Boolean)
+          : [];
+      } else if (key === "summary") cur.summary = value;
+    }
   }
+  if (cur) links.push(cur);
   return links;
 }
 
-function toTaskMd(
-  key: string,
-  links: { label: string; url: string }[],
-): string {
+function toTaskMd(key: string, links: Link[]): string {
   const lines = [`# ${key}`, ""];
-  for (const l of links) lines.push(`- [${l.label}] ${l.url}`);
+  for (const l of links) {
+    lines.push(`- **${l.label}**`);
+    lines.push(`  - URL: ${l.url}`);
+    lines.push(`  - Triggers: ${l.triggers.join(", ")}`);
+    lines.push(`  - Summary: ${l.summary}`);
+  }
   if (links.length) lines.push("");
   return lines.join("\n");
+}
+
+function validate(links: Link[]): string | null {
+  const labels = new Set<string>();
+  const urls = new Set<string>();
+  for (const l of links) {
+    if (!l.label.trim()) return "Label is required";
+    if (!l.url.trim()) return "URL is required";
+    if (!/^https?:\/\//i.test(l.url)) return `Invalid URL: ${l.url}`;
+    const lk = l.label.trim().toLowerCase();
+    if (labels.has(lk)) return `Duplicate label: ${l.label}`;
+    labels.add(lk);
+    if (urls.has(l.url)) return `Duplicate URL: ${l.url}`;
+    urls.add(l.url);
+  }
+  return null;
 }
 
 function json(res: ServerResponse, status: number, data: unknown) {
@@ -42,6 +88,15 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+async function readCurrent(): Promise<string | null> {
+  try {
+    const v = (await readFile(CURRENT_FILE, "utf-8")).trim();
+    return v || null;
+  } catch {
+    return null;
+  }
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url!, `http://localhost:${PORT}`);
   const method = req.method!;
@@ -50,6 +105,31 @@ const server = createServer(async (req, res) => {
     const html = await readFile(join(__dirname, "index.html"), "utf-8");
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(html);
+  }
+
+  if (url.pathname === "/api/current") {
+    if (method === "GET") {
+      return json(res, 200, { current: await readCurrent() });
+    }
+    if (method === "PUT") {
+      let body: { current: string | null };
+      try {
+        body = JSON.parse(await readBody(req));
+      } catch {
+        return json(res, 400, { error: "Invalid JSON" });
+      }
+      const next = (body.current ?? "").trim();
+      if (next) {
+        const exists = await readFile(join(TASKS_DIR, `${next}.md`), "utf-8")
+          .then(() => true)
+          .catch(() => false);
+        if (!exists) return json(res, 404, { error: "Task not found" });
+        await writeFile(CURRENT_FILE, next);
+      } else {
+        await writeFile(CURRENT_FILE, "");
+      }
+      return json(res, 200, { current: next || null });
+    }
   }
 
   if (url.pathname === "/api/tasks" && method === "GET") {
@@ -82,20 +162,31 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === "PUT") {
-      let body: { links: { label: string; url: string }[] };
+      let body: { links: Link[] };
       try {
         body = JSON.parse(await readBody(req));
       } catch {
         return json(res, 400, { error: "Invalid JSON" });
       }
-      await writeFile(filePath, toTaskMd(key, body.links));
-      return json(res, 200, { key, links: body.links });
+      const links = (body.links ?? []).map((l) => ({
+        label: (l.label ?? "").trim(),
+        url: (l.url ?? "").trim(),
+        triggers: Array.isArray(l.triggers)
+          ? l.triggers.map((t) => String(t).trim()).filter(Boolean)
+          : [],
+        summary: (l.summary ?? "").trim(),
+      }));
+      const err = validate(links);
+      if (err) return json(res, 409, { error: err });
+      await writeFile(filePath, toTaskMd(key, links));
+      return json(res, 200, { key, links });
     }
 
     if (method === "DELETE") {
       try {
         await unlink(filePath);
-        await unlink(join(TASKS_DIR, `${key}.meta.md`)).catch(() => {});
+        const cur = await readCurrent();
+        if (cur === key) await writeFile(CURRENT_FILE, "");
         res.writeHead(204);
         return res.end();
       } catch {
