@@ -1,0 +1,5 @@
+memory/private/
+skills/private/
+skills/*/node_modules/
+skills/*/.spa-auth/
+.claude/
