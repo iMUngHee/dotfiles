@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: "Goal-backward verification of completed features by a dedicated agent. Use when /verify needs extensive code exploration to confirm a goal is achieved without polluting the main context."
+description: "Goal-backward verification of completed features by a dedicated agent. Use when /verify needs extensive code exploration to confirm a goal is achieved without polluting the main context. NOT used at commit time — pre-commit-verifier reads the active plan goal for a light scope check."
 model: sonnet
 allowed-tools: Read, Grep, Glob, Bash
 memory: user
