@@ -1,10 +1,10 @@
 # Claude Code Global Config — ~/.config/claude/
 
-@RTK.md
 @PERSONAL.md
+@guardrails.md
 @DEVGUARD.md
+@RTK.md
 @MEMORY.md
-@MEMORY.private.md
 
 ## Automated by Hooks (do not do manually)
 
