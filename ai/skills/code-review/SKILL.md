@@ -30,12 +30,11 @@ Dispatch to **`reviewer`** when:
 - Diff exceeds ~400 lines
 - Multiple modules touched
 
-Dispatch via:
-```
-Agent(subagent_type: "reviewer", description: "<short>", prompt: "Base branch: <base>. Focus: <optional>. Branch: <current>.")
-```
+Dispatch to a separate context to keep the main thread clean:
+- **Claude Code**: `Agent(subagent_type: "reviewer", description: "<short>", prompt: "Base branch: <base>. Focus: <optional>. Branch: <current>.")`
+- **Codex CLI**: `codex exec` with the same focused prompt (Base branch / Focus / current branch). No subagent dispatch tool exists; spawn an exec subprocess instead.
 
-Return the agent's report directly — do NOT re-run per-commit analysis inline after dispatch.
+Return the delegated context's report directly — do NOT re-run per-commit analysis inline after dispatch.
 
 ## Steps
 

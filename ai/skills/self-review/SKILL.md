@@ -10,21 +10,23 @@ Review whether rules were followed in this session.
 
 ## Instructions
 
-1. Read all rule files fresh (do not rely on memory):
-   - `~/.config/claude/PERSONAL.md`
-   - `~/.config/claude/DEVGUARD.md`
-   - `~/.config/claude/rules/rationalization.md`
-   - `~/.config/claude/rules/subagent-trust.md`
-   - `~/.config/claude/rules/testing.md`
-   - `~/.config/claude/rules/diagnostics.md`
-   - `~/.config/claude/rules/code-review.md`
-   - `~/.config/claude/MEMORY.md` (feedback entries only)
-   - `~/.config/claude/MEMORY.private.md` (if present — feedback entries only)
+1. Read all rule sources fresh from disk (do not rely on memory). Walk both the shared tier and the current tool's tier:
+
+   ```
+   ~/.config/ai/PERSONAL.md
+   ~/.config/ai/guardrails.md
+   ~/.config/ai/rules/*.md
+   ~/.config/{{TOOL_NAME_LC}}/DEVGUARD.md      (if exists — Claude carries a thin tool-specific addendum)
+   ~/.config/{{TOOL_NAME_LC}}/rules/*.md       (e.g. claude-subagent-trust.md)
+   ~/.config/ai/memory/*.md                    (feedback entries only)
+   ~/.config/{{TOOL_NAME_LC}}/memory/*.md      (feedback entries only — claude-* / codex-* prefix)
+   ~/.config/ai/memory/private/*.md            (feedback entries only)
+   ```
 
 2. For each rule, evaluate against the conversation history:
    - **✓** followed (cite evidence)
    - **✗** violated (cite the specific action/message)
-   - **—** not triggered (explain why)
+   - **—** not triggered (explain why) OR `— (n/a — rule not present in this tool)` if the rule lives in a tier that does not apply to the current tool.
 
 3. For each **✗**, analyze actionability.
 
@@ -33,7 +35,7 @@ Review whether rules were followed in this session.
 ````
 ## Self-Review: Rule Compliance
 
-### PERSONAL.md
+### PERSONAL.md (shared)
 
 | Rule | Result | Evidence |
 |------|--------|----------|
@@ -44,10 +46,10 @@ Review whether rules were followed in this session.
 | Critical Analysis — Simplification | ✓/✗ | ... |
 | Critical Analysis — Side effects | ✓/✗ | ... |
 | Code Style | ✓/✗ | ... |
-| Interactive Decision Points (AskUserQuestion) | ✓/✗/— | ... |
+| Interactive Decision Points | ✓/✗/— | ... |
 | Citations (cite source URL or mark "일반 지식 기반") | ✓/✗/— | ... |
 
-### DEVGUARD.md
+### guardrails.md (shared)
 
 | Rule | Result | Evidence |
 |------|--------|----------|
@@ -55,30 +57,33 @@ Review whether rules were followed in this session.
 | Forbidden completion words (without evidence) | ✓/✗ | ... |
 | Absence Proofs (scope match + fenced evidence) | ✓/✗/— | ... |
 | Scope Resolution | ✓/✗/— | ... |
-| Skill Compliance (/design vs EnterPlanMode) | ✓/✗/— | ... |
 | Design Gate trigger (3+ files / arch / ambiguous) | ✓/✗/— | ... |
 
-### rules/rationalization.md
+### {{TOOL_NAME_LC}}/DEVGUARD.md (tool-only — skip if absent)
+
+| Rule | Result | Evidence |
+|------|--------|----------|
+| Skill Compliance (slash invocation vs raw tool) | ✓/✗/— | ... |
+| Design Gate Invocation (Claude: /design vs Plan Mode) | ✓/✗/— | ... |
+
+### ai/rules/rationalization.md
 
 | Rule | Result | Evidence |
 |------|--------|----------|
 | No rationalization phrases used | ✓/✗ | ... |
 
-### rules/subagent-trust.md
+### {{TOOL_NAME_LC}}/rules/* (tool-only)
 
-| Rule | Result | Evidence |
-|------|--------|----------|
-| Before dispatch — scope, constraints, rules in prompt | ✓/✗/— | ... |
-| After results — git diff review, cross-verify claims | ✓/✗/— | ... |
+For each `claude-*.md` / `codex-*.md` rule file present, add one row per top-level rule in that file. Examples for Claude: `claude-subagent-trust.md` → "Before dispatch — scope, constraints, rules in prompt", "After results — git diff review, cross-verify claims".
 
-### rules/testing.md
+### ai/rules/testing.md
 
 | Rule | Result | Evidence |
 |------|--------|----------|
 | Test Awareness (⚠️ warning if no tests) | ✓/✗/— | ... |
 | TDD Discipline (if required) | ✓/✗/— | ... |
 
-### rules/diagnostics.md
+### ai/rules/diagnostics.md
 
 | Rule | Result | Evidence |
 |------|--------|----------|
@@ -86,20 +91,20 @@ Review whether rules were followed in this session.
 | Simplest cause first | ✓/✗/— | ... |
 | 3-Strike escalation | ✓/✗/— | ... |
 
-### rules/code-review.md
+### ai/rules/code-review.md
 
 | Rule | Result | Evidence |
 |------|--------|----------|
 | Code Review Honesty (verify before accepting) | ✓/✗/— | ... |
 | Parallel Dispatch Criteria | ✓/✗/— | ... |
 
-### MEMORY.md / MEMORY.private.md Feedback
+### Memory Feedback (ai/memory + {{TOOL_NAME_LC}}/memory + ai/memory/private)
 
-For each feedback entry listed in MEMORY.md (and MEMORY.private.md if present), add one row. Use the entry title from the memory index as the Rule name so new entries are picked up automatically without editing this template.
+For each feedback entry across all walked memory directories, add one row. Use the entry's `name` frontmatter field as the Rule. New entries pick up automatically — no template edit needed.
 
 | Rule | Result | Evidence |
 |------|--------|----------|
-| <memory entry title> | ✓/✗/— | ... |
+| <memory entry name> | ✓/✗/— | ... |
 
 ### Actionability
 

@@ -21,7 +21,7 @@ Check if a plan artifact exists for the current branch:
 
 ```bash
 branch=$(git branch --show-current 2>/dev/null)
-ls .claude/plans/ 2>/dev/null && grep -li "branch: $branch" .claude/plans/*.md 2>/dev/null
+ls {{PLAN_DIR}}/ 2>/dev/null && grep -li "branch: $branch" {{PLAN_DIR}}/*.md 2>/dev/null
 ```
 
 If found, compare planned vs actual:
@@ -45,12 +45,11 @@ Dispatch to **`verifier`** when:
 - 5+ truth conditions expected
 - Level 3/4 requires grep across 10+ files or running a test suite
 
-Dispatch via:
-```
-Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")
-```
+Dispatch to a separate context to isolate heavy reading:
+- **Claude Code**: `Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")`
+- **Codex CLI**: `codex exec` with the same focused prompt (Goal / Depth / Plan path / Changed files). No subagent dispatch tool exists; spawn an exec subprocess instead.
 
-Return the agent's report directly — do NOT re-run checks inline after dispatch.
+Return the delegated context's report directly — do NOT re-run checks inline after dispatch.
 
 ## Approach: Goal-backward
 

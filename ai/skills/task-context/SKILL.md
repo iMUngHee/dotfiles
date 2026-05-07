@@ -40,7 +40,7 @@ Add a single link to a task without starting the GUI, then auto-fetch its Summar
    - `figma.com` → Figma, `github.com`/`oss.` → GitHub
    - `slack.com` → Slack, `notion.` → Notion, default → Link
 2. Ensure task file exists. If missing, create with `# <KEY>\n\n`.
-3. Reject if URL already present (grep), or if LABEL collides with an existing label (case-insensitive). On label collision, suggest a numeric suffix (`Wiki-2`) and ask the user via AskUserQuestion to confirm/override.
+3. Reject if URL already present (grep), or if LABEL collides with an existing label (case-insensitive). On label collision, suggest a numeric suffix (`Wiki-2`) and ask the user via interactive question prompt to confirm/override.
 4. **Fetch** the URL using the appropriate tool (see Fetch Routing). The response takes one of two forms:
 
    **Path 1 — inline response (small pages):** parse the returned content directly, then proceed to step 5.
@@ -83,7 +83,7 @@ Remove an entry from a task by label or URL substring match.
 
 1. Read `tasks/<KEY>.md`. If missing, report and stop.
 2. Find entries whose Label or URL contains MATCH (case-insensitive).
-3. If no matches, report and stop. If multiple, list them and use AskUserQuestion to clarify.
+3. If no matches, report and stop. If multiple, list them and interactively prompt the user to clarify.
 4. Remove the entry block (the `- **Label**` line plus its sub-bullets) and write back.
 5. Output the updated file content verbatim.
 
@@ -158,7 +158,7 @@ Open the web GUI for full link management (Label, URL, Triggers, Summary).
    ```bash
    sleep 2 && { command -v xdg-open >/dev/null && xdg-open http://localhost:8484 || open http://localhost:8484; }
    ```
-5. Use AskUserQuestion:
+5. Prompt interactively:
    > 브라우저에서 작업이 끝나면 알려주세요.
 6. When user confirms, kill server:
    ```bash
