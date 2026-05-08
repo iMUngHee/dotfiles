@@ -60,22 +60,21 @@ mv "$TMP" "$TARGET"
 SIZE=$(wc -c < "$TARGET" | tr -d ' ')
 echo "Built ~/.codex/AGENTS.md ($SIZE B)"
 
-# ── 4. config.toml — preserve existing [mcp_servers.*], replace static prelude ──
+# ── 4. config.toml — yq deep merge: template keys enforced, user keys preserved ──
 TARGET_CFG="$HOME/.codex/config.toml"
 TEMPLATE="$CODEX_DIR/config.toml.template"
 
-if [ -f "$TARGET_CFG" ] && grep -q '^\[mcp_servers\.' "$TARGET_CFG"; then
-    # Capture from first [mcp_servers.*] line to EOF
-    awk '/^\[mcp_servers\./{flag=1} flag' "$TARGET_CFG" > "$TARGET_CFG.mcp"
-    cat "$TEMPLATE" > "$TARGET_CFG.tmp"
-    echo "" >> "$TARGET_CFG.tmp"
-    cat "$TARGET_CFG.mcp" >> "$TARGET_CFG.tmp"
-    rm "$TARGET_CFG.mcp"
-    mv "$TARGET_CFG.tmp" "$TARGET_CFG"
-    echo "Merged config.toml (preserved existing [mcp_servers.*])"
-else
+if [ ! -f "$TARGET_CFG" ]; then
     cp "$TEMPLATE" "$TARGET_CFG"
-    echo "Wrote config.toml from template (no prior [mcp_servers.*])"
+    echo "Wrote ~/.codex/config.toml from template (first deploy)"
+else
+    if ! command -v yq &>/dev/null; then
+        echo "ERROR: yq required for config.toml deep merge (brew install yq)"
+        exit 1
+    fi
+    yq -p toml -o toml '. *= load("'"$TEMPLATE"'")' "$TARGET_CFG" > "$TARGET_CFG.tmp" \
+        && mv "$TARGET_CFG.tmp" "$TARGET_CFG"
+    echo "Merged config.toml (template keys enforced; user keys preserved)"
 fi
 
 # ── 5. Skills overlay → ~/.agents/skills/ ──
