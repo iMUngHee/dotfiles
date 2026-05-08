@@ -17,7 +17,7 @@ fi
 
 # 2. ai/ source: detect undefined tokens
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-unknown=$(grep -rEo '\{\{[A-Z_]+\}\}' "$ROOT_DIR/ai/" 2>/dev/null \
+unknown=$(grep -rEo --include='*.md' '\{\{[A-Z_]+\}\}' "$ROOT_DIR/ai/" 2>/dev/null \
     | grep -vE "$KNOWN" \
     | sort -u || true)
 if [ -n "$unknown" ]; then

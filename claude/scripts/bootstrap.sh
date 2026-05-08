@@ -54,6 +54,7 @@ done
 
 # ── 3. rules/ merge: ai/rules/* + claude/rules/* ──
 echo "Merging rules..."
+[ -L "$CLAUDE_DIR/rules" ] && rm "$CLAUDE_DIR/rules"
 mkdir -p "$CLAUDE_DIR/rules"
 find "$CLAUDE_DIR/rules" -maxdepth 1 -type l -delete 2>/dev/null || true
 for f in "$AI_DIR/rules/"*.md "$REPO_DIR/rules/"*.md; do
@@ -63,6 +64,7 @@ done
 
 # ── 4. memory/ merge + MEMORY.md generate ──
 echo "Merging memory + generating MEMORY.md..."
+[ -L "$CLAUDE_DIR/memory" ] && rm "$CLAUDE_DIR/memory"
 mkdir -p "$CLAUDE_DIR/memory/private"
 find "$CLAUDE_DIR/memory" -maxdepth 1 -type l -delete 2>/dev/null || true
 find "$CLAUDE_DIR/memory/private" -maxdepth 1 -type l -delete 2>/dev/null || true
@@ -120,13 +122,14 @@ generate_memory_index
 
 # ── 5. skills/ overlay (ai + ai/private + claude) ──
 echo "Linking skills..."
+[ -L "$CLAUDE_DIR/skills" ] && rm "$CLAUDE_DIR/skills"
 mkdir -p "$CLAUDE_DIR/skills"
 find "$CLAUDE_DIR/skills" -maxdepth 1 -type l -delete 2>/dev/null || true
 
 link_skill_dir() {
     local d="$1"
-    [ -d "$d" ] || return
-    [ -f "$d/SKILL.md" ] || return
+    [ -d "$d" ] || return 0
+    [ -f "$d/SKILL.md" ] || return 0
     ln -sfn "$d" "$CLAUDE_DIR/skills/$(basename "$d")"
 }
 for d in "$AI_DIR/skills/"*/;          do link_skill_dir "$d"; done
