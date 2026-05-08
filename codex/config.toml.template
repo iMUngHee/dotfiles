@@ -1,17 +1,8 @@
-# codex/config.toml.template — static portion merged into ~/.codex/config.toml.
-# The bootstrap preserves any [mcp_servers.*] blocks already present in the
-# user's ~/.codex/config.toml (they are managed by hand, not by this template).
+# codex/config.toml.template — keys ENFORCED on every bootstrap (deep-merge).
+# All other keys (trust levels, NUX counters, mcp_servers, etc.) are
+# user/machine-managed and preserved by the merge.
 
 project_doc_max_bytes = 65536
 
-[projects."/Users/unghee.lee/.config"]
-trust_level = "trusted"
-
-[projects."/Users/unghee.lee/.agents"]
-trust_level = "trusted"
-
 [tui]
 theme = "catppuccin-mocha"
-
-[tui.model_availability_nux]
-"gpt-5.5" = 3
