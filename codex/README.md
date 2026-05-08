@@ -40,6 +40,9 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 
 - `project_doc_max_bytes` (sets the AGENTS.md cap, default 65536)
 - `[tui].theme`
+- `[tui].status_line_use_colors`
+- `[tui].status_line`
+- `[notice].fast_default_opt_out`
 
 Everything else under `~/.codex/config.toml` is user/machine-managed and is preserved across bootstraps.
 

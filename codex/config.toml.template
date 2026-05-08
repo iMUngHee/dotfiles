@@ -6,3 +6,21 @@ project_doc_max_bytes = 65536
 
 [tui]
 theme = "catppuccin-mocha"
+status_line_use_colors = true
+status_line = [
+  "model-with-reasoning",
+  "run-state",
+  "context-used",
+  "context-window-size",
+  "used-tokens",
+  "total-input-tokens",
+  "total-output-tokens",
+  "five-hour-limit",
+  "weekly-limit",
+  "current-dir",
+  "git-branch",
+  "task-progress",
+]
+
+[notice]
+fast_default_opt_out = true
