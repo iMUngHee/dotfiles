@@ -84,8 +84,8 @@ find "$HOME/.agents/skills" -maxdepth 1 -mindepth 1 -type l -delete 2>/dev/null 
 
 link_skill_dir() {
     local d="$1"
-    [ -d "$d" ] || return
-    [ -f "$d/SKILL.md" ] || return
+    [ -d "$d" ] || return 0
+    [ -f "$d/SKILL.md" ] || return 0
     ln -sfn "$d" "$HOME/.agents/skills/$(basename "$d")"
 }
 for d in "$AI_DIR/skills/"*/; do link_skill_dir "$d"; done

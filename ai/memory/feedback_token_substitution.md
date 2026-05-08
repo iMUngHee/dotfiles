@@ -1,6 +1,6 @@
 ---
 name: Token substitution rules
-description: ai/ files use {{TOKEN}} mustache placeholders for tool-varying paths/names. Replace with actual values whenever you reference, write, or execute commands containing them.
+description: ai/ files use double-mustache placeholders for tool-varying paths/names. Replace with actual values whenever you reference, write, or execute commands containing them.
 type: feedback
 ---
 
@@ -20,7 +20,7 @@ Whenever you reference, write, or execute commands containing the following toke
 
 **How to apply:**
 - Reading ai/* content → mentally substitute the token with the value for whichever tool you are.
-- Writing tool calls (Bash, Edit, Write) → substitute first; the literal `{{TOKEN}}` must NOT appear in any command or path.
+- Writing tool calls (Bash, Edit, Write) → substitute first; literal placeholders must NOT appear in any command or path.
 - Quoting rules verbatim → the token may appear in QUOTE only; any ACTUAL action you take expands it.
 - Adding a new token → update both Claude and Codex bootstrap's expand_tokens function (Codex uses sed for AGENTS.md build; Claude relies on this in-context substitution).
 - System dependency (slash commands, subagent dispatch, EnterWorktree, etc.) is NOT a token candidate — generalize the body or split tool-specific detail into the tool's directory.
