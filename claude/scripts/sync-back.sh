@@ -46,6 +46,7 @@ if [ -f "$MANIFEST" ]; then
         -not -path './skills/*' \
         -not -path './scripts/*' \
         -not -path './lib/*' \
+        -not -name 'README.md' \
         | sed 's|^\./||' | sort -u)
     missing=$(comm -23 <(echo "$actual") <(echo "$listed"))
     stale=$(comm -13 <(echo "$actual") <(echo "$listed"))
