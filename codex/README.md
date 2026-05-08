@@ -27,7 +27,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 
 2. **`~/.codex/config.toml`** deep-merged with `config.toml.template`:
    - first deploy: `cp template target`
-   - subsequent: `yq '. *= load(template)' target` — template keys override; user/machine keys (trust levels, NUX counters, `[mcp_servers.*]`, `[notice]`, etc.) survive untouched
+   - subsequent: `yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' target template` — template keys override; user/machine keys (trust levels, NUX counters, `[mcp_servers.*]`, `[notice]`, etc.) survive untouched
    - depends on `yq` (mikefarah)
 
 3. **`~/.agents/skills/`** overlayed (note: not `~/.codex/skills/` — Codex discovery path is `~/.agents/skills/`):
@@ -42,6 +42,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 - `[tui].theme`
 - `[tui].status_line_use_colors`
 - `[tui].status_line`
+- `[tui].terminal_title`
 - `[notice].fast_default_opt_out`
 
 Everything else under `~/.codex/config.toml` is user/machine-managed and is preserved across bootstraps.
