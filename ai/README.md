@@ -24,7 +24,7 @@ ai/
 
 ## Token substitution
 
-Files under `ai/` use `{{TOKEN}}` placeholders for tool-varying paths/names. The model substitutes them at runtime per `memory/feedback_token_substitution.md`:
+Files under `ai/` use double-mustache placeholders for tool-varying paths/names. The model substitutes them at runtime per `memory/feedback_token_substitution.md`:
 
 | Token | Claude Code | Codex CLI |
 |---|---|---|
