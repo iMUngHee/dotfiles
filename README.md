@@ -6,12 +6,18 @@ Personal configuration files managed via `~/.config/` and synced with git.
 
 | Directory | Tool | Key files |
 |-----------|------|-----------|
-| `claude/` | [Claude Code](https://claude.ai/code) | `settings.json`, hooks, skills, memory, rules, agents |
+| `ai/` | Shared (Claude + Codex) | `PERSONAL.md`, `guardrails.md`, `rules/`, `memory/`, `skills/`, `AGENTS.manifest` |
+| `claude/` | [Claude Code](https://claude.ai/code) | `CLAUDE.md`, `DEVGUARD.md`, `RTK.md`, `settings.json`, `hooks/`, `agents/`, `commands/`, `skills/` (Claude-only) |
+| `codex/` | [Codex CLI](https://developers.openai.com/codex/) | `config.toml.template`, `skills/` (Codex-only), `scripts/` |
 | `ghostty/` | [Ghostty](https://ghostty.org/) | `config`, `shaders/` (cursor animation) |
 | `nvim/` | Neovim | `init.lua`, `lua/plugins/` |
 | `tmux/` | tmux | `tmux.conf`, `scripts/`, `status/` |
 | `zsh/` | Zsh | `.zshrc`, `custom/plugins/` |
 | `.ideavimrc` | IdeaVim (JetBrains) | Standalone file |
+
+### AI assistant 3-tier layout
+
+`ai/` is the single source of truth for tool-agnostic content (rules, memory, most skills). `claude/` and `codex/` hold per-tool deploy logic and tool-only files. The orchestrator at `ai/scripts/bootstrap.sh` calls each tool's bootstrap. See [`ai/README.md`](ai/README.md), [`claude/README.md`](claude/README.md), [`codex/README.md`](codex/README.md).
 
 > Everything else under `~/.config/` is gitignored. See `.gitignore` for the allowlist.
 
@@ -27,6 +33,7 @@ Personal configuration files managed via `~/.config/` and synced with git.
 
 ```bash
 git clone --recurse-submodules <repo> ~/.config
+~/.config/ai/scripts/bootstrap.sh   # deploys both Claude + Codex (Codex skipped if not installed)
 ```
 
-For Claude Code specifically, see [`claude/README.md`](claude/README.md).
+For per-tool details: [`ai/`](ai/README.md), [`claude/`](claude/README.md), [`codex/`](codex/README.md).
