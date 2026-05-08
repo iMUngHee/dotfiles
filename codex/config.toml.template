@@ -19,8 +19,8 @@ status_line = [
   "weekly-limit",
   "current-dir",
   "git-branch",
-  "task-progress",
 ]
+terminal_title = ["spinner", "project", "task-progress"]
 
 [notice]
 fast_default_opt_out = true
