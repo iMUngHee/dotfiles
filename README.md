@@ -7,7 +7,7 @@ Personal configuration files managed via `~/.config/` and synced with git.
 | Directory | Tool | Key files |
 |-----------|------|-----------|
 | `ai/` | Shared (Claude + Codex) | `PERSONAL.md`, `guardrails.md`, `rules/`, `memory/`, `skills/`, `AGENTS.manifest` |
-| `claude/` | [Claude Code](https://claude.ai/code) | `CLAUDE.md`, `DEVGUARD.md`, `RTK.md`, `settings.json`, `hooks/`, `agents/`, `commands/`, `skills/` (Claude-only) |
+| `claude/` | [Claude Code](https://claude.ai/code) | `CLAUDE.md`, `DEVGUARD.md`, `settings.json`, `hooks/`, `agents/`, `commands/`, `skills/` (Claude-only) |
 | `codex/` | [Codex CLI](https://developers.openai.com/codex/) | `config.toml.template`, `skills/` (Codex-only), `scripts/` |
 | `ghostty/` | [Ghostty](https://ghostty.org/) | `config`, `shaders/` (cursor animation) |
 | `nvim/` | Neovim | `init.lua`, `lua/plugins/` |

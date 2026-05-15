@@ -6,9 +6,8 @@ Claude Code-only deploy logic and Claude-native files. Shared content lives in [
 
 ```
 claude/
-├── CLAUDE.md                   # Entry point — @imports PERSONAL/guardrails (from ai/) + DEVGUARD/RTK/MEMORY (claude-only)
+├── CLAUDE.md                   # Entry point — @imports PERSONAL/guardrails (from ai/) + DEVGUARD/MEMORY (claude-only)
 ├── DEVGUARD.md                 # Claude-only addendum (Skill Compliance, /design routing) — shared base in ai/guardrails.md
-├── RTK.md                      # RTK (Rust Token Killer) reference — Claude-only (PreToolUse hook based)
 ├── settings.json               # Claude Code settings (permissions, hooks, plugins)
 ├── rules/
 │   └── claude-subagent-trust.md # Claude-only rule (subagent dispatch trust)
@@ -46,7 +45,7 @@ git clone <repo> ~/.config
 
 Bootstrap will:
 
-1. Symlink `ai/PERSONAL.md`, `ai/guardrails.md` and `claude/{CLAUDE,DEVGUARD,RTK}.md` into `~/.claude/`
+1. Symlink `ai/PERSONAL.md`, `ai/guardrails.md` and `claude/{CLAUDE,DEVGUARD}.md` into `~/.claude/`
 2. Symlink `hooks/`, `commands/`, `agents/` (wholesale dir symlinks, Claude-only) into `~/.claude/`
 3. Per-file symlinks for `rules/` (merged ai/ + claude/) and `memory/` (merged ai/ + claude/ + ai/private)
 4. Auto-generate `~/.claude/MEMORY.md` (Shared / Claude-only / Private sections, with `AUTO-GENERATED` header)
@@ -73,7 +72,7 @@ ai/scripts/bootstrap.sh              # repo → local (re-deploy)
 
 | Synced (git) | Local-only |
 |---|---|
-| `claude/CLAUDE.md`, `DEVGUARD.md`, `RTK.md`, `settings.json` | `model` in settings.json |
+| `claude/CLAUDE.md`, `DEVGUARD.md`, `settings.json` | `model` in settings.json |
 | Hooks, commands, rules, agents, extensions, notifier source | `policy-limits.json`, `tool-failures.log` |
 | Public skills + memory files | `ai/skills/private/` (work-only), `ai/memory/private/` (work-only) |
 | `claude/scripts/`, `ai/scripts/`, `codex/scripts/` | `~/.claude/MEMORY.md` (regenerated) |
