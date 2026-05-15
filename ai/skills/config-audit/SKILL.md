@@ -12,7 +12,7 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 ### 1. Tier violation
 - A file in `claude/` whose body has NO Claude-specific dependency (no slash commands, no `Agent(subagent_type=...)`, no `EnterPlanMode`/`EnterWorktree`, no `~/.claude/`-only paths, no settings.json permissions) → suggest moving to `ai/`.
 - A file in `codex/` whose body has NO Codex-specific dependency (no sandbox modes, no `codex exec`, no `~/.agents/skills/`, no `config.toml [mcp_servers.*]`-only refs) → suggest moving to `ai/`.
-- A file in `ai/` whose body uses tool-only tokens or systems → split the tool-specific portion into the tool's directory.
+- A file in `ai/` whose body uses tool-only tokens or systems → split the tool-specific portion into the tool's directory. Exception: `ai/README.md` may reference tool-specific systems when explicitly comparing the two tools.
 
 ### 2. Prefix violation
 - File or skill directory directly under `claude/{rules,memory,skills}/` without `claude-` prefix → FAIL (move with rename).
@@ -20,7 +20,7 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 - Any file under `ai/` with `claude-` or `codex-` prefix → FAIL (prefix is for tool-specific tiers only).
 
 ### 3. AGENTS.manifest drift
-- A file in `ai/` (excluding `ai/skills/`, `ai/scripts/`, `ai/lib/`, `ai/.gitignore`, `ai/AGENTS.manifest` itself) NOT listed in `ai/AGENTS.manifest` → WARN (Codex will not see this file). Same as `ai/scripts/sync-back.sh --strict` would catch.
+- A file in `ai/` (excluding `ai/skills/`, `ai/scripts/`, `ai/lib/`, `ai/.gitignore`, `ai/AGENTS.manifest` itself, `ai/README.md`) NOT listed in `ai/AGENTS.manifest` → WARN (Codex will not see this file). Same as `ai/scripts/sync-back.sh --strict` would catch.
 - A line in `ai/AGENTS.manifest` whose target file does not exist → FAIL.
 - `feedback_token_substitution.md` not the first memory entry in the manifest → FAIL (Codex must see token rules before any token-using file).
 

@@ -7,7 +7,7 @@ model: sonnet
 disable-model-invocation: true
 ---
 
-Manage per-task document links. Stored as a single markdown file per task in `~/.config/claude/skills/task-context/tasks/<KEY>.md`. The pointer to the active task lives in `tasks/.current`.
+Manage per-task document links. Stored as a single markdown file per task in `~/.config/ai/skills/task-context/tasks/<KEY>.md`. The pointer to the active task lives in `tasks/.current`.
 
 Arguments: $ARGUMENTS
 
@@ -127,7 +127,7 @@ List all registered task keys, marking the current one.
 
 1. List keys:
    ```bash
-   ls ~/.config/claude/skills/task-context/tasks/*.md 2>/dev/null | xargs -I{} basename {} .md
+   ls ~/.config/ai/skills/task-context/tasks/*.md 2>/dev/null | xargs -I{} basename {} .md
    ```
 2. Read `.current` for the active key.
 3. Output one key per line; prefix the current key with `* `.
@@ -139,7 +139,7 @@ Open the web GUI for full link management (Label, URL, Triggers, Summary).
 
 1. Install dependencies if needed:
    ```bash
-   cd ~/.config/claude/skills/task-context && [[ -d node_modules ]] || npm install
+   cd ~/.config/ai/skills/task-context && [[ -d node_modules ]] || npm install
    ```
 2. Check port:
    ```bash
@@ -151,7 +151,7 @@ Open the web GUI for full link management (Label, URL, Triggers, Summary).
    ```
 3. Start server in background:
    ```bash
-   cd ~/.config/claude/skills/task-context && ./node_modules/.bin/tsx server.ts
+   cd ~/.config/ai/skills/task-context && ./node_modules/.bin/tsx server.ts
    ```
    Use `run_in_background: true`.
 4. Wait 2 seconds for server startup, then open browser:
@@ -168,7 +168,7 @@ Open the web GUI for full link management (Label, URL, Triggers, Summary).
 
 ## Fetch Routing
 
-Use `WebFetch` by default. Prefer the matching MCP server for authenticated/internal hosts. The naver-internal routing table lives in `~/.config/claude/memory/private/reference_naver_tools.md`; it is loaded into context via `MEMORY.private.md`.
+Use `WebFetch` by default. Prefer the matching MCP server for authenticated/internal hosts. The naver-internal routing table lives in `~/.config/ai/memory/private/reference_naver_tools.md`; it is loaded into context via `MEMORY.private.md`.
 
 On fetch failure, use `(fetch 실패)` as the Summary. Never block the add/annotate flow on a single fetch failure.
 
