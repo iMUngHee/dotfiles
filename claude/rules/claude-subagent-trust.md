@@ -10,6 +10,10 @@ Do not spawn a subagent for work completable in a single response. Dispatch only
 - Isolating heavy context from the main thread (e.g., reading large files for summary)
 - Delegating to a specialized agent (pre-commit-verifier, Explore, etc.)
 
+## Parallel Dispatch Criteria
+
+Parallelize when 3+ independent failures exist in different subsystems with no shared state. Don't parallelize when failures might be related or agents would edit the same files.
+
 ## Before Dispatch
 
 1. Define exact scope (files, line ranges, what to change vs flag)
