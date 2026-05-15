@@ -1,6 +1,6 @@
 #!/bin/bash
 # claude/scripts/bootstrap.sh — deploy claude/ + ai/ shared content into ~/.claude/.
-# - md files (PERSONAL, guardrails, RTK, DEVGUARD, CLAUDE) are symlinked from
+# - md files (PERSONAL, guardrails, DEVGUARD, CLAUDE) are symlinked from
 #   ai/ or claude/. Tokens stay in source; the model substitutes per
 #   ai/memory/feedback_token_substitution.md.
 # - rules/ and memory/ are merged via per-file symlinks (ai/ + claude/).
@@ -31,7 +31,7 @@ mkdir -p "$CLAUDE_DIR"
 echo "Linking md files..."
 ln -sfn "$AI_DIR/PERSONAL.md"     "$CLAUDE_DIR/PERSONAL.md"
 ln -sfn "$AI_DIR/guardrails.md"   "$CLAUDE_DIR/guardrails.md"
-for f in CLAUDE.md RTK.md DEVGUARD.md; do
+for f in CLAUDE.md DEVGUARD.md; do
     ln -sfn "$REPO_DIR/$f" "$CLAUDE_DIR/$f"
 done
 ln -sfn "$REPO_DIR/extensions/statusline.sh" "$CLAUDE_DIR/statusline.sh"
