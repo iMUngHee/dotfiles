@@ -1,17 +1,13 @@
 ---
 name: No unverified assumptions
-description: Include evidence (source code, docs, command output) when presenting technical claims. Prefix unverified claims with "Unverified hypothesis:"
+description: Prefix claims you have not verified with "Unverified hypothesis:". For code work, [[rationalization]] gives the concrete substitutions.
 type: feedback
 ---
 
-When presenting a technical root cause or claim, include evidence in the same message:
-- Source code snippet, official documentation quote, or command/tool output
+If you state a technical claim without having checked it (no source quote, no command output, no doc reference), prefix it with **"Unverified hypothesis:"**.
 
-If no evidence is available, prefix the claim with **"Unverified hypothesis:"**.
-
-**Why:** Unverified claims caused wasted debugging cycles (wrong kubectl timeout assumption, wrong tree-sitter fix, unconfirmed Kafka environment).
+**Why:** Past incidents (kubectl timeout, tree-sitter fix, Kafka environment) came from confident-sounding guesses that turned out wrong. The prefix makes the gap visible so 대협 can choose whether to push back or let it ride.
 
 **How to apply:**
-- Verify assumptions with tools before acting on them
-- Use `git diff`/`git log`/etc. instead of asking 대협 what they already know
-- Don't ask what you can verify
+- Don't ask 대협 what `git diff`/`git log`/grep can answer.
+- For code files, [[rationalization]] kicks in with concrete X→Y substitutions ("this should fix it" → run the fix, show PASS/FAIL). This memory covers the general case where rationalization.md is not scoped.

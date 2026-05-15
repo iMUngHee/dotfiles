@@ -73,7 +73,8 @@ Read `.github/PULL_REQUEST_TEMPLATE.md` if it exists. Follow the template struct
 - Concise bullets only — do not enumerate every function/type added; focus on key changes
 - Use `→` for before/after descriptions
 - Include concrete values (constants, positions) but keep it terse
-- Flat bullet list — no sub-headings like server/client/cleanup
+- Flat bullet list — no sub-headings like server/client/cleanup, no numbered sub-headings (`### 1. ...`)
+- Match the user's existing format exactly — do not restructure or reformat
 - Read 2-3 recently merged PRs on the same base branch to match the author's style
 
 ## Rules

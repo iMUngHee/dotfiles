@@ -1,6 +1,6 @@
 # ai/AGENTS.manifest — concat order for ~/.codex/AGENTS.md build
 # One file per line, paths relative to ~/.config/ai/. Comments via `#`.
-# feedback_token_substitution.md MUST be the first memory entry.
+# feedback_ai_config_structure.md MUST be the first memory entry (carries token substitution).
 
 # Top-level metas
 PERSONAL.md
@@ -12,16 +12,11 @@ rules/diagnostics.md
 rules/rationalization.md
 rules/testing.md
 
-# Memory (token-substitution rules first — enables all later tokens)
-memory/feedback_token_substitution.md
-memory/feedback_3tier_layout.md
-memory/feedback_native_prefix_convention.md
-memory/feedback_bootstrap_deploy_model.md
-memory/feedback_agents_manifest.md
+# Memory (config-structure rules first — enables all later tokens)
+memory/feedback_ai_config_structure.md
 memory/feedback_no_guessing.md
 memory/feedback_prompt_format.md
 memory/feedback_reverse_grep.md
-memory/feedback_pr_body_format.md
 memory/feedback_code_review_per_commit.md
 memory/feedback_raw_urls.md
 memory/feedback_memory_english.md
