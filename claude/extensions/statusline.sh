@@ -325,7 +325,7 @@ render_fresh() {
 
 render_plan() {
     local state_file plan_path plan_full status color icon
-    state_file="$PWD/.claude/state/current.txt"
+    state_file="$PWD/.agents/state/current.txt"
     [ -f "$state_file" ] || return
 
     plan_path=$(awk 'NF { print; exit }' "$state_file")

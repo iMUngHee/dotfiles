@@ -10,4 +10,4 @@ If a user request matches a registered skill's trigger condition, invoke the ski
 
 ## Design Gate Invocation (Claude)
 
-When the shared Design Gate Trigger (in `~/.claude/guardrails.md`) fires, invoke the `/design` skill for the design/planning process. Do not improvise the planning workflow — the skill manages plan artifacts under `.claude/plans/` and the state pointer at `.claude/state/current.txt`.
+When the shared Design Gate Trigger (in `~/.claude/guardrails.md`) fires, invoke the `/design` skill for the design/planning process. Do not improvise the planning workflow — the skill manages plan artifacts under `.agents/plans/` and the state pointer at `.agents/state/current.txt`.
