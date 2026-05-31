@@ -15,10 +15,6 @@
 - **Context monitor**: At 50% and 65% context usage, warnings are injected via PostToolUse hook. Heed the warnings — autocompact triggers at 70%.
 - **Post-compact context**: After compaction, git branch, recent commits, and modified files are automatically injected. Do not re-query basic git state after compact.
 - **Prompt guard**: User prompts are scanned for accidentally pasted secrets (API keys, tokens, private keys). If blocked, remove the secret and retry.
-- **Tool failure log**: Bash/Edit/Write/MultiEdit tool failures are logged to `~/.claude/tool-failures.log` for debugging pattern analysis. No action required.
-- **Rate limit handling**: On rate limit, quota account switching is attempted automatically via StopFailure hook.
-- **Quota check**: On session start/clear, quota reset status is checked and account may be auto-switched back.
-- **Instruction logging**: Loaded instructions are logged for debugging via InstructionsLoaded hook. No action required.
 - **Subagent trust reminder**: On subagent stop, a trust reminder is automatically injected. Do not duplicate the reminder manually.
 
 ## After Compaction

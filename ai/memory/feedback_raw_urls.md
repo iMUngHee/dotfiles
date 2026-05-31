@@ -1,6 +1,6 @@
 ---
 name: Raw URLs in chat output
-description: Share links as bare URLs, not Markdown link syntax, so terminal rendering never hides the href.
+description: Share links as bare URLs, never Markdown [label](url), so the CLI never hides the href.
 type: feedback
 ---
 

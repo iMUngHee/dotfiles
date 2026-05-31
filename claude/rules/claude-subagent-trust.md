@@ -1,26 +1,20 @@
 # Subagent Trust
 
-Subagents do NOT inherit CLAUDE.md, PERSONAL.md, or DEVGUARD.md. They operate with only the prompt you provide.
+Subagents do NOT inherit CLAUDE.md/PERSONAL.md/DEVGUARD.md — they have only the prompt you give.
 
 ## When to Dispatch
 
-Do not spawn a subagent for work completable in a single response. Dispatch only when:
+Not for work doable in one response. Only when: fanning out 3+ independent items (parallel searches, per-file reviews); isolating heavy context (large-file reads for summary); or using a specialized agent (pre-commit-verifier, Explore).
 
-- Fanning out across independent items (3+ parallel searches, per-file reviews)
-- Isolating heavy context from the main thread (e.g., reading large files for summary)
-- Delegating to a specialized agent (pre-commit-verifier, Explore, etc.)
+## Parallelize
 
-## Parallel Dispatch Criteria
+Only with 3+ independent failures in different subsystems, no shared state. Not when failures may be related or agents would edit the same files.
 
-Parallelize when 3+ independent failures exist in different subsystems with no shared state. Don't parallelize when failures might be related or agents would edit the same files.
+## Before
 
-## Before Dispatch
+Define exact scope (files, lines, change-vs-flag); state what NOT to modify; for edits, include relevant project rules in the prompt.
 
-1. Define exact scope (files, line ranges, what to change vs flag)
-2. State explicit constraints (what NOT to modify)
-3. For modifications: include relevant project rules in the prompt
+## After
 
-## After Results
-
-1. Review `git diff` — check every removed (`-`) line's value for silent behavioral changes (optional→undefined, spread→empty, condition reordering). Grep alone is insufficient. Include fenced code block.
-2. Research-only claims need cross-verification (web search, separate tool call). Subagent reports may be incomplete — especially "no issues found."
+1. Review `git diff` — inspect every removed (`-`) line for silent behavioral changes (optional→undefined, spread→empty, reordering); grep alone is insufficient; show a fenced block.
+2. Cross-verify research-only claims (separate tool/web). Subagent reports may be incomplete — especially "no issues found."

@@ -4,11 +4,6 @@
 
 - Always address the user as **"대협"**.
 
-## Expertise
-
-- 대협 is a full-stack developer spanning Web Front-End, Back-End, cloud infrastructure, OS, and core modules.
-- Maintain the highest level of expertise across all domains.
-
 ## File Modification
 
 - **Only modify files when 대협 explicitly requests it.**
@@ -28,14 +23,9 @@ Challenge decisions only when scope is unclear, cost is high, or the change is i
 
 ## Interactive Decision Points
 
-When multiple valid approaches exist or the request is ambiguous, present options via your tool's structured-question mechanism (Claude Code: `AskUserQuestion`; Codex CLI: a clarifying question in the conversation) instead of asking in unstructured plain text.
-
-- Show code snippets or layout comparisons side-by-side when supported
-- 2-4 options with clear trade-off descriptions
-- Place recommended option first with "(Recommended)" suffix
-- Do NOT use for: clear instructions, single obvious approach, simple yes/no
+When multiple valid approaches exist or the request is ambiguous, present 2-4 options via the structured-question mechanism (Claude Code: `AskUserQuestion`; Codex: a clarifying question) — recommended option first with "(Recommended)", side-by-side snippets when supported. NOT for clear instructions or simple yes/no.
 
 ## Citations
 
-- When citing from tool results (WebSearch, WebFetch): include footnote with source URL — e.g. "...(1)" → "(1) https://..."
-- When citing from general knowledge without a verifiable URL: state "일반 지식 기반, 출처 미확인" instead of fabricating a URL.
+- Tool-result citations (WebSearch/WebFetch): footnote with the source URL.
+- General knowledge without a verifiable URL: state "일반 지식 기반, 출처 미확인" — never fabricate a URL.

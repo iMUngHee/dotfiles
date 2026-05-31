@@ -1,6 +1,6 @@
 ---
 name: Team agent vs subagent distinction
-description: Do not conflate team agents (TeamCreate + teammates) with subagents (.claude/agents/ definitions). They are different mechanisms with different lifecycles.
+description: Don't conflate team agents (TeamCreate) with subagents (.claude/agents/); different lifecycles.
 type: feedback
 ---
 

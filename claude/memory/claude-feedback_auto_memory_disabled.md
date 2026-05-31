@@ -1,6 +1,6 @@
 ---
 name: Auto memory intentionally disabled
-description: Auto memory is off by design; do not recommend enabling it
+description: Auto memory is off by design (prevents context bloat); do not recommend enabling it.
 type: feedback
 ---
 

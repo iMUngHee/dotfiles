@@ -1,6 +1,6 @@
 ---
 name: All persistent files in English only
-description: All AI-assistant config files (under {{TOOL_HOME}}, ai/, codex/, and project {{INSTRUCTIONS_FILE}}) must be written in English to reduce token usage
+description: All AI-config files (instructions, guardrails, skills, memory) in English to cut tokens; quoted triggers stay Korean.
 type: feedback
 ---
 
