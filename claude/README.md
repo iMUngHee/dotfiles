@@ -31,8 +31,9 @@ claude/
 ## Prerequisites
 
 - `jq` — required by bootstrap, RTK hook, statusline
-- `go` — optional, for shared AgentNotifier sender build
+- `go` — optional, for shared AgentNotifier sender build (required for the Linux daemon)
 - `swiftc` — optional on macOS, for shared AgentNotifier build (Xcode CLI tools)
+- `notify-send` (libnotify) — Linux only, for desktop notifications
 
 ## Setup
 
