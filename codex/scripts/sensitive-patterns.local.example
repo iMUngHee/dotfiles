@@ -1,0 +1,7 @@
+# Copy to sensitive-patterns.local (gitignored) and fill in your org's
+# internal hostnames/emails. Values are ERE fragments passed to `grep -Eo`.
+# Without sensitive-patterns.local present, the internal-hostname/email
+# checks in pre-commit-sensitive-scan.sh are skipped.
+
+INTERNAL_HOSTNAME_RE='([A-Za-z0-9.-]+\.)?corp\.example|grafana\.internal\.example'
+INTERNAL_EMAIL_RE='[A-Za-z0-9._%+-]+@corp\.example'
