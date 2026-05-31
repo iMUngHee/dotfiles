@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>ClaudeNotifier</string>
+    <string>AgentNotifier</string>
     <key>CFBundleIdentifier</key>
-    <string>com.clawd.notifier</string>
+    <string>com.agent.notifier.sky</string>
     <key>CFBundleName</key>
-    <string>ClaudeNotifier</string>
+    <string>AgentNotifier</string>
     <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+    <string>AgentNotifierIcon</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>1.2</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.2</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSUserNotificationAlertStyle</key>

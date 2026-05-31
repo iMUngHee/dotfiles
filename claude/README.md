@@ -14,14 +14,14 @@ claude/
 ├── memory/
 │   └── claude-feedback_*.md    # Claude-only feedback memories (claude- prefix)
 ├── skills/
-│   └── claude-worktree/        # Claude-only skill (EnterWorktree tool dependency)
+│   ├── claude-ask-codex/       # Claude-only skill; invokes as `ask-codex`
+│   └── claude-worktree/        # Claude-only skill; invokes as `worktree`
 ├── hooks/                      # PreToolUse, PostToolUse, UserPromptSubmit, Stop, etc. — see Hooks section
 │   └── lib/                    # Shared helpers
 ├── agents/                     # Subagent definitions (pre-commit-verifier, reviewer, verifier)
 ├── commands/                   # Slash command definitions
 ├── extensions/
 │   └── statusline.sh           # Status line (model, context, cost, quota/proxy status, plan widget)
-├── notifier/                   # macOS notification daemon (Swift)
 └── scripts/
     ├── bootstrap.sh            # Deploy ai/ + claude/ → ~/.claude/
     ├── sync-back.sh            # Pull repo-tracked keys back from ~/.claude/settings.json
@@ -31,8 +31,8 @@ claude/
 ## Prerequisites
 
 - `jq` — required by bootstrap, RTK hook, statusline
-- `python3` — required by notification hook
-- `swiftc` — optional, for ClaudeNotifier build (Xcode CLI tools)
+- `go` — optional, for shared AgentNotifier sender build
+- `swiftc` — optional on macOS, for shared AgentNotifier build (Xcode CLI tools)
 
 ## Setup
 
@@ -52,7 +52,8 @@ Bootstrap will:
 5. Per-skill symlinks in `~/.claude/skills/` from `ai/skills/`, `ai/skills/private/`, `claude/skills/`
 6. Copy executable scripts to `~/.claude/scripts/` (excluding bootstrap/sync-back)
 7. Merge `settings.json` (permissions union; repo keys override; local-only keys like `model` preserved)
-8. Build ClaudeNotifier (optional, skipped if `swiftc` not found)
+
+The top-level orchestrator (`ai/scripts/bootstrap.sh`) builds the shared AgentNotifier from `notifier/` after Claude/Codex deploy.
 
 ## Sync
 
@@ -73,7 +74,7 @@ ai/scripts/bootstrap.sh              # repo → local (re-deploy)
 | Synced (git) | Local-only |
 |---|---|
 | `claude/CLAUDE.md`, `DEVGUARD.md`, `settings.json` | `model` in settings.json |
-| Hooks, commands, rules, agents, extensions, notifier source | `policy-limits.json`, `tool-failures.log` |
+| Hooks, commands, rules, agents, extensions | `policy-limits.json`, `tool-failures.log` |
 | Public skills + memory files | `ai/skills/private/` (work-only), `ai/memory/private/` (work-only) |
 | `claude/scripts/`, `ai/scripts/`, `codex/scripts/` | `~/.claude/MEMORY.md` (regenerated) |
 
@@ -93,8 +94,8 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `rtk-rewrite.sh` | PreToolUse (Bash) | Rewrite commands through RTK for token savings |
 | `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files) |
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
-| `inject-context.sh` | UserPromptSubmit | Inject active plan info from `.claude/state/current.txt` |
-| `notify.sh` | Stop, Notification, PermissionRequest | macOS notification on completion or approval |
+| `inject-context.sh` | UserPromptSubmit | Inject active plan info from `.agents/state/current.txt` |
+| `notify.sh` | Stop, Notification, PermissionRequest | AgentNotifier desktop/tmux notification on completion or approval |
 | `stop-handler.sh` | Stop | Final gate — auto-format then type check before completion |
 | `on-rate-limit.sh` | StopFailure | Auto-switch CCS quota account on rate limit |
 | `check-quota-switch.sh` | SessionStart, SessionClear | Quota reset check, account swap if elapsed |

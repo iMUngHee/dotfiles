@@ -10,9 +10,12 @@
 #   notify.sh stop       <- Stop event
 #   notify.sh approval   <- Notification event
 #
-# Dependency: ~/Applications/ClaudeNotifier.app
+# Dependency: ~/Applications/AgentNotifier.app and ~/.agent-notifier/bin/agent-notifier-send
 
 MODE="${1:-stop}"
+SOCKET="${AGENT_NOTIFIER_SOCKET:-/tmp/agent-notifier.sock}"
+SEND="${AGENT_NOTIFIER_SEND:-$HOME/.agent-notifier/bin/agent-notifier-send}"
+DAEMON="${AGENT_NOTIFIER_DAEMON:-$HOME/.agent-notifier/bin/agent-notifier}"
 
 # --- tmux session tag ---
 tmux_tag() {
@@ -21,7 +24,7 @@ tmux_tag() {
 TAG=$(tmux_tag)
 
 # --- approval/stop deduplication marker ---
-MARKER_DIR="/tmp/claude-notify-markers"
+MARKER_DIR="/tmp/agent-notifier-markers"
 marker_path() {
     local key
     key=$(printf '%s' "${TAG:-default}" | tr -c 'a-zA-Z0-9._-' '_')
@@ -46,20 +49,32 @@ has_recent_approval() {
 }
 
 # --- daemon socket check and recovery ---
-LAUNCHD_LABEL="com.clawd.notifier"
+LAUNCHD_LABEL="com.agent.notifier"
 ensure_daemon() {
-    [ -S /tmp/claude-notifier.sock ] && return 0
-    # If launchd agent exists, restart via kickstart (avoids open -n which goes through Gatekeeper)
-    if launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" &>/dev/null; then
-        launchctl kickstart -k "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null
-    else
-        # Fallback when launchd agent is not registered
-        pkill -x ClaudeNotifier 2>/dev/null && sleep 0.2
-        open -n ~/Applications/ClaudeNotifier.app &>/dev/null &
-    fi
+    [ -S "$SOCKET" ] && return 0
+    case "$(uname -s)" in
+        Darwin)
+            # If launchd agent exists, restart via kickstart (avoids open -n which goes through Gatekeeper)
+            if launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" &>/dev/null; then
+                launchctl kickstart -k "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null
+            else
+                # Fallback when launchd agent is not registered
+                pkill -x AgentNotifier 2>/dev/null && sleep 0.2
+                open -n ~/Applications/AgentNotifier.app &>/dev/null &
+            fi
+            ;;
+        Linux)
+            if command -v systemctl &>/dev/null; then
+                systemctl --user start agent-notifier.service &>/dev/null || true
+            fi
+            if [ ! -S "$SOCKET" ] && [ -x "$DAEMON" ]; then
+                "$DAEMON" &>/dev/null &
+            fi
+            ;;
+    esac
     # Wait for socket creation (max 3s, polling every 0.2s)
     local i=0
-    while [ ! -S /tmp/claude-notifier.sock ] && [ $i -lt 15 ]; do
+    while [ ! -S "$SOCKET" ] && [ $i -lt 15 ]; do
         sleep 0.2
         i=$((i + 1))
     done
@@ -73,11 +88,13 @@ notify() {
     local tag_clean
     tag_clean=$(printf '%s' "${TAG:-}" | tr -d '[]')
     ensure_daemon
-    python3 "${0%/*}/notify_send.py" "$title" "$message" "$sound" "$tag_clean" 2>/dev/null
+    [ -x "$SEND" ] || return 0
+    "$SEND" "$title" "$message" "$sound" "$tag_clean" 2>/dev/null
 }
 
 # --- check if a terminal app is focused ---
 is_terminal_focused() {
+    [ "$(uname -s)" = "Darwin" ] || return 1
     local script="tell application \"System Events\" to get name of first application process whose frontmost is true"
     local frontmost
     frontmost=$(osascript -e "$script" 2>/dev/null)
@@ -103,9 +120,9 @@ is_watching_current_pane() {
 
 # --- tmux internal notification ---
 tmux_notify() {
-    # Target by session name from TAG — displayed on the most recent client attached to that session
     local session="${TAG%%:*}"
-    tmux display-message -d 4000 -t "$session" "$1" 2>/dev/null
+    local target="${session:-${TMUX_PANE:-${TAG:-}}}"
+    [ -n "$target" ] && tmux display-message -d 4000 -t "$target" "$1" 2>/dev/null || true
 }
 
 # --- event handling ---
