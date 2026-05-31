@@ -6,21 +6,122 @@ project_doc_max_bytes = 65536
 
 [tui]
 theme = "catppuccin-mocha"
+notifications = false
+vim_mode_default = true
 status_line_use_colors = true
 status_line = [
   "model-with-reasoning",
   "run-state",
+  "task-progress",
   "context-used",
-  "context-window-size",
-  "used-tokens",
-  "total-input-tokens",
-  "total-output-tokens",
   "five-hour-limit",
   "weekly-limit",
   "current-dir",
   "git-branch",
 ]
-terminal_title = ["spinner", "project", "task-progress"]
+terminal_title = ["app-name", "project-name", "run-state", "task-progress"]
 
 [notice]
 fast_default_opt_out = true
+
+[experimental_network.unix_sockets]
+"/tmp/agent-notifier.sock" = "allow"
+"/private/tmp/tmux-__UID__/default" = "allow"
+
+[hooks]
+
+[[hooks.UserPromptSubmit]]
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/prompt-guard.sh"
+timeout = 5
+statusMessage = "codex prompt guard"
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/inject-context.sh"
+timeout = 5
+statusMessage = "codex active plan context"
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/context-mode.sh userpromptsubmit"
+timeout = 5
+statusMessage = "context-mode prompt capture"
+
+[[hooks.PreToolUse]]
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/protect-files.sh"
+timeout = 5
+statusMessage = "codex file safety"
+
+[[hooks.PreToolUse]]
+matcher = "^(Bash|Read|Grep|WebFetch|Agent|mcp__context_mode__ctx_execute(_file)?)$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/context-mode.sh pretooluse"
+timeout = 5
+statusMessage = "context-mode routing"
+
+[[hooks.PostToolUse]]
+matcher = "^(Write|Edit|apply_patch)$"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/post-edit-pipeline.sh"
+timeout = 40
+statusMessage = "codex edit pipeline"
+
+[[hooks.PostToolUse]]
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/context-monitor.sh"
+timeout = 5
+statusMessage = "codex context monitor"
+
+[[hooks.PostToolUse]]
+matcher = "^(Bash|Read|WebFetch|apply_patch|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__.*)$"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/context-mode.sh posttooluse"
+timeout = 5
+statusMessage = "context-mode output capture"
+
+[[hooks.PreCompact]]
+
+[[hooks.PreCompact.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/context-mode.sh precompact"
+timeout = 10
+statusMessage = "context-mode precompact"
+
+[[hooks.SessionStart]]
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/context-mode.sh sessionstart"
+timeout = 5
+statusMessage = "context-mode session start"
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/stop-gate.sh"
+timeout = 45
+statusMessage = "codex final gate"
+
+[[hooks.PermissionRequest]]
+matcher = "*"
+
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "$HOME/.config/codex/hooks/notify.sh approval"
+timeout = 5
+statusMessage = "codex approval notify"

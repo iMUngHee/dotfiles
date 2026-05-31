@@ -1,8 +1,9 @@
 #!/bin/bash
 # codex/scripts/bootstrap.sh
 # - Build ~/.codex/AGENTS.md from ai/AGENTS.manifest with sed token expand.
+# - Append Codex-only instruction addendum from codex/DEVGUARD.md.
 # - Overlay ai/skills/* + ai/skills/private/* + codex/skills/* into ~/.agents/skills/.
-# - Merge codex/config.toml.template with the user's existing [mcp_servers.*] blocks.
+# - Merge codex/config.toml.template with user-managed local config blocks.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -22,8 +23,8 @@ expand_tokens_codex() {
         -e "s|{{TOOL_NAME_LC}}|codex|g" \
         -e "s|{{INSTRUCTIONS_FILE}}|AGENTS.md|g" \
         -e "s|{{CONFIG_FILE}}|config.toml|g" \
-        -e "s|{{PLAN_DIR}}|.codex/plans|g" \
-        -e "s|{{STATE_DIR}}|.codex/state|g"
+        -e "s|{{PLAN_DIR}}|.agents/plans|g" \
+        -e "s|{{STATE_DIR}}|.agents/state|g"
 }
 
 # ── 2. Strip frontmatter (the leading `---`...`---` block, if present) ──
@@ -55,6 +56,11 @@ TMP="$TARGET.tmp"
         strip_frontmatter < "$src" | expand_tokens_codex
         echo
     done < "$MANIFEST"
+    if [ -f "$CODEX_DIR/DEVGUARD.md" ]; then
+        echo "<!-- codex/DEVGUARD.md -->"
+        strip_frontmatter < "$CODEX_DIR/DEVGUARD.md" | expand_tokens_codex
+        echo
+    fi
 } > "$TMP"
 mv "$TMP" "$TARGET"
 SIZE=$(wc -c < "$TARGET" | tr -d ' ')
@@ -64,6 +70,13 @@ echo "Built ~/.codex/AGENTS.md ($SIZE B)"
 TARGET_CFG="$HOME/.codex/config.toml"
 TEMPLATE="$CODEX_DIR/config.toml.template"
 
+# Expand machine-specific placeholders (tmux socket uid) into a temp copy so the
+# committed template carries no hardcoded uid and stays portable across machines.
+TEMPLATE_EXPANDED="$(mktemp)"
+trap 'rm -f "$TEMPLATE_EXPANDED"' EXIT
+sed "s|tmux-__UID__|tmux-$(id -u)|g" "$TEMPLATE" > "$TEMPLATE_EXPANDED"
+TEMPLATE="$TEMPLATE_EXPANDED"
+
 if [ ! -f "$TARGET_CFG" ]; then
     cp "$TEMPLATE" "$TARGET_CFG"
     echo "Wrote ~/.codex/config.toml from template (first deploy)"
@@ -72,8 +85,15 @@ else
         echo "ERROR: yq required for config.toml deep merge (brew install yq)"
         exit 1
     fi
-    yq -p toml -o toml '. *= load("'"$TEMPLATE"'")' "$TARGET_CFG" > "$TARGET_CFG.tmp" \
-        && mv "$TARGET_CFG.tmp" "$TARGET_CFG"
+    if yq eval-all -p toml -o toml \
+        'select(fileIndex == 0) * select(fileIndex == 1) | del(.UserPromptSubmit, .PreToolUse, .PostToolUse, .PreCompact, .SessionStart, .Stop, .PermissionRequest)' \
+        "$TARGET_CFG" "$TEMPLATE" > "$TARGET_CFG.tmp"; then
+        mv "$TARGET_CFG.tmp" "$TARGET_CFG"
+    else
+        rm -f "$TARGET_CFG.tmp"
+        echo "ERROR: failed to merge config.toml with template" >&2
+        exit 1
+    fi
     echo "Merged config.toml (template keys enforced; user keys preserved)"
 fi
 
