@@ -97,11 +97,47 @@ alias vim="nvim"
 alias vi="nvim"
 alias ulock="open -a ScreenSaverEngine"
 
-# Preserve working directory across Claude Code sessions
+# Keep AI assistant tmux pane labels scoped while preserving the cwd.
+_ai_run_named_window() {
+	local window_label="$1"
+	local command_name="${2:-$1}"
+	shift
+	shift
+	local start_dir="$PWD"
+	local old_pane_label=""
+	local had_old_pane_label=0
+
+	if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
+		if old_pane_label="$(tmux show-options -p -v @ai_pane_label 2>/dev/null)"; then
+			had_old_pane_label=1
+		fi
+		tmux set-option -p @ai_pane_label "$window_label" 2>/dev/null || true
+	fi
+
+	{
+		command "$command_name" "$@"
+	} always {
+		if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
+			if (( had_old_pane_label )); then
+				tmux set-option -p @ai_pane_label "$old_pane_label" 2>/dev/null || true
+			else
+				tmux set-option -p -u @ai_pane_label 2>/dev/null || true
+			fi
+		fi
+		cd "$start_dir"
+	}
+}
+
 claude() {
-  local start_dir="$PWD"
-  command claude "$@"
-  cd "$start_dir"
+	_ai_run_named_window claude claude "$@"
+}
+
+ccs() {
+	_ai_run_named_window claude ccs "$@"
+}
+
+codex() {
+	_ai_run_named_window codex codex "$@"
 }
 
 # Utils
