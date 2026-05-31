@@ -1,7 +1,8 @@
 ---
-name: codex-worktree
+name: worktree
 description: "Worktree creation with dependency setup for Codex CLI workflows. Creates .codex/worktrees/<branch> with deps installed. TRIGGER 'create worktree' / 'worktree 만들어'. SKIP in-place edits where isolation isn't needed."
 argument-hint: "<target-branch> [base-branch]"
+disable-model-invocation: true
 ---
 
 Create and set up a git worktree under `.codex/worktrees/<target-branch>` for isolated Codex CLI sessions.

@@ -24,7 +24,7 @@ ai/
 
 ## Token substitution
 
-Files under `ai/` use double-mustache placeholders for tool-varying paths/names. The model substitutes them at runtime per `memory/feedback_token_substitution.md`:
+Files under `ai/` use double-mustache placeholders for tool-varying paths/names. The model substitutes them at runtime per `memory/feedback_ai_config_structure.md`:
 
 | Token | Claude Code | Codex CLI |
 |---|---|---|
@@ -33,10 +33,12 @@ Files under `ai/` use double-mustache placeholders for tool-varying paths/names.
 | `{{TOOL_NAME_LC}}` | `claude` | `codex` |
 | `{{INSTRUCTIONS_FILE}}` | `CLAUDE.md` | `AGENTS.md` |
 | `{{CONFIG_FILE}}` | `settings.json` | `config.toml` |
-| `{{PLAN_DIR}}` | `.claude/plans` | `.codex/plans` |
-| `{{STATE_DIR}}` | `.claude/state` | `.codex/state` |
+| `{{PLAN_DIR}}` | `.agents/plans` | `.agents/plans` |
+| `{{STATE_DIR}}` | `.agents/state` | `.agents/state` |
 
 Codex's AGENTS.md is built by sed-expanding these tokens at concat time (decisive). Claude's deploy keeps tokens intact and the model handles substitution in-context (live-validated 5/5 on tool calls).
+
+Shared skill artifacts use repo-local `.agents/plans` and `.agents/state`. Codex skill discovery uses `.agents/skills`; keep plans/state as siblings, never inside `.agents/skills`.
 
 ## Deploy model
 
@@ -51,9 +53,18 @@ Codex's AGENTS.md is built by sed-expanding these tokens at concat time (decisiv
 
 `~/.claude/MEMORY.md` and `~/.codex/AGENTS.md` are **auto-generated**. They carry an `AUTO-GENERATED` header. Do not edit them — edit the source files in `ai/` (or `claude/`, `codex/` for tool-only content) and re-run bootstrap.
 
+## Skill naming
+
+Tool-specific skill directories use native prefixes for ownership:
+
+- `claude/skills/claude-<id>/`
+- `codex/skills/codex-<id>/`
+
+The `SKILL.md` frontmatter `name:` is the user-facing invocation/display name. It may omit the native prefix when the shorter name is clear and does not conflict in that tool's deployed skill scope. Example: `codex/skills/codex-worktree/SKILL.md` can use `name: worktree`.
+
 ## AGENTS.manifest
 
-Codex sees no index file — it reads `AGENTS.md` body directly. `ai/AGENTS.manifest` declares the concat order. New `ai/*.md` files MUST be added to the manifest, otherwise Codex never sees them. `feedback_token_substitution.md` MUST stay first in the memory section so Codex receives token rules before any token-using content.
+Codex sees no index file — it reads `AGENTS.md` body directly. `ai/AGENTS.manifest` declares the concat order. New `ai/*.md` files MUST be added to the manifest, otherwise Codex never sees them. `feedback_ai_config_structure.md` MUST stay first in the memory section so Codex receives token rules before any token-using content.
 
 `ai/scripts/sync-back.sh` (or `claude/scripts/sync-back.sh --strict`) detects manifest drift and warns/fails accordingly.
 
@@ -62,7 +73,7 @@ Codex sees no index file — it reads `AGENTS.md` body directly. `ai/AGENTS.mani
 When adding new content, decide where it belongs:
 
 - `ai/`: tool-agnostic. No slash commands, no subagent dispatch, no `EnterPlanMode`/`EnterWorktree`, no `~/.claude/`-only paths.
-- `claude/`: depends on Claude-specific systems (subagents, slash commands, `.claude/plans/`/`.claude/state/`, hooks, settings.json permissions). Files use `claude-` prefix.
+- `claude/`: depends on Claude-specific systems (subagents, slash commands, hooks, settings.json permissions). Files use `claude-` prefix.
 - `codex/`: depends on Codex-specific systems (sandbox modes, `codex exec`, `~/.agents/skills/` discovery, `[mcp_servers.*]`). Files use `codex-` prefix.
 
 If unsure, default to `ai/` and tokenize tool-specific paths/names.

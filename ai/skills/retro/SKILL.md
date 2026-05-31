@@ -27,13 +27,13 @@ Before proposing ANY new item, count what exists:
 ```bash
 # Count active knowledge
 echo "=== Feedback memories ==="
-ls -1 ~/.claude/memory/feedback_*.md 2>/dev/null | wc -l
+ls -1 {{TOOL_HOME}}/memory/feedback_*.md 2>/dev/null | wc -l
 echo "=== Project memories ==="
-ls -1 ~/.claude/memory/project_*.md 2>/dev/null | wc -l
+ls -1 {{TOOL_HOME}}/memory/project_*.md 2>/dev/null | wc -l
 echo "=== Rules ==="
-ls -1 ~/.claude/rules/*.md 2>/dev/null | wc -l
+ls -1 {{TOOL_HOME}}/rules/*.md 2>/dev/null | wc -l
 echo "=== Private memories ==="
-ls -1 ~/.claude/memory/private/*.md 2>/dev/null | wc -l
+ls -1 {{TOOL_HOME}}/memory/private/*.md 2>/dev/null | wc -l
 ```
 
 Guidelines (not hard limits):
