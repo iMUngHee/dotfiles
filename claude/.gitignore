@@ -3,5 +3,6 @@
 skills/*/node_modules/
 skills-private/
 memory/private/
+MEMORY.md
 MEMORY.private.md
 hooks/.rtk-hook.sha256
