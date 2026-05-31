@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # UserPromptSubmit hook: inject the current plan as additional context.
 #
-# Reads `.claude/state/current.txt` (a single-line plan path) and looks up the
+# Reads `.agents/state/current.txt` (a single-line plan path) and looks up the
 # plan's frontmatter `status` to emit a status-aware label:
 #   draft  → ⚙️ draft: <title> — <path>
 #   active → ▶️ active: <title> — <path>
@@ -16,7 +16,7 @@ set -euo pipefail
 cat > /dev/null
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-STATE_FILE="$PROJECT_DIR/.claude/state/current.txt"
+STATE_FILE="$PROJECT_DIR/.agents/state/current.txt"
 
 # No state pointer → nothing to inject
 [[ -f "$STATE_FILE" ]] || exit 0

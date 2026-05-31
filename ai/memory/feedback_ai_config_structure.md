@@ -1,6 +1,6 @@
 ---
 name: ai config structure (3-tier, prefix, token, deploy, manifest)
-description: Core rules for ~/.config/ai/, claude/, codex/ — layout, deploy model, prefix convention, AGENTS.manifest ordering, and double-mustache token substitution. Token rules MUST be read first to enable later tokens.
+description: ~/.config 3-tier (ai/claude/codex): layout, deploy model, prefix, AGENTS.manifest order, token substitution. Must load first.
 type: feedback
 ---
 
@@ -20,3 +20,9 @@ Files inside `claude/` or `codex/` get a `claude-` / `codex-` prefix. Files in `
 
 ## Token substitution
 `ai/` files use `{{double-mustache}}` placeholders for tool-varying paths/names. Replace with actual values when referencing, writing, or executing commands containing them.
+
+Shared plan/state tokens are intentionally tool-agnostic:
+- `PLAN_DIR` placeholder -> `.agents/plans`
+- `STATE_DIR` placeholder -> `.agents/state`
+
+Codex skill discovery uses `.agents/skills`. Keep `.agents/plans`, `.agents/state`, and `.agents/skills` as separate sibling directories.

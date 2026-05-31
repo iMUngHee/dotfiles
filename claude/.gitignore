@@ -1,6 +1,5 @@
 .spa-auth/
 .claude/
-.claude/state/
 skills/*/node_modules/
 skills-private/
 memory/private/

@@ -26,9 +26,9 @@ git diff --name-only HEAD~1 2>/dev/null
 Detect the active plan for the current branch. Used solely by **Scope Creep** (Check 5). Failure to find a plan is NOT an error — Scope Creep simply skips.
 
 ```bash
-# Active plan = path in `.claude/state/current.txt` whose frontmatter status is `active`.
+# Active plan = path in `.agents/state/current.txt` whose frontmatter status is `active`.
 # `draft` plans are NOT yet committed-to (user has not promoted), so Scope Creep should skip them.
-STATE_FILE=".claude/state/current.txt"
+STATE_FILE=".agents/state/current.txt"
 PLAN=""
 if [ -f "$STATE_FILE" ]; then
   p=$(awk 'NF { print; exit }' "$STATE_FILE")
@@ -115,7 +115,7 @@ Compare the staged file list against the plan's `files_affected` and `title`:
 False-positive suppression:
 - If `files_affected` is empty or has a single entry, skip (plan is too coarse to compare).
 - If staged file count ≤ 2, skip (small changes generate noise).
-- Always treat the following paths as OK regardless of the plan: `.claude/plans/*.md`, `MEMORY.md`, `MEMORY.private.md`, `memory/**/*.md` (these are meta-work that supports any plan).
+- Always treat the following paths as OK regardless of the plan: `.agents/plans/*.md`, `MEMORY.md`, `MEMORY.private.md`, `memory/**/*.md` (these are meta-work that supports any plan).
 
 ### 6. Convention Drift
 
