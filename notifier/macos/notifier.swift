@@ -28,15 +28,13 @@ class NotifierDelegate: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    // MARK: - UNUserNotificationCenterDelegate
-
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let tag = response.notification.request.content.userInfo["tag"] as? String ?? ""
-        focusGhostty(tag: tag)
+        focusTerminal(tag: tag)
         completionHandler()
     }
 
@@ -48,16 +46,60 @@ class NotifierDelegate: NSObject, UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound])
     }
 
-    // MARK: - Focus
-
-    private func focusGhostty(tag: String) {
+    private func focusTerminal(tag: String) {
         run("/usr/bin/osascript", ["-e", "tell application \"Ghostty\" to activate"])
         let target = tag.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
         guard !target.isEmpty else { return }
-        // switch-client is ineffective in daemon context (no attached client)
-        // select-window / select-pane talk directly to the tmux server, so they work from daemons
         run(tmuxPath, ["select-window", "-t", target])
-        run(tmuxPath, ["select-pane",   "-t", target])
+        run(tmuxPath, ["select-pane", "-t", target])
+    }
+
+    private func isTerminalFrontmost() -> Bool {
+        guard let frontmost = NSWorkspace.shared.frontmostApplication else { return false }
+        let names = [
+            "Terminal", "iTerm2", "Warp", "kitty", "Alacritty",
+            "Hyper", "Ghostty", "ghostty", "WezTerm"
+        ]
+        let bundleIds = [
+            "com.apple.Terminal",
+            "com.googlecode.iterm2",
+            "dev.warp.Warp-Stable",
+            "net.kovidgoyal.kitty",
+            "org.alacritty",
+            "co.zeit.hyper",
+            "com.mitchellh.ghostty",
+            "com.github.wez.wezterm"
+        ]
+        return names.contains(frontmost.localizedName ?? "")
+            || bundleIds.contains(frontmost.bundleIdentifier ?? "")
+    }
+
+    private func normalizeTmuxTarget(_ target: String) -> String {
+        let clean = target.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        guard !clean.isEmpty else { return "" }
+        let out = capture(tmuxPath, ["display-message", "-p", "-t", clean, "#S:#I.#P"])
+        return out.isEmpty ? clean : out
+    }
+
+    private func isWatchingCurrentPane(target: String) -> Bool {
+        let normalized = normalizeTmuxTarget(target)
+        guard !normalized.isEmpty else { return false }
+        let out = capture(tmuxPath, ["list-panes", "-s", "-F", "#{window_active}#{pane_active} #S:#I.#P"])
+        for line in out.split(separator: "\n") {
+            if line.hasPrefix("11 ") {
+                return String(line.dropFirst(3)) == normalized
+            }
+        }
+        return false
+    }
+
+    private func displayTmuxMessage(target: String, message: String) {
+        let normalized = normalizeTmuxTarget(target)
+        let clean = (normalized.isEmpty ? target : normalized)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        guard !clean.isEmpty else { return }
+        let session = clean.split(separator: ":", maxSplits: 1).first.map(String.init) ?? clean
+        run(tmuxPath, ["display-message", "-d", "4000", "-t", session, message])
     }
 
     @discardableResult
@@ -70,10 +112,27 @@ class NotifierDelegate: NSObject, UNUserNotificationCenterDelegate {
         return p.terminationStatus
     }
 
-    // MARK: - Unix Domain Socket Server
+    private func capture(_ path: String, _ args: [String]) -> String {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        do {
+            try p.run()
+            p.waitUntilExit()
+        } catch {
+            return ""
+        }
+        return String(
+            data: pipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
 
     private func startSocketServer() {
-        let socketPath = "/tmp/claude-notifier.sock"
+        let socketPath = ProcessInfo.processInfo.environment["AGENT_NOTIFIER_SOCKET"] ?? "/tmp/agent-notifier.sock"
         try? FileManager.default.removeItem(atPath: socketPath)
 
         let serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -85,7 +144,8 @@ class NotifierDelegate: NSObject, UNUserNotificationCenterDelegate {
             socketPath.withCString { src in
                 _ = strncpy(
                     UnsafeMutableRawPointer(ptr).assumingMemoryBound(to: CChar.self),
-                    src, 104
+                    src,
+                    104
                 )
             }
         }
@@ -114,15 +174,23 @@ class NotifierDelegate: NSObject, UNUserNotificationCenterDelegate {
         let data = Data(buf[..<n])
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] else { return }
 
-        let title = json["title"] ?? "Claude Code"
-        let body  = json["body"]  ?? ""
+        let title = json["title"] ?? "Agent"
+        let body = json["body"] ?? ""
         let sound = json["sound"] ?? "Glass"
-        let tag   = json["tag"]   ?? ""
+        let tag = json["tag"] ?? ""
+        let delivery = json["delivery"] ?? ""
+        let tmuxMessage = json["tmuxMessage"] ?? "\(title) - \(body)"
 
         DispatchQueue.main.async {
+            if delivery == "focus-aware", !tag.isEmpty, self.isTerminalFrontmost() {
+                if !self.isWatchingCurrentPane(target: tag) {
+                    self.displayTmuxMessage(target: tag, message: tmuxMessage)
+                }
+                return
+            }
             let content = UNMutableNotificationContent()
             content.title = title
-            content.body  = body
+            content.body = body
             content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: sound))
             content.userInfo = ["tag": tag]
             let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)

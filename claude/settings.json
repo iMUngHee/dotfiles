@@ -93,7 +93,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Bash|Read|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__"
+        "matcher": "Bash|Read|WebFetch|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__"
       }
     ],
     "PostToolUseFailure": [
@@ -310,7 +310,7 @@
       "Bash(open*)",
       "Bash(pbcopy*)",
       "Bash(pbpaste*)",
-      "Bash(pkill -x ClaudeNotifier*)",
+      "Bash(pkill -x AgentNotifier*)",
       "Bash(pnpm build*)",
       "Bash(pnpm run*)",
       "Bash(pnpm test*)",

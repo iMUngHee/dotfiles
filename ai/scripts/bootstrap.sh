@@ -50,11 +50,29 @@ else
     echo "Skipped codex bootstrap (codex CLI not installed)."
 fi
 
-# ── 4. Sanity ──
+# ── 4. Shared notifier ──
+case "$(uname -s)" in
+    Darwin)
+        if command -v swiftc &>/dev/null; then
+            "$ROOT_DIR/notifier/macos/build.sh"
+        else
+            echo "Skipped AgentNotifier macOS build (swiftc not found)."
+        fi
+        ;;
+    Linux)
+        if command -v go &>/dev/null; then
+            "$ROOT_DIR/notifier/linux/build.sh"
+        else
+            echo "Skipped AgentNotifier Linux build (go not found)."
+        fi
+        ;;
+esac
+
+# ── 5. Sanity ──
 "$AI_DIR/lib/verify-no-residual-tokens.sh"
 "$AI_DIR/lib/verify-agents-md-size.sh"
 
-# ── 5. Notice ──
+# ── 6. Notice ──
 cat <<'EOF'
 
 === Bootstrap complete ===
@@ -63,5 +81,6 @@ Edit source files under ~/.config/ai/, claude/, codex/ — NOT the deployed copi
 - ~/.codex/AGENTS.md is generated (concat+sed expand). Direct edits are lost.
 - ~/.claude/MEMORY.md is generated. Direct edits are lost.
 - Skills overlay: ~/.claude/skills/, ~/.agents/skills/ (Codex).
+- AgentNotifier is shared by Claude and Codex hooks.
 - New ai/*.md? Add to ai/AGENTS.manifest before next bootstrap.
 EOF

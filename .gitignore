@@ -6,6 +6,7 @@
 !nvim/
 !tmux/
 !zsh/
+!notifier/
 !.ideavimrc
 !claude/
 !ai/
@@ -30,9 +31,16 @@ zsh/**/.git
 
 # claude
 claude/hooks/.rtk-hook.sha256
-claude/notifier/ClaudeNotifier
 claude/memory/private/
 claude/MEMORY.private.md
 claude/*.lock
 claude/*.tmp
 claude/.claude
+
+# notifier
+notifier/macos/AgentNotifier
+notifier/linux/agent-notifier
+notifier/linux/agent-notifier-send
+
+# codex — site-local sensitive patterns (never committed)
+codex/scripts/sensitive-patterns.local
