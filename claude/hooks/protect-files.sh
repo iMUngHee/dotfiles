@@ -16,6 +16,9 @@ EXACT_PATTERNS=("package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "g
 SEGMENT_PATTERNS=("credentials" "secrets")
 # Substring patterns: match anywhere in the path
 SUBSTRING_PATTERNS=("-secret")
+# Allowlisted basenames that legitimately contain a blocked substring
+# (OS secret-store helpers). Referencing or editing these is permitted.
+ALLOWLIST_BASENAMES=("mcp-secret-env.sh" "mcp-secret-set.sh")
 
 # Check a single file path against all pattern categories
 check_file() {
@@ -23,6 +26,12 @@ check_file() {
   [[ -z "$f" ]] && return 1
   local base
   base="$(basename "$f")"
+
+  # Allowlist: OS secret-store helpers legitimately contain a blocked
+  # substring ('-secret'). Referencing or editing them is permitted.
+  for a in "${ALLOWLIST_BASENAMES[@]}"; do
+    [[ "$base" == "$a" ]] && return 1
+  done
 
   # Extension patterns: basename ends with pattern
   for p in "${EXT_PATTERNS[@]}"; do
@@ -70,6 +79,13 @@ check_command() {
   local cmd="$1"
   [[ -z "$cmd" ]] && return 1
 
+  # Mask allowlisted helper basenames before matching so referencing the OS
+  # secret-store helpers is not blocked by the '-secret' substring.
+  local scan="$cmd"
+  for a in "${ALLOWLIST_BASENAMES[@]}"; do
+    scan="${scan//$a/__allowlisted__}"
+  done
+
   # Build a combined list of all pattern strings to search in the command
   local all_patterns=()
   all_patterns+=("${EXT_PATTERNS[@]}")
@@ -80,7 +96,7 @@ check_command() {
   all_patterns+=(".env.")
 
   for p in "${all_patterns[@]}"; do
-    if [[ "$cmd" == *"$p"* ]]; then
+    if [[ "$scan" == *"$p"* ]]; then
       echo "Blocked: command references sensitive pattern '$p'." >&2
       return 0
     fi
