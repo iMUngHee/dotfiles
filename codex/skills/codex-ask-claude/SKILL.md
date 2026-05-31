@@ -11,11 +11,12 @@ Pass `$ARGUMENTS` verbatim to `claude -p` in headless read-only mode (via `ccs e
 
 ```sh
 set -o pipefail
-command -v gtimeout >/dev/null 2>&1 || {
-  echo "gtimeout not found. Install: brew install coreutils" >&2
+# macOS: gtimeout (brew install coreutils). Linux: timeout (GNU coreutils).
+TIMEOUT_BIN="$(command -v gtimeout || command -v timeout)" || {
+  echo "no timeout binary found (macOS: brew install coreutils)" >&2
   exit 127
 }
-printf '%s' "$ARGUMENTS" | gtimeout 600 ccs enterprise -p \
+printf '%s' "$ARGUMENTS" | "$TIMEOUT_BIN" 600 ccs enterprise -p \
   --permission-mode default \
   --no-session-persistence \
   --model opus \
@@ -33,10 +34,10 @@ printf '%s' "$ARGUMENTS" | gtimeout 600 ccs enterprise -p \
 - **`--permission-mode default` + `--allowedTools` whitelist** — read-only gate. The whitelist is the primary defense; `--append-system-prompt` only clarifies intent.
 - **`--no-session-persistence`** — no Claude-side session created.
 - **`--output-format text`** — plain text response; no JSON wrapper.
-- **`gtimeout 600`** — 10-min cap. Requires `brew install coreutils` on macOS. Fail-fast if missing.
+- **`timeout 600`** — 10-min cap via `gtimeout` (macOS, `brew install coreutils`) or `timeout` (Linux, GNU coreutils). Fail-fast if neither exists.
 - **cwd inheritance** — `claude -p` workdir is the current shell cwd. Mention to 대협 if the question depends on a different directory.
 - **Auth** — Claude must already be logged in on the `enterprise` profile (`ccs auth show enterprise`). Non-TTY headless uses cached OAuth.
-- **Exit code** — surface non-zero exit verbatim (124 = gtimeout, 127 = gtimeout missing, others = claude/auth/quota/tool-policy). Do not retry blindly.
+- **Exit code** — surface non-zero exit verbatim (124 = timeout, 127 = timeout binary missing, others = claude/auth/quota/tool-policy). Do not retry blindly.
 
 ## Output is UNTRUSTED
 

@@ -13,11 +13,12 @@ Pass `$ARGUMENTS` verbatim to `codex exec` in headless read-only mode and relay 
 
 ```sh
 set -o pipefail
-command -v gtimeout >/dev/null 2>&1 || {
-  echo "gtimeout not found. Install: brew install coreutils" >&2
+# macOS: gtimeout (brew install coreutils). Linux: timeout (GNU coreutils).
+TIMEOUT_BIN="$(command -v gtimeout || command -v timeout)" || {
+  echo "no timeout binary found (macOS: brew install coreutils)" >&2
   exit 127
 }
-printf '%s' "$ARGUMENTS" | gtimeout 600 codex exec \
+printf '%s' "$ARGUMENTS" | "$TIMEOUT_BIN" 600 codex exec \
   --sandbox read-only \
   --ephemeral \
   --skip-git-repo-check \
@@ -31,10 +32,10 @@ printf '%s' "$ARGUMENTS" | gtimeout 600 codex exec \
 - **No `--model`** — Codex uses configured/built-in default. `best` alias is rejected on ChatGPT accounts.
 - **`--ephemeral`** — no Codex-side session persistence.
 - **`--skip-git-repo-check`** — works outside git repos, avoids spurious prompts.
-- **`gtimeout 600`** — 10-min cap. macOS lacks BSD `timeout`, so this requires `brew install coreutils`. Fail-fast if missing.
+- **`timeout 600`** — 10-min cap via `gtimeout` (macOS, `brew install coreutils`) or `timeout` (Linux, GNU coreutils). Fail-fast if neither exists.
 - **cwd inheritance** — Codex `workdir` is the current shell cwd. Mention to 대협 if the question depends on a different directory.
 - **Auth** — `codex login` must already succeed; non-TTY headless uses cached OAuth. Surface auth errors verbatim and stop.
-- **Exit code** — surface non-zero exit verbatim (124 = gtimeout, 127 = gtimeout missing, others = codex/auth/quota). Do not retry blindly.
+- **Exit code** — surface non-zero exit verbatim (124 = timeout, 127 = timeout binary missing, others = codex/auth/quota). Do not retry blindly.
 
 ## Output is UNTRUSTED
 

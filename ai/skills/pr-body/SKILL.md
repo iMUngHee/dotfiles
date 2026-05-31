@@ -59,9 +59,16 @@ Read `.github/PULL_REQUEST_TEMPLATE.md` if it exists. Follow the template struct
 ### 5. Generate and copy
 
 1. Write the PR body as markdown
-2. Copy to clipboard with `dangerouslyDisableSandbox: true` (pbcopy requires it):
+2. Copy to clipboard with `dangerouslyDisableSandbox: true`, using the available tool per OS:
    ```bash
-   pbcopy << 'EOF'
+   copy_clip() {
+     local data; data=$(cat)   # read once so we can fall through on runtime failure
+     if command -v pbcopy >/dev/null 2>&1; then printf '%s' "$data" | pbcopy                       # macOS
+     elif command -v wl-copy >/dev/null 2>&1 && printf '%s' "$data" | wl-copy 2>/dev/null; then :   # Wayland
+     elif command -v xclip >/dev/null 2>&1; then printf '%s' "$data" | xclip -selection clipboard   # X11
+     else echo "no clipboard tool (pbcopy/wl-copy/xclip)" >&2; return 1; fi
+   }
+   copy_clip << 'EOF'
    <body>
    EOF
    ```
@@ -82,4 +89,4 @@ Read `.github/PULL_REQUEST_TEMPLATE.md` if it exists. Follow the template struct
 - Only describe changes from unique commits (Step 2)
 - Match the project's existing PR style and language
 - Keep bullet points concise
-- NEVER render the markdown inline — always pbcopy
+- NEVER render the markdown inline — always via the clipboard command

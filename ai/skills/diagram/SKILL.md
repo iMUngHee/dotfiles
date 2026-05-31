@@ -14,7 +14,17 @@ Create a Mermaid diagram for: $ARGUMENTS
 1. Generate clean, excalidraw-import-compatible Mermaid DSL (see compatibility rules below)
 2. Output the DSL in a ```mermaid fenced code block
 3. Save to `/tmp/diagram.mmd`
-4. Copy to clipboard: `cat /tmp/diagram.mmd | pbcopy`
+4. Copy to clipboard (`dangerouslyDisableSandbox: true`), using the available tool per OS:
+   ```bash
+   copy_clip() {
+     local data; data=$(cat)   # read once so we can fall through on runtime failure
+     if command -v pbcopy >/dev/null 2>&1; then printf '%s' "$data" | pbcopy                       # macOS
+     elif command -v wl-copy >/dev/null 2>&1 && printf '%s' "$data" | wl-copy 2>/dev/null; then :   # Wayland
+     elif command -v xclip >/dev/null 2>&1; then printf '%s' "$data" | xclip -selection clipboard   # X11
+     else echo "no clipboard tool (pbcopy/wl-copy/xclip)" >&2; return 1; fi
+   }
+   cat /tmp/diagram.mmd | copy_clip
+   ```
 
 ## Mermaid Type Selection
 

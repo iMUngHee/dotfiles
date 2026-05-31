@@ -27,6 +27,7 @@ fast_default_opt_out = true
 [experimental_network.unix_sockets]
 "/tmp/agent-notifier.sock" = "allow"
 "/private/tmp/tmux-__UID__/default" = "allow"
+"/tmp/tmux-__UID__/default" = "allow"
 
 [hooks]
 

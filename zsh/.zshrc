@@ -6,6 +6,8 @@
 
 if [ -x /opt/homebrew/bin/brew ]; then
 	eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+	eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
 
 # Shell core
@@ -88,14 +90,18 @@ source <(fzf --zsh)
 
 # $PATH
 export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"
-export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
+[ -d /opt/homebrew/opt/rustup/bin ] && export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 
 # Alias
 alias buu="brew update;brew upgrade"
 alias l="eza -alH --icons --git --color=always"
 alias vim="nvim"
 alias vi="nvim"
-alias ulock="open -a ScreenSaverEngine"
+if [[ "$OSTYPE" == darwin* ]]; then
+	alias ulock="open -a ScreenSaverEngine"
+else
+	alias ulock="loginctl lock-session"
+fi
 
 # Keep AI assistant tmux pane labels scoped while preserving the cwd.
 _ai_run_named_window() {
