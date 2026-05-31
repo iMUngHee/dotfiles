@@ -1,6 +1,6 @@
 ---
 name: Code review feature branches per-commit
-description: For feature branch code reviews, iterate per-commit via git show instead of reviewing the branch-wide diff
+description: Review feature branches commit-by-commit via git show, never the branch-wide diff.
 type: feedback
 ---
 

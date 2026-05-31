@@ -1,6 +1,6 @@
 ---
 name: Pre-commit scan invocation (Claude)
-description: Claude-specific invocation mechanism for the shared pre-commit sensitive-info scan rule — dispatch the pre-commit-verifier subagent
+description: Claude pre-commit scan mechanism: dispatch the pre-commit-verifier subagent.
 type: feedback
 ---
 

@@ -4,7 +4,7 @@
 # Set ENABLED=true to activate logging, false to silently skip
 # Always exits 0 — informational only, never blocks
 
-ENABLED=true
+ENABLED=false
 LOG_FILE="/tmp/claude/instructions-loaded.log"
 
 if [[ "$ENABLED" != "true" ]]; then

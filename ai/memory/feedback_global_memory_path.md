@@ -1,6 +1,6 @@
 ---
 name: Global memory storage path
-description: When 대협 asks to remember something "globally", save to the shared ~/.config/ai/memory/ source (not project-specific paths)
+description: Save 'global' memories to the shared ~/.config/ai/memory/ source, not project-specific paths.
 type: feedback
 ---
 

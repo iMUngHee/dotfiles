@@ -1,6 +1,6 @@
 ---
 name: Format-level instructions for agent rules
-description: When writing agent rules (CLAUDE.md, DEVGUARD.md, skills), use concrete output format requirements not abstract behavioral directives
+description: Write agent rules as concrete output-format requirements, not abstract behavioral directives.
 type: feedback
 ---
 

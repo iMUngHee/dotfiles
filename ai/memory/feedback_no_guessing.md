@@ -1,6 +1,6 @@
 ---
 name: No unverified assumptions
-description: Prefix claims you have not verified with "Unverified hypothesis:". For code work, [[rationalization]] gives the concrete substitutions.
+description: Prefix unverified technical claims with 'Unverified hypothesis:'. For code work see [[rationalization]].
 type: feedback
 ---
 

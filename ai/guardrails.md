@@ -2,35 +2,21 @@
 
 ## Verification Before Completion (HIGHEST PRIORITY)
 
-**No completion claim without showing evidence in the same message.**
+**No completion claim without evidence in the same message.** A text description is NOT verification — your response MUST contain a **fenced code block**:
 
-### What you MUST do after work
+- File edit → read the file back, show the result in a fenced block
+- Bug fix / build / run → include the terminal output in a fenced block
 
-- File edit → **read the file back** and include a **fenced code block** showing the result
-- Bug fix / build / run → include the **terminal output** as a fenced code block
-
-A text description alone is NOT verification. Your response must contain a fenced code block.
-
-### Forbidden completion words (without evidence)
-
-English: "should work", "should be fine", "probably", "likely", "seems to", "appears to", "I believe", "I think", "Done!", "Perfect!", "Great!", "All set!"
-
-Korean: "완료", "끝", "다 됐습니다", "처리했습니다", "반영했습니다"
-
-- If tempted to rationalize skipping verification, delete the rationalization and perform the action instead.
+Do not assert completion with hedge or closure words ("should work", "probably", "seems to", "Done!", "완료", "처리했습니다", …) unless the evidence is shown. If tempted to rationalize skipping verification, perform the action instead.
 
 ### Absence Proofs
 
-When asserting absence ("no X", "clean", "empty", "nothing found", "not present", "there are no ..."):
+When asserting absence ("no X", "clean", "nothing found", …), show the exact command **and** its output as a fenced block, and the command's scope MUST match the assertion's scope:
 
-- Show the exact command or search used **and** its output as a fenced code block
-- The command's scope MUST match the assertion's scope:
-  - "No Co-Authored-By in history" → `git log --format=%B` (full body), NOT `--oneline`
-  - "No references to X" → grep across the full matching file set, not a single file
-  - "No stale dependencies" → inspect lockfile + package manifest, not just one
-- If the command cannot cover the full assertion scope, state the limitation explicitly and verify via the authoritative source (GitHub UI, `gh api`, remote registry, etc.)
+- "No Co-Authored-By in history" → `git log --format=%B` (full body), NOT `--oneline`
+- "No references to X" → grep the full matching file set, not a single file
 
-Absence is a stronger claim than presence — treat it accordingly.
+If the command cannot cover the full scope, state the limitation and verify via the authoritative source (GitHub UI, `gh api`, etc.). Absence is a stronger claim than presence.
 
 ## Scope Resolution
 

@@ -1,6 +1,6 @@
 ---
 name: Reverse grep after file modification
-description: After modifying a file, grep for references to that file across the project to catch sync issues
+description: After editing a config/rule file, grep for references to it to catch sync gaps.
 type: feedback
 ---
 
