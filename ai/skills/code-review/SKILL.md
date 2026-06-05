@@ -32,7 +32,7 @@ Dispatch to **`reviewer`** when:
 
 Dispatch to a separate context to keep the main thread clean:
 - **Claude Code**: `Agent(subagent_type: "reviewer", description: "<short>", prompt: "Base branch: <base>. Focus: <optional>. Branch: <current>.")`
-- **Codex CLI**: `codex exec` with the same focused prompt (Base branch / Focus / current branch). No subagent dispatch tool exists; spawn an exec subprocess instead.
+- **Codex CLI**: `codex exec` with the same focused prompt (Base branch / Focus / current branch). Codex's `multi_agent_v1.spawn_agent` is explicit-request-only (not for auto-dispatch), so spawn a `codex exec` subprocess instead.
 
 Return the delegated context's report directly — do NOT re-run per-commit analysis inline after dispatch.
 
