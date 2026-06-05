@@ -34,6 +34,8 @@ clipboard-write = allow
 # QoL
 mouse-hide-while-typing = true
 window-padding-balance = true
+copy-on-select = clipboard
+scrollback-limit = 10000
 
 # Keybindings
 keybind = super+ctrl+f=toggle_fullscreen
