@@ -7,11 +7,31 @@ if ! command -v jq &>/dev/null; then
   exit 2
 fi
 
+# Fix 5 (case-insensitive match): macOS has a case-insensitive filesystem, so
+# `.ENV`, `.Env`, `Credentials` resolve to the same file and would otherwise
+# bypass case-sensitive matching. Mirror the built-in toLowerCase() normalization.
+shopt -s nocasematch
+
 # --- Pattern categories (Fix 4) ---
 # Extension patterns: match at end of basename
-EXT_PATTERNS=(".env" ".pem" ".key" ".p12" ".pfx")
-# Exact filename patterns: match basename exactly
-EXACT_PATTERNS=("package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "go.sum" "bun.lock" "bun.lockb")
+EXT_PATTERNS=(".env" ".pem" ".key" ".p8" ".p12" ".pfx")
+# Exact filename patterns: match basename exactly. Blocked for BOTH read and
+# write — either integrity-critical (lockfiles) or token/key-bearing
+# (.npmrc/.netrc, id_rsa...), where even a read can exfiltrate.
+EXACT_PATTERNS=(
+  "package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "go.sum" "bun.lock" "bun.lockb"
+  ".npmrc" ".netrc"
+  "id_rsa" "id_dsa" "id_ecdsa" "id_ed25519"
+)
+# Write-protected config: blocked for Edit/Write/MultiEdit ONLY (Read and Bash
+# `source`/`git config` stay legitimate). These are arbitrary-code-execution or
+# tool-control vectors where the real risk is an injected WRITE, not a read.
+# NOTE: Bash redirects (e.g. `echo >> ~/.zshrc`) are intentionally NOT covered
+# here to avoid breaking `source ~/.zshrc`; Edit/Write are the primary AI path.
+WRITE_PROTECT_EXACT=(
+  ".zshrc" ".bashrc" ".bash_profile" ".zprofile" ".profile"
+  ".gitconfig" ".mcp.json" ".claude.json"
+)
 # Path segment patterns: match as a directory or filename component
 SEGMENT_PATTERNS=("credentials" "secrets")
 # Substring patterns: match anywhere in the path
@@ -23,6 +43,7 @@ ALLOWLIST_BASENAMES=("mcp-secret-env.sh" "mcp-secret-set.sh")
 # Check a single file path against all pattern categories
 check_file() {
   local f="$1"
+  local mode="${2:-write}"
   [[ -z "$f" ]] && return 1
   local base
   base="$(basename "$f")"
@@ -70,6 +91,16 @@ check_file() {
       return 0
     fi
   done
+
+  # Write-protected config files: enforced only when the tool is writing.
+  if [[ "$mode" == "write" ]]; then
+    for p in "${WRITE_PROTECT_EXACT[@]}"; do
+      if [[ "$base" == "$p" ]]; then
+        echo "Blocked: '$f' — write-protected config '$p' (read is allowed)." >&2
+        return 0
+      fi
+    done
+  fi
 
   return 1
 }
@@ -125,19 +156,27 @@ case "$TOOL" in
     fi
     [[ -z "$FILES" ]] && exit 0
     while IFS= read -r f; do
-      if check_file "$f"; then
+      if check_file "$f" write; then
         exit 2
       fi
     done <<< "$FILES"
     ;;
 
-  Edit|Write|Read|*)
-    # Default: extract .tool_input.file_path (covers Edit, Write, and unknown tools)
+  Edit|Write)
+    # Write tools: enforce secret patterns AND write-protected config files.
     FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
-    if [[ -z "$FILE" ]]; then
-      exit 0
+    [[ -z "$FILE" ]] && exit 0
+    if check_file "$FILE" write; then
+      exit 2
     fi
-    if check_file "$FILE"; then
+    ;;
+
+  Read|*)
+    # Read (and unknown tools): enforce secret patterns only — write-protected
+    # config (shell rc, git/mcp config) stays readable.
+    FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+    [[ -z "$FILE" ]] && exit 0
+    if check_file "$FILE" read; then
       exit 2
     fi
     ;;
