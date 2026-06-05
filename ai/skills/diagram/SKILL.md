@@ -5,6 +5,7 @@ argument-hint: "[diagram description]"
 allowed-tools: Bash
 disable-model-invocation: false
 model: sonnet
+effort: medium
 ---
 
 Create a Mermaid diagram for: $ARGUMENTS
