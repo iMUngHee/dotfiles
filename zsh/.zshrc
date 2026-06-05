@@ -30,6 +30,7 @@ ZSH_THEME=""
 
 plugins=(
 	git
+	fzf-tab
 	zsh-autosuggestions
 	zsh-syntax-highlighting
 	zsh-history-substring-search
@@ -71,6 +72,9 @@ conditional_eval fnm env --use-on-cd
 ## thefuck
 conditional_eval thefuck --alias plz
 
+## zoxide
+conditional_eval zoxide init zsh
+
 ## fzf
 export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
@@ -87,6 +91,10 @@ export FZF_DEFAULT_OPTS=" \
   --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8 \
   --color=selected-bg:#45475a"
 source <(fzf --zsh)
+
+# fzf-tab (inherits Catppuccin colors from FZF_DEFAULT_OPTS)
+zstyle ':fzf-tab:*' use-fzf-default-opts yes
+zstyle ':completion:*:descriptions' format '[%d]'
 
 # $PATH
 export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"

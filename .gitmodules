@@ -10,3 +10,6 @@
 [submodule "ghostty/shaders"]
 	path = ghostty/shaders
 	url = https://github.com/sahaj-b/ghostty-cursor-shaders
+[submodule "zsh/custom/plugins/fzf-tab"]
+	path = zsh/custom/plugins/fzf-tab
+	url = https://github.com/aloxaf/fzf-tab.git
