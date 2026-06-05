@@ -15,8 +15,8 @@ return {
         provider = "openai_fim_compatible",
         notify = "warn",
         n_completions = 1,
-        throttle = 200,
-        debounce = 250,
+        throttle = 1000,
+        debounce = 400,
         context_window = 32000,
         request_timeout = 5,
         provider_options = {
@@ -80,6 +80,19 @@ return {
         },
         virtualtext = {
           auto_trigger_ft = { "*" },
+          -- Special buffers where auto-completion must never fire (complements
+          -- the BufEnter buftype guard below; uses minuet's native mechanism).
+          auto_trigger_ignore_ft = {
+            "TelescopePrompt",
+            "TelescopeResults",
+            "dashboard",
+            "neo-tree",
+            "oil",
+            "trouble",
+            "noice",
+            "lazy",
+            "mason",
+          },
           show_on_completion_menu = true,
           keymap = {
             accept = "<M-l>",

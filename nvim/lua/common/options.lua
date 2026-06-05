@@ -52,7 +52,7 @@ opt.confirm = true
 opt.inccommand = "split"
 
 opt.updatetime = 250
-opt.timeoutlen = 300
+opt.timeoutlen = 500
 
 opt.pumborder = "rounded"
 opt.signcolumn = "yes"
