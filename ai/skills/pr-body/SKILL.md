@@ -4,6 +4,7 @@ description: "Generate PR body from branch changes and copy to clipboard. TRIGGE
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob
 model: sonnet
+effort: medium
 disable-model-invocation: false
 ---
 

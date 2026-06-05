@@ -4,6 +4,7 @@ description: "Convert local files or public URLs to Markdown via markitdown CLI;
 argument-hint: "<file-path|public-URL>"
 allowed-tools: Bash, Read, Write
 model: sonnet
+effort: low
 disable-model-invocation: false
 ---
 
