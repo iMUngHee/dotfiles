@@ -22,12 +22,12 @@
     "BASH_MAX_TIMEOUT_MS": "900000",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
     "CLAUDE_CODE_ENABLE_AWAY_SUMMARY": "1",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
     "DISABLE_AUTOUPDATER": "1",
-    "ENABLE_CLAUDEAI_MCP_SERVERS": "false"
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "MAX_MCP_OUTPUT_TOKENS": "15000"
   },
   "hooks": {
     "InstructionsLoaded": [
@@ -310,9 +310,6 @@
       "Bash(open*)",
       "Bash(pbcopy*)",
       "Bash(pbpaste*)",
-      "Bash(wl-copy*)",
-      "Bash(wl-paste*)",
-      "Bash(xclip*)",
       "Bash(pkill -x AgentNotifier*)",
       "Bash(pnpm build*)",
       "Bash(pnpm run*)",
@@ -334,6 +331,9 @@
       "Bash(wget*)",
       "Bash(which*)",
       "Bash(whoami*)",
+      "Bash(wl-copy*)",
+      "Bash(wl-paste*)",
+      "Bash(xclip*)",
       "Edit",
       "Glob",
       "Grep",

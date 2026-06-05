@@ -47,7 +47,7 @@ Dispatch to **`verifier`** when:
 
 Dispatch to a separate context to isolate heavy reading:
 - **Claude Code**: `Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")`
-- **Codex CLI**: `codex exec` with the same focused prompt (Goal / Depth / Plan path / Changed files). No subagent dispatch tool exists; spawn an exec subprocess instead.
+- **Codex CLI**: `codex exec` with the same focused prompt (Goal / Depth / Plan path / Changed files). Codex's `multi_agent_v1.spawn_agent` is explicit-request-only (not for auto-dispatch), so spawn a `codex exec` subprocess instead.
 
 Return the delegated context's report directly — do NOT re-run checks inline after dispatch.
 
