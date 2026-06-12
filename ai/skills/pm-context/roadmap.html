@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Backlog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --crust: #0e0e16; --mantle: #15151f; --base: #1c1c28; --card: #1e1e2e;
+        --s0: #2a2b3c; --s1: #393b4d; --s2: #585b70;
+        --ov0: #6c7086; --ov1: #838aa3; --sub0: #a6adc8; --sub1: #bac2de; --text: #cdd6f4;
+        --mauve: #cba6f7; --blue: #89b4fa; --sapphire: #74c7ec; --green: #a6e3a1;
+        --peach: #fab387; --red: #f38ba8; --teal: #94e2d5; --lav: #b4befe; --yellow: #f9e2af;
+        --sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+        --serif: "Playfair Display", Georgia, "Times New Roman", serif;
+        --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px -16px rgba(0,0,0,.7); --r: 16px;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { scrollbar-color: var(--s1) transparent; }
+      body { background: var(--crust); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+      .mono { font-family: var(--mono); }
+      ::-webkit-scrollbar { width: 9px; height: 9px; } ::-webkit-scrollbar-thumb { background: var(--s1); border-radius: 6px; }
+
+      .shell { padding: 18px; max-width: 1280px; margin: 0 auto; }
+      .topbar { display: flex; align-items: center; gap: 20px; padding: 6px 8px 18px; }
+      .brand { display: flex; align-items: center; gap: 11px; }
+      .brand .logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--blue), var(--mauve)); display: grid; place-items: center; color: var(--crust); font-weight: 800; font-size: 15px; }
+      .brand .nm { font-family: var(--serif); font-size: 18px; font-weight: 700; letter-spacing: 0; }
+      .brand .nm .proj { color: var(--ov1); font-weight: 500; }
+      .topbar .spacer { flex: 1; }
+      .focus-pill { font-family: var(--mono); font-size: 12px; color: var(--sub0); background: var(--card); border: 1px solid var(--s0); border-radius: 999px; padding: 7px 14px; }
+      .focus-pill b { color: var(--peach); font-weight: 600; }
+
+      .app { display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 18px; align-items: start; }
+      .menu-btn { display: none; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--s1); background: var(--card); color: var(--sub1); font-size: 15px; cursor: pointer; flex: none; }
+      .scrim { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 14; }
+      @keyframes slidein { from { transform: translateX(-100%); } to { transform: none; } }
+      @media (max-width: 720px) {
+        .app { grid-template-columns: 1fr; }
+        .menu-btn { display: inline-grid; place-items: center; }
+        .side { display: none; }
+        body.nav-open .side { display: block; position: fixed; top: 0; left: 0; bottom: 0; width: 268px; z-index: 15; border-radius: 0; overflow-y: auto; animation: slidein 0.2s ease; }
+        body.nav-open .scrim { display: block; }
+      }
+      .card { background: var(--card); border: 1px solid var(--s0); border-radius: var(--r); box-shadow: var(--shadow); }
+
+      .side { padding: 14px; position: sticky; top: 18px; }
+      .side .grp { font-size: 10px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ov0); padding: 6px 12px; margin-top: 8px; }
+      .side .grp:first-child { margin-top: 0; }
+      .nav { display: flex; flex-direction: column; gap: 2px; }
+      .navitem { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; cursor: pointer; color: var(--sub0); font-weight: 500; font-size: 13px; transition: background 0.13s ease, color 0.13s ease; }
+      .navitem:hover { background: var(--mantle); color: var(--text); }
+      .navitem.on { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); font-weight: 600; }
+      .navitem .ic { width: 14px; text-align: center; opacity: 0.9; }
+      .navitem .nm2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+      .navitem .ct { font-family: var(--mono); font-size: 11px; color: var(--ov0); }
+      .navitem.on .ct { color: var(--blue); }
+      .navitem .star { color: var(--peach); font-size: 11px; }
+      .side .sep { height: 1px; background: var(--s0); margin: 12px 4px; }
+      .stat { padding: 11px; background: var(--mantle); border-radius: 12px; margin-top: 12px; }
+      .stat .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ov1); padding: 3px 0; }
+      .stat .row b { color: var(--sub1); font-family: var(--mono); font-weight: 600; }
+
+      .panel { padding: 22px 24px; }
+      .secrow { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+      .secrow h2 { font-family: var(--serif); font-size: 18px; font-weight: 700; letter-spacing: 0; }
+      .secrow .sub { font-family: var(--mono); font-size: 11px; color: var(--ov0); }
+      .secrow .spacer { flex: 1; }
+
+      /* tabs (task view: Context / Memory / Backlog) */
+      .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--s0); margin: 18px 0 0; }
+      .tab { padding: 9px 15px; font-size: 13px; font-weight: 600; color: var(--ov1); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.12s ease; }
+      .tab:hover { color: var(--text); }
+      .tab.on { color: var(--blue); border-bottom-color: var(--blue); }
+      .tab .ct { font-family: var(--mono); font-size: 11px; color: var(--ov0); margin-left: 6px; }
+      .tab.on .ct { color: var(--blue); }
+      .tab-panel { display: none; padding-top: 20px; }
+      .tab-panel.on { display: block; }
+      .panel-tools { display: flex; align-items: center; margin-bottom: 6px; }
+      .panel-tools .label { margin: 0; }
+      .panel-tools .spacer { flex: 1; }
+
+      /* page header (task / item) */
+      .phead { display: flex; align-items: center; gap: 13px; margin-bottom: 6px; }
+      .back { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--s1); background: var(--mantle); color: var(--sub1); cursor: pointer; font-size: 16px; flex: none; transition: all 0.13s ease; }
+      .back:hover { border-color: var(--s2); color: var(--text); }
+      .ficon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; flex: none; }
+      .ficon.task { background: color-mix(in srgb, var(--teal) 18%, transparent); color: var(--teal); }
+      .ficon.item { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); }
+      .htext { flex: 1; min-width: 0; }
+      .eyebrow { font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--ov1); text-transform: uppercase; }
+      .htext h1 { font-family: var(--serif); font-size: 23px; font-weight: 700; letter-spacing: 0; margin-top: 2px; word-break: break-word; }
+      .htext h1.mono { font-family: var(--mono); font-size: 20px; letter-spacing: -0.01em; }
+      .star-btn { font-family: var(--mono); font-size: 11.5px; background: var(--mantle); border: 1px solid var(--s1); border-radius: 8px; padding: 6px 12px; cursor: pointer; color: var(--ov1); transition: all 0.12s ease; }
+      .star-btn.on { color: var(--peach); border-color: color-mix(in srgb, var(--peach) 38%, transparent); } .star-btn:hover { border-color: var(--s2); }
+
+      /* buttons */
+      .btn { font-family: var(--sans); font-size: 12.5px; font-weight: 600; border-radius: 9px; padding: 8px 13px; cursor: pointer; border: 1px solid transparent; transition: all 0.13s ease; display: inline-flex; align-items: center; gap: 6px; }
+      .btn.primary { color: var(--crust); background: var(--blue); } .btn.primary:hover { background: var(--sapphire); }
+      .btn.ghost { background: var(--mantle); color: var(--sub1); border-color: var(--s1); } .btn.ghost:hover { border-color: var(--s2); color: var(--text); }
+      .btn.danger { background: transparent; color: var(--red); border-color: color-mix(in srgb, var(--red) 28%, transparent); } .btn.danger:hover { background: color-mix(in srgb, var(--red) 12%, transparent); }
+      .btn.sm { padding: 6px 11px; font-size: 12px; }
+
+      /* tables (backlog item rows) */
+      .tbl .th { display: grid; grid-template-columns: var(--cols); gap: 14px; padding: 0 12px 9px; border-bottom: 1px solid var(--s0); }
+      .tbl .th span { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ov0); }
+      .trow { display: grid; grid-template-columns: var(--cols); gap: 14px; align-items: center; padding: 11px 12px; border-radius: 11px; cursor: pointer; transition: background 0.12s ease; }
+      .trow:hover { background: var(--mantle); } .trow + .trow { margin-top: 1px; }
+      .name { display: flex; align-items: center; gap: 11px; min-width: 0; }
+      .name .txt { min-width: 0; } .name .id { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
+      .name .ti { font-size: 12.5px; color: var(--ov1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .chip { display: inline-flex; font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 7px; }
+      .p-P0 { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
+      .p-P1 { color: var(--peach); background: color-mix(in srgb, var(--peach) 16%, transparent); }
+      .p-P2 { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 14%, transparent); }
+      .p-P3 { color: var(--ov1); background: color-mix(in srgb, var(--ov1) 20%, transparent); }
+      .sb-open { color: var(--ov1); background: color-mix(in srgb, var(--ov1) 18%, transparent); }
+      .sb-draft { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 14%, transparent); }
+      .sb-active { color: var(--blue); background: color-mix(in srgb, var(--blue) 16%, transparent); }
+      .sb-done { color: var(--green); background: color-mix(in srgb, var(--green) 15%, transparent); }
+      .sb-dropped { color: var(--red); background: color-mix(in srgb, var(--red) 15%, transparent); }
+      .hint { color: var(--ov0); font-size: 13px; padding: 16px 12px; }
+
+      /* backlog timeline (work order within a task) */
+      .tl-item { display: grid; grid-template-columns: 30px minmax(0, 1fr) 60px 84px; gap: 12px; align-items: center; padding: 9px 10px; border-radius: 11px; cursor: pointer; position: relative; transition: background 0.12s ease; }
+      .tl-item:hover { background: var(--mantle); }
+      .tl-num { width: 26px; height: 26px; border-radius: 50%; background: var(--base); border: 1px solid var(--s1); color: var(--sub0); font-family: var(--mono); font-size: 11.5px; font-weight: 700; display: grid; place-items: center; position: relative; z-index: 1; }
+      .tl-item.focus .tl-num { border-color: var(--peach); color: var(--peach); }
+      .tl-item:not(:last-child)::after { content: ""; position: absolute; left: 22px; top: 35px; height: calc(100% - 17px); width: 2px; background: var(--s0); }
+      .tl-item.closed { opacity: 0.55; }
+      .tl-item.closed .tl-num { border-style: dashed; font-size: 12px; }
+
+      /* sections inside task / item view */
+      .sec { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--s0); }
+      .sec.first { border-top: none; padding-top: 8px; }
+      .label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ov1); margin-bottom: 10px; }
+      .label .right { float: right; font-family: var(--mono); font-weight: 500; text-transform: none; letter-spacing: 0; }
+      .v { font-size: 13.5px; color: var(--sub1); line-height: 1.6; }
+      .v .muted { color: var(--ov0); } .v .step { color: var(--green); display: block; margin-top: 6px; }
+      .v code { font-family: var(--mono); font-size: 12px; color: var(--sub0); background: var(--mantle); padding: 1px 5px; border-radius: 5px; }
+      a { color: var(--blue); text-decoration: none; word-break: break-all; } a:hover { color: var(--lav); }
+
+      /* editable cards (links + memory share .ed) */
+      .ed { position: relative; background: var(--mantle); border: 1px solid var(--s0); border-radius: 12px; padding: 15px 16px; margin-top: 11px; }
+      .ed .rm { position: absolute; top: 9px; right: 9px; width: 24px; height: 24px; border-radius: 7px; border: none; background: transparent; color: var(--ov0); font-size: 16px; cursor: pointer; transition: all 0.12s ease; }
+      .ed .rm:hover { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+      .fld { margin-bottom: 10px; } .fld:last-child { margin-bottom: 0; }
+      .fld > label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ov0); margin-bottom: 4px; }
+      .fld input { width: 100%; font-family: var(--sans); font-size: 13px; color: var(--text); background: var(--base); border: 1px solid var(--s1); border-radius: 9px; padding: 8px 11px; outline: none; transition: border-color 0.12s ease; }
+      .fld input:focus { border-color: var(--blue); }
+      .fld input.code { font-family: var(--mono); font-size: 12px; }
+      .fld.title-fld input { font-weight: 600; max-width: 440px; }
+      .toolbar { display: flex; gap: 8px; align-items: center; }
+
+      /* stagger reveal (Editorial Ledger, plan Decision 5) */
+      @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      .trow, .tl-item, .ed { animation: rise 0.25s ease backwards; animation-delay: calc(var(--i, 0) * 28ms); }
+      @media (prefers-reduced-motion: reduce) { .trow, .tl-item, .ed { animation: none; } }
+
+      .copy-path { cursor: pointer; } .copy-path:hover { color: var(--lav) !important; }
+
+      /* modal (shared: delete type-to-confirm / new task / drop) */
+      .mback { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: grid; place-items: center; z-index: 30; }
+      .modal { background: var(--card); border: 1px solid var(--s1); border-radius: var(--r); box-shadow: var(--shadow); padding: 22px; width: min(92vw, 400px); }
+      .modal h3 { font-family: var(--serif); font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+      .modal .mbody { font-size: 13px; color: var(--sub0); line-height: 1.6; margin-bottom: 14px; }
+      .modal .mbody code { font-family: var(--mono); font-size: 12px; color: var(--peach); background: var(--mantle); padding: 1px 5px; border-radius: 5px; }
+      .modal input { width: 100%; font-family: var(--sans); font-size: 13px; color: var(--text); background: var(--base); border: 1px solid var(--s1); border-radius: 9px; padding: 9px 11px; outline: none; margin-bottom: 4px; }
+      .modal input.mono { font-family: var(--mono); }
+      .modal input:focus { border-color: var(--blue); }
+      .modal .merr { font-size: 11.5px; color: var(--red); min-height: 17px; }
+      .modal .mrow { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+      .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+      /* validate badge dropdown panel */
+      .vwrap { position: relative; }
+      .focus-pill.clickable { cursor: pointer; }
+      .vpanel { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: min(92vw, 460px); background: var(--card); border: 1px solid var(--s1); border-radius: 12px; box-shadow: var(--shadow); padding: 10px; z-index: 25; }
+      .vpanel.open { display: block; }
+      .vpanel .vrow { font-family: var(--mono); font-size: 11.5px; line-height: 1.5; padding: 5px 7px; border-radius: 7px; color: var(--sub1); }
+      .vpanel .vrow b { font-weight: 600; }
+      .vpanel .vrow.err b { color: var(--red); } .vpanel .vrow.warn b { color: var(--peach); }
+
+      .toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--card); color: var(--text); border: 1px solid var(--s1); box-shadow: var(--shadow); padding: 12px 20px; border-radius: 12px; font-size: 13px; opacity: 0; transition: all 0.2s ease; pointer-events: none; z-index: 9; }
+      .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+      .toast .ok { color: var(--green); } .toast .bad { color: var(--red); }
+      .boot { color: var(--ov0); font-size: 14px; padding: 50px 0; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="topbar">
+        <button class="menu-btn" id="menu" title="menu">☰</button>
+        <div class="brand"><div class="logo">B</div><div class="nm">Backlog <span class="proj" id="proj"></span></div></div>
+        <div class="spacer"></div>
+        <div class="vwrap"><div class="focus-pill" id="vbadge" title="">…</div><div class="vpanel" id="vpanel"></div></div>
+        <div class="focus-pill">focus · <b id="focus">—</b></div>
+      </div>
+      <div class="app">
+        <nav class="card side" id="side"></nav>
+        <section id="main"><div class="card panel"><div class="boot">reading…</div></div></section>
+      </div>
+    </div>
+    <div class="scrim" id="scrim"></div>
+    <div class="toast" id="toast"></div>
+
+    <script type="module">
+      const $ = (s, r = document) => r.querySelector(s);
+      const PRIOS = ["P0", "P1", "P2", "P3"];
+      const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      let RM = null, TASKS = [], CURRENT = null, VIEW = { type: "home" };
+
+      const toast = (msg, ok = true) => {
+        const t = $("#toast");
+        t.innerHTML = (ok ? '<span class="ok">✓</span> ' : '<span class="bad">✕</span> ') + esc(msg);
+        t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 2100);
+      };
+      const byOrder = (a, b) => (a.order || 1e9) - (b.order || 1e9); // explicit Order asc; unset → file order (stable)
+      const itemsForTask = (key) => ((RM && RM.open) || []).filter((i) => (i.task ?? "_INBOX") === key).sort(byOrder);
+      // Closed grouping is STRICT (c.task === key): legacy/inbox rows (task null)
+      // belong to no task group and stay visible only in Recently Closed.
+      const closedForTask = (key) => ((RM && RM.recentlyClosed) || []).filter((c) => c.task === key);
+      const today = () => new Date().toISOString().slice(0, 10);
+
+      // ── shared modal (delete type-to-confirm / new task / drop) ──
+      // input: { placeholder, mono, validate(v) → error-string|null }. Resolves
+      // with the input value (or true without input); null on cancel/ESC/backdrop.
+      function modal({ title, body = "", confirmLabel = "확인", danger = false, input = null }) {
+        return new Promise((resolve) => {
+          const back = document.createElement("div");
+          back.className = "mback";
+          back.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><h3>${esc(title)}</h3>
+            ${body ? `<div class="mbody">${body}</div>` : ""}
+            ${input ? `<input class="${input.mono ? "mono" : ""}" placeholder="${esc(input.placeholder || "")}" /><div class="merr"></div>` : ""}
+            <div class="mrow"><button class="btn ghost sm" data-x>취소</button><button class="btn ${danger ? "danger" : "primary"} sm" data-ok ${input ? "disabled" : ""}>${esc(confirmLabel)}</button></div></div>`;
+          const onKey = (e) => { if (e.key === "Escape") done(null); };
+          const done = (v) => { back.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+          document.addEventListener("keydown", onKey);
+          back.addEventListener("click", (e) => { if (e.target === back) done(null); });
+          back.querySelector("[data-x]").addEventListener("click", () => done(null));
+          const ok = back.querySelector("[data-ok]");
+          const inp = back.querySelector("input");
+          if (inp) {
+            inp.addEventListener("input", () => {
+              const v = inp.value.trim();
+              const err = v ? (input.validate ? input.validate(v) : null) : null;
+              ok.disabled = !v || !!err;
+              back.querySelector(".merr").textContent = err || "";
+            });
+            inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !ok.disabled) done(inp.value.trim()); });
+          }
+          ok.addEventListener("click", () => done(inp ? inp.value.trim() : true));
+          document.body.appendChild(back);
+          if (inp) inp.focus();
+        });
+      }
+
+      // ── dirty-state guard (task editor: links + memory inputs) ──
+      let SNAP = null; // { key, v } — snapshot taken right after the task editor renders
+      const edSnap = () => JSON.stringify([...document.querySelectorAll("#links .ed input, #memory .ed input")].map((i) => i.value));
+      const isDirty = () => !!SNAP && VIEW.type === "task" && VIEW.key === SNAP.key && SNAP.v !== edSnap();
+      // Wrap anything that destroys/rebuilds the task editor DOM (nav, setCurrent reload).
+      async function guardNav(fn) {
+        if (isDirty() && !(await modal({ title: "저장 안 된 변경", body: "이동하면 편집 중인 내용이 사라집니다.", confirmLabel: "이동", danger: true }))) return;
+        SNAP = null;
+        fn();
+      }
+      window.addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
+
+      // ── mobile drawer ──
+      const closeNav = () => document.body.classList.remove("nav-open");
+      $("#menu").addEventListener("click", () => document.body.classList.toggle("nav-open"));
+      $("#scrim").addEventListener("click", closeNav);
+
+      function wireCopy(root) {
+        root.querySelectorAll(".copy-path").forEach((el) => el.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(el.dataset.copy); toast("경로 복사됨"); } catch { toast("클립보드 차단", false); }
+        }));
+      }
+
+      async function load() {
+        const [rm, tasks, cur, val] = await Promise.all([
+          fetch("/api/roadmap").then((r) => r.json()),
+          fetch("/api/tasks").then((r) => r.json()).catch(() => []),
+          fetch("/api/current").then((r) => r.json()).then((c) => c.current).catch(() => null),
+          fetch("/api/roadmap/validate").then((r) => r.json()).catch(() => null),
+        ]);
+        RM = rm; TASKS = tasks || []; CURRENT = cur;
+        renderValidateBadge(val);
+        $("#proj").textContent = rm.project ? `· ${rm.project}` : "";
+        $("#focus").textContent = rm.focus || CURRENT || "—";
+        if (VIEW.type === "home") VIEW = CURRENT ? { type: "task", key: CURRENT } : TASKS[0] ? { type: "task", key: TASKS[0].key } : { type: "backlog" };
+        renderSide(); renderMain();
+      }
+
+      function renderValidateBadge(val) {
+        const b = $("#vbadge"), p = $("#vpanel");
+        if (!val || val.missingRoadmap) { b.style.display = "none"; p.classList.remove("open"); return; }
+        b.style.display = "";
+        const errs = val.errors || [], warns = val.warns || [];
+        const rows = [...errs.map((v) => ({ ...v, lv: "err" })), ...warns.map((v) => ({ ...v, lv: "warn" }))];
+        if (errs.length) b.innerHTML = `<b style="color:var(--red)">✗ ${errs.length} error${errs.length > 1 ? "s" : ""}</b>`;
+        else if (warns.length) b.innerHTML = `<b style="color:var(--peach)">△ ${warns.length} warn${warns.length > 1 ? "s" : ""}</b>`;
+        else b.innerHTML = `<b style="color:var(--green)">✓ valid</b>`;
+        b.title = rows.length ? `${rows.length}건 — 클릭해서 목록 보기` : "all roadmap invariants hold";
+        b.classList.toggle("clickable", rows.length > 0);
+        p.innerHTML = rows.map((v) => `<div class="vrow ${v.lv}"><b>[${esc(v.level)}] ${esc(v.check)}</b> ${esc(v.id)} — ${esc(v.message)}</div>`).join("");
+        b.onclick = rows.length ? () => p.classList.toggle("open") : null;
+        if (!rows.length) p.classList.remove("open");
+      }
+
+      function renderSide() {
+        const open = (RM && RM.open) || [], closed = (RM && RM.recentlyClosed) || [];
+        const taskNav = TASKS.map((t) => {
+          const on = VIEW.type === "task" && VIEW.key === t.key;
+          return `<div class="navitem ${on ? "on" : ""}" data-task="${esc(t.key)}"><span class="ic">✦</span><span class="nm2">${esc(t.key)}</span>${t.key === CURRENT ? '<span class="star">★</span>' : ""}<span class="ct">${itemsForTask(t.key).length || ""}</span></div>`;
+        }).join("") || `<div class="hint" style="padding:8px 12px">task 없음</div>`;
+        const inboxItems = itemsForTask("_INBOX");
+        const inboxNav = inboxItems.length
+          ? `<div class="navitem ${VIEW.type === "task" && VIEW.key === "_INBOX" ? "on" : ""}" data-task="_INBOX"><span class="ic">▤</span><span class="nm2">_INBOX</span><span class="ct">${inboxItems.length}</span></div>`
+          : "";
+        $("#side").innerHTML = `
+          <div class="grp">Tasks</div>
+          <div class="nav">${taskNav}${inboxNav}</div>
+          <div style="padding:2px 12px 8px"><button class="btn ghost sm" id="newTaskSide">+ new task</button></div>
+          <div class="sep"></div>
+          <div class="nav">
+            <div class="navitem ${VIEW.type === "backlog" ? "on" : ""}" data-view="backlog"><span class="ic">❒</span><span class="nm2" style="font-family:var(--sans);font-size:13px">All Backlog</span><span class="ct">${open.length}</span></div>
+            <div class="navitem ${VIEW.type === "closed" ? "on" : ""}" data-view="closed"><span class="ic">✓</span><span class="nm2" style="font-family:var(--sans);font-size:13px">Recently Closed</span><span class="ct">${closed.length}</span></div>
+          </div>
+          <div class="stat"><div class="row"><span>tasks</span><b>${TASKS.length}</b></div><div class="row"><span>open items</span><b>${open.length}</b></div><div class="row" style="font-size:11px;margin-top:3px">${PRIOS.map((p) => `${p} ${open.filter((i) => i.priority === p).length}`).join("&nbsp;&nbsp;")}</div></div>`;
+        $("#side").querySelectorAll("[data-task]").forEach((n) => n.addEventListener("click", () => guardNav(() => { VIEW = { type: "task", key: n.dataset.task }; closeNav(); renderSide(); renderMain(); })));
+        $("#side").querySelectorAll("[data-view]").forEach((n) => n.addEventListener("click", () => guardNav(() => { VIEW = { type: n.dataset.view }; closeNav(); renderSide(); renderMain(); })));
+        const nts = $("#newTaskSide");
+        if (nts) nts.addEventListener("click", newTask);
+      }
+
+      function renderMain() {
+        if (VIEW.type === "task") return showTask(VIEW.key);
+        if (VIEW.type === "item") return showItem(VIEW.id, VIEW.from, VIEW.closed);
+        if (VIEW.type === "closed") return showClosed();
+        return showBacklogAll();
+      }
+
+      // ── item rows (shared) ──
+      function itemRows(items) {
+        if (!items.length) return '<div class="hint">아이템 없음</div>';
+        return `<div class="tbl" style="--cols: minmax(0,1fr) 64px 88px"><div class="th"><span>Name</span><span>Priority</span><span>Status</span></div>${items.map((it, i) => `
+          <div class="trow" style="--i:${i}" data-item="${esc(it.id)}"><div class="name"><div class="txt"><div class="id">${esc(it.id)}${it.id === (RM && RM.focus) ? ' <span style="color:var(--peach);font-size:10.5px">◀ focus</span>' : ""}</div><div class="ti">${esc(it.title)}</div></div></div><span><span class="chip p-${esc(it.priority)}">${esc(it.priority)}</span></span><span><span class="chip sb-${esc(it.status)}">${esc(it.status)}</span></span></div>`).join("")}</div>`;
+      }
+      function wireItems(root, from) { root.querySelectorAll("[data-item]").forEach((el) => el.addEventListener("click", () => guardNav(() => { VIEW = { type: "item", id: el.dataset.item, closed: el.dataset.closed === "1", from }; renderSide(); renderMain(); }))); }
+      // closed rows under a task timeline — dimmed, ✓/✕ marker, no order number
+      function closedTimelineRows(items) {
+        if (!items.length) return "";
+        return items.map((c, i) => `<div class="tl-item closed" style="--i:${i}" data-item="${esc(c.id)}" data-closed="1">
+          <div class="tl-num">${c.status === "done" ? "✓" : "✕"}</div>
+          <div class="name"><div class="txt"><div class="id">${esc(c.id)}</div>${c.plan ? `<div class="ti mono">${esc(c.plan)}</div>` : c.note ? `<div class="ti">${esc(c.note)}</div>` : ""}</div></div>
+          <span></span>
+          <span><span class="chip sb-${esc(c.status)}">${esc(c.status)}</span></span></div>`).join("");
+      }
+      // numbered timeline (work order within a task)
+      function timelineRows(items, showTaskTag) {
+        const sorted = items.slice().sort(byOrder);
+        if (!sorted.length) return '<div class="hint">아이템 없음</div>';
+        return sorted.map((it, i) => `<div class="tl-item ${it.id === (RM && RM.focus) ? "focus" : ""}" style="--i:${i}" data-item="${esc(it.id)}">
+          <div class="tl-num">${i + 1}</div>
+          <div class="name"><div class="txt"><div class="id">${esc(it.id)}${showTaskTag ? ` <span class="chip mono" style="background:var(--mantle);color:var(--ov1);font-size:10px;padding:1px 7px">${esc(it.task ?? "_INBOX")}</span>` : ""}${it.id === (RM && RM.focus) ? ' <span style="color:var(--peach);font-size:10.5px">◀ focus</span>' : ""}</div><div class="ti">${esc(it.title)}</div></div></div>
+          <span><span class="chip p-${esc(it.priority)}">${esc(it.priority)}</span></span>
+          <span><span class="chip sb-${esc(it.status)}">${esc(it.status)}</span></span></div>`).join("");
+      }
+
+      // ── TASK view: Context (links + memory) editor + Backlog ──
+      async function showTask(key) {
+        const m = $("#main"); m.innerHTML = `<div class="card panel"><div class="boot">loading ${esc(key)}…</div></div>`;
+        if (key === "_INBOX") {
+          // virtual task: no task-context file, no links/memory editor — backlog only
+          const items = itemsForTask("_INBOX");
+          m.innerHTML = `<div class="card panel">
+            <div class="phead"><div class="ficon task">▤</div><div class="htext"><div class="eyebrow">inbox</div><h1 class="mono">_INBOX</h1></div></div>
+            <div class="hint" style="margin:6px 0 12px">untriaged ideas — not designable until assigned: <code>/pm-roadmap link &lt;id&gt; Task &lt;KEY&gt;</code></div>
+            ${itemRows(items)}</div>`;
+          wireItems(m, { type: "task", key: "_INBOX" });
+          return;
+        }
+        const data = await fetch(`/api/tasks/${encodeURIComponent(key)}`).then((r) => (r.ok ? r.json() : null));
+        if (!data) return void (m.innerHTML = `<div class="card panel"><div class="hint">load 실패: ${esc(key)}</div></div>`);
+        const isCur = key === CURRENT;
+        const links = data.links || [], memory = data.memory || [], items = itemsForTask(key), closedItems = closedForTask(key);
+        m.innerHTML = `<div class="card panel">
+          <div class="phead"><div class="ficon task">✦</div><div class="htext"><div class="eyebrow">task</div><h1 class="mono">${esc(key)}</h1></div>
+            <button class="star-btn ${isCur ? "on" : ""}" id="star">${isCur ? "★ current" : "☆ set current"}</button>
+            <button class="btn primary sm" id="save">save</button></div>
+
+          <div class="tabs">
+            <div class="tab on" data-tab="context">Context <span class="ct">${links.length}</span></div>
+            <div class="tab" data-tab="memory">Memory <span class="ct">${memory.length}</span></div>
+            <div class="tab" data-tab="backlog">Backlog <span class="ct">${items.length}${closedItems.length ? ` +${closedItems.length}✓` : ""}</span></div>
+          </div>
+
+          <div class="tab-panel on" id="panel-context">
+            <div class="panel-tools"><div class="label">External links</div><span class="spacer"></span><button class="btn ghost sm" id="addLink">+ add link</button></div>
+            <div id="links">${links.map((l, i) => linkRow(l, { i })).join("") || '<div class="hint">링크 없음 — 위에서 추가</div>'}</div>
+          </div>
+          <div class="tab-panel" id="panel-memory">
+            <div class="panel-tools"><div class="label">Per-task memory (결정 · 배운 것 · 주의점)</div><span class="spacer"></span><button class="btn ghost sm" id="addMem">+ add memory</button></div>
+            <div id="memory">${memory.map((mm, i) => memRow(mm, { i })).join("") || '<div class="hint">메모리 없음 — 위에서 추가</div>'}</div>
+          </div>
+          <div class="tab-panel" id="panel-backlog">
+            ${timelineRows(items)}${closedTimelineRows(closedItems)}
+          </div>
+
+          <div class="sec"><button class="btn danger sm" id="delTask">delete task</button></div></div>`;
+        wireItems(m, { type: "task", key });
+        m.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+        $("#star").addEventListener("click", () => guardNav(() => setCurrent(isCur ? "" : key))); // setCurrent reloads → editor DOM is destroyed
+        $("#addLink").addEventListener("click", () => { switchTab("context"); addCard("#links", linkRow); });
+        $("#addMem").addEventListener("click", () => { switchTab("memory"); addCard("#memory", memRow); });
+        $("#save").addEventListener("click", () => saveTask(key));
+        $("#delTask").addEventListener("click", () => delTask(key, links.length, memory.length));
+        m.querySelectorAll("[data-rm]").forEach(rmWire);
+        if (VIEW.type === "task" && VIEW.key === key) SNAP = { key, v: edSnap() }; // key-scoped: a stale async render never snapshots another task
+      }
+      function switchTab(name) {
+        document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === name));
+        document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("on", p.id === `panel-${name}`));
+      }
+      function addCard(sel, fn) { const h = $(sel); if (h.querySelector(".hint")) h.innerHTML = ""; h.insertAdjacentHTML("afterbegin", fn({}, { fresh: true })); const c = h.querySelector(".ed"); rmWire(c.querySelector("[data-rm]")); c.querySelector("input").focus(); }
+      function rmWire(btn) { if (btn) btn.addEventListener("click", () => btn.closest(".ed").remove()); }
+
+      // o = { fresh, i } — explicit options object; render call sites use lambdas
+      // so Array.map's index never lands in this slot (it would be truthy).
+      function linkRow(l = {}, o = {}) {
+        const tr = Array.isArray(l.triggers) ? l.triggers.join(", ") : l.triggers || "";
+        return `<div class="ed" style="--i:${o.i || 0}" data-kind="link"><button class="rm" data-rm title="remove">×</button>
+          <div class="fld title-fld"><label>label</label><input data-f="label" value="${esc(l.label)}" placeholder="Jira / Wiki / …" /></div>
+          <div class="fld"><label>url</label><input class="code" data-f="url" value="${esc(l.url)}" placeholder="https://…" /></div>
+          <div class="fld"><label>triggers</label><input class="code" data-f="triggers" value="${esc(tr)}" placeholder="comma, separated" /></div>
+          <div class="fld"><label>summary</label><input data-f="summary" value="${esc(l.summary)}" placeholder="한 줄 설명" /></div></div>`;
+      }
+      function memRow(m = {}, o = {}) {
+        const date = m.date || (o.fresh === true ? today() : "");
+        return `<div class="ed" style="--i:${o.i || 0}" data-kind="mem"><button class="rm" data-rm title="remove">×</button>
+          <div class="fld title-fld"><label>title</label><input data-f="title" value="${esc(m.title)}" placeholder="결정 / 배운 것 / 주의점" /></div>
+          <div class="fld"><label>note</label><input data-f="note" value="${esc(m.note)}" placeholder="한 줄 메모" /></div>
+          <div class="fld"><label>date</label><input class="code" data-f="date" value="${esc(date)}" placeholder="YYYY-MM-DD" style="max-width:160px" /></div></div>`;
+      }
+      function collect(sel, fields) { return [...document.querySelectorAll(`${sel} .ed`)].map((row) => { const o = {}; for (const f of fields) o[f] = row.querySelector(`input[data-f="${f}"]`).value.trim(); return o; }); }
+
+      async function saveTask(key) {
+        const links = collect("#links", ["label", "url", "summary"]).map((l, i) => { const tr = document.querySelectorAll("#links .ed input[data-f=triggers]")[i].value.trim(); return { ...l, triggers: tr ? tr.split(",").map((t) => t.trim()).filter(Boolean) : [] }; });
+        const memory = collect("#memory", ["title", "note", "date"]).filter((m) => m.title);
+        const r = await fetch(`/api/tasks/${encodeURIComponent(key)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ links, memory }) });
+        if (r.ok) { SNAP = null; toast(`저장됨 · ${key}`); await load(); } else { const e = await r.json().catch(() => ({})); toast(e.error || "저장 실패", false); }
+      }
+      async function delTask(key, nLinks, nMems) {
+        const v = await modal({
+          title: `task ${key} 삭제`,
+          body: `links <b>${nLinks}</b> + memory <b>${nMems}</b>가 함께 삭제됩니다. 되돌릴 수 없습니다.<br>계속하려면 <code>${esc(key)}</code> 를 입력하세요.`,
+          confirmLabel: "삭제", danger: true,
+          input: { placeholder: key, mono: true, validate: (x) => (x === key ? null : "KEY가 일치하지 않습니다") },
+        });
+        if (!v) return;
+        SNAP = null;
+        const r = await fetch(`/api/tasks/${encodeURIComponent(key)}`, { method: "DELETE" });
+        if (r.ok || r.status === 204) { toast(`삭제됨 · ${key}`); VIEW = { type: "backlog" }; await load(); } else toast("삭제 실패", false);
+      }
+      async function setCurrent(key) {
+        const r = await fetch("/api/current", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current: key }) });
+        if (r.ok) { CURRENT = key || null; toast(key ? `current → ${key}` : "current 해제"); await load(); } else toast("current 설정 실패", false);
+      }
+      async function newTask() {
+        const key = await modal({
+          title: "새 task",
+          body: "KEY 형식: 대문자/숫자/_/- (예: <code>PROJ-123</code>)",
+          confirmLabel: "생성",
+          input: { placeholder: "PROJ-123", mono: true, validate: (v) => (/^[A-Z0-9_-]+$/.test(v) ? null : "대문자/숫자/_/- 만 허용") },
+        });
+        if (!key) return;
+        const r = await fetch(`/api/tasks/${encodeURIComponent(key)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ links: [], memory: [] }) });
+        if (r.ok) { toast(`생성됨 · ${key}`); VIEW = { type: "task", key }; await load(); } else { const e = await r.json().catch(() => ({})); toast(e.error || "생성 실패", false); }
+      }
+
+      // ── All Backlog (cross-task, by priority) ──
+      function showBacklogAll() {
+        const open = (RM && RM.open) || [];
+        const m = $("#main");
+        if (RM && RM.missing) { m.innerHTML = `<div class="card panel"><div class="secrow"><h2>All Backlog</h2></div><div class="hint">no .agents/ROADMAP.md yet — run <code>/roadmap init</code></div></div>`; return; }
+        let body = "";
+        for (const p of PRIOS) { const its = open.filter((i) => i.priority === p).sort(byOrder); if (its.length) body += `<div class="label" style="margin-top:16px">${p} <span class="right">${its.length}</span></div>${timelineRows(its, true)}`; }
+        m.innerHTML = `<div class="card panel"><div class="phead"><div class="ficon item">❒</div><div class="htext"><div class="eyebrow">backlog</div><h1>All Backlog</h1></div></div>${body || '<div class="hint">open 아이템 없음 — 터미널에서 <code>/pm-roadmap add &lt;id&gt; &lt;title&gt;</code> 로 추가 (GUI는 backlog를 쓰지 않음)</div>'}</div>`;
+        wireItems(m, { type: "backlog" });
+      }
+      function showClosed() {
+        const closed = (RM && RM.recentlyClosed) || [];
+        const m = $("#main");
+        const body = closed.length ? `<div class="tbl" style="--cols: minmax(0,1fr) 88px">${closed.map((c, i) => `<div class="trow" style="--i:${i}" data-item="${esc(c.id)}" data-closed="1"><div class="name"><div class="txt"><div class="id">${esc(c.id)}${c.task ? ` <span class="chip mono" style="background:var(--mantle);color:var(--ov1);font-size:10px;padding:1px 7px">${esc(c.task)}</span>` : ""}</div>${c.plan ? `<div class="ti mono">${esc(c.plan)}</div>` : c.note ? `<div class="ti">${esc(c.note)}</div>` : ""}</div></div><span><span class="chip sb-${esc(c.status)}">${esc(c.status)}</span></span></div>`).join("")}</div>` : '<div class="hint">닫힌 항목 없음</div>';
+        m.innerHTML = `<div class="card panel"><div class="phead"><div class="ficon item">✓</div><div class="htext"><div class="eyebrow">archive</div><h1>Recently Closed</h1></div></div>${body}</div>`;
+        wireItems(m, { type: "closed" });
+      }
+
+      // ── item detail (drill from task/backlog) ──
+      async function showItem(id, from, closedScope) {
+        const m = $("#main"); m.innerHTML = `<div class="card panel"><div class="boot">resolving…</div></div>`;
+        // closed rows request ?scope=closed — open-wins join would shadow a closed row sharing an open id
+        const j = await fetch(`/api/roadmap/${encodeURIComponent(id)}/join${closedScope ? "?scope=closed" : ""}`).then((r) => (r.ok ? r.json() : null));
+        if (!j) return void (m.innerHTML = `<div class="card panel"><div class="hint">resolve 실패: ${esc(id)}</div></div>`);
+        // Recently Closed entry → reduced view (no title/priority on ClosedEntry; task = close-time owner; next/drop unavailable)
+        if (j.closed) {
+          const c = j.item;
+          const planHtml = c.plan && j.plan
+            ? `<code class="copy-path" data-copy="${esc(j.plan.path)}" title="클릭 시 경로 복사">${esc(j.plan.path)}</code> <span class="muted">(${esc(j.plan.status)})</span>${j.plan.goal ? `<div style="margin-top:6px">${esc(j.plan.goal)}</div>` : ""}`
+            : `<span class="muted">plan 없음 (planless drop)</span>`;
+          m.innerHTML = `<div class="card panel">
+            <div class="phead"><button class="back" id="back">←</button><div class="ficon item">✓</div><div class="htext"><div class="eyebrow">closed item${c.task ? ` · ${esc(c.task)}` : ""}</div><h1 class="mono">${esc(c.id)}</h1></div></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 4px"><span class="chip sb-${esc(c.status)}">${esc(c.status)}</span></div>
+            <div class="sec"><div class="label">What</div><div class="v">${esc(c.note) || '<span class="muted">—</span>'}</div></div>
+            <div class="sec"><div class="label">Plan</div><div class="v">${planHtml}</div></div>
+            <div class="sec"><div class="label">Post-Implementation Notes</div><div class="v">${j.postImplNotes ? esc(j.postImplNotes).replace(/\n/g, "<br>") : '<span class="muted">—</span>'}</div></div></div>`;
+          $("#back").addEventListener("click", () => { VIEW = from || { type: "closed" }; renderSide(); renderMain(); });
+          wireCopy(m);
+          return;
+        }
+        const it = j.item;
+        const plan = j.plan ? `<code class="copy-path" data-copy="${esc(j.plan.path)}" title="클릭 시 경로 복사">${esc(j.plan.path)}</code> <span class="muted">(${esc(j.plan.status)})</span>${j.plan.goal ? `<div style="margin-top:6px">${esc(j.plan.goal)}</div>` : ""}${j.plan.nextStep ? `<span class="step">→ ${esc(j.plan.nextStep)}</span>` : ""}` : `<span class="muted">plan 없음 — <code>/design ${esc(it.id)}</code>부터</span>`;
+        const links = (j.contextLinks || []).map((l) => `<li><div style="color:var(--text);font-weight:600">${esc(l.label)}</div><div class="v"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.url)}</a></div>${l.summary ? `<div class="v">${esc(l.summary)}</div>` : ""}</li>`).join("");
+        const mems = (j.contextMemory || []).map((mm) => `<li><div style="color:var(--text);font-weight:600">${esc(mm.title)}</div>${mm.note ? `<div class="v">${esc(mm.note)}</div>` : ""}</li>`).join("");
+        const ctx = j.task ? ((links || mems) ? `<ul style="list-style:none;display:flex;flex-direction:column;gap:11px">${mems}${links}</ul>` : `<span class="muted">${esc(j.task)} (context 비어있음)</span>`) : `<span class="muted">연결된 task 없음</span>`;
+        const sibs = (j.siblings || []).filter((s) => s.notes);
+        const sibsHtml = sibs.length ? `<ul style="list-style:none;display:flex;flex-direction:column;gap:9px">${sibs.map((s) => `<li><span style="color:var(--text);font-weight:600">${esc(s.id)}</span> <span class="muted">(${esc(s.status)})</span><div class="v">${esc(s.notes.split("\n")[0])}</div></li>`).join("")}</ul>` : `<span class="muted">—</span>`;
+        const backLabel = from && from.type === "task" ? from.key : "All Backlog";
+        m.innerHTML = `<div class="card panel">
+          <div class="phead"><button class="back" id="back">←</button><div class="ficon item">❒</div><div class="htext"><div class="eyebrow">backlog item${j.task ? ` · ${esc(j.task)}` : ""}</div><h1>${esc(it.title)}</h1></div></div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 4px"><span class="chip mono" style="background:var(--mantle);color:var(--sub0)">${esc(it.id)}</span><span class="chip p-${esc(it.priority)}">${esc(it.priority)}</span><span class="chip sb-${esc(it.status)}">${esc(it.status)}</span></div>
+          <div class="sec"><div class="label">What</div><div class="v">${esc(it.note || it.title)}</div></div>
+          <div class="sec"><div class="label">Plan</div><div class="v">${plan}</div></div>
+          <div class="sec"><div class="label">Context${j.task ? `<span class="right">${esc(j.task)}</span>` : ""}</div><div class="v">${ctx}</div></div>
+          <div class="sec"><div class="label">Inherited · done siblings</div><div class="v">${sibsHtml}</div></div>
+          <div class="sec" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn primary" id="nextBtn">▸ 다음 세션 프롬프트 복사</button>
+            <span style="flex:1"></span>
+            ${j.plan
+              ? `<span class="v muted" style="font-size:12.5px">plan 연동 — close는 <code>/retro</code>로 (drop 시 plan과 desync)</span>`
+              : `<button class="btn danger sm" id="dropBtn">drop (폐기)</button>`}
+          </div></div>`;
+        $("#back").addEventListener("click", () => { VIEW = from || { type: "backlog" }; renderSide(); renderMain(); });
+        wireCopy(m);
+        const db = $("#dropBtn");
+        if (db) db.addEventListener("click", async () => {
+          const ok = await modal({ title: `${id} drop`, body: `아이디어 <code>${esc(id)}</code> 를 폐기하고 Recently Closed로 이동합니다.`, confirmLabel: "drop", danger: true });
+          if (!ok) return;
+          const r = await fetch(`/api/roadmap/${encodeURIComponent(id)}/drop`, { method: "POST" });
+          if (r.ok) { toast(`drop됨 · ${id}`); VIEW = from || { type: "backlog" }; await load(); }
+          else { const e = await r.json().catch(() => ({})); toast(e.error || "drop 실패", false); }
+        });
+        const nb = $("#nextBtn");
+        if (nb) nb.addEventListener("click", async () => {
+          const txt = await fetch(`/api/roadmap/${encodeURIComponent(id)}/next`).then((r) => r.text());
+          try { await navigator.clipboard.writeText(txt); toast("kickoff 프롬프트 복사됨"); } catch { toast("클립보드 차단 — 콘솔 출력", false); console.log(txt); }
+        });
+      }
+
+      load().catch((e) => ($("#main").innerHTML = `<div class="card panel"><div class="boot">error: ${esc(e.message)}</div></div>`));
+    </script>
+  </body>
+</html>
