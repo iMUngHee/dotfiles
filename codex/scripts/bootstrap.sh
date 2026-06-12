@@ -24,7 +24,8 @@ expand_tokens_codex() {
         -e "s|{{INSTRUCTIONS_FILE}}|AGENTS.md|g" \
         -e "s|{{CONFIG_FILE}}|config.toml|g" \
         -e "s|{{PLAN_DIR}}|.agents/plans|g" \
-        -e "s|{{STATE_DIR}}|.agents/state|g"
+        -e "s|{{STATE_DIR}}|.agents/state|g" \
+        -e "s|{{ROADMAP}}|.agents/ROADMAP.md|g"
 }
 
 # ── 2. Strip frontmatter (the leading `---`...`---` block, if present) ──

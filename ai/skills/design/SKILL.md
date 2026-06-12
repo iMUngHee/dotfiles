@@ -12,6 +12,15 @@ Design and plan implementation for the given task.
 
 Task: $ARGUMENTS (if empty, ask the user)
 
+## System — role in the pm-* loop
+
+`design` is a **general-purpose** planning skill (any multi-file change). It is also the **plan** node of the project-management loop:
+
+```
+(pm-context · context | retro · memory | pm-roadmap · backlog)  ──▶  design · plan
+```
+When invoked on a `pm-roadmap` backlog item, read that task's **context** (`/pm-context`: links) + **memory** (`/retro`: per-task decisions) + the item, then write the plan and link it back (`Task:`/`Plan:`). Outside the loop it just plans. (Plan storage: `{{PLAN_DIR}}/`; pointer: `{{STATE_DIR}}/current.txt`.)
+
 ## Context Discovery
 
 Before starting, search for existing plan artifacts that may be relevant:
@@ -21,6 +30,8 @@ ls {{PLAN_DIR}}/ 2>/dev/null && grep -l "<relevant keywords>" {{PLAN_DIR}}/*.md 
 ```
 
 Match against the `description:` frontmatter field for highest signal-to-noise. Read related plans for context (prior decisions, lessons learned).
+
+**Also consult the backlog** if `{{ROADMAP}}` exists: read it to see whether this task is already a `## Open` item (pull its Priority/Note/Task and any sibling decisions). If so, this design will link back to that item at persist time.
 
 ## Steps
 
@@ -46,7 +57,7 @@ Present design section by section with confirmation. Do NOT dump all sections at
 After design approval, present the implementation plan as response text. **Do NOT begin executing edits in this step.**
 
 1. **File Structure**: Map Create/Modify/Test files with responsibilities
-2. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL)
+2. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL). During implementation, flip `- [ ]` → `- [x]` in the plan artifact the moment each step meets its PASS output — unconditionally, one step at a time.
 3. If planned output differs from actual during implementation, investigate
 
 ### 5. Persist plan artifact (BEFORE implementation)
@@ -56,8 +67,8 @@ After 대협 approves the design (Step 3 approval = signal to persist) and **bef
 1. **Generate id slug** — kebab-case from title (lowercase, hyphens for spaces, ASCII only). Scan `{{PLAN_DIR}}/*.md` for existing `id:` fields. On collision, append `-2`, `-3`, etc.
 
 2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If the file exists and points to a plan with `status: draft` or `status: active`, present three options to 대협:
-   - **(a)** Mark the existing plan `done` and swap to the new one
-   - **(b)** Demote the existing plan to `draft` (preserved but not pointed-at) and proceed
+   - **(a)** Run `/retro` on the existing plan first — it closes the plan `done` with Post-Impl Notes, roadmap sink, and defer harvest — then swap the pointer to the new one. (design never writes `done` directly; that transition is /retro-exclusive.)
+   - **(b)** Demote the existing plan to `draft` (preserved but not pointed-at) and proceed. If `{{ROADMAP}}` exists and an item has `Plan:` == the existing plan, mirror its Status `active → draft` (it stays in `## Open`).
    - **(c)** Cancel the new plan creation
 
    If existing plan is `done` or `dropped`, just overwrite the state pointer.
@@ -100,11 +111,22 @@ Followed by the approved design content (Goal, Approach, Decisions, Implementati
 
 **Status values & lifecycle**: `draft` (just saved) → `active` (in progress) → `done` | `dropped` (terminal).
 
+### 6. Roadmap linkage (only if `{{ROADMAP}}` exists)
+
+Right after persisting the plan and pointing `current.txt`, link the plan to the backlog (markdown write only — single-writer discipline):
+
+- If a `## Open` item already has `Plan:` == this plan path → do nothing (idempotent).
+- Else if an item matches this work (id == plan id slug, or 대협 names one) → set its `Plan:` to the new path. Its Status now mirrors the plan = `draft`.
+- Else create a new `## Open` item: id = plan id slug, title from the plan title, Priority asked-or-`P2`, `Plan:` = path, **`Task:` = the owning task-context KEY** — a **real KEY is required** (ask 대협 which; if none exists, create the task first). Never persist a plan-linked item into `_INBOX`: inbox items are untriaged ideas and must be reassigned (`link <id> Task <KEY>`) before design. Status mirrors = `draft`.
+
+Each plan path appears as `Plan:` in **at most one** item. Skip this step entirely when `{{ROADMAP}}` does not exist.
+
 ## Rules
 
 - Do NOT implement until user approves the design
 - Plan artifact is saved ONLY after explicit design approval (Step 3)
 - **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they look up plans by id) and loses the pre-drift intent snapshot
+- **ALWAYS check off implementation steps as you go.** The instant a step in `## Implementation Steps` lands (meets its PASS output), edit the plan to flip its `- [ ]` → `- [x]` — unconditionally, never batched at the end. The checkbox state is the live progress record `/verify` and `/retro` trust; stale checkboxes break that contract.
 - No file writes during design exploration (Steps 1-3)
 - If 대협 declines to save, skip Step 5 — the plan remains conversation-only
 - Frontmatter MUST be English. Body content can be Korean.
@@ -120,7 +142,11 @@ After `current.txt` points to a `draft` plan, watch for explicit user replies th
 | `승인` / `approve` | Edit plan frontmatter `status: draft → active` |
 | `취소` / `cancel`  | Edit plan frontmatter to `status: dropped`     |
 
+**Roadmap mirror (only if `{{ROADMAP}}` exists and an item has `Plan:` == this plan):** on `승인`, set that item Status `active`. On `취소`, set Status `dropped` and move it from `## Open` to `## Recently Closed` (`- **id** → <plan> (dropped) · Task: <KEY>` — keep the item's Task as the trailing suffix when non-null, omit when taskless); clear the roadmap frontmatter `focus` if it names this item (focus-clear rule — see /pm-roadmap Lifecycle). Markdown write only; never copy plan content.
+
 > The `done` transition is **delegated to `/retro`**. `/retro` Phase 5 Apply marks the plan `done` together with `## Post-Implementation Notes`. Do NOT add a `완료` / `done` natural-language trigger here.
+
+> Only the `current.txt`-pointed plan is trigger-eligible. A parked `draft` plan (e.g. demoted via Step 5 option (b)) becomes eligible again by re-pointing `current.txt` at its repo-relative path — a direct one-line write; no new plan artifact is created.
 
 **Hard rules:**
 
