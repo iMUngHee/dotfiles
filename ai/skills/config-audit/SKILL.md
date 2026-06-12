@@ -29,8 +29,8 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 - `feedback_ai_config_structure.md` not the first memory entry in the manifest memory section → FAIL (Codex must see token rules before any token-using file).
 
 ### 4. Undefined tokens
-- Any `{{[A-Z_]+}}` in `ai/` source files whose name is NOT in the defined token set ({{TOOL_HOME}}, {{TOOL_NAME}}, {{TOOL_NAME_LC}}, {{INSTRUCTIONS_FILE}}, {{CONFIG_FILE}}, {{PLAN_DIR}}, {{STATE_DIR}}) → FAIL. Either add to the token set + bootstrap expand functions, or replace with literal value.
-- `{{PLAN_DIR}}` must resolve to `.agents/plans` and `{{STATE_DIR}}` must resolve to `.agents/state`. `.agents/skills` is for Codex skill discovery only; plans/state must stay sibling directories.
+- Any `{{[A-Z_]+}}` in `ai/` source files whose name is NOT in the defined token set ({{TOOL_HOME}}, {{TOOL_NAME}}, {{TOOL_NAME_LC}}, {{INSTRUCTIONS_FILE}}, {{CONFIG_FILE}}, {{PLAN_DIR}}, {{STATE_DIR}}, {{ROADMAP}}) → FAIL. Either add to the token set + bootstrap expand functions, or replace with literal value.
+- `{{PLAN_DIR}}` must resolve to `.agents/plans`, `{{STATE_DIR}}` to `.agents/state`, `{{ROADMAP}}` to `.agents/ROADMAP.md`. `.agents/skills` is for Codex skill discovery only; `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md`, and `.agents/task-context/` must stay sibling entries (never inside `.agents/skills`).
 
 ### 5. Generated-file integrity
 - `~/.claude/MEMORY.md` missing the `AUTO-GENERATED` header → FAIL (file was hand-edited or bootstrap is broken).

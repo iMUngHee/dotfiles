@@ -35,10 +35,11 @@ Files under `ai/` use double-mustache placeholders for tool-varying paths/names.
 | `{{CONFIG_FILE}}` | `settings.json` | `config.toml` |
 | `{{PLAN_DIR}}` | `.agents/plans` | `.agents/plans` |
 | `{{STATE_DIR}}` | `.agents/state` | `.agents/state` |
+| `{{ROADMAP}}` | `.agents/ROADMAP.md` | `.agents/ROADMAP.md` |
 
 Codex's AGENTS.md is built by sed-expanding these tokens at concat time (decisive). Claude's deploy keeps tokens intact and the model handles substitution in-context (live-validated 5/5 on tool calls).
 
-Shared skill artifacts use repo-local `.agents/plans` and `.agents/state`. Codex skill discovery uses `.agents/skills`; keep plans/state as siblings, never inside `.agents/skills`.
+Shared skill artifacts use repo-local `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md` (cross-plan backlog SSOT), and `.agents/task-context/` (per-project task links, gitignored). Codex skill discovery uses `.agents/skills`; keep all of these as siblings, never inside `.agents/skills`.
 
 ## Deploy model
 

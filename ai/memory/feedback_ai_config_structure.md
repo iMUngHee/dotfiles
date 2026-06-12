@@ -21,8 +21,9 @@ Files inside `claude/` or `codex/` get a `claude-` / `codex-` prefix. Files in `
 ## Token substitution
 `ai/` files use `{{double-mustache}}` placeholders for tool-varying paths/names. Replace with actual values when referencing, writing, or executing commands containing them.
 
-Shared plan/state tokens are intentionally tool-agnostic:
+Shared plan/state/roadmap tokens are intentionally tool-agnostic:
 - `PLAN_DIR` placeholder -> `.agents/plans`
 - `STATE_DIR` placeholder -> `.agents/state`
+- `ROADMAP` placeholder -> `.agents/ROADMAP.md`
 
-Codex skill discovery uses `.agents/skills`. Keep `.agents/plans`, `.agents/state`, and `.agents/skills` as separate sibling directories.
+Codex skill discovery uses `.agents/skills`. Keep `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md`, `.agents/task-context/`, and `.agents/skills` as separate siblings.

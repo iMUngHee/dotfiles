@@ -3,7 +3,7 @@
 # and that all tokens used in ai/ source are in the defined token set.
 set -euo pipefail
 
-KNOWN='\{\{(TOOL_HOME|TOOL_NAME|TOOL_NAME_LC|INSTRUCTIONS_FILE|CONFIG_FILE|PLAN_DIR|STATE_DIR)\}\}'
+KNOWN='\{\{(TOOL_HOME|TOOL_NAME|TOOL_NAME_LC|INSTRUCTIONS_FILE|CONFIG_FILE|PLAN_DIR|STATE_DIR|ROADMAP)\}\}'
 
 # 1. ~/.codex/AGENTS.md must have zero {{TOKEN}}
 if [ -f "$HOME/.codex/AGENTS.md" ]; then
