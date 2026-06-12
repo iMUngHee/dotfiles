@@ -4,6 +4,10 @@
 
 project_doc_max_bytes = 65536
 
+# Default startup automation = TUI "Auto" preset (on-request approvals + workspace-write sandbox)
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
 [tui]
 theme = "catppuccin-mocha"
 notifications = false
