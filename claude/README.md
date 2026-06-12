@@ -15,6 +15,7 @@ claude/
 │   └── claude-feedback_*.md    # Claude-only feedback memories (claude- prefix)
 ├── skills/
 │   ├── claude-ask-codex/       # Claude-only skill; invokes as `ask-codex`
+│   ├── claude-fanout/          # Claude-only skill; invokes as `fanout`
 │   └── claude-worktree/        # Claude-only skill; invokes as `worktree`
 ├── hooks/                      # PreToolUse, PostToolUse, UserPromptSubmit, Stop, etc. — see Hooks section
 │   └── lib/                    # Shared helpers
@@ -96,13 +97,14 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files) |
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
 | `inject-context.sh` | UserPromptSubmit | Inject active plan info from `.agents/state/current.txt` |
-| `notify.sh` | Stop, Notification, PermissionRequest | AgentNotifier desktop/tmux notification on completion or approval |
+| `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |
 | `stop-handler.sh` | Stop | Final gate — auto-format then type check before completion |
 | `on-rate-limit.sh` | StopFailure | Auto-switch CCS quota account on rate limit |
-| `check-quota-switch.sh` | SessionStart, SessionClear | Quota reset check, account swap if elapsed |
+| `check-quota-switch.sh` | SessionStart (startup, clear) | Quota reset check, account swap if elapsed |
 | `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format + type check (30s debounce) |
 | `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage (autocompact at 70%) |
 | `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files |
 | `subagent-stop-reminder.sh` | SubagentStop | Inject DEVGUARD subagent trust reminder |
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
 | `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
+| `context-mode-go hook *` | PreToolUse, PostToolUse, UserPromptSubmit, PreCompact, SessionStart | context-mode MCP integration (sandboxed output indexing/search) |

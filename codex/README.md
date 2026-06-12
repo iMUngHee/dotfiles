@@ -11,6 +11,7 @@ codex/
 ├── hooks/                      # Codex hook commands
 ├── skills/                     # Codex-native skills (codex-* prefix)
 │   ├── codex-ask-claude/       # Codex-only skill; invokes as `ask-claude`
+│   ├── codex-fanout/           # Codex-only skill; invokes as `fanout`
 │   └── codex-worktree/         # Codex-only skill; invokes as `worktree`
 └── scripts/
     ├── bootstrap.sh            # Build AGENTS.md, deep-merge config.toml, overlay skills
@@ -40,13 +41,14 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 3. **`~/.agents/skills/`** overlayed (note: not `~/.codex/skills/` — Codex discovery path is `~/.agents/skills/`):
    - per-skill symlinks from `ai/skills/*/`, `ai/skills/private/*/`, `codex/skills/*/`
    - existing user-added (non-symlink) entries preserved
-   - plan/state artifacts are not deployed here; repo-local `.agents/plans` and `.agents/state` are sibling directories
+   - plan/state/roadmap artifacts are not deployed here; repo-local `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md`, `.agents/task-context/`, and `.agents/memory/` are sibling entries
 
 ## What's enforced via template
 
 `config.toml.template` declares the keys that should always match the repo:
 
 - `project_doc_max_bytes` (sets the AGENTS.md cap, default 65536)
+- `approval_policy` + `sandbox_mode` (default startup automation = TUI "Auto" preset: on-request approvals, workspace-write sandbox)
 - `[tui].theme`
 - `[tui].vim_mode_default`
 - `[tui].status_line_use_colors`
@@ -87,11 +89,11 @@ Verify with `codex mcp list`.
 
 Codex discovers skills at `~/.agents/skills/` (note: `.agents/`, not `.codex/`). The bootstrap overlay merges three sources into that directory:
 
-- `ai/skills/<name>/` — shared (15)
+- `ai/skills/<name>/` — shared (16)
 - `ai/skills/private/<name>/` — shared but gitignored (kafdrop-hunt, track-logging)
-- `codex/skills/codex-<id>/` — Codex-only (2: `ask-claude`, `worktree`)
+- `codex/skills/codex-<id>/` — Codex-only (3: `ask-claude`, `fanout`, `worktree`)
 
-Repo-local plans and state use `.agents/plans` and `.agents/state`; do not place them under `.agents/skills`.
+Repo-local artifacts use `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md`, `.agents/task-context/`, and `.agents/memory/`; do not place them under `.agents/skills`.
 
 ## Codex-only instructions
 

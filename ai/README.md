@@ -39,7 +39,19 @@ Files under `ai/` use double-mustache placeholders for tool-varying paths/names.
 
 Codex's AGENTS.md is built by sed-expanding these tokens at concat time (decisive). Claude's deploy keeps tokens intact and the model handles substitution in-context (live-validated 5/5 on tool calls).
 
-Shared skill artifacts use repo-local `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md` (cross-plan backlog SSOT), and `.agents/task-context/` (per-project task links, gitignored). Codex skill discovery uses `.agents/skills`; keep all of these as siblings, never inside `.agents/skills`.
+Shared skill artifacts use repo-local `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md` (cross-plan backlog SSOT), `.agents/task-context/` (per-project task links, gitignored), and `.agents/memory/` (per-task memory notes, gitignored). Codex skill discovery uses `.agents/skills`; keep all of these as siblings, never inside `.agents/skills`.
+
+## Project-management loop (pm-*)
+
+Four shared skills form one project-management system over those `.agents/` artifacts:
+
+```
+(pm-context · links | retro · memory | pm-roadmap · backlog)  ──▶  design · plan
+        ▲__________________________________________________________________│
+        retro closes the loop: plan done → close backlog item, harvest defers + decisions
+```
+
+`pm-context` owns per-task links, `pm-roadmap` owns the backlog (`.agents/ROADMAP.md`), `retro` owns per-task memory (`.agents/memory/<KEY>.md`) and the done transition, `design` reads all three and owns the plan. The `pm-context` GUI (`manage`) serves a unified dashboard (backlog + tasks + inline link editing) and reuses `pm-roadmap`'s TS modules.
 
 ## Deploy model
 
