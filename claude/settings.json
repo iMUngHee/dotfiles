@@ -1,25 +1,268 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "alwaysThinkingEnabled": true,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "cleanupPeriodDays": 14,
-  "skillListingBudgetFraction": 0.02,
+  "effortLevel": "xhigh",
+  "enabledPlugins": {
+    "clangd-lsp@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true,
+    "jdtls-lsp@claude-plugins-official": true,
+    "kotlin-lsp@claude-plugins-official": true,
+    "lua-lsp@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  },
   "env": {
     "BASH_DEFAULT_TIMEOUT_MS": "300000",
     "BASH_MAX_TIMEOUT_MS": "900000",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1",
     "CLAUDE_CODE_ENABLE_AWAY_SUMMARY": "1",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
     "DISABLE_AUTOUPDATER": "1",
     "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
-    "MAX_MCP_OUTPUT_TOKENS": "15000",
-    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
+    "MAX_MCP_OUTPUT_TOKENS": "15000"
   },
-  "attribution": {
-    "commit": "",
-    "pr": ""
+  "hooks": {
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/log-instructions.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/notify.sh approval",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/notify.sh approval",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/post-edit-pipeline.sh",
+            "statusMessage": "Formatting & checking...",
+            "timeout": 60000,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/context-monitor.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|Bash|Agent|NotebookEdit|MultiEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "context-mode-go hook posttooluse",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Read|WebFetch|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__"
+      },
+      {
+        "hooks": [
+          {
+            "command": "context-mode-go hook posttooluse",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Read|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/log-tool-failure.sh",
+            "statusMessage": "Logging tool failure...",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Edit|Write|MultiEdit"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "context-mode-go hook precompact",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/rtk-rewrite.sh",
+            "statusMessage": "Optimizing command...",
+            "timeout": 5000,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/protect-files.sh",
+            "statusMessage": "Checking file safety...",
+            "timeout": 5000,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Edit|Write|MultiEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "context-mode-go hook pretooluse",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Read|Grep|WebFetch|Agent|mcp__context-mode__ctx_execute(_file)?"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/compact-restore.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
+      },
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ],
+        "matcher": "startup"
+      },
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ],
+        "matcher": "clear"
+      },
+      {
+        "hooks": [
+          {
+            "command": "context-mode-go hook sessionstart",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/stop-handler.sh",
+            "statusMessage": "Running type checker...",
+            "timeout": 45000,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/on-rate-limit.sh",
+            "timeout": 10000,
+            "type": "command"
+          }
+        ],
+        "matcher": "rate_limit"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/subagent-stop-reminder.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/.claude/hooks/prompt-guard.sh",
+            "statusMessage": "Scanning for secrets...",
+            "timeout": 5000,
+            "type": "command"
+          },
+          {
+            "command": "$HOME/.claude/hooks/inject-context.sh",
+            "timeout": 3000,
+            "type": "command"
+          },
+          {
+            "command": "context-mode-go hook userpromptsubmit",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
   },
   "includeGitInstructions": false,
+  "language": "한국어",
   "permissions": {
     "allow": [
       "Bash(awk*)",
@@ -109,6 +352,7 @@
       "WebSearch",
       "Write"
     ],
+    "defaultMode": "auto",
     "deny": [
       "Edit(**/.env)",
       "Edit(**/.env.*)",
@@ -134,252 +378,18 @@
       "Write(**/credentials/**)",
       "Write(**/secrets/**)"
     ],
-    "defaultMode": "auto",
     "disableBypassPermissionsMode": "disable"
   },
-  "hooks": {
-    "InstructionsLoaded": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/log-instructions.sh"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/notify.sh approval",
-            "timeout": 10000
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/notify.sh approval",
-            "timeout": 10000
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/post-edit-pipeline.sh",
-            "timeout": 60000,
-            "statusMessage": "Formatting & checking..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|Bash|Agent|NotebookEdit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/context-monitor.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Read|WebFetch|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "context-mode-go hook posttooluse"
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "Bash|Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/log-tool-failure.sh",
-            "statusMessage": "Logging tool failure..."
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "context-mode-go hook precompact"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/rtk-rewrite.sh",
-            "timeout": 5000,
-            "statusMessage": "Optimizing command..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/protect-files.sh",
-            "timeout": 5000,
-            "statusMessage": "Checking file safety..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Read|Grep|WebFetch|Agent|mcp__context-mode__ctx_execute(_file)?",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "context-mode-go hook pretooluse"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/compact-restore.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
-            "timeout": 10000
-          }
-        ]
-      },
-      {
-        "matcher": "clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
-            "timeout": 10000
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "context-mode-go hook sessionstart"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/stop-handler.sh",
-            "timeout": 45000,
-            "statusMessage": "Running type checker..."
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "matcher": "rate_limit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/on-rate-limit.sh",
-            "timeout": 10000
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/subagent-stop-reminder.sh"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/prompt-guard.sh",
-            "timeout": 5000,
-            "statusMessage": "Scanning for secrets..."
-          },
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/inject-context.sh",
-            "timeout": 3000
-          },
-          {
-            "type": "command",
-            "command": "context-mode-go hook userpromptsubmit"
-          }
-        ]
-      }
-    ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "$HOME/.claude/statusline.sh"
-  },
-  "enabledPlugins": {
-    "clangd-lsp@claude-plugins-official": true,
-    "gopls-lsp@claude-plugins-official": true,
-    "jdtls-lsp@claude-plugins-official": true,
-    "kotlin-lsp@claude-plugins-official": true,
-    "lua-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
-  },
-  "language": "한국어",
+  "preferredNotifChannel": "notifications_disabled",
   "sandbox": {
+    "autoAllowBashIfSandboxed": true,
     "enabled": false,
-    "failIfUnavailable": true,
-    "autoAllowBashIfSandboxed": true
+    "failIfUnavailable": true
   },
+  "skillListingBudgetFraction": 0.02,
   "spinnerTipsEnabled": false,
-  "alwaysThinkingEnabled": true,
-  "effortLevel": "xhigh"
+  "statusLine": {
+    "command": "$HOME/.claude/statusline.sh",
+    "type": "command"
+  }
 }

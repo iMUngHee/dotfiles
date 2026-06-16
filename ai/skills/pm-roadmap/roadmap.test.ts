@@ -83,4 +83,12 @@ assert.ok(!ser.includes("  - Task: -"), "legacy `-` is never written");
 assert.equal(parseRoadmap(ser.replace("Task: _INBOX", "Task: -")).open[1].task, null, "legacy `-` alias");
 assert.equal(parseRoadmap(ser).open[1].task, null, "_INBOX reads as null");
 
-console.log("PASS: roadmap round-trip (3 open, Task grouping, 2 closed forms, status mirror, _INBOX alias)");
+// malformed closed rows are dropped at parse time — only the two valid forms survive.
+// planless `→ done` is unrepresentable, and `→ <neither form>` is garbage. (⑤ false-coverage fix)
+{
+  const md = `---\nproject: d\nfocus:\nupdated: 2026-06-10\n---\n\n# d — Backlog\n\n## Open\n\n## Recently Closed\n\n- **good** → dropped · ok\n- **ghost** → done · was never planned\n- **garbage** → who knows\n`;
+  const dropped = parseRoadmap(md);
+  assert.deepEqual(dropped.recentlyClosed.map((c) => c.id), ["good"], "malformed closed rows dropped: " + JSON.stringify(dropped.recentlyClosed));
+}
+
+console.log("PASS: roadmap round-trip (3 open, Task grouping, 2 closed forms, status mirror, _INBOX alias, malformed-closed dropped)");

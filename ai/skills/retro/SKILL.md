@@ -20,7 +20,7 @@ Range: $ARGUMENTS (if empty, default to HEAD~5)
         ▲___________________________________________________________________│
         retro: on a landed plan → close the pm-roadmap item, harvest follow-up workable units → backlog, harvest durable decisions → that task's MEMORY
 ```
-So retro feeds **memory** and **backlog** back into the loop. Memory is **retro-owned** (durable per-task decisions/learnings), distinct from `pm-context`'s links and from a plan's Post-Impl Notes. Stored in the retro-owned `.agents/memory/<KEY>.md`; a legacy `## Memory` section in a task-context file is still read (union) but never written. (Global memory/rules hygiene is retro's other, non-pm job.)
+So retro feeds **memory** and **backlog** back into the loop. Memory (durable per-task decisions/learnings) is **retro's domain — retro is its primary writer** — distinct from `pm-context`'s links and from a plan's Post-Impl Notes. Stored at `.agents/memory/<KEY>.md`; the `pm-context` manage GUI is a secondary writer (the Memory half of its 2-write task edit), so the file itself is the single SSOT — not a single-writer store. A legacy `## Memory` section in a task-context file is still read (union) but never written by retro. (Global memory/rules hygiene is retro's other, non-pm job.)
 
 ## Current Context
 - Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`

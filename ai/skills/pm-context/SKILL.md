@@ -22,7 +22,7 @@ One of four skills in a single project-management system. **This skill owns *con
 (retro · memory)         ├──▶  (design · plan)
 (pm-roadmap · backlog)  ┘
 ```
-`pm-context`→links · `retro`→memory(per-task decisions) · `pm-roadmap`→backlog(items) · `design`→plan(reads all three). Each fact in the smallest file enforcing its invariant; views derived. (Per-task *memory* is **retro's**, not this skill's — stored separately at `.agents/memory/<KEY>.md`; a legacy `## Memory` section here is read-only back-compat.)
+`pm-context`→links · `retro`→memory(per-task decisions) · `pm-roadmap`→backlog(items) · `design`→plan(reads all three). Each fact in the smallest file enforcing its invariant; views derived. (Per-task *memory* lives at `.agents/memory/<KEY>.md` — **retro is the primary writer** (harvests durable decisions on close), and the `manage` GUI also writes it as the Memory half of its 2-write task edit. The SSOT is that single file, not a single writer. A legacy `## Memory` section here is read-only back-compat.)
 
 > In the subcommands below, `tasks/` is shorthand for the project-scoped dir `<git-root>/.agents/task-context/` and `tasks/.current` for its pointer file. Resolve the git root once per invocation; refuse outside a repo.
 
@@ -227,14 +227,14 @@ A task's context has **two parts**: external **Links** (top-level blocks, this f
 - `URL`: required, must match `https?://`, unique within file
 - `Triggers`: optional, comma-separated keyword list (5-13 recommended — see `add` step 5)
 - `Summary`: optional, single-line
-- **Memory** entries (`.agents/memory/<KEY>.md`, or a legacy `## Memory` section here): `title` (required), `Note` (one-line), `Date` (optional `YYYY-MM-DD`). Written by /retro to the memory file; surfaced in `/pm-roadmap next` prompts and item context.
+- **Memory** entries (`.agents/memory/<KEY>.md`, or a legacy `## Memory` section here): `title` (required), `Note` (one-line), `Date` (optional `YYYY-MM-DD`). Written by /retro (primary) and the `manage` GUI (2-write task edit) to the memory file; surfaced in `/pm-roadmap next` prompts and item context.
 
 **Parser:**
 - Top-level `- **Label**` opens a link entry; entries under `## Memory` open a memory note
 - Sub-bullet `  - Key: Value` populates a field (Key is case-insensitive, value is trimmed)
 - Unknown sub-bullet keys are ignored (forward compatibility)
 - Sub-bullets without a parent are ignored
-- The `add`/`remove`/`annotate` subcommands (including the `manage` reconcile pass, which reuses `annotate`) match and modify **top-level Link entries only** — Memory entries (memory file or legacy `## Memory` section) are outside their match scope and are never fetched or removed by them. Memory notes are written by /retro to `.agents/memory/<KEY>.md`; the `manage` GUI may also edit them (Links + Memory are both task context)
+- The `add`/`remove`/`annotate` subcommands (including the `manage` reconcile pass, which reuses `annotate`) match and modify **top-level Link entries only** — Memory entries (memory file or legacy `## Memory` section) are outside their match scope and are never fetched or removed by them. Memory notes live in `.agents/memory/<KEY>.md` — /retro is the primary writer; the `manage` GUI also writes them as the Memory half of its 2-write task edit (Links + Memory are both task context)
 
 ## Pointer File
 
