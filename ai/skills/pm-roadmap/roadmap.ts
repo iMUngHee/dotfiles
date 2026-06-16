@@ -50,7 +50,7 @@ function nullToDash(v: string | null): string {
 // Taskless items live in the virtual _INBOX (no task-context file, not designable
 // until triaged to a real task). Reads accept legacy `-` and `_INBOX` as the same
 // null; writes emit `_INBOX` only.
-export const INBOX = "_INBOX";
+const INBOX = "_INBOX"; // internal parser alias — not imported elsewhere
 function taskToNull(v: string): string | null {
   const t = dashToNull(v);
   return t === INBOX ? null : t;

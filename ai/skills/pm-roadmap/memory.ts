@@ -69,6 +69,8 @@ export async function writeTaskMemory(root: string, key: string, notes: TaskMemo
 }
 
 // Strip a legacy `## Memory` section from task-context md (post-migration).
+// test-only helper: production migration happens implicitly via the pm-context server's
+// toTaskMd(key, links, []) full-rewrite, so this is exercised by memory.test.ts only.
 export function stripMemorySection(taskMd: string): string {
   const lines = taskMd.split("\n");
   const out: string[] = [];

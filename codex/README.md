@@ -114,7 +114,7 @@ Codex hook blocks are enforced through `config.toml.template`.
 - `Stop` → `stop-gate.sh` runs the final quality gate and then sends task completion or review-needed notifications.
 - `PermissionRequest` → `codex/hooks/notify.sh approval` sends approval notifications.
 
-Notifications use the shared AgentNotifier socket and sender from `notifier/`.
+Notifications use the shared AgentNotifier socket and sender from `notifier/`. Codex hooks request focus-aware delivery (`AGENT_NOTIFIER_DELIVERY=focus-aware`): when the originating terminal is already frontmost the daemon suppresses the desktop alert and routes the message to the tmux pane instead — on both macOS and Linux. See [`notifier/README.md`](../notifier/README.md) for the protocol fields and Linux focus hooks (`AGENT_NOTIFIER_FOCUS_CHECK_CMD`).
 
 Skill SKILL.md files use the same frontmatter as Claude (`name`, `description`, ...). Codex ignores unknown frontmatter keys (live-validated). Tool-specific directories keep the `codex-` prefix for ownership, while `name:` is the user-facing invocation/display name and may omit that prefix.
 

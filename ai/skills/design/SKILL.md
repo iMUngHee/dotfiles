@@ -68,7 +68,7 @@ After 대협 approves the design (Step 3 approval = signal to persist) and **bef
 
 2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If the file exists and points to a plan with `status: draft` or `status: active`, present three options to 대협:
    - **(a)** Run `/retro` on the existing plan first — it closes the plan `done` with Post-Impl Notes, roadmap sink, and defer harvest — then swap the pointer to the new one. (design never writes `done` directly; that transition is /retro-exclusive.)
-   - **(b)** Demote the existing plan to `draft` (preserved but not pointed-at) and proceed. If `{{ROADMAP}}` exists and an item has `Plan:` == the existing plan, mirror its Status `active → draft` (it stays in `## Open`).
+   - **(b)** Demote the existing plan to `draft` (preserved but not pointed-at) and proceed. If `{{ROADMAP}}` exists and an item has `Plan:` == the existing plan, mirror its Status `active → draft` (it stays in `## Open`) — this is the **demote** row in /pm-roadmap Lifecycle.
    - **(c)** Cancel the new plan creation
 
    If existing plan is `done` or `dropped`, just overwrite the state pointer.
@@ -120,6 +120,18 @@ Right after persisting the plan and pointing `current.txt`, link the plan to the
 - Else create a new `## Open` item: id = plan id slug, title from the plan title, Priority asked-or-`P2`, `Plan:` = path, **`Task:` = the owning task-context KEY** — a **real KEY is required** (ask 대협 which; if none exists, create the task first). Never persist a plan-linked item into `_INBOX`: inbox items are untriaged ideas and must be reassigned (`link <id> Task <KEY>`) before design. Status mirrors = `draft`.
 
 Each plan path appears as `Plan:` in **at most one** item. Skip this step entirely when `{{ROADMAP}}` does not exist.
+
+### 7. Archive aged plans (only if `{{ROADMAP}}` exists)
+
+**After** roadmap linkage (so the new plan is current + linked and won't be touched), run the deterministic archiver to keep `{{PLAN_DIR}}/` small. It moves **terminal** (`done`/`dropped`) plans **≥ 30 days old** that are **unreferenced** (not named by `current.txt`, not any `## Open` item's `Plan:`) into `{{PLAN_DIR}}/archive/`, and rewrites each Recently-Closed `→ <plan>` pointer in `{{ROADMAP}}` so closed-join / GUI still resolve. Reference-protected and idempotent (safe to re-run; recovers a crash between move and pointer rewrite). The just-saved `draft` plan is never archived (it is current + non-terminal).
+
+```bash
+repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
+(cd ~/.config/ai/skills/pm-roadmap && [[ -d node_modules ]] || npm install)
+~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.config/ai/skills/pm-roadmap/archive.ts "$repo_root"
+```
+
+Report the archiver's output (moved / skipped). Add `--dry-run` to preview without moving, or `--today=YYYY-MM-DD` to pin the age cutoff.
 
 ## Rules
 

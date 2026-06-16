@@ -76,17 +76,18 @@ const checksOf = (vs: { check: string }[]) => vs.map((v) => v.check).sort();
   assert.deepEqual(checksOf(r.errors), ["V2"], JSON.stringify(r.errors));
 }
 
-// ── V4 closed bad status is unrepresentable post-parse; V4 fires via open-section status — covered by parser defaults.
-// ── V5 planless active + planless closed done ──
+// ── V5 planless item with non-open status (open section) ──
+// NOTE: a planless *closed* `done` row is unrepresentable — the parser accepts only
+// `dropped` for planless closed rows, so `→ done · <note>` is dropped at parse time
+// (proven in roadmap.test.ts). V5 here is driven solely by the open planless-active item.
 {
   const root = await makeRoot({
     ".agents/ROADMAP.md": roadmap(
       item("a-item", { Status: "active", Plan: "-", Note: "n" }),
-      "- **ghost** → done · was never planned\n",
     ),
   });
   const r = await validateRoadmap(root);
-  assert.ok(checksOf(r.errors).includes("V5"), JSON.stringify(r.errors));
+  assert.deepEqual(checksOf(r.errors), ["V5"], JSON.stringify(r.errors));
 }
 
 // ── V6 dangling focus ──

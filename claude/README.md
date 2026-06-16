@@ -108,3 +108,5 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
 | `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
 | `context-mode-go hook *` | PreToolUse, PostToolUse, UserPromptSubmit, PreCompact, SessionStart | context-mode MCP integration (sandboxed output indexing/search) |
+
+Claude Code's built-in notification emitter is disabled via `preferredNotifChannel: notifications_disabled` in `settings.json`, so desktop alerts go through a single path (`notify.sh` → AgentNotifier) instead of the terminal's own emitter — which otherwise surfaced under the terminal app's name (e.g. Ghostty), especially while waiting on approvals.
