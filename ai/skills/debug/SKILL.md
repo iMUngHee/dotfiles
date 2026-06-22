@@ -25,7 +25,7 @@ Establish a reliable reproduction BEFORE any investigation.
 
 1. Get exact command/steps that trigger the error
 2. Run it. Capture full output in a fenced code block
-3. If not reproducible: report to 대협 with findings. Do NOT guess.
+3. If not reproducible: report to the user with findings. Do NOT guess.
 
 Output gate: a fenced code block showing the FAILING output.
 
@@ -41,7 +41,7 @@ Narrow to root cause with evidence at each step.
    - Binary search: comment out / simplify until error changes
 4. If hypothesis wrong, state why and form next hypothesis
 
-Escalation: 3 failed hypotheses — STOP. Report findings to 대협 per 3-strike rule.
+Escalation: 3 failed hypotheses — STOP. Report findings to the user per 3-strike rule.
 
 ### When to spawn Explore subagent
 
@@ -67,4 +67,4 @@ Output gate: "Root cause: [specific line/condition] because [evidence from step 
 - No fix without root cause stated first
 - No "it works now" without showing Phase 1 vs Phase 4 comparison
 - Each phase must produce its output gate before proceeding
-- If 대협 provides reproduction steps, start at Phase 1. If 대협 provides a root cause, start at Phase 3.
+- If the user provides reproduction steps, start at Phase 1. If the user provides a root cause, start at Phase 3.

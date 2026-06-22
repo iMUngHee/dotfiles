@@ -126,7 +126,7 @@ Verdict: X/Y conditions verified
 ```
 
 Each condition MUST have a fenced code block showing the verification output.
-Failed conditions — report to 대협 with specific failure point.
+Failed conditions — report to the user with specific failure point.
 
 ## Rules
 

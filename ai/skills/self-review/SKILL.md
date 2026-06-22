@@ -39,7 +39,7 @@ Review whether rules were followed in this session.
 
 | Rule | Result | Evidence |
 |------|--------|----------|
-| Address as 대협 | ✓/✗ | ... |
+| Address convention (PERSONAL.md) | ✓/✗ | ... |
 | Expertise level | ✓/✗ | ... |
 | File Modification (explicit request only) | ✓/✗ | ... |
 | Critical Analysis — Justification | ✓/✗ | ... |

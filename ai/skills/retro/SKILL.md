@@ -118,10 +118,10 @@ Present all proposed changes in a single table:
 | 5 | Skip        | —                           | —              | File structure (derivable)      |
 ```
 
-For **Consolidate** actions: show the proposed merged content inline so 대협 can judge quality.
+For **Consolidate** actions: show the proposed merged content inline so the user can judge quality.
 For **Add** actions: show the full proposed file content.
 
-Wait for 대협 to approve by number (e.g., "1,2,3" or "all" or "none").
+Wait for the user to approve by number (e.g., "1,2,3" or "all" or "none").
 
 ### 5. Apply
 
