@@ -20,7 +20,7 @@ Range: $ARGUMENTS (if empty, default to HEAD~5)
         ▲___________________________________________________________________│
         retro: on a landed plan → close the pm-roadmap item, harvest follow-up workable units → backlog, harvest durable decisions → that task's MEMORY
 ```
-So retro feeds **memory** and **backlog** back into the loop. Memory (durable per-task decisions/learnings) is **retro's domain — retro is its primary writer** — distinct from `pm-context`'s links and from a plan's Post-Impl Notes. Stored at `.agents/memory/<KEY>.md`; the `pm-context` manage GUI is a secondary writer (the Memory half of its 2-write task edit), so the file itself is the single SSOT — not a single-writer store. A legacy `## Memory` section in a task-context file is still read (union) but never written by retro. (Global memory/rules hygiene is retro's other, non-pm job.)
+So retro feeds **memory** and **backlog** back into the loop. The close is **one atomic transaction** — the `pm-roadmap.ts complete` CLI (→ `completePlanFromRetro`): plan → terminal status, the backlog item → `closed.md`, the plan's structured `## Deferred` block harvested into the task backlog, and the `current.txt`/`focus` pointers cleared, all-or-nothing. Memory (durable per-task decisions/learnings) is **retro's domain — retro is its primary writer** — distinct from `pm-context`'s links and from a plan's Post-Impl Notes. Stored per-task at `.agents/tasks/<KEY>/memory.md`, written through the `pm-roadmap.ts memory add` CLI (lock+CAS via ops) — **never hand-edited**; the `pm-context` manage GUI is the other writer, so the file is the single SSOT, not a single-writer store. (Global memory/rules hygiene is retro's other, non-pm job.)
 
 ## Current Context
 - Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
@@ -73,7 +73,7 @@ state_file="{{STATE_DIR}}/current.txt"
   && [ -f "$plan" ] && echo "$plan"
 ```
 
-If a plan exists, read it — the delta between plan and reality is a key input. **Also capture its current frontmatter `status:`** (a pointed-at plan may still be `draft`, not only `active`) — Phase 5 builds its status edit from this captured value.
+If a plan exists, read it — the delta between plan and reality is a key input. **Also capture its current frontmatter `status:` and whether it is linked to a backlog item** (run `pm-roadmap.ts get <id>`, where `<id>` is the plan's frontmatter `id` — see Phase 5 setup). Phase 5 routes on these: a **linked** plan closes via the `complete` CLI (which sets the status itself); an **unlinked** plan (general /design, no backlog) gets a direct status edit built from the captured value. If the plan is already terminal (`done`/`dropped`), skip the close.
 
 If `/self-review` was run in this session, reference its findings (especially violations).
 
@@ -128,18 +128,48 @@ Wait for 대협 to approve by number (e.g., "1,2,3" or "all" or "none").
 Only apply approved items:
 
 - **Consolidate**: Write merged file, delete the redundant file, update MEMORY.md index
-- **Update**: Edit the plan artifact — set `status: <current> → <terminal>` where `<current>` is the status captured in Phase 1 (∈ {draft, active}) and `<terminal>` is `done` (or `dropped` if explicitly abandoned by 대협); build the Edit old_string from the captured status. Guard: if the plan is already terminal (`done`/`dropped`), skip the status edit and report. AND fill `## Post-Implementation Notes` with key outcomes, design pivots, and findings. **Then truncate `{{STATE_DIR}}/current.txt` to empty** so the active-task pointer reflects reality (no plan is currently active). This is the canonical path to mark a plan `done` (the `design` skill does NOT carry a `완료` natural-language trigger).
-- **Roadmap sink** (only if `{{ROADMAP}}` exists and a `## Open` item has `Plan:` == this plan): mirror the item Status to the plan's terminal status, then move it from `## Open` to `## Recently Closed` (`- **id** → <plan> (done|dropped) · Task: <KEY>` — keep the item's Task as the trailing suffix when non-null, omit when taskless; trim to the most recent 10); clear the roadmap frontmatter `focus` if it names this item (Focus-clear rule — see /pm-roadmap Lifecycle). On `done`, also **harvest** each deferred item named in `## Post-Implementation Notes` into `## Open` as a new planless item (Status `open`, Priority `P2` or as noted, `Note` = the defer description, **`Task:` = the closed item's Task** so the follow-up stays grouped). A durable decision/gotcha worth recalling next session → add it as a **Memory note** to the retro-owned store `.agents/memory/<KEY>.md` (create with H1 `# <KEY>` if missing; ensure `.agents/.gitignore` has a `memory/` line first), bullet grammar: `- **<title>**` / `  - Note: <one-line>` / `  - Date: <YYYY-MM-DD>` — not the roadmap. If the task-context file still carries a legacy `## Memory` section, migrate it in the same pass (copy notes into the memory file → verify → delete the section). Markdown write only — never copy plan content into the roadmap.
+- **Update plan body**: Fill `## Post-Implementation Notes` with key outcomes, design pivots, and findings. A plan under `{{PLAN_DIR}}/` is a design artifact, **not** a task-store file, so edit it directly with `Edit`. If follow-up workable units emerged, add a structured `## Deferred` block to the same plan so the close transaction harvests them into the task backlog (grammar below). Do **not** hand-edit the plan's `status:` here — the close step owns it.
+
+  CLI setup (one block; `<id>` = the plan's frontmatter `id`):
+  ```bash
+  repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
+  (cd ~/.config/ai/skills/pm-roadmap && [[ -d node_modules ]] || npm install)
+  pm() { PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.config/ai/skills/pm-roadmap/pm-roadmap.ts "$@"; }
+  pm get <id>   # resolves the owning task KEY + confirms the item is still open (linked path)
+  ```
+
+  `## Deferred` block grammar (harvested by `complete`; ids must be fresh kebab-case — a collision aborts the whole close):
+  ```markdown
+  ## Deferred
+
+  - **<new-kebab-id>** — <title>
+    - Priority: P2
+    - Note: <one-line follow-up description>
+  ```
+
+- **Close the loop** — pick one path:
+  - **Linked to a backlog item** (the pm loop — `pm get <id>` finds the item **still open** in a task backlog; `<id>` = the plan's frontmatter `id`, aligned 1:1 with the plan slug): run the atomic close transaction
+    ```bash
+    pm complete <KEY> <id> --plan <plan-path> --status done       # done path
+    pm complete <KEY> <id> --plan <plan-path> --status dropped --reason "<why abandoned>"   # dropped path
+    ```
+    `complete` (→ `completePlanFromRetro`) atomically sets the plan `status` → terminal, moves the item `backlog.md` → `closed.md`, harvests the plan's `## Deferred` block (preflighted wholesale), and clears `current.txt`/`focus` if they name this plan/item. **Do NOT hand-edit the plan `status` or `current.txt` — `complete` owns both.** The op preflights all-or-nothing: it **refuses** before any write if the item is not actually linked to `<plan-path>` (guards a wrong `--plan`) or if `--status dropped` is missing `--reason` — so a wrong linked/unlinked call fails safely instead of corrupting state.
+  - **Not linked** (plan-only /design, no backlog item): set the plan frontmatter `status: <captured> → done` (or `dropped`) with `Edit` (build `old_string` from the Phase-1 captured status) and truncate `{{STATE_DIR}}/current.txt` to empty. No task store is involved, so no CLI/lock is needed. Guard: if the plan is already terminal, skip and report. This is the canonical path to mark an unlinked plan `done` (the `design` skill carries no `완료` trigger).
+- **Harvest durable decisions → memory**: for each decision/gotcha worth recalling next session, write it to the task's memory store via the CLI (a separate write, outside the close transaction):
+  ```bash
+  pm memory <KEY> add "<note title>" --note "<one-line decision>" --date <YYYY-MM-DD>
+  ```
+  This upserts (by title) `.agents/tasks/<KEY>/memory.md` through ops (lock+CAS) — **never hand-edit it**. Surfaced in `pm next` prompts and item context. (Legacy `.agents/memory/<KEY>.md` files and in-file `## Memory` sections are migrated once by `pm migrate`, not by retro.)
 - **Delete**: Remove file, update MEMORY.md index
 - **Add**: Write new file (to memory/ or memory/private/ based on classification), update MEMORY.md or MEMORY.private.md index
 
-After applying, show the diff of MEMORY.md to confirm index consistency. If a Roadmap sink ran, also run the invariant checker once (`/pm-roadmap validate`) and report its output — a read-only self-check of the just-written state.
+After applying, show the diff of MEMORY.md to confirm index consistency. If the close transaction ran (linked path), also run the invariant checker once (`pm validate`) and report its output — a read-only self-check of the just-written task store.
 
 ## Rules
 
 - Never add without counting existing items first (Budget Awareness)
 - Never force insights from a routine session — "nothing to change" is a valid outcome
 - Consolidation proposals MUST show the merged content for review
-- Respect each store's format: global memory files (`{{TOOL_HOME}}/memory/*.md`) use frontmatter (name, description, type); per-task memory notes (`.agents/memory/<KEY>.md`) use the bullet grammar (`- **<title>**` / `Note:` / `Date:`)
+- Respect each store's format: global memory files (`{{TOOL_HOME}}/memory/*.md`) use frontmatter (name, description, type); per-task memory notes live at `.agents/tasks/<KEY>/memory.md`, written **only** via `pm memory <KEY> add` (never hand-edited) — block grammar `- **<title>**` / `Note:` / `Date:`
 - All file content in English (per feedback_memory_english.md)
 - If unsure whether something is public or private, default to private

@@ -1,39 +1,41 @@
-// Read-time join: a backlog item → its task's context (links + memory) + plan
-// + same-task siblings. No copying; everything resolved fresh from files.
-import { readFile } from "node:fs/promises";
+// Read-time derivation over the task-first model (tasks/<KEY>/*). No writes.
+// Cross-task "next" candidates (deterministic sort + per-task Order gate), capped
+// same-task done-sibling inheritance, recent-closed merge, and an item join view.
+// ops.ts owns all mutation; this module only reads.
+import { readdir } from "node:fs/promises";
 import { join as pathJoin } from "node:path";
-import type { Roadmap, RoadmapItem } from "./roadmap.ts";
-import { type TaskMemory, readTaskMemory } from "./memory.ts";
-
-export type { TaskMemory };
+import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
+const DEFAULT_INHERIT_CAP = 5;
 
-export function frontmatterField(md: string, field: string): string {
-  const lines = md.split("\n");
-  if (lines[0]?.trim() !== "---") return "";
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") break;
-    const m = lines[i].match(/^([A-Za-z_]+):\s*(.*)$/);
-    if (m && m[1].toLowerCase() === field.toLowerCase()) return m[2].trim();
-  }
-  return "";
+async function read(path: string): Promise<string | null> {
+  const s = await readStamped(path);
+  return s ? s.content : null;
+}
+async function blocksOf(path: string): Promise<Block[]> {
+  const md = await read(path);
+  return md ? parseBlocks(md).blocks : [];
 }
 
+export async function listActiveTasks(root: string): Promise<string[]> {
+  const ents = await readdir(tasksDir(root), { withFileTypes: true }).catch(() => []);
+  return ents.filter((e) => e.isDirectory() && e.name !== "archive").map((e) => e.name).sort();
+}
+
+// ── plan-file parsing (plans/*.md keep the design/Goal/Steps/Post-Impl format) ──
+export function frontmatterField(md: string, field: string): string {
+  return getFmField(parseFrontmatter(md).fields, field) ?? "";
+}
 export function section(md: string, heading: string): string {
   const lines = md.split("\n");
   const start = lines.findIndex((l) => l.trim().toLowerCase() === `## ${heading}`.toLowerCase());
   if (start < 0) return "";
   const body: string[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^##\s/.test(lines[i])) break;
-    body.push(lines[i]);
-  }
+  for (let i = start + 1; i < lines.length; i++) { if (/^##\s/.test(lines[i])) break; body.push(lines[i]); }
   return body.join("\n").trim();
 }
-
 export interface PlanInfo { path: string; status: string; goal: string; nextStep: string | null; }
-
 export function planInfo(path: string, md: string): PlanInfo {
   const goal = section(md, "Goal").split(/\n\s*\n/)[0]?.trim() ?? "";
   const next = section(md, "Implementation Steps").split("\n").find((l) => /^-\s+\[ \]/.test(l.trim()));
@@ -43,168 +45,130 @@ export function postImplNotes(md: string): string {
   return section(md, "Post-Implementation Notes").replace(/<!--[\s\S]*?-->/g, "").trim();
 }
 
-export interface TaskLink { label: string; url: string; summary: string; }
+// ── next candidates ──
+export interface Candidate { key: string; id: string; title: string; priority: string; order: number; plan: string | null; note: string; status: string; blockedBy?: string; }
 
-// Parse a task-context file into links (top-level blocks with URL) + memory (## Memory blocks).
-export function parseTaskContext(md: string): { links: TaskLink[]; memory: TaskMemory[] } {
-  const lines = md.split("\n").map((l) => l.replace(/\r$/, ""));
-  const links: TaskLink[] = [];
-  const memory: TaskMemory[] = [];
-  let inMemory = false;
-  let link: TaskLink | null = null;
-  let mem: TaskMemory | null = null;
-  const flushLink = () => { if (link && link.url) links.push(link); link = null; };
-  const flushMem = () => { if (mem && mem.title) memory.push(mem); mem = null; };
+function toCandidate(key: string, b: Block): Candidate {
+  const plan = getField(b, "Plan");
+  const orderRaw = getField(b, "Order");
+  return {
+    key, id: b.id, title: b.title,
+    priority: getField(b, "Priority") ?? "P2",
+    order: orderRaw ? parseInt(orderRaw, 10) || 0 : 0,
+    plan: plan && plan !== "-" ? plan : null,
+    note: getField(b, "Note") ?? "",
+    status: getField(b, "Status") ?? "open",
+  };
+}
 
-  for (const line of lines) {
-    const h = line.match(/^##\s+(.*)$/);
-    if (h) {
-      flushLink(); flushMem();
-      inMemory = h[1].trim().toLowerCase().startsWith("memory");
-      continue;
-    }
-    const top = line.match(/^-\s+\*\*([^*]+)\*\*\s*$/);
-    if (top) {
-      flushLink(); flushMem();
-      if (inMemory) mem = { title: top[1].trim(), note: "", date: "" };
-      else link = { label: top[1].trim(), url: "", summary: "" };
-      continue;
-    }
-    const sub = line.match(/^\s{2,}-\s+([A-Za-z]+):\s*(.*)$/);
-    if (sub) {
-      const k = sub[1].toLowerCase(), v = sub[2].trim();
-      if (inMemory && mem) { if (k === "note") mem.note = v; else if (k === "date") mem.date = v; }
-      else if (link) { if (k === "url") link.url = v; else if (k === "summary") link.summary = v; }
-    }
+function candidateSort(a: Candidate, b: Candidate): number {
+  return (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9)
+    || a.key.localeCompare(b.key)
+    || (a.order || 1e9) - (b.order || 1e9)
+    || a.id.localeCompare(b.id);
+}
+
+// Eligible = not blocked by an earlier-Order open sibling in the SAME task.
+// Returns sorted eligible + blocked (with blockedBy) + focus + inbox count. No auto-pick.
+export async function nextCandidates(root: string): Promise<{ eligible: Candidate[]; blocked: Candidate[]; focus: string | null; inbox: number }> {
+  const all: Candidate[] = [];
+  for (const key of await listActiveTasks(root)) {
+    for (const b of await blocksOf(taskFile(root, key, "backlog.md"))) all.push(toCandidate(key, b));
   }
-  flushLink(); flushMem();
-  return { links, memory };
+  const eligible: Candidate[] = [], blocked: Candidate[] = [];
+  for (const c of all) {
+    const earlier = all.find((o) => o.key === c.key && o.order > 0 && c.order > 0 && o.order < c.order);
+    if (earlier) { blocked.push({ ...c, blockedBy: earlier.id }); } else eligible.push(c);
+  }
+  eligible.sort(candidateSort);
+  const focusRaw = await read(pathJoin(root, ".agents", "state", "focus.txt"));
+  const inbox = (await blocksOf(inboxPath(root))).length;
+  return { eligible, blocked, focus: focusRaw ? focusRaw.trim() || null : null, inbox };
 }
 
-// "Next to work on": explicit id → focus → eligible item.
-// Eligibility respects per-task work sequence: an item is blocked while an
-// earlier-Order item in the SAME task is still open. Among eligible, sort by
-// priority (P0→P3), then Order, then file order (stable).
-export function selectTarget(rm: Roadmap, id?: string): RoadmapItem | null {
-  if (id) return rm.open.find((i) => i.id === id) ?? null;
-  if (rm.focus) { const f = rm.open.find((i) => i.id === rm.focus); if (f) return f; }
-  // _INBOX (task: null) items are not designable until triaged → never auto-selected
-  const candidates = rm.open.filter((it) => it.task != null);
-  const blocked = (it: RoadmapItem) =>
-    it.order > 0 &&
-    rm.open.some((o) => o.task === it.task && o.order > 0 && o.order < it.order);
-  const eligible = candidates.filter((it) => !blocked(it));
-  const pool = eligible.length ? eligible : candidates;
-  return [...pool].sort((a, b) =>
-    (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9) ||
-    (a.order || 1e9) - (b.order || 1e9),
-  )[0] ?? null;
+// ── item join view ──
+export interface SiblingNote { id: string; notes: string; }
+export interface ItemView {
+  key: string; id: string; title: string; priority: string; note: string; status: string; closed: boolean;
+  plan: PlanInfo | null; links: Block[]; memory: Block[]; siblings: SiblingNote[];
 }
 
-// Items awaiting triage in the virtual _INBOX (task: null).
-export function inboxCount(rm: Roadmap): number {
-  return rm.open.filter((it) => it.task == null).length;
+function closedDateOf(b: Block): string { return getField(b, "Closed") ?? ""; }
+
+// Recent same-task done siblings (by Closed date desc, capped) → their plan Post-Impl notes.
+export async function doneSiblings(root: string, key: string, excludeId: string, cap = DEFAULT_INHERIT_CAP): Promise<SiblingNote[]> {
+  const closed = (await blocksOf(taskFile(root, key, "closed.md")))
+    .filter((b) => b.id !== excludeId && getField(b, "Status") === "done" && getField(b, "Plan") && getField(b, "Plan") !== "-")
+    .sort((a, b) => closedDateOf(b).localeCompare(closedDateOf(a)))
+    .slice(0, cap);
+  const out: SiblingNote[] = [];
+  for (const b of closed) {
+    const md = await read(pathJoin(root, getField(b, "Plan")!));
+    if (md) { const n = postImplNotes(md); if (n) out.push({ id: b.id, notes: n }); }
+  }
+  return out;
 }
 
-export interface SiblingNote { id: string; status: string; notes: string; }
-export interface OpenJoinView {
-  closed: false;
-  item: RoadmapItem;
-  plan: PlanInfo | null;
-  task: string | null;
-  contextLinks: TaskLink[];
-  contextMemory: TaskMemory[];
-  siblings: SiblingNote[];
-  note: string;
-}
-// Reduced join for a Recently Closed entry: ClosedEntry carries no
-// title/priority, so the view is the record (incl. its close-time task, null
-// for legacy rows) + plan + post-impl notes only.
-// buildNextPrompt accepts OpenJoinView exclusively — closed never reaches it.
-export interface ClosedJoinView {
-  closed: true;
-  item: { id: string; status: string; plan: string | null; note: string; task: string | null };
-  plan: PlanInfo | null;
-  postImplNotes: string;
-}
-export type JoinView = OpenJoinView | ClosedJoinView;
-
-async function tryRead(path: string): Promise<string | null> {
-  try { return await readFile(path, "utf-8"); } catch { return null; }
-}
-
-export async function resolveJoin(root: string, rm: Roadmap, id: string): Promise<JoinView | null> {
-  const item = rm.open.find((i) => i.id === id);
-  if (!item) return resolveClosedJoin(root, rm, id); // open wins; closed is the fallback
-
+export async function resolveItem(root: string, key: string, id: string, cap = DEFAULT_INHERIT_CAP): Promise<ItemView | null> {
+  const backlog = await blocksOf(taskFile(root, key, "backlog.md"));
+  let b = backlog.find((x) => x.id === id), closed = false;
+  if (!b) { b = (await blocksOf(taskFile(root, key, "closed.md"))).find((x) => x.id === id); closed = true; }
+  if (!b) return null;
+  const planRel = getField(b, "Plan");
   let plan: PlanInfo | null = null;
-  if (item.plan) { const md = await tryRead(pathJoin(root, item.plan)); if (md) plan = planInfo(item.plan, md); }
+  if (planRel && planRel !== "-") { const md = await read(pathJoin(root, planRel)); if (md) plan = planInfo(planRel, md); }
+  return {
+    key, id, title: b.title,
+    priority: getField(b, "Priority") ?? "P2",
+    note: getField(b, "Note") ?? "",
+    status: getField(b, "Status") ?? (closed ? "done" : "open"),
+    closed,
+    plan,
+    links: await blocksOf(taskFile(root, key, "links.md")),
+    memory: await blocksOf(taskFile(root, key, "memory.md")),
+    siblings: await doneSiblings(root, key, id, cap),
+  };
+}
 
-  let contextLinks: TaskLink[] = [], contextMemory: TaskMemory[] = [];
-  if (item.task) {
-    const md = await tryRead(pathJoin(root, ".agents", "task-context", `${item.task}.md`));
-    const parsed = md ? parseTaskContext(md) : { links: [], memory: [] };
-    contextLinks = parsed.links;
-    contextMemory = await readTaskMemory(root, item.task, parsed.memory); // union: memory file + legacy section
-  }
-
-  // siblings = same-task open items; plus done items from recently-closed (best-effort, carry plan notes)
-  const siblings: SiblingNote[] = [];
-  for (const sib of rm.open) {
-    if (sib.id === item.id || item.task == null || sib.task !== item.task) continue;
-    siblings.push({ id: sib.id, status: sib.status, notes: "" });
-  }
-  for (const c of rm.recentlyClosed) {
-    if (c.status === "done" && c.plan) {
-      // task-exact when the closed record carries a task; legacy (task: null)
-      // rows keep the historical best-effort inclusion.
-      if (c.task != null && c.task !== item.task) continue;
-      const md = await tryRead(pathJoin(root, c.plan));
-      if (md) { const notes = postImplNotes(md); if (notes) siblings.push({ id: c.id, status: "done", notes }); }
+// Merge all tasks' closed history, newest first, capped — the derived "recent closed" view.
+export interface ClosedRow { key: string; id: string; title: string; status: string; plan: string | null; closed: string; reason: string; }
+export async function recentClosed(root: string, limit = 20): Promise<ClosedRow[]> {
+  const rows: ClosedRow[] = [];
+  for (const key of await listActiveTasks(root)) {
+    for (const b of await blocksOf(taskFile(root, key, "closed.md"))) {
+      rows.push({
+        key, id: b.id, title: b.title,
+        status: getField(b, "Status") ?? "", plan: getField(b, "Plan") ?? null,
+        closed: getField(b, "Closed") ?? "", reason: getField(b, "Reason") ?? "",
+      });
     }
   }
-
-  return { closed: false, item, plan, task: item.task, contextLinks, contextMemory, siblings, note: item.note };
+  rows.sort((a, b) => b.closed.localeCompare(a.closed));
+  return rows.slice(0, limit);
 }
 
-// Exported: the server's `?scope=closed` route calls this directly so a closed
-// row stays reachable even when an open item shares the same id (open wins in resolveJoin).
-export async function resolveClosedJoin(root: string, rm: Roadmap, id: string): Promise<ClosedJoinView | null> {
-  const c = rm.recentlyClosed.find((e) => e.id === id);
-  if (!c) return null;
-  let plan: PlanInfo | null = null, notes = "";
-  if (c.plan) {
-    const md = await tryRead(pathJoin(root, c.plan));
-    if (md) { plan = planInfo(c.plan, md); notes = postImplNotes(md); }
-  }
-  return { closed: true, item: { id: c.id, status: c.status, plan: c.plan, note: c.note, task: c.task }, plan, postImplNotes: notes };
-}
-
-export function buildNextPrompt(j: OpenJoinView, inbox = 0): string {
+// ── kickoff prompt ──
+export function buildNextPrompt(v: ItemView, inbox = 0): string {
   const L: string[] = [];
-  L.push(`# Next: ${j.item.id} — ${j.item.title}  (${j.item.priority})`, "");
-  L.push("## What", j.note || j.item.title, "");
-  if (j.task) L.push(`> task: ${j.task}`, "");
-  if (j.contextMemory.length) {
+  L.push(`# Next: ${v.id} — ${v.title}  (${v.priority})`, "");
+  L.push("## What", v.note || v.title, "", `> task: ${v.key}`, "");
+  if (v.memory.length) {
     L.push("## Task memory (decisions / things to remember)");
-    for (const m of j.contextMemory) L.push(`- ${m.title}${m.note ? `: ${m.note}` : ""}`);
+    for (const m of v.memory) { const note = getField(m, "Note"); L.push(`- ${m.title}${note ? `: ${note}` : ""}`); }
     L.push("");
   }
-  if (j.siblings.some((s) => s.notes)) {
-    L.push("## Inherited (done siblings)");
-    for (const s of j.siblings.filter((x) => x.notes)) L.push(`- [${s.id}] ${s.notes.split("\n")[0]}`);
+  if (v.siblings.length) {
+    L.push("## Inherited (recent done siblings)");
+    for (const s of v.siblings) L.push(`- [${s.id}] ${s.notes.split("\n")[0]}`);
     L.push("");
   }
-  if (j.task) {
-    L.push(`## External refs (task-context: ${j.task})`);
-    if (j.contextLinks.length) for (const l of j.contextLinks) L.push(`- ${l.label}: ${l.url}${l.summary ? ` — ${l.summary}` : ""}`);
-    else L.push(`- (run \`/pm-context get ${j.task}\`)`);
-    L.push("");
-  }
-  L.push("## Prior plan state");
-  if (j.plan) L.push(`- ${j.plan.path} (${j.plan.status})${j.plan.nextStep ? ` → next step: ${j.plan.nextStep}` : ""}`);
-  else L.push(`- no plan yet — start with /design ${j.item.id}`);
-  L.push("", "## Start here", j.plan ? "resume at the next unchecked step above" : `/design ${j.item.id}`);
-  if (inbox > 0) L.push("", `> inbox: ${inbox} item${inbox > 1 ? "s" : ""} awaiting triage (assign a Task via \`link <id> Task <KEY>\`)`);
+  L.push(`## External refs (${v.key} links)`);
+  if (v.links.length) for (const l of v.links) { const url = getField(l, "URL") ?? ""; const sum = getField(l, "Summary") ?? ""; L.push(`- ${l.title || l.id}: ${url}${sum ? ` — ${sum}` : ""}`); }
+  else L.push(`- (none yet)`);
+  L.push("", "## Prior plan state");
+  if (v.plan) L.push(`- ${v.plan.path} (${v.plan.status})${v.plan.nextStep ? ` → next step: ${v.plan.nextStep}` : ""}`);
+  else L.push(`- no plan yet — start with /design ${v.id}`);
+  L.push("", "## Start here", v.plan ? "resume at the next unchecked step above" : `/design ${v.id}`);
+  if (inbox > 0) L.push("", `> inbox: ${inbox} item(s) awaiting triage (assign via \`triage <id> <KEY>\`)`);
   return L.join("\n");
 }

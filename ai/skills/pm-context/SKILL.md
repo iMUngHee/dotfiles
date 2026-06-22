@@ -1,15 +1,23 @@
 ---
 name: pm-context
 description: "Manage per-task document links and inject context into sessions. Manual invocation only — do NOT auto-trigger."
-argument-hint: "get [KEY] | add <KEY> <URL> [LABEL] | remove <KEY> <MATCH> | annotate <KEY> [LABEL] [--regen-triggers] | set <KEY> | unset | list | manage"
+argument-hint: "get [KEY] | add <KEY> <URL> [LABEL] | remove <KEY> <MATCH> | annotate <KEY> [LABEL] [--regen-triggers] | list | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, WebFetch
 model: sonnet
 disable-model-invocation: true
 ---
 
-Manage per-task document links. **Project-scoped**: stored as a single markdown file per task at `<git-root>/.agents/task-context/<KEY>.md`, where the git root is `git rev-parse --show-toplevel`. Refuse outside a git repo. The active-task pointer lives in `<git-root>/.agents/task-context/.current` (per-project, not global).
+Manage per-task document links. **Project-scoped**: stored per task at `<git-root>/.agents/tasks/<KEY>/links.md`, where the git root is `git rev-parse --show-toplevel`. Refuse outside a git repo. There is no pm-context-owned active-task pointer — the **"current task" is derived from the `focus` item** via `pm-roadmap.ts current-task` (`.current` is abolished).
 
-`.agents/task-context/` is **gitignored** (task links may carry internal URLs). Before writing the first task file in a repo, ensure `<git-root>/.agents/.gitignore` contains a `task-context/` line — add it if missing; never write internal URLs into a tracked path.
+`.agents/tasks/` is **gitignored** (task links may carry internal URLs); the gitignore line is ensured by the pm-roadmap store, not by this skill. **All writes to `links.md` go through the pm-roadmap CLI → ops (lock + CAS) — never hand-edit the markdown.** pm-context's job is the fetch + trigger/summary extraction; it then persists the result via `links <KEY> add|remove`.
+
+CLI setup (one block; capture the git root, install once):
+
+```bash
+repo_root="$(git rev-parse --show-toplevel)" || { echo "pm-context needs a git repo"; exit 1; }
+(cd ~/.config/ai/skills/pm-roadmap && [[ -d node_modules ]] || npm install)
+pm() { PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.config/ai/skills/pm-roadmap/pm-roadmap.ts "$@"; }
+```
 
 Arguments: $ARGUMENTS
 
@@ -22,11 +30,11 @@ One of four skills in a single project-management system. **This skill owns *con
 (retro · memory)         ├──▶  (design · plan)
 (pm-roadmap · backlog)  ┘
 ```
-`pm-context`→links · `retro`→memory(per-task decisions) · `pm-roadmap`→backlog(items) · `design`→plan(reads all three). Each fact in the smallest file enforcing its invariant; views derived. (Per-task *memory* lives at `.agents/memory/<KEY>.md` — **retro is the primary writer** (harvests durable decisions on close), and the `manage` GUI also writes it as the Memory half of its 2-write task edit. The SSOT is that single file, not a single writer. A legacy `## Memory` section here is read-only back-compat.)
+`pm-context`→links · `retro`→memory(per-task decisions) · `pm-roadmap`→backlog(items) · `design`→plan(reads all three). Each fact in the smallest file enforcing its invariant; views derived. A task owns its dir `<git-root>/.agents/tasks/<KEY>/`: `links.md` (this skill), `memory.md` (**retro** is the primary writer; the `manage` GUI is the other), `backlog.md`/`closed.md`/`task.md` (pm-roadmap). All are written through the pm-roadmap CLI → ops.
 
-> In the subcommands below, `tasks/` is shorthand for the project-scoped dir `<git-root>/.agents/task-context/` and `tasks/.current` for its pointer file. Resolve the git root once per invocation; refuse outside a repo.
+> In the subcommands below, `tasks/<KEY>/links.md` is the link file under `<git-root>/.agents/tasks/<KEY>/`. Resolve the git root once per invocation; refuse outside a repo.
 
-> Every subcommand taking a KEY (`get`/`add`/`remove`/`annotate`/`set`) validates it against `^[A-Z0-9_-]+$` **before any filesystem access** — reject with the expected pattern. A lowercase or path-bearing KEY (`../foo`) must never resolve `tasks/<KEY>.md`, on read paths as well as writes.
+> Every subcommand taking a KEY (`get`/`add`/`remove`/`annotate`) validates it against `^[A-Z0-9_-]+$` **before any filesystem access** — reject with the expected pattern. A lowercase or path-bearing KEY (`../foo`) must never resolve `tasks/<KEY>/links.md`, on read paths as well as writes. (The CLI re-validates the KEY too.)
 
 ## Subcommands
 
@@ -36,8 +44,8 @@ Inject a task's links — including TRIGGERS and Summary — into the current se
 
 1. Resolve KEY:
    - If KEY argument provided, use it
-   - Else read `tasks/.current` — if empty/missing, report "no current task. Run `/pm-context set <KEY>` first." and stop
-2. Read `tasks/<KEY>.md`. If not found, run `list` and report missing key.
+   - Else `pm current-task` (the task owning the `focus` item) — if it prints empty, report "no current task. Set focus with `/pm-roadmap focus <id>`, or pass a KEY." and stop
+2. Read `tasks/<KEY>/links.md`. If not found, run `list` and report missing key.
 3. Output a header line followed by the file content verbatim:
 
    ```
@@ -56,8 +64,8 @@ Add a single link to a task without starting the GUI, then auto-fetch its Summar
    - `jira.` → Jira, `wiki.`/`confluence` → Wiki, `/pull/\d+` → PR
    - `figma.com` → Figma, `github.com`/`oss.` → GitHub
    - `slack.com` → Slack, `notion.` → Notion, default → Link
-2. Ensure task file exists. If missing, create with `# <KEY>\n\n`.
-3. Reject if URL already present (grep), or if LABEL collides with an existing label (case-insensitive). On label collision, suggest a numeric suffix (`Wiki-2`) and ask the user via interactive question prompt to confirm/override.
+2. Ensure the task exists — `pm task create <KEY> --title "<title>"` if it does not (`links add` refuses a non-existent task). Never hand-create the dir/file.
+3. Read `tasks/<KEY>/links.md` (read-only). Reject if the URL is already present, or if LABEL collides with an existing label (case-insensitive). On label collision, suggest a numeric suffix (`Wiki-2`) and ask the user via interactive question prompt to confirm/override.
 4. **Fetch** the URL using the appropriate tool (see Fetch Routing). The response takes one of two forms:
 
    **Path 1 — inline response (small pages):** parse the returned content directly, then proceed to step 5.
@@ -82,27 +90,24 @@ Add a single link to a task without starting the GUI, then auto-fetch its Summar
 
    On fetch failure (network, permission, 404): Summary `(fetch 실패)`, Triggers empty.
 
-6. Append the new entry in canonical format:
+6. Persist the entry through the CLI (single write path — lock + CAS via ops; never hand-edit `links.md`):
 
-   ```
-   - **<LABEL>**
-     - URL: <URL>
-     - Triggers: <comma-separated keywords or empty on fetch failure>
-     - Summary: <one-line summary or "(fetch 실패)" on failure>
+   ```bash
+   pm links <KEY> add "<LABEL>" --url "<URL>" --triggers "<comma-separated keywords>" --summary "<one-line summary>"
    ```
 
-   The user can refine Triggers via `manage` (GUI) — auto-extracted values are a starting point.
-7. Output the updated file content verbatim.
+   Omit `--triggers` on fetch failure (leave empty) and pass `--summary "(fetch 실패)"`. The op upserts by label. The user can refine Triggers later via `manage` (GUI) — auto-extracted values are a starting point.
+7. Read `tasks/<KEY>/links.md` back and output its content verbatim.
 
 ### remove <KEY> <MATCH>
 
 Remove an entry from a task by label or URL substring match.
 
-1. Read `tasks/<KEY>.md`. If missing, report and stop.
+1. Read `tasks/<KEY>/links.md`. If missing, report and stop.
 2. Find entries whose Label or URL contains MATCH (case-insensitive; top-level Link entries only).
-3. If no matches, report and stop. If multiple, list them and interactively prompt the user to clarify.
-4. Remove the entry block (the `- **Label**` line plus its sub-bullets) and write back.
-5. Output the updated file content verbatim.
+3. If no matches, report and stop. If multiple, list them and interactively prompt the user to clarify so MATCH names exactly one.
+4. Remove via the CLI (the op drops every link whose label or URL contains MATCH — pass a specific MATCH): `pm links <KEY> remove "<MATCH>"`.
+5. Read `tasks/<KEY>/links.md` back and output its content verbatim.
 
 ### annotate <KEY> [LABEL] [--regen-triggers]
 
@@ -112,41 +117,29 @@ Re-fetch the Summary for one or all entries. Triggers behavior depends on curren
 - **Triggers populated** → preserved (user authored them)
 - **`--regen-triggers` flag** → force re-extraction even when populated (overrides user edits)
 
-1. Read `tasks/<KEY>.md`. If missing, report and stop.
+1. Read `tasks/<KEY>/links.md`. If missing, report and stop.
 2. Determine target entries:
    - If LABEL provided, target only that entry (case-insensitive match; top-level Link entries only). Error if not found.
    - Else target all top-level Link entries.
-3. For each target, fetch URL via Fetch Routing using the same two-path logic as `add` (Path 1 inline / Path 2 file-saved with grep sweep — see `add` step 4). Then:
-   - Replace the Summary line with the fresh one-line summary (or `(fetch 실패)` on failure).
-   - If Triggers is empty OR `--regen-triggers` flag set: replace Triggers with auto-extracted keywords (5-13, same priority rules as `add` — code identifiers first, concept terms last).
-   - Else: preserve existing Triggers verbatim.
-   - Label/URL are never modified by `annotate`.
-4. Write back. Output the updated file content verbatim.
+3. For each target, fetch URL via Fetch Routing using the same two-path logic as `add` (Path 1 inline / Path 2 file-saved with grep sweep — see `add` step 4). Then compute the fields to persist:
+   - **Summary**: the fresh one-line summary (or `(fetch 실패)` on failure) — always replaced.
+   - **Triggers**: if currently empty OR `--regen-triggers` is set → auto-extracted keywords (5-13, same priority rules as `add` — code identifiers first, concept terms last); else → the existing Triggers verbatim.
+   - Label/URL are never changed.
+4. Persist each via the CLI (upsert by label — re-supply the unchanged URL and the resolved Triggers so they are preserved): `pm links <KEY> add "<LABEL>" --url "<existing URL>" --triggers "<resolved>" --summary "<fresh>"`. Then read `tasks/<KEY>/links.md` back and output it verbatim.
 
-### set <KEY>
+### current task (no `set`/`unset`)
 
-Set the active task pointer.
-
-1. Verify `tasks/<KEY>.md` exists. If not, report missing key and run `list`.
-2. Write `<KEY>` to `tasks/.current` (overwrite).
-3. Confirm with `current: <KEY>`.
-
-### unset
-
-Clear the active task pointer.
-
-1. Truncate `tasks/.current` to empty.
-2. Confirm with `current cleared`.
+There is no pm-context active-task pointer — `.current` is abolished. The **current task is the task owning the `focus` item**, set with `/pm-roadmap focus <id>` (cleared with `/pm-roadmap focus --clear`). `get` with no KEY resolves it via `pm current-task`.
 
 ### list
 
-List all registered task keys, marking the current one.
+List all task keys, marking the current one.
 
-1. List keys:
+1. List keys (each task dir holding a `links.md`):
    ```bash
-   ls "$(git rev-parse --show-toplevel)/.agents/task-context/"*.md 2>/dev/null | xargs -I{} basename {} .md
+   for d in "$repo_root"/.agents/tasks/*/; do [ -f "$d/links.md" ] && basename "$d"; done
    ```
-2. Read `.current` for the active key.
+2. `pm current-task` for the active key.
 3. Output one key per line; prefix the current key with `* `.
 4. If empty, report no tasks.
 
@@ -203,48 +196,43 @@ On fetch failure, use `(fetch 실패)` as the Summary. Never block the add/annot
 
 ## File Format
 
-`<git-root>/.agents/task-context/<KEY>.md` is the single source of truth (project-scoped).
+`<git-root>/.agents/tasks/<KEY>/links.md` is the single source of truth for a task's links (project-scoped).
 
-A task's context has **two parts**: external **Links** (top-level blocks, this file) and per-task **Memory** (decisions / things to remember) stored in the retro-owned `<git-root>/.agents/memory/<KEY>.md`. Both are this task's "context"; `/pm-roadmap` backlog items whose `Task:` is this KEY inherit it. A legacy `## Memory` section in this file is still **read** (union with the memory file) but never written; full-state GUI writes migrate it out.
+A task's context has **two parts**: external **Links** (`links.md`, this skill) and per-task **Memory** (`memory.md`, retro-owned — decisions / things to remember). Both are this task's "context"; a `/pm-roadmap` backlog item belongs to the task by its directory (`tasks/<KEY>/backlog.md`), so it inherits this context. `links.md` holds **only links** — memory is its own file (no `## Memory` section here; the legacy in-file section is folded out once by `pm migrate`).
 
 ```markdown
-# TASK_KEY
+# <KEY> — Links
 
 - **<Label>**
   - URL: https://example.com/page
   - Triggers: keyword1, keyword2, keyword3
   - Summary: one-line description
-
-## Memory
-
-- **<note title>**
-  - Note: one-line decision / thing to remember
-  - Date: YYYY-MM-DD
 ```
 
 **Field rules:**
-- `Label`: required, unique within file (case-insensitive), max 80 char, used as join key
-- `URL`: required, must match `https?://`, unique within file
+- `Label`: required, **case-insensitive unique** within file (the CLI upserts by case-folded label), max 80 char, used as the block id / join key — free of `*` and newlines (the CLI rejects those)
+- `URL`: required, must match `https?://` (the CLI rejects non-http), **unique within file** (the CLI rejects a URL already linked under another label)
 - `Triggers`: optional, comma-separated keyword list (5-13 recommended — see `add` step 5)
 - `Summary`: optional, single-line
-- **Memory** entries (`.agents/memory/<KEY>.md`, or a legacy `## Memory` section here): `title` (required), `Note` (one-line), `Date` (optional `YYYY-MM-DD`). Written by /retro (primary) and the `manage` GUI (2-write task edit) to the memory file; surfaced in `/pm-roadmap next` prompts and item context.
+- **Memory** lives in `.agents/tasks/<KEY>/memory.md` (`- **<title>**` / `Note:` / `Date:`), written by /retro (primary, via `pm memory add`) and the `manage` GUI; surfaced in `pm next` prompts and item context. It is **not** part of `links.md`.
 
 **Parser:**
-- Top-level `- **Label**` opens a link entry; entries under `## Memory` open a memory note
+- Top-level `- **Label**` opens a link entry
 - Sub-bullet `  - Key: Value` populates a field (Key is case-insensitive, value is trimmed)
 - Unknown sub-bullet keys are ignored (forward compatibility)
 - Sub-bullets without a parent are ignored
-- The `add`/`remove`/`annotate` subcommands (including the `manage` reconcile pass, which reuses `annotate`) match and modify **top-level Link entries only** — Memory entries (memory file or legacy `## Memory` section) are outside their match scope and are never fetched or removed by them. Memory notes live in `.agents/memory/<KEY>.md` — /retro is the primary writer; the `manage` GUI also writes them as the Memory half of its 2-write task edit (Links + Memory are both task context)
+- The `add`/`remove`/`annotate` subcommands (including the `manage` reconcile pass, which reuses `annotate`) match **link entries only**, and **all of their writes go through `pm links <KEY> add|remove`** (lock + CAS via ops) — never a direct markdown edit. Memory is a separate file with its own writers (/retro, GUI).
 
-## Pointer File
+## Current task (no pm-context pointer)
 
-`<git-root>/.agents/task-context/.current` — single line containing the current task KEY, or empty/missing for none. Per-project (not global). Modified only by `set` / `unset`, the GUI current-task toggle (★ button, `PUT /api/current`), and as a side effect of deleting the current task via the GUI.
+`.current` is abolished. The current task is **derived** from the `pm-roadmap` `focus` item (`<git-root>/.agents/state/focus.txt`, owned by pm-roadmap): the task owning that item. Resolve it read-only with `pm current-task` (empty when no focus). The GUI's `PUT /api/current` is a no-op for the same reason — its current-task badge reads `focus.txt`. Set/clear the current task with `/pm-roadmap focus <id>` / `--clear`.
 
 ## Rules
 
 - All Bash commands are pre-authorized via `allowed-tools` frontmatter — no user confirmation needed
+- **Never hand-edit `tasks/<KEY>/links.md` — every write goes through `pm links <KEY> add|remove` (lock + CAS via ops).** That is the single write path; the GUI `manage` is the other writer (also via ops)
 - The web GUI in `manage` writes the full schema (Label/URL/Triggers/Summary). The skill's `add` auto-extracts both Summary and Triggers from page content; the user can refine Triggers in the GUI afterward
 - `annotate` overwrites Summary unconditionally. Triggers are auto-extracted only when empty; populated Triggers are preserved unless `--regen-triggers` is passed
-- Task keys: uppercase alphanumeric, underscores, hyphens (`^[A-Z0-9_-]+$`) — enforced at every entry surface (skill subcommands, server API endpoints, GUI forms) before filesystem access
+- Task keys: uppercase alphanumeric, underscores, hyphens (`^[A-Z0-9_-]+$`) — enforced at every entry surface (skill subcommands, the CLI/ops, server API endpoints, GUI forms) before filesystem access
 - On fetch failure, write `(fetch 실패)` as the Summary — never skip the entry
-- Label collisions are rejected at the GUI server (HTTP 409) and at `add` (skill suggests a suffix)
+- Label/URL uniqueness is enforced by the `links add` CLI → ops (case-insensitive label upsert, unique URL per task — throws on a cross-label URL dup) and pre-checked by the skill's `add` (suggests a `Wiki-2` suffix on collision). The GUI `manage` is a full-state editor (links + memory written together via `ops.updateTaskLinks`); there is no per-link HTTP 409 in the new model

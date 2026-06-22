@@ -1,0 +1,200 @@
+// Tests for ops.ts. Run: ./node_modules/.bin/tsx ops.test.ts
+import assert from "node:assert/strict";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as ops from "./ops.ts";
+import { taskFile, inboxPath, parseBlocks, parseFrontmatter, getField, getFmField, readStamped } from "./store.ts";
+
+const O = { nowMs: 1_750_000_000_000, nowDate: "2026-06-22", retries: 0 as number };
+
+async function ids(path: string): Promise<string[]> {
+  const s = await readStamped(path);
+  return s ? parseBlocks(s.content).blocks.map((b) => b.id) : [];
+}
+async function field(path: string, id: string, key: string): Promise<string | null> {
+  const s = await readStamped(path);
+  if (!s) return null;
+  const b = parseBlocks(s.content).blocks.find((x) => x.id === id);
+  return b ? getField(b, key) : null;
+}
+async function planStatus(root: string, rel: string): Promise<string | null> {
+  const s = await readStamped(join(root, rel));
+  return s ? getFmField(parseFrontmatter(s.content).fields, "status") : null;
+}
+async function makePlan(root: string, rel: string, status = "draft"): Promise<void> {
+  await mkdir(join(root, ".agents", "plans"), { recursive: true });
+  await writeFile(join(root, rel), `---\nid: p\nstatus: ${status}\npm_loop: true\nfiles_affected:\n  - a.ts\n  - b.ts\n---\n# p\n`);
+}
+
+async function main() {
+  const root = await mkdtemp(join(tmpdir(), "ops-test-"));
+  const BL = (k: string) => taskFile(root, k, "backlog.md");
+  const CL = (k: string) => taskFile(root, k, "closed.md");
+  try {
+    // ── task create (+ duplicate refusal, + key grammar) ──
+    await ops.taskCreate(root, "ALPHA", "Alpha task", O);
+    assert.equal(getFmField(parseFrontmatter((await readStamped(taskFile(root, "ALPHA", "task.md")))!.content).fields, "status"), "active");
+    await assert.rejects(() => ops.taskCreate(root, "ALPHA", "dup", O), ops.OpError);
+    await assert.rejects(() => ops.taskCreate(root, "bad key", "x", O), ops.OpError);
+
+    // ── item add to task + duplicate-id (reserved) refusal + kebab refusal ──
+    await ops.itemAdd(root, { task: "ALPHA" }, { id: "a-one", title: "One" }, O);
+    assert.deepEqual(await ids(BL("ALPHA")), ["a-one"]);
+    await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "a-one", title: "dup" }, O), ops.OpError);
+    await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "Bad_Id", title: "x" }, O), ops.OpError);
+
+    // ── inbox add + reservedIds spans task+inbox ──
+    await ops.itemAdd(root, { inbox: true }, { id: "untriaged-x", title: "U" }, O);
+    const reserved = await ops.reservedIds(root, O);
+    assert.ok(reserved.has("a-one") && reserved.has("untriaged-x"));
+
+    // ── focus rejects an inbox item; accepts a real backlog item ──
+    await assert.rejects(() => ops.focusSet(root, "untriaged-x", O), ops.OpError);
+    await ops.focusSet(root, "a-one", O);
+    assert.equal((await readStamped(join(root, ".agents", "state", "focus.txt")))!.content.trim(), "a-one");
+
+    // ── triage: inbox → task ──
+    await ops.triage(root, "untriaged-x", "ALPHA", O);
+    assert.deepEqual((await ids(inboxPath(root))), []);
+    assert.deepEqual((await ids(BL("ALPHA"))).sort(), ["a-one", "untriaged-x"]);
+
+    // ── plan link (+ approve) + plan 1:1 refusal ──
+    await makePlan(root, ".agents/plans/2026-06-22-a-one.md");
+    await ops.itemSetPlan(root, "ALPHA", "a-one", ".agents/plans/2026-06-22-a-one.md", O);
+    assert.equal(await field(BL("ALPHA"), "a-one", "Status"), "draft");
+    await assert.rejects(() => ops.itemSetPlan(root, "ALPHA", "untriaged-x", ".agents/plans/2026-06-22-a-one.md", O), ops.OpError); // 1:1
+    await ops.itemApprove(root, "ALPHA", "a-one", O);
+    assert.equal(await field(BL("ALPHA"), "a-one", "Status"), "active");
+
+    // ── close refusals: planless done; dropped without reason ──
+    await assert.rejects(() => ops.itemClose(root, "ALPHA", "untriaged-x", { status: "done", closedDate: "2026-06-22", ...O }), ops.OpError);
+    await assert.rejects(() => ops.dropItem(root, "ALPHA", "untriaged-x", { reason: "", ...O }), ops.OpError);
+
+    // ── done close moves backlog → closed; id stays reserved (no reuse) ──
+    await ops.itemClose(root, "ALPHA", "a-one", { status: "done", plan: ".agents/plans/2026-06-22-a-one.md", closedDate: "2026-06-22", ...O });
+    assert.deepEqual(await ids(BL("ALPHA")), ["untriaged-x"]);
+    assert.deepEqual(await ids(CL("ALPHA")), ["a-one"]);
+    assert.equal(await field(CL("ALPHA"), "a-one", "Status"), "done");
+    await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "a-one", title: "reuse" }, O), ops.OpError); // closed id reserved
+    // focus on a-one was cleared by the close
+    assert.equal((await readStamped(join(root, ".agents", "state", "focus.txt")))!.content.trim(), "");
+
+    // ── createPlanAndBacklogItem transaction: item+plan+current together ──
+    await makePlan(root, ".agents/plans/2026-06-22-a-two.md");
+    await ops.createPlanAndBacklogItem(root, "ALPHA", { id: "a-two", title: "Two" }, ".agents/plans/2026-06-22-a-two.md", O);
+    assert.equal(await field(BL("ALPHA"), "a-two", "Plan"), ".agents/plans/2026-06-22-a-two.md");
+    assert.equal((await readStamped(join(root, ".agents", "state", "current.txt")))!.content.trim(), ".agents/plans/2026-06-22-a-two.md");
+
+    // ── harvest preflight: one colliding deferred id aborts the WHOLE harvest ──
+    const before = await ids(BL("ALPHA"));
+    await assert.rejects(
+      () => ops.harvest(root, "ALPHA", [{ id: "fresh-1", title: "F1" }, { id: "a-one", title: "collide" }], O),
+      ops.OpError,
+    );
+    assert.deepEqual(await ids(BL("ALPHA")), before, "no deferred item written when one collides");
+
+    // good harvest applies all
+    await ops.harvest(root, "ALPHA", [{ id: "fresh-1", title: "F1" }, { id: "fresh-2", title: "F2" }], O);
+    assert.ok((await ids(BL("ALPHA"))).includes("fresh-1") && (await ids(BL("ALPHA"))).includes("fresh-2"));
+
+    // ── completePlanFromRetro: all-or-nothing on a bad item id (no plan-status flip, no close) ──
+    await assert.rejects(
+      () => ops.completePlanFromRetro(root, "ALPHA", "does-not-exist", { planPath: ".agents/plans/2026-06-22-a-two.md", terminalStatus: "done", ...O }),
+      ops.OpError,
+    );
+    assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "draft", "plan status untouched on aborted retro");
+
+    // ── completePlanFromRetro #1: dropped without a Reason aborts BEFORE _setPlanStatus (no partial plan flip) ──
+    await assert.rejects(
+      () => ops.completePlanFromRetro(root, "ALPHA", "a-two", { planPath: ".agents/plans/2026-06-22-a-two.md", terminalStatus: "dropped", ...O }),
+      ops.OpError,
+    );
+    assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "draft", "dropped-without-reason: plan NOT flipped (all-or-nothing)");
+    assert.ok((await ids(BL("ALPHA"))).includes("a-two"), "dropped-without-reason: item stays open");
+
+    // ── completePlanFromRetro #2: a --plan that the item is not linked to is refused before any write ──
+    const aOneStatusBefore = await planStatus(root, ".agents/plans/2026-06-22-a-one.md");
+    await assert.rejects(
+      () => ops.completePlanFromRetro(root, "ALPHA", "a-two", { planPath: ".agents/plans/2026-06-22-a-one.md", terminalStatus: "done", ...O }),
+      ops.OpError,
+    );
+    assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-one.md"), aOneStatusBefore, "wrong-plan: the mis-named plan is NOT flipped");
+    assert.ok((await ids(BL("ALPHA"))).includes("a-two"), "wrong-plan: item stays open");
+
+    // ── completePlanFromRetro #3: a non-{done,dropped} terminalStatus is refused in preflight (before _setPlanStatus) ──
+    await assert.rejects(
+      () => ops.completePlanFromRetro(root, "ALPHA", "a-two", { planPath: ".agents/plans/2026-06-22-a-two.md", terminalStatus: "bogus" as "done", ...O }),
+      ops.OpError,
+    );
+    assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "draft", "bogus terminalStatus: plan NOT flipped (all-or-nothing)");
+
+    // ── completePlanFromRetro success: plan→done + item closed + deferred harvested + current cleared ──
+    await ops.completePlanFromRetro(root, "ALPHA", "a-two", {
+      planPath: ".agents/plans/2026-06-22-a-two.md", terminalStatus: "done",
+      deferred: [{ id: "followup-1", title: "Follow" }], closedDate: "2026-06-22", ...O,
+    });
+    assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "done");
+    assert.match((await readStamped(join(root, ".agents/plans/2026-06-22-a-two.md")))!.content, /files_affected:\n  - a\.ts\n  - b\.ts/, "complete preserves multi-line frontmatter lists (no _setPlanStatus round-trip loss)");
+    assert.ok((await ids(CL("ALPHA"))).includes("a-two"));
+    assert.ok((await ids(BL("ALPHA"))).includes("followup-1"));
+    assert.equal((await readStamped(join(root, ".agents", "state", "current.txt")))!.content.trim(), "");
+
+    // ── addTaskMemory: upsert by title + reject block-breaking titles ──
+    const MEM = taskFile(root, "ALPHA", "memory.md");
+    await ops.addTaskMemory(root, "ALPHA", { title: "decision-x", note: "n1", date: "2026-06-22" }, O);
+    assert.deepEqual(await ids(MEM), ["decision-x"]);
+    await ops.addTaskMemory(root, "ALPHA", { title: "decision-x", note: "n2" }, O); // same title → upsert
+    assert.deepEqual(await ids(MEM), ["decision-x"], "upsert keeps a single block");
+    assert.equal(await field(MEM, "decision-x", "Note"), "n2", "upsert updated the note in place");
+    assert.equal(await field(MEM, "decision-x", "Date"), "2026-06-22", "upsert with no date defaults to nowDate");
+    await assert.rejects(() => ops.addTaskMemory(root, "ALPHA", { title: "bad*title" }, O), ops.OpError); // '*' breaks block id
+    await assert.rejects(() => ops.addTaskMemory(root, "ALPHA", { title: "   " }, O), ops.OpError); // empty after trim
+
+    // ── addTaskLink/removeTaskLink: case-insensitive label upsert + URL uniqueness + guards ──
+    const LK = taskFile(root, "ALPHA", "links.md");
+    await ops.addTaskLink(root, "ALPHA", { label: "Wiki", url: "https://w.example.com/a", triggers: "x,y", summary: "S" }, O);
+    assert.deepEqual(await ids(LK), ["Wiki"]);
+    await ops.addTaskLink(root, "ALPHA", { label: "wiki", url: "https://w.example.com/b" }, O); // case-insensitive → upsert
+    assert.deepEqual(await ids(LK), ["Wiki"], "case-insensitive label upsert keeps a single block (no Wiki/wiki dup)");
+    assert.equal(await field(LK, "Wiki", "URL"), "https://w.example.com/b", "upsert updated URL");
+    await ops.addTaskLink(root, "ALPHA", { label: "Other", url: "https://other.example.com" }, O);
+    await assert.rejects(() => ops.addTaskLink(root, "ALPHA", { label: "Third", url: "https://w.example.com/b" }, O), ops.OpError); // URL dup across labels
+    await assert.rejects(() => ops.addTaskLink(root, "ALPHA", { label: "bad", url: "ftp://nope" }, O), ops.OpError); // non-http
+    await assert.rejects(() => ops.addTaskLink(root, "ALPHA", { label: "a*b", url: "https://x.example.com" }, O), ops.OpError); // '*' in label
+    await assert.rejects(() => ops.removeTaskLink(root, "ALPHA", "nomatch", O), ops.OpError); // nothing matches
+    await ops.removeTaskLink(root, "ALPHA", "wiki", O); // case-insensitive remove
+    assert.deepEqual(await ids(LK), ["Other"], "wiki removed (case-insensitive), Other kept");
+
+    // ── close/complete status guard: a non-{done,dropped} status is refused before any write ──
+    await assert.rejects(() => ops.itemClose(root, "ALPHA", "followup-1", { status: "bogus" as "done", closedDate: "2026-06-22", ...O }), ops.OpError);
+    assert.ok((await ids(BL("ALPHA"))).includes("followup-1"), "bad-status close left the item open (all-or-nothing)");
+
+    // ── task done refusal (open items) then archive refusal then success path ──
+    await assert.rejects(() => ops.taskDone(root, "ALPHA", O), ops.OpError); // still has open items
+    await assert.rejects(() => ops.taskArchive(root, "ALPHA", O), ops.OpError);
+
+    // drain ALPHA's remaining open items, then done + archive + restore
+    for (const id of await ids(BL("ALPHA"))) await ops.dropItem(root, "ALPHA", id, { reason: "cleanup", ...O });
+    await ops.taskDone(root, "ALPHA", O);
+    assert.equal(getFmField(parseFrontmatter((await readStamped(taskFile(root, "ALPHA", "task.md")))!.content).fields, "status"), "done");
+    await ops.taskArchive(root, "ALPHA", O);
+    // archived task refuses writes; ids still reserved
+    await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "z", title: "z" }, O), ops.OpError);
+    assert.ok((await ops.reservedIds(root, O)).has("a-one"), "archived ids stay reserved");
+    await ops.taskRestore(root, "ALPHA", O);
+    assert.equal(getFmField(parseFrontmatter((await readStamped(taskFile(root, "ALPHA", "task.md")))!.content).fields, "status"), "active");
+
+    // ── done→active auto-reopen on new item ──
+    for (const id of await ids(BL("ALPHA"))) await ops.dropItem(root, "ALPHA", id, { reason: "c", ...O });
+    await ops.taskDone(root, "ALPHA", O);
+    await ops.itemAdd(root, { task: "ALPHA" }, { id: "revive-1", title: "R" }, O);
+    assert.equal(getFmField(parseFrontmatter((await readStamped(taskFile(root, "ALPHA", "task.md")))!.content).fields, "status"), "active", "adding an item reopens a done task");
+
+    console.log("ops.test.ts OK");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+await main();

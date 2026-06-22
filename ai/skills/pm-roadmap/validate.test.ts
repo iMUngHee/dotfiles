@@ -1,166 +1,88 @@
-// Violation fixtures for validate.ts. Run: ./node_modules/.bin/tsx validate.test.ts
+// Tests for validate.ts. Run: ./node_modules/.bin/tsx validate.test.ts
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as ops from "./ops.ts";
 import { validateRoadmap } from "./validate.ts";
+import { taskFile } from "./store.ts";
 
-const PLAN_DRAFT = `---\nid: p1\ntitle: t\nstatus: draft\n---\n\n## Goal\n`;
-const PLAN_DONE = `---\nid: p2\ntitle: t\nstatus: done\n---\n\n## Goal\n`;
+const O = { nowMs: 1_750_000_000_000, nowDate: "2026-06-22", retries: 0 as number };
+const has = (r: { errors: { check: string }[] }, c: string) => r.errors.some((e) => e.check === c);
 
-function roadmap(open: string, closed = "", focus = ""): string {
-  return `---\nproject: demo\nfocus: ${focus}\nupdated: 2026-06-10\n---\n\n# demo — Backlog\n\n## Open\n\n${open}\n## Recently Closed\n\n${closed}`;
+async function makePlan(root: string, rel: string, status = "draft", pmLoop = true): Promise<void> {
+  await mkdir(join(root, ".agents", "plans"), { recursive: true });
+  await writeFile(join(root, rel), `---\nid: p\nstatus: ${status}\npm_loop: ${pmLoop}\n---\n# p\n`);
+}
+async function writeState(root: string, name: string, val: string): Promise<void> {
+  await mkdir(join(root, ".agents", "state"), { recursive: true });
+  await writeFile(join(root, ".agents", "state", name), val);
 }
 
-const item = (id: string, fields: Record<string, string>): string =>
-  `- **${id}** — title of ${id}\n` + Object.entries(fields).map(([k, v]) => `  - ${k}: ${v}`).join("\n") + "\n";
+async function main() {
+  const root = await mkdtemp(join(tmpdir(), "validate-test-"));
+  try {
+    // ── clean tree → 0 errors ──
+    await ops.taskCreate(root, "A", "A", O);
+    await ops.itemAdd(root, { task: "A" }, { id: "a-1", title: "x" }, O); // planless open
+    let r = await validateRoadmap(root);
+    assert.equal(r.errors.length, 0, "clean: " + JSON.stringify(r.errors));
 
-async function makeRoot(files: Record<string, string>): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "pmval-"));
-  for (const [rel, content] of Object.entries(files)) {
-    const abs = join(root, rel);
-    await mkdir(join(abs, ".."), { recursive: true });
-    await writeFile(abs, content);
+    // ── C1: id reuse across backlog+closed ──
+    await writeFile(taskFile(root, "A", "closed.md"), `# A — Closed\n\n- **a-1** — dup\n  - Status: done\n  - Plan: .agents/plans/x.md\n  - Closed: 2026-01-01\n`);
+    assert.ok(has(await validateRoadmap(root), "C1"), "C1 id reuse");
+    await writeFile(taskFile(root, "A", "closed.md"), `# A — Closed\n`); // reset
+
+    // ── C2: plan 1:1 (two backlog items same Plan) ──
+    await makePlan(root, ".agents/plans/shared.md", "draft");
+    await writeFile(taskFile(root, "A", "backlog.md"), `# A — Backlog\n\n- **a-1** — x\n  - Priority: P2\n  - Status: draft\n  - Plan: .agents/plans/shared.md\n  - Note: \n- **a-2** — y\n  - Priority: P2\n  - Status: draft\n  - Plan: .agents/plans/shared.md\n  - Note: \n`);
+    assert.ok(has(await validateRoadmap(root), "C2"), "C2 plan 1:1");
+
+    // ── C4: status mirror (item active, plan draft) ──
+    await writeFile(taskFile(root, "A", "backlog.md"), `# A — Backlog\n\n- **a-1** — x\n  - Priority: P2\n  - Status: active\n  - Plan: .agents/plans/shared.md\n  - Note: \n`);
+    assert.ok(has(await validateRoadmap(root), "C4"), "C4 status mirror");
+
+    // ── C5: bad backlog status ──
+    await writeFile(taskFile(root, "A", "backlog.md"), `# A — Backlog\n\n- **a-1** — x\n  - Priority: P2\n  - Status: done\n  - Plan: -\n  - Note: \n`);
+    assert.ok(has(await validateRoadmap(root), "C5"), "C5 section membership");
+
+    // ── C6: planless closed recorded as done ──
+    await writeFile(taskFile(root, "A", "backlog.md"), `# A — Backlog\n`);
+    await writeFile(taskFile(root, "A", "closed.md"), `# A — Closed\n\n- **a-9** — x\n  - Status: done\n  - Plan: -\n  - Closed: 2026-01-01\n`);
+    assert.ok(has(await validateRoadmap(root), "C6"), "C6 planless done");
+
+    // ── C7: closed plan path missing ──
+    await writeFile(taskFile(root, "A", "closed.md"), `# A — Closed\n\n- **a-9** — x\n  - Status: done\n  - Plan: .agents/plans/gone.md\n  - Closed: 2026-01-01\n`);
+    assert.ok(has(await validateRoadmap(root), "C7"), "C7 closed plan missing");
+    await writeFile(taskFile(root, "A", "closed.md"), `# A — Closed\n`); // reset
+
+    // ── C8: focus names an inbox item ──
+    await ops.itemAdd(root, { inbox: true }, { id: "inb-1", title: "i" }, O);
+    await writeState(root, "focus.txt", "inb-1\n");
+    assert.ok(has(await validateRoadmap(root), "C8"), "C8 focus inbox");
+    await writeState(root, "focus.txt", "");
+
+    // ── C3: orphan in-flight plan (pm_loop:true) → error; pm_loop:false → exempt ──
+    await makePlan(root, ".agents/plans/orphan.md", "active", true);
+    await writeState(root, "current.txt", ".agents/plans/orphan.md\n");
+    assert.ok(has(await validateRoadmap(root), "C3"), "C3 orphan in-flight (pm_loop true)");
+    await makePlan(root, ".agents/plans/orphan.md", "active", false); // now out-of-loop
+    assert.ok(!has(await validateRoadmap(root), "C3"), "C3 exempt when pm_loop:false");
+
+    // ── C9: current.txt points to a terminal plan ──
+    await makePlan(root, ".agents/plans/term.md", "done", false);
+    await writeState(root, "current.txt", ".agents/plans/term.md\n");
+    assert.ok(has(await validateRoadmap(root), "C9"), "C9 current not draft|active");
+    await writeState(root, "current.txt", "");
+
+    // ── C10 (warn): duplicate Order in a task ──
+    await writeFile(taskFile(root, "A", "backlog.md"), `# A — Backlog\n\n- **a-1** — x\n  - Priority: P2\n  - Status: open\n  - Order: 1\n  - Plan: -\n  - Note: \n- **a-2** — y\n  - Priority: P2\n  - Status: open\n  - Order: 1\n  - Plan: -\n  - Note: \n`);
+    assert.ok((await validateRoadmap(root)).warns.some((w) => w.check === "C10"), "C10 dup order warn");
+
+    console.log("validate.test.ts OK");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
-  return root;
 }
 
-const checksOf = (vs: { check: string }[]) => vs.map((v) => v.check).sort();
-
-// ── green fixture: everything consistent ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(
-      item("a-item", { Priority: "P1", Status: "draft", Task: "TK", Plan: ".agents/plans/p1.md", Note: "n" }) +
-        item("b-item", { Priority: "P2", Status: "open", Task: "TK", Plan: "-", Note: "n" }),
-      "- **old** → .agents/plans/p2.md (done)\n",
-    ),
-    ".agents/plans/p1.md": PLAN_DRAFT,
-    ".agents/plans/p2.md": PLAN_DONE,
-    ".agents/state/current.txt": ".agents/plans/p1.md\n",
-    ".agents/task-context/TK.md": "# TK\n",
-  });
-  const r = await validateRoadmap(root);
-  assert.equal(r.missingRoadmap, false);
-  assert.deepEqual(r.errors, [], `green fixture must have no errors: ${JSON.stringify(r.errors)}`);
-  assert.deepEqual(r.warns, []);
-}
-
-// ── missing roadmap ──
-{
-  const root = await makeRoot({});
-  const r = await validateRoadmap(root);
-  assert.equal(r.missingRoadmap, true);
-  assert.deepEqual(r.errors, []);
-}
-
-// ── V1 duplicate plan link + V3 mirror mismatch ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(
-      item("a-item", { Status: "active", Plan: ".agents/plans/p1.md", Note: "n" }) +
-        item("b-item", { Status: "draft", Plan: ".agents/plans/p1.md", Note: "n" }),
-    ),
-    ".agents/plans/p1.md": PLAN_DRAFT,
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(checksOf(r.errors), ["V1", "V3"], JSON.stringify(r.errors));
-}
-
-// ── V2 missing plan path ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(item("a-item", { Status: "draft", Plan: ".agents/plans/nope.md", Note: "n" })),
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(checksOf(r.errors), ["V2"], JSON.stringify(r.errors));
-}
-
-// ── V5 planless item with non-open status (open section) ──
-// NOTE: a planless *closed* `done` row is unrepresentable — the parser accepts only
-// `dropped` for planless closed rows, so `→ done · <note>` is dropped at parse time
-// (proven in roadmap.test.ts). V5 here is driven solely by the open planless-active item.
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(
-      item("a-item", { Status: "active", Plan: "-", Note: "n" }),
-    ),
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(checksOf(r.errors), ["V5"], JSON.stringify(r.errors));
-}
-
-// ── V6 dangling focus ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(item("a-item", { Status: "open", Plan: "-", Note: "n" }), "", "gone-item"),
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(checksOf(r.errors), ["V6"], JSON.stringify(r.errors));
-}
-
-// ── V7 pointer → terminal plan ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(item("a-item", { Status: "open", Plan: "-", Note: "n" })),
-    ".agents/plans/p2.md": PLAN_DONE,
-    ".agents/state/current.txt": ".agents/plans/p2.md\n",
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(checksOf(r.errors), ["V7"], JSON.stringify(r.errors));
-}
-
-// ── V8 duplicate id + bad kebab ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(
-      item("dup", { Status: "open", Plan: "-", Note: "n" }) +
-        item("dup", { Status: "open", Plan: "-", Note: "n" }) +
-        item("Bad_Id", { Status: "open", Plan: "-", Note: "n" }),
-    ),
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(checksOf(r.errors), ["V8", "V8"], JSON.stringify(r.errors));
-}
-
-// ── V9 warn: bad task grammar + missing task file ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(
-      item("a-item", { Status: "open", Task: "bad key", Plan: "-", Note: "n" }) +
-        item("b-item", { Status: "open", Task: "NOFILE", Plan: "-", Note: "n" }),
-    ),
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(r.errors, []);
-  assert.deepEqual(checksOf(r.warns), ["V9", "V9"], JSON.stringify(r.warns));
-}
-
-// ── V9 (closed) warn: bad task grammar + missing task file; legacy null exempt ──
-{
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(
-      item("a-item", { Status: "open", Plan: "-", Note: "n" }),
-      "- **c1** → dropped · gone · Task: bad key\n" + // suffix with bad grammar stays note-side? no — KEY grammar fails → stays in note, no warn
-        "- **c2** → dropped · gone · Task: NOFILE\n" +
-        "- **c3** → dropped · legacy no task\n",
-    ),
-  });
-  const r = await validateRoadmap(root);
-  assert.deepEqual(r.errors, []);
-  // c1: `Task: bad key` does not match the suffix regex (space in KEY) → parsed as note tail, task null, exempt.
-  // c2: NOFILE matches grammar but task-context missing → one V9 warn. c3: legacy → exempt.
-  assert.deepEqual(checksOf(r.warns), ["V9"], JSON.stringify(r.warns));
-}
-
-// ── V10 warn: closed > 10 ──
-{
-  const closed = Array.from({ length: 11 }, (_, i) => `- **c${i}** → dropped · old\n`).join("");
-  const root = await makeRoot({
-    ".agents/ROADMAP.md": roadmap(item("a-item", { Status: "open", Plan: "-", Note: "n" }), closed),
-  });
-  const r = await validateRoadmap(root);
-  assert.ok(checksOf(r.warns).includes("V10"), JSON.stringify(r.warns));
-}
-
-console.log("validate.test.ts: all fixtures PASS");
+await main();
