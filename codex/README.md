@@ -48,7 +48,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 `config.toml.template` declares the keys that should always match the repo:
 
 - `project_doc_max_bytes` (sets the AGENTS.md cap, default 65536)
-- `approval_policy` + `sandbox_mode` (default startup automation = TUI "Auto" preset: on-request approvals, workspace-write sandbox)
+- `approval_policy` + `approvals_reviewer` + `sandbox_mode` (default startup automation = TUI "Auto" preset with automatic approval review)
 - `[tui].theme`
 - `[tui].vim_mode_default`
 - `[tui].status_line_use_colors`
