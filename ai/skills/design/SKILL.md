@@ -39,6 +39,8 @@ Match against the `description:` frontmatter field for highest signal-to-noise. 
 
 If 2+ independent subsystems exist, list them and ask which to start with.
 
+For large, irreversible, or under-specified work, mention `/grill` before proposing approaches when intent alignment is the main risk; invoke it only if 대협 explicitly asks.
+
 ### 2. Propose approaches
 
 Propose 2-3 approaches with:
