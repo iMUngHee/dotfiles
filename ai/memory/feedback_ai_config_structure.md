@@ -10,6 +10,8 @@ type: feedback
 ## Native prefix convention
 Files inside `claude/` or `codex/` get a `claude-` / `codex-` prefix. Files in `ai/` have no prefix.
 
+When a `claude-`/`codex-` skill becomes identical across tools, **unify it into `ai/skills/<name>/`** (shared, no prefix) and keep only the platform-specific bits as dual `Claude:` / `Codex:` notes — the pattern `verify`/`design`/`worktree` use (e.g. worktree's sandbox invocation: Claude `dangerouslyDisableSandbox` vs Codex `-s workspace-write`). Don't keep near-duplicate per-tool skills. Note: `ai/` skills must stay tool-agnostic (no `EnterWorktree`/`EnterPlanMode`/`~/.claude`-only refs).
+
 ## Deploy model
 - Claude: reads `ai/` via symlink overlay with in-context token substitution.
 - Codex: receives `ai/` as concat+sed-expanded `AGENTS.md`. `MEMORY.md` is auto-generated.
@@ -21,9 +23,10 @@ Files inside `claude/` or `codex/` get a `claude-` / `codex-` prefix. Files in `
 ## Token substitution
 `ai/` files use `{{double-mustache}}` placeholders for tool-varying paths/names. Replace with actual values when referencing, writing, or executing commands containing them.
 
-Shared plan/state/roadmap tokens are intentionally tool-agnostic:
+Shared plan/state tokens are intentionally tool-agnostic:
 - `PLAN_DIR` placeholder -> `.agents/plans`
 - `STATE_DIR` placeholder -> `.agents/state`
-- `ROADMAP` placeholder -> `.agents/ROADMAP.md`
 
-Codex skill discovery uses `.agents/skills`. Keep `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md`, `.agents/task-context/`, and `.agents/skills` as separate siblings.
+(The `ROADMAP` token was retired with the pm task-first redesign — the backlog now lives per-task under `.agents/tasks/<KEY>/`, no single `ROADMAP.md`.)
+
+Codex skill discovery uses `.agents/skills`. Keep `.agents/plans`, `.agents/state`, `.agents/tasks/`, and `.agents/skills` as separate siblings.

@@ -35,11 +35,10 @@ Files under `ai/` use double-mustache placeholders for tool-varying paths/names.
 | `{{CONFIG_FILE}}` | `settings.json` | `config.toml` |
 | `{{PLAN_DIR}}` | `.agents/plans` | `.agents/plans` |
 | `{{STATE_DIR}}` | `.agents/state` | `.agents/state` |
-| `{{ROADMAP}}` | `.agents/ROADMAP.md` | `.agents/ROADMAP.md` |
 
 Codex's AGENTS.md is built by sed-expanding these tokens at concat time (decisive). Claude's deploy keeps tokens intact and the model handles substitution in-context (live-validated 5/5 on tool calls).
 
-Shared skill artifacts use repo-local `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md` (cross-plan backlog SSOT), `.agents/task-context/` (per-project task links, gitignored), and `.agents/memory/` (per-task memory notes, gitignored). Codex skill discovery uses `.agents/skills`; keep all of these as siblings, never inside `.agents/skills`.
+Shared skill artifacts use repo-local `.agents/plans`, `.agents/state`, and `.agents/tasks/<KEY>/` (per-task backlog/closed/links/memory — the task-first pm model; gitignored). Codex skill discovery uses `.agents/skills`; keep all of these as siblings, never inside `.agents/skills`.
 
 ## Project-management loop (pm-*)
 
@@ -51,7 +50,7 @@ Four shared skills form one project-management system over those `.agents/` arti
         retro closes the loop: plan done → close backlog item, harvest defers + decisions
 ```
 
-`pm-context` owns per-task links, `pm-roadmap` owns the backlog (`.agents/ROADMAP.md`), `retro` owns per-task memory (`.agents/memory/<KEY>.md`) and the done transition, `design` reads all three and owns the plan. The `pm-context` GUI (`manage`) serves a unified dashboard (backlog + tasks + inline link editing) and reuses `pm-roadmap`'s TS modules.
+`pm-context` owns per-task links (`.agents/tasks/<KEY>/links.md`), `pm-roadmap` owns the task-first backlog (`.agents/tasks/<KEY>/{backlog,closed}.md`, derived cross-task views — no single ROADMAP.md), `retro` owns per-task memory (`.agents/tasks/<KEY>/memory.md`) and the done transition, `design` reads all three and owns the plan. All `tasks/*` writes go through the `pm-roadmap` CLI → ops (lock + CAS). The `pm-context` GUI (`manage`) serves a unified dashboard (backlog + tasks + inline link editing) and reuses `pm-roadmap`'s TS modules.
 
 ## Deploy model
 
@@ -73,7 +72,7 @@ Tool-specific skill directories use native prefixes for ownership:
 - `claude/skills/claude-<id>/`
 - `codex/skills/codex-<id>/`
 
-The `SKILL.md` frontmatter `name:` is the user-facing invocation/display name. It may omit the native prefix when the shorter name is clear and does not conflict in that tool's deployed skill scope. Example: `codex/skills/codex-worktree/SKILL.md` can use `name: worktree`.
+The `SKILL.md` frontmatter `name:` is the user-facing invocation/display name. It may omit the native prefix when the shorter name is clear and does not conflict in that tool's deployed skill scope. Example: `codex/skills/codex-ask-claude/SKILL.md` uses `name: ask-claude`. (A skill that is identical across tools belongs in `ai/skills/<name>/` instead — e.g. `ai/skills/worktree/`.)
 
 ## AGENTS.manifest
 
