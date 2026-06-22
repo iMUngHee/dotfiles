@@ -1,6 +1,6 @@
 ---
 name: fanout
-description: "Parallel multi-agent fan-out for independent N-item work. TRIGGER when: 대협 explicitly asks for parallel/fan-out/sub-agent/delegation processing (Codex spawns sub-agents ONLY on explicit request). SKIP (defer to the owner): PR/code review (code-review), feature verification (verify), planning/architecture (design), root-cause debugging (debug), web research; single-file edits and one-response work (→ handle solo)."
+description: "Parallel multi-agent fan-out for independent N-item work. TRIGGER when: the user explicitly asks for parallel/fan-out/sub-agent/delegation processing (Codex spawns sub-agents ONLY on explicit request). SKIP (defer to the owner): PR/code review (code-review), feature verification (verify), planning/architecture (design), root-cause debugging (debug), web research; single-file edits and one-response work (→ handle solo)."
 argument-hint: "[task description]"
 disable-model-invocation: false
 ---
@@ -23,7 +23,7 @@ Only proceed when NO specialized skill owns the request.
 
 ## 1. Explicit-request gate (Codex policy — hard rule)
 
-Codex's `spawn_agent` policy: spawn sub-agents ONLY when 대협 explicitly asks for sub-agents / delegation / parallel agent work. If there is **no explicit request → do NOT spawn**. Handle the task solo, even if it looks fan-out-worthy. (This is why Codex fan-out cannot be fully automatic; it is the trigger asymmetry vs Claude's `Workflow`.)
+Codex's `spawn_agent` policy: spawn sub-agents ONLY when the user explicitly asks for sub-agents / delegation / parallel agent work. If there is **no explicit request → do NOT spawn**. Handle the task solo, even if it looks fan-out-worthy. (This is why Codex fan-out cannot be fully automatic; it is the trigger asymmetry vs Claude's `Workflow`.)
 
 ## 2. Fan-out worthiness
 
@@ -41,7 +41,7 @@ Spawn one worker per dimension/unit → collect via `wait_agent` → spawn verif
 
 ### Execution mode (strict opt-in)
 
-Allowed ONLY when ALL hold: 대협 explicitly requested implementation; worker write sets are disjoint; the main agent is the integration owner; every worker diff is reviewed (no silent revert, no unrequested privilege escalation). Use the `worktree` skill for isolation. Otherwise fall back to solo.
+Allowed ONLY when ALL hold: the user explicitly requested implementation; worker write sets are disjoint; the main agent is the integration owner; every worker diff is reviewed (no silent revert, no unrequested privilege escalation). Use the `worktree` skill for isolation. Otherwise fall back to solo.
 
 ## 4. Cost
 

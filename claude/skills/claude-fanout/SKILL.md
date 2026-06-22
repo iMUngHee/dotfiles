@@ -1,6 +1,6 @@
 ---
 name: fanout
-description: "Parallel multi-agent fan-out for independent N-item work. TRIGGER when: 대협 explicitly asks for parallel/fan-out/multi-agent processing, OR a task splits into 3+ truly independent units (per-file/per-module/per-symbol) that NO specialized skill owns. SKIP (defer to the owner): PR/code review (code-review), feature verification (verify), planning/architecture (design), root-cause debugging (debug), web research (deep-research), UI building (frontend-design); single-file edits and one-response work (→ handle solo)."
+description: "Parallel multi-agent fan-out for independent N-item work. TRIGGER when: the user explicitly asks for parallel/fan-out/multi-agent processing, OR a task splits into 3+ truly independent units (per-file/per-module/per-symbol) that NO specialized skill owns. SKIP (defer to the owner): PR/code review (code-review), feature verification (verify), planning/architecture (design), root-cause debugging (debug), web research (deep-research), UI building (frontend-design); single-file edits and one-response work (→ handle solo)."
 argument-hint: "[task description]"
 allowed-tools: Workflow, Task, TaskOutput, Read, Glob, Grep, Bash, Agent
 model: opus
@@ -47,7 +47,7 @@ For questions, audits, root-cause, surveys with no code change. Orchestrate via 
 
 ### Execution mode (strict opt-in)
 
-Allowed ONLY when ALL hold: 대협 explicitly requested implementation; worker write sets are disjoint; the main agent is the integration owner; every worker diff is reviewed (no silent revert, no unrequested privilege escalation). Otherwise fall back to solo.
+Allowed ONLY when ALL hold: the user explicitly requested implementation; worker write sets are disjoint; the main agent is the integration owner; every worker diff is reviewed (no silent revert, no unrequested privilege escalation). Otherwise fall back to solo.
 
 - `pipeline(items, implement {isolation:'worktree'}, verify)`.
 - After workers finish: review each diff, integrate, run the project's verification.

@@ -39,7 +39,7 @@ Match against the `description:` frontmatter field for highest signal-to-noise. 
 
 If 2+ independent subsystems exist, list them and ask which to start with.
 
-For large, irreversible, or under-specified work, mention `/grill` before proposing approaches when intent alignment is the main risk; invoke it only if 대협 explicitly asks.
+For large, irreversible, or under-specified work, mention `/grill` before proposing approaches when intent alignment is the main risk; invoke it only if the user explicitly asks.
 
 ### 2. Propose approaches
 
@@ -64,11 +64,11 @@ After design approval, present the implementation plan as response text. **Do NO
 
 ### 5. Persist plan artifact (BEFORE implementation)
 
-After 대협 approves the design (Step 3 approval = signal to persist) and **before any file writes that implement the plan**:
+After the user approves the design (Step 3 approval = signal to persist) and **before any file writes that implement the plan**:
 
 1. **Generate id slug** — kebab-case from title (lowercase, hyphens for spaces, ASCII only). Scan `{{PLAN_DIR}}/*.md` for existing `id:` fields. On collision, append `-2`, `-3`, etc.
 
-2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If it names a plan with `status: draft` or `status: active`, present three options to 대협:
+2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If it names a plan with `status: draft` or `status: active`, present three options to the user:
    - **(a)** Run `/retro` on the in-flight plan first — it closes the plan + its backlog item via the `complete` transaction (Post-Impl Notes, deferred harvest, pointer clear) — then persist the new one. (design never writes `done` directly; that transition is /retro-exclusive.)
    - **(b)** Park the in-flight plan and proceed: persisting the new plan repoints `current.txt`, so the previous plan + its backlog item become a parked draft/active (re-activate later by re-pointing `current.txt` at it). The "exactly one backlog item" invariant applies only to the *in-flight* plan, so a parked plan keeps its item without error.
    - **(c)** Cancel the new plan creation.
@@ -112,7 +112,7 @@ Followed by the approved design content (Goal, Approach, Decisions, Implementati
      pm plan <KEY> <id> "<plan-repo-rel-path>"                 # sets Plan + Status → draft
      printf '%s\n' "<plan-repo-rel-path>" > "$repo_root/.agents/state/current.txt"
      ```
-   - **No backlog item yet** (ad-hoc design): one transaction creates + links + points. The owning task `<KEY>` is required — ask 대협 which; create it first if none exists:
+   - **No backlog item yet** (ad-hoc design): one transaction creates + links + points. The owning task `<KEY>` is required — ask the user which; create it first if none exists:
      ```bash
      pm task create <KEY> --title "<task title>"              # only if the task does not exist yet
      pm persist <KEY> <id> "<plan-repo-rel-path>" --title "<plan title>"
@@ -134,7 +134,7 @@ Followed by the approved design content (Goal, Approach, Decisions, Implementati
 <!-- Filled by /retro if run after implementation -->
 ```
 
-7. **Confirm to 대협:** "saved as `<path>` — review and reply with **승인** (active 전환), **취소** (dropped), or further edits. Run `/retro` after implementation to mark the plan `done`."
+7. **Confirm to the user:** "saved as `<path>` — review and reply with **승인** (active 전환), **취소** (dropped), or further edits. Run `/retro` after implementation to mark the plan `done`."
 
 **Status values & lifecycle**: `draft` (just saved) → `active` (in progress) → `done` | `dropped` (terminal).
 
@@ -167,7 +167,7 @@ Report the archiver's output (moved / skipped). Add `--dry-run` to preview witho
 - **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they look up plans by id) and loses the pre-drift intent snapshot
 - **ALWAYS check off implementation steps as you go.** The instant a step in `## Implementation Steps` lands (meets its PASS output), edit the plan to flip its `- [ ]` → `- [x]` — unconditionally, never batched at the end. The checkbox state is the live progress record `/verify` and `/retro` trust; stale checkboxes break that contract.
 - No file writes during design exploration (Steps 1-3)
-- If 대협 declines to save, skip Step 5 — the plan remains conversation-only
+- If the user declines to save, skip Step 5 — the plan remains conversation-only
 - Frontmatter MUST be English. Body content can be Korean.
 - The `branch` field is NOT in the schema. Git tracks branch separately.
 - Inline `#` comments in frontmatter are NOT used (natural-language triggers replace them).
