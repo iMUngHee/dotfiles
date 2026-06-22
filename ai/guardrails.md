@@ -37,3 +37,16 @@ Activate the design/planning workflow when ANY of these apply:
 - 대협 explicitly requests a design
 
 If none apply, skip and proceed directly. Tool-specific design workflow invocation is documented in each tool's `{{INSTRUCTIONS_FILE}}`.
+
+## Pre-Implementation Gate (Lean Ladder)
+
+Before writing any code, stop at the first rung that holds:
+
+1. Does this need to exist at all? → no: skip it (YAGNI)
+2. Does the standard library already do it? → use it
+3. Is there a native platform feature for it? → use it
+4. Does an already-installed dependency cover it? → use it
+5. Can it be one line? → write the one line
+6. Only then → write the minimal custom code
+
+Leanness applies to invented code only — verification, security, accessibility, and tests are never what you cut.
