@@ -41,7 +41,7 @@ Spawn one worker per dimension/unit → collect via `wait_agent` → spawn verif
 
 ### Execution mode (strict opt-in)
 
-Allowed ONLY when ALL hold: 대협 explicitly requested implementation; worker write sets are disjoint; the main agent is the integration owner; every worker diff is reviewed (no silent revert, no unrequested privilege escalation). Use the `codex-worktree` skill for isolation. Otherwise fall back to solo.
+Allowed ONLY when ALL hold: 대협 explicitly requested implementation; worker write sets are disjoint; the main agent is the integration owner; every worker diff is reviewed (no silent revert, no unrequested privilege escalation). Use the `worktree` skill for isolation. Otherwise fall back to solo.
 
 ## 4. Cost
 

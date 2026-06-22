@@ -11,8 +11,7 @@ codex/
 ├── hooks/                      # Codex hook commands
 ├── skills/                     # Codex-native skills (codex-* prefix)
 │   ├── codex-ask-claude/       # Codex-only skill; invokes as `ask-claude`
-│   ├── codex-fanout/           # Codex-only skill; invokes as `fanout`
-│   └── codex-worktree/         # Codex-only skill; invokes as `worktree`
+│   └── codex-fanout/           # Codex-only skill; invokes as `fanout`
 └── scripts/
     ├── bootstrap.sh            # Build AGENTS.md, deep-merge config.toml, overlay skills
     ├── mcp-secret-env.sh       # Load MCP env from the OS secret store, then exec server
@@ -41,7 +40,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 3. **`~/.agents/skills/`** overlayed (note: not `~/.codex/skills/` — Codex discovery path is `~/.agents/skills/`):
    - per-skill symlinks from `ai/skills/*/`, `ai/skills/private/*/`, `codex/skills/*/`
    - existing user-added (non-symlink) entries preserved
-   - plan/state/roadmap artifacts are not deployed here; repo-local `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md`, `.agents/task-context/`, and `.agents/memory/` are sibling entries
+   - plan/state/task artifacts are not deployed here; repo-local `.agents/plans`, `.agents/state`, and `.agents/tasks/` are sibling entries
 
 ## What's enforced via template
 
@@ -89,11 +88,11 @@ Verify with `codex mcp list`.
 
 Codex discovers skills at `~/.agents/skills/` (note: `.agents/`, not `.codex/`). The bootstrap overlay merges three sources into that directory:
 
-- `ai/skills/<name>/` — shared (16)
+- `ai/skills/<name>/` — shared (17)
 - `ai/skills/private/<name>/` — shared but gitignored (kafdrop-hunt, track-logging)
-- `codex/skills/codex-<id>/` — Codex-only (3: `ask-claude`, `fanout`, `worktree`)
+- `codex/skills/codex-<id>/` — Codex-only (2: `ask-claude`, `fanout`)
 
-Repo-local artifacts use `.agents/plans`, `.agents/state`, `.agents/ROADMAP.md`, `.agents/task-context/`, and `.agents/memory/`; do not place them under `.agents/skills`.
+Repo-local artifacts use `.agents/plans`, `.agents/state`, and `.agents/tasks/` (per-task backlog/closed/links/memory); do not place them under `.agents/skills`.
 
 ## Codex-only instructions
 
@@ -127,4 +126,4 @@ Skill SKILL.md files use the same frontmatter as Claude (`name`, `description`, 
 
 ## Sandbox
 
-Codex skills that write to disk should declare the required sandbox in their SKILL.md `Rules` section. The `worktree` skill (`codex/skills/codex-worktree`) writes to `.git/config`, `.env`, `node_modules/`, so it documents `-s workspace-write --add-dir .codex/worktrees`.
+Codex skills that write to disk should declare the required sandbox in their SKILL.md `Rules` section. The shared `worktree` skill (`ai/skills/worktree`) writes to `.git/config`, `node_modules/`, env files, and `.agents/worktrees/`, so it documents `-s workspace-write --add-dir .agents/worktrees` (Codex) alongside the Claude-Code sandbox note.

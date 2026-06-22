@@ -15,8 +15,7 @@ claude/
 │   └── claude-feedback_*.md    # Claude-only feedback memories (claude- prefix)
 ├── skills/
 │   ├── claude-ask-codex/       # Claude-only skill; invokes as `ask-codex`
-│   ├── claude-fanout/          # Claude-only skill; invokes as `fanout`
-│   └── claude-worktree/        # Claude-only skill; invokes as `worktree`
+│   └── claude-fanout/          # Claude-only skill; invokes as `fanout`
 ├── hooks/                      # PreToolUse, PostToolUse, UserPromptSubmit, Stop, etc. — see Hooks section
 │   └── lib/                    # Shared helpers
 ├── agents/                     # Subagent definitions (pre-commit-verifier, reviewer, verifier)
