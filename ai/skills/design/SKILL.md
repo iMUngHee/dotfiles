@@ -19,7 +19,7 @@ Task: $ARGUMENTS (if empty, ask the user)
 ```
 (pm-context · context | retro · memory | pm-roadmap · backlog)  ──▶  design · plan
 ```
-When invoked on a `pm-roadmap` backlog item, read that task's **context** (`/pm-context`: links) + **memory** (`/retro`: per-task decisions) + the item, then write the plan and link it back (`Task:`/`Plan:`). Outside the loop it just plans. (Plan storage: `{{PLAN_DIR}}/`; pointer: `{{STATE_DIR}}/current.txt`.)
+When invoked on a `pm-roadmap` backlog item, read that task's **context** (`/pm-context`: links) + **memory** (`/retro`: per-task decisions) + the item, then write the plan and link it back through the **`pm-roadmap.ts persist`** CLI — one transaction that creates/links the backlog item and points `current.txt` together. Outside the loop it just plans: a standalone plan carries `pm_loop: false` and is tracked in no backlog. (Plan storage: `{{PLAN_DIR}}/`; pointer: `{{STATE_DIR}}/current.txt`; per-task backlog: `.agents/tasks/<KEY>/`, written only via the CLI.)
 
 ## Context Discovery
 
@@ -31,7 +31,7 @@ ls {{PLAN_DIR}}/ 2>/dev/null && grep -l "<relevant keywords>" {{PLAN_DIR}}/*.md 
 
 Match against the `description:` frontmatter field for highest signal-to-noise. Read related plans for context (prior decisions, lessons learned).
 
-**Also consult the backlog** if `{{ROADMAP}}` exists: read it to see whether this task is already a `## Open` item (pull its Priority/Note/Task and any sibling decisions). If so, this design will link back to that item at persist time.
+**Also consult the backlog** via the CLI — `pm-roadmap.ts list` (eligible items) or `pm-roadmap.ts get <id>` — to see whether this work is already a backlog item (pull its Priority/Note/owning task and any sibling decisions). If so, this design links back to that item at persist time. (CLI setup in Step 5; on a legacy repo the read prints a migrate hint instead.)
 
 ## Steps
 
@@ -66,14 +66,14 @@ After 대협 approves the design (Step 3 approval = signal to persist) and **bef
 
 1. **Generate id slug** — kebab-case from title (lowercase, hyphens for spaces, ASCII only). Scan `{{PLAN_DIR}}/*.md` for existing `id:` fields. On collision, append `-2`, `-3`, etc.
 
-2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If the file exists and points to a plan with `status: draft` or `status: active`, present three options to 대협:
-   - **(a)** Run `/retro` on the existing plan first — it closes the plan `done` with Post-Impl Notes, roadmap sink, and defer harvest — then swap the pointer to the new one. (design never writes `done` directly; that transition is /retro-exclusive.)
-   - **(b)** Demote the existing plan to `draft` (preserved but not pointed-at) and proceed. If `{{ROADMAP}}` exists and an item has `Plan:` == the existing plan, mirror its Status `active → draft` (it stays in `## Open`) — this is the **demote** row in /pm-roadmap Lifecycle.
-   - **(c)** Cancel the new plan creation
+2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If it names a plan with `status: draft` or `status: active`, present three options to 대협:
+   - **(a)** Run `/retro` on the in-flight plan first — it closes the plan + its backlog item via the `complete` transaction (Post-Impl Notes, deferred harvest, pointer clear) — then persist the new one. (design never writes `done` directly; that transition is /retro-exclusive.)
+   - **(b)** Park the in-flight plan and proceed: persisting the new plan repoints `current.txt`, so the previous plan + its backlog item become a parked draft/active (re-activate later by re-pointing `current.txt` at it). The "exactly one backlog item" invariant applies only to the *in-flight* plan, so a parked plan keeps its item without error.
+   - **(c)** Cancel the new plan creation.
 
-   If existing plan is `done` or `dropped`, just overwrite the state pointer.
+   If the existing plan is `done`/`dropped`, just proceed (persist overwrites the pointer).
 
-   > **Note**: `current.txt` is a *pointer* file naming the in-flight plan. It is unrelated to the `status: active` value — a plan can be pointed-at while still in `draft`. Do not conflate "writing to `current.txt`" with "promoting status to active".
+   > **Note**: `current.txt` is a *pointer* naming the in-flight plan, unrelated to the `status:` value — a plan can be pointed-at while still `draft`. Do not conflate "pointing `current.txt`" with "promoting status to active". The `persist` CLI does the pointing for pm-loop plans.
 
 3. **Create `{{PLAN_DIR}}/` directory** if it does not exist.
 
@@ -86,17 +86,42 @@ title: <English title, ~80 chars>
 description: <English 1-2 sentence summary, ~150 chars — used for grep/search>
 date: YYYY-MM-DD
 status: draft
+pm_loop: true
 files_affected:
   - <file paths from implementation plan>
 ---
 ```
 
+`pm_loop: true` = this plan is tracked in a `pm-roadmap` backlog (persisted in 5.5). Set `pm_loop: false` for a **standalone** plan (general /design, no backlog item) — it is then exempt from the "linked to exactly one backlog item" in-flight invariant, and 5.5 writes `current.txt` directly instead of calling `persist`.
+
 Followed by the approved design content (Goal, Approach, Decisions, Implementation Steps).
 
-5. **Create `{{STATE_DIR}}/` directory if needed and update `{{STATE_DIR}}/current.txt`** with the new plan's repo-relative path on a single line. **The plan's `status` stays `draft` — this step only points at it; promotion to `active` happens later via the `승인` trigger.**
+5. **Link the plan to the backlog + point `current.txt` via the CLI.** The `id` slug doubles as the backlog item id (1:1 with the plan). Setup:
 
+   ```bash
+   repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
+   (cd ~/.config/ai/skills/pm-roadmap && [[ -d node_modules ]] || npm install)
+   pm() { PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.config/ai/skills/pm-roadmap/pm-roadmap.ts "$@"; }
    ```
-   {{PLAN_DIR}}/2026-05-07-<id>.md
+
+   Pick the path that matches the backlog:
+   - **The work is already a backlog item** (the canonical loop — you designed *for* an open item, e.g. one from `pm next`): link the plan, then point the pointer. Link first so the in-flight plan is never an orphan:
+     ```bash
+     pm plan <KEY> <id> "<plan-repo-rel-path>"                 # sets Plan + Status → draft
+     printf '%s\n' "<plan-repo-rel-path>" > "$repo_root/.agents/state/current.txt"
+     ```
+   - **No backlog item yet** (ad-hoc design): one transaction creates + links + points. The owning task `<KEY>` is required — ask 대협 which; create it first if none exists:
+     ```bash
+     pm task create <KEY> --title "<task title>"              # only if the task does not exist yet
+     pm persist <KEY> <id> "<plan-repo-rel-path>" --title "<plan title>"
+     ```
+     `persist` (→ `createPlanAndBacklogItem`) creates the item (Status `draft`, mirroring the plan) **and** points `current.txt`, atomically — no orphan mid-write. (`persist` rejects an id that is already a backlog item; relink an existing item with `plan` above.)
+
+   **Never hand-edit any `tasks/*` file** — `plan`/`persist` are the only writers. The plan `status` stays `draft`; promotion to `active` is the `승인` trigger.
+
+   **Standalone plan (`pm_loop: false`):** skip both — there is no backlog item. Point the pointer directly (`current.txt` is a state pointer, not a `tasks/*` file):
+   ```bash
+   mkdir -p "$repo_root/.agents/state" && printf '%s\n' "<plan-repo-rel-path>" > "$repo_root/.agents/state/current.txt"
    ```
 
 6. **Append empty Post-Implementation section** to the plan:
@@ -111,19 +136,19 @@ Followed by the approved design content (Goal, Approach, Decisions, Implementati
 
 **Status values & lifecycle**: `draft` (just saved) → `active` (in progress) → `done` | `dropped` (terminal).
 
-### 6. Roadmap linkage (only if `{{ROADMAP}}` exists)
+### 6. Backlog linkage invariants
 
-Right after persisting the plan and pointing `current.txt`, link the plan to the backlog (markdown write only — single-writer discipline):
+Step 5.5 already wrote the linkage; these are the rules it satisfies — all enforced by ops (a violation throws, it is never silently written):
 
-- If a `## Open` item already has `Plan:` == this plan path → do nothing (idempotent).
-- Else if an item matches this work (id == plan id slug, or 대협 names one) → set its `Plan:` to the new path. Its Status now mirrors the plan = `draft`.
-- Else create a new `## Open` item: id = plan id slug, title from the plan title, Priority asked-or-`P2`, `Plan:` = path, **`Task:` = the owning task-context KEY** — a **real KEY is required** (ask 대협 which; if none exists, create the task first). Never persist a plan-linked item into `_INBOX`: inbox items are untriaged ideas and must be reassigned (`link <id> Task <KEY>`) before design. Status mirrors = `draft`.
+- **id == plan slug**, and **one item per plan path** (`Plan:` 1:1 across every task's backlog + closed). `persist`/`plan` reject a duplicate plan link or a reused id.
+- The backlog item **Status mirrors the plan** (`draft` at persist; `active` after `승인`).
+- A **real task `<KEY>` is required** — an inbox item is untriaged and cannot carry a plan or be made in-flight. Triage it first (`pm triage <id> <KEY>`); `persist`/`plan`/`focus` reject inbox items.
 
-Each plan path appears as `Plan:` in **at most one** item. Skip this step entirely when `{{ROADMAP}}` does not exist.
+Skip for a standalone (`pm_loop: false`) plan — it has no backlog item.
 
-### 7. Archive aged plans (only if `{{ROADMAP}}` exists)
+### 7. Archive aged plans
 
-**After** roadmap linkage (so the new plan is current + linked and won't be touched), run the deterministic archiver to keep `{{PLAN_DIR}}/` small. It moves **terminal** (`done`/`dropped`) plans **≥ 30 days old** that are **unreferenced** (not named by `current.txt`, not any `## Open` item's `Plan:`) into `{{PLAN_DIR}}/archive/`, and rewrites each Recently-Closed `→ <plan>` pointer in `{{ROADMAP}}` so closed-join / GUI still resolve. Reference-protected and idempotent (safe to re-run; recovers a crash between move and pointer rewrite). The just-saved `draft` plan is never archived (it is current + non-terminal).
+**After** linkage (the new plan is current + linked and won't be touched), run the deterministic archiver to keep `{{PLAN_DIR}}/` small. It moves **terminal** (`done`/`dropped`) plans **≥ 30 days old** that are **unreferenced** (not named by `current.txt`, not any backlog item's `Plan:`) into `{{PLAN_DIR}}/archive/`, and rewrites each task's `closed.md` `Plan:` pointer so closed-join / GUI still resolve. Reference-protected and idempotent (safe to re-run; recovers a crash between move and pointer rewrite). The just-saved `draft` plan is never archived (it is current + non-terminal). No-ops on a repo with no task store.
 
 ```bash
 repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
@@ -151,14 +176,14 @@ After `current.txt` points to a `draft` plan, watch for explicit user replies th
 
 | User trigger       | Action                                         |
 | ------------------ | ---------------------------------------------- |
-| `승인` / `approve` | Edit plan frontmatter `status: draft → active` |
-| `취소` / `cancel`  | Edit plan frontmatter to `status: dropped`     |
+| `승인` / `approve` | Edit plan frontmatter `status: draft → active`, then mirror the item: `pm approve <KEY> <id>` (item Status → `active`). |
+| `취소` / `cancel`  | Edit plan frontmatter `status: → dropped`, then `pm close <KEY> <id> --status dropped --reason "<why>"` (moves the item to `closed.md`; the op clears `focus`), then truncate `current.txt`. |
 
-**Roadmap mirror (only if `{{ROADMAP}}` exists and an item has `Plan:` == this plan):** on `승인`, set that item Status `active`. On `취소`, set Status `dropped` and move it from `## Open` to `## Recently Closed` (`- **id** → <plan> (dropped) · Task: <KEY>` — keep the item's Task as the trailing suffix when non-null, omit when taskless); clear the roadmap frontmatter `focus` if it names this item (focus-clear rule — see /pm-roadmap Lifecycle). Markdown write only; never copy plan content.
+**Backlog mirror (pm-loop plans):** the backlog item Status must mirror the plan, so each trigger pairs the plan-frontmatter edit with a CLI op (reuse the `pm` helper from Step 5.5). On `승인` → `pm approve <KEY> <id>`. On `취소` → `pm close <KEY> <id> --status dropped --reason "<why>"` then truncate `current.txt`. The ops take the lock; the plan-frontmatter edit is a direct write (a plan file is a design artifact, not a `tasks/*` file). For a **standalone** (`pm_loop: false`) plan there is no item — edit only the plan frontmatter (+ truncate `current.txt` on 취소).
 
-> The `done` transition is **delegated to `/retro`**. `/retro` Phase 5 Apply marks the plan `done` together with `## Post-Implementation Notes`. Do NOT add a `완료` / `done` natural-language trigger here.
+> The `done` transition is **delegated to `/retro`**. `/retro` Phase 5 closes the plan + item via the `complete` transaction together with `## Post-Implementation Notes`. Do NOT add a `완료` / `done` natural-language trigger here.
 
-> Only the `current.txt`-pointed plan is trigger-eligible. A parked `draft` plan (e.g. demoted via Step 5 option (b)) becomes eligible again by re-pointing `current.txt` at its repo-relative path — a direct one-line write; no new plan artifact is created.
+> Only the `current.txt`-pointed plan is trigger-eligible. A parked plan (Step 5 option (b)) becomes eligible again by re-pointing `current.txt` at its repo-relative path — a direct one-line write; no new plan artifact is created.
 
 **Hard rules:**
 

@@ -1,0 +1,118 @@
+// Tests for pm-roadmap.ts CLI. Run: ./node_modules/.bin/tsx cli.test.ts
+import assert from "node:assert/strict";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runCli } from "./pm-roadmap.ts";
+
+async function makePlan(root: string, rel: string, status = "draft"): Promise<void> {
+  await mkdir(join(root, ".agents", "plans"), { recursive: true });
+  await writeFile(join(root, rel), `---\nid: p\nstatus: ${status}\npm_loop: true\n---\n# p\n\n## Post-Implementation Notes\n\n-\n`);
+}
+
+async function main() {
+  const root = await mkdtemp(join(tmpdir(), "cli-test-"));
+  const cli = (...a: string[]) => runCli(root, a);
+  try {
+    assert.equal((await cli("task", "create", "ALPHA", "--title", "Alpha")).code, 0);
+    assert.equal((await cli("add", "a-1", "--task", "ALPHA", "--title", "One")).code, 0);
+    assert.equal((await cli("add", "inb-1", "--inbox", "--title", "I")).code, 0);
+
+    let r = await cli("list");
+    assert.ok(r.out.includes("ALPHA/a-1") && r.out.includes("inbox: 1"), "list shows item + inbox");
+    r = await cli("tree");
+    assert.ok(r.out.includes("a-1"), "tree shows backlog");
+    assert.equal((await cli("validate")).code, 0, "clean validate");
+
+    // triage inbox → task
+    assert.equal((await cli("task", "create", "BETA", "--title", "Beta")).code, 0);
+    assert.equal((await cli("triage", "inb-1", "BETA")).code, 0);
+    assert.ok((await cli("tree")).out.includes("inb-1"), "triaged item under BETA");
+
+    // focus set/clear (+ list reflects focus)
+    assert.equal((await cli("focus", "a-1")).code, 0);
+    assert.ok((await cli("list")).out.includes("focus: a-1"));
+    assert.equal((await cli("focus", "--clear")).code, 0);
+
+    // explicit next
+    assert.ok((await cli("next", "a-1")).out.includes("# Next: a-1"));
+
+    // plan link + get + validate stays clean (draft↔draft mirror)
+    await makePlan(root, ".agents/plans/2026-06-22-a-1.md", "draft");
+    assert.equal((await cli("plan", "ALPHA", "a-1", ".agents/plans/2026-06-22-a-1.md")).code, 0);
+    assert.ok((await cli("get", "a-1")).out.includes("a-1"));
+    assert.equal((await cli("validate")).code, 0, "validate clean after plan link");
+
+    // close done → recent
+    assert.equal((await cli("close", "ALPHA", "a-1", "--status", "done")).code, 0);
+    assert.ok((await cli("recent")).out.includes("a-1"), "closed item in recent");
+
+    // drop (with reason)
+    assert.equal((await cli("add", "b-1", "--task", "BETA", "--title", "B1")).code, 0);
+    assert.equal((await cli("drop", "BETA", "b-1", "--reason", "nope")).code, 0);
+
+    // unknown command → nonzero
+    assert.equal((await cli("bogus")).code, 1);
+
+    // design persist hook + retro complete hook (with ## Deferred harvest)
+    await mkdir(join(root, ".agents", "plans"), { recursive: true });
+    await writeFile(join(root, ".agents/plans/2026-06-22-pi.md"), "---\nid: p\nstatus: draft\npm_loop: true\n---\n# p\n\n## Deferred\n\n- **followup-x** — Follow up\n  - Priority: P2\n  - Note: later\n");
+    assert.equal((await cli("persist", "ALPHA", "pi-item", ".agents/plans/2026-06-22-pi.md", "--title", "PI")).code, 0);
+    assert.ok((await cli("get", "pi-item")).out.includes("pi-item"), "persist created+linked the item");
+    assert.equal((await cli("complete", "ALPHA", "pi-item", "--plan", ".agents/plans/2026-06-22-pi.md", "--status", "done")).code, 0);
+    assert.ok((await cli("recent")).out.includes("pi-item"), "completed item lands in recent");
+    assert.ok((await cli("tree")).out.includes("followup-x"), "## Deferred harvested into backlog");
+
+    // retro durable-decision sink: memory <KEY> add → upsert a note via ops (lock+CAS)
+    assert.equal((await cli("memory", "ALPHA", "add", "lock-policy", "--note", "writes go through ops", "--date", "2026-06-22")).code, 0);
+    let mem = await readFile(join(root, ".agents/tasks/ALPHA/memory.md"), "utf8");
+    assert.ok(mem.includes("- **lock-policy**") && mem.includes("Note: writes go through ops") && mem.includes("Date: 2026-06-22"), "memory note written");
+    assert.equal((await cli("memory", "ALPHA", "add", "lock-policy", "--note", "updated note")).code, 0); // same title
+    mem = await readFile(join(root, ".agents/tasks/ALPHA/memory.md"), "utf8");
+    assert.equal((mem.match(/- \*\*lock-policy\*\*/g) ?? []).length, 1, "upsert by title: no duplicate note");
+    assert.ok(mem.includes("Note: updated note"), "upsert updated the note in place");
+    assert.equal((await cli("validate")).code, 0, "validate clean after memory write");
+    assert.equal((await cli("memory", "ALPHA", "bogus")).code, 1, "unknown memory subcmd rejected");
+
+    // pm-context link writes route through ops (single write path; upsert by label)
+    assert.equal((await cli("links", "ALPHA", "add", "wiki", "--url", "https://wiki.example.com/x", "--triggers", "alpha,beta", "--summary", "Spec page")).code, 0);
+    let lk = await readFile(join(root, ".agents/tasks/ALPHA/links.md"), "utf8");
+    assert.ok(lk.includes("- **wiki**") && lk.includes("URL: https://wiki.example.com/x") && lk.includes("Triggers: alpha,beta") && lk.includes("Summary: Spec page"), "link written");
+    assert.equal((await cli("links", "ALPHA", "add", "wiki", "--url", "https://wiki.example.com/y")).code, 0); // same label → upsert
+    lk = await readFile(join(root, ".agents/tasks/ALPHA/links.md"), "utf8");
+    assert.equal((lk.match(/- \*\*wiki\*\*/g) ?? []).length, 1, "upsert by label: single block");
+    assert.ok(lk.includes("https://wiki.example.com/y"), "upsert updated the URL");
+    await assert.rejects(() => cli("links", "ALPHA", "add", "bad", "--url", "ftp://nope"), /http/); // non-http URL rejected (ops throws)
+    assert.equal((await cli("links", "ALPHA", "remove", "wiki")).code, 0);
+    assert.ok(!(await readFile(join(root, ".agents/tasks/ALPHA/links.md"), "utf8")).includes("wiki"), "link removed");
+    await assert.rejects(() => cli("links", "ALPHA", "remove", "wiki"), /no link/); // removing a missing link errors (ops throws)
+
+    // current-task resolver: the task owning the focus item (pm-context default-KEY source)
+    assert.equal((await cli("focus", "followup-x")).code, 0); // an open ALPHA item harvested earlier
+    assert.equal((await cli("current-task")).out.trim(), "ALPHA", "current-task = focus item's task");
+    assert.equal((await cli("focus", "--clear")).code, 0);
+    assert.equal((await cli("current-task")).out.trim(), "", "no focus → empty current-task");
+
+    // path-traversal guard: a malformed / path-bearing task KEY is rejected at the taskDir chokepoint
+    await assert.rejects(() => cli("get", "anything", "--task", "../evil"), /invalid task key/);
+    await assert.rejects(() => cli("links", "../evil", "add", "x", "--url", "https://x.example.com"), /invalid task key/);
+
+    // --status validation: close/complete reject a non-{done,dropped} status (code 1, before any write)
+    assert.equal((await cli("close", "ALPHA", "whatever", "--status", "bogus")).code, 1, "close rejects bad --status");
+    assert.equal((await cli("complete", "ALPHA", "whatever", "--plan", ".agents/plans/x.md", "--status", "bogus")).code, 1, "complete rejects bad --status");
+
+    // legacy detection + migrate subcmd on a separate legacy repo
+    const leg = await mkdtemp(join(tmpdir(), "cli-legacy-"));
+    await mkdir(join(leg, ".agents"), { recursive: true });
+    await writeFile(join(leg, ".agents", "ROADMAP.md"), "---\nproject: t\n---\n# t — Backlog\n\n## Open\n\n## Recently Closed\n");
+    assert.ok((await runCli(leg, ["list"])).out.includes("legacy roadmap detected"), "legacy detected on read");
+    assert.ok((await runCli(leg, ["migrate"])).out.includes("DRY-RUN"), "migrate subcmd dry-runs");
+    await rm(leg, { recursive: true, force: true });
+
+    console.log("cli.test.ts OK");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+await main();

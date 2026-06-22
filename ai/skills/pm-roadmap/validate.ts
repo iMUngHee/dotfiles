@@ -1,150 +1,139 @@
-// Read-only invariant validator for .agents/ROADMAP.md and its joins
-// (plans, state/current.txt, task-context). Never mutates — violations are
-// reported and fixed via the owning paths (/retro, design triggers, manual close).
-// CLI: ./node_modules/.bin/tsx validate.ts [project-root]   (exit 1 on errors)
-import { readFile, access } from "node:fs/promises";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseRoadmap, type Roadmap } from "./roadmap.ts";
-import { frontmatterField } from "./join.ts";
+// Read-only invariant validator for the task-first model. Full-task scan over
+// tasks/<KEY>/{task,backlog,closed}.md + inbox.md + archive + state pointers.
+// Never mutates — fix via ops. CLI: tsx validate.ts [root]  (exit 1 on errors).
+import { readdir, stat } from "node:fs/promises";
+import { join as pathJoin } from "node:path";
+import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
+import { listActiveTasks } from "./join.ts";
 
-export interface Violation {
-  level: "error" | "warn";
-  check: string; // V1..V10
-  id: string; // item id or "-" for file-level
-  message: string;
-}
-
-export interface ValidationReport {
-  missingRoadmap: boolean;
-  errors: Violation[];
-  warns: Violation[];
-}
+export interface Violation { level: "error" | "warn"; check: string; id: string; message: string; }
+export interface ValidationReport { errors: Violation[]; warns: Violation[]; }
 
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const TASK_KEY = /^[A-Z0-9_-]+$/;
-const OPEN_STATUSES = new Set(["open", "draft", "active"]);
+const BACKLOG_STATUS = new Set(["open", "draft", "active"]);
+const CLOSED_STATUS = new Set(["done", "dropped"]);
+const TASK_STATUS = new Set(["active", "done", "archived"]);
 
-async function exists(path: string): Promise<boolean> {
-  return access(path).then(() => true).catch(() => false);
+async function exists(p: string): Promise<boolean> { return stat(p).then(() => true).catch(() => false); }
+async function blocksOf(path: string): Promise<Block[]> { const s = await readStamped(path); return s ? parseBlocks(s.content).blocks : []; }
+async function readState(root: string, name: string): Promise<string> { const s = await readStamped(pathJoin(root, ".agents", "state", name)); return s ? s.content.trim() : ""; }
+async function listArchiveKeys(root: string): Promise<string[]> {
+  const ents = await readdir(pathJoin(tasksDir(root), "archive"), { withFileTypes: true }).catch(() => []);
+  return ents.filter((e) => e.isDirectory()).map((e) => e.name);
 }
 
 export async function validateRoadmap(root: string): Promise<ValidationReport> {
-  const errors: Violation[] = [];
-  const warns: Violation[] = [];
-  const err = (check: string, id: string, message: string) => errors.push({ level: "error", check, id, message });
-  const warn = (check: string, id: string, message: string) => warns.push({ level: "warn", check, id, message });
+  const errors: Violation[] = [], warns: Violation[] = [];
+  const err = (c: string, id: string, m: string) => errors.push({ level: "error", check: c, id, message: m });
+  const warn = (c: string, id: string, m: string) => warns.push({ level: "warn", check: c, id, message: m });
 
-  const md = await readFile(join(root, ".agents", "ROADMAP.md"), "utf-8").catch(() => null);
-  if (md == null) return { missingRoadmap: true, errors, warns };
-  const rm: Roadmap = parseRoadmap(md);
+  const keys = await listActiveTasks(root);
+  const archiveKeys = await listArchiveKeys(root);
 
-  // V8 — id uniqueness + kebab grammar (open items)
-  const seen = new Set<string>();
-  for (const it of rm.open) {
-    if (seen.has(it.id)) err("V8", it.id, "duplicate item id in ## Open");
-    seen.add(it.id);
-    if (!KEBAB.test(it.id)) err("V8", it.id, "item id is not kebab-case");
-  }
+  // gather all items (id-uniqueness spans active backlog+closed + inbox + archive)
+  const idSeen = new Map<string, string>(); // id → where
+  const planRefs = new Map<string, string[]>(); // plan → [where]
+  const noteId = (key: string, sec: string, id: string) => `${key}/${sec}/${id}`;
 
-  // V1 — Plan: 1:1 among open items
-  const planRefs = new Map<string, string[]>();
-  for (const it of rm.open) {
-    if (it.plan) planRefs.set(it.plan, [...(planRefs.get(it.plan) ?? []), it.id]);
-  }
-  for (const [plan, ids] of planRefs) {
-    if (ids.length > 1) err("V1", ids.join(","), `plan ${plan} is linked by ${ids.length} items (must be 1:1)`);
-  }
-
-  // Per-item checks over ## Open
-  for (const it of rm.open) {
-    // V4 — section membership
-    if (!OPEN_STATUSES.has(it.status)) err("V4", it.id, `status '${it.status}' not allowed in ## Open (open|draft|active)`);
-
-    if (it.plan) {
-      // V2 — plan path exists
-      const planPath = join(root, it.plan);
-      if (!(await exists(planPath))) {
-        err("V2", it.id, `plan path missing on disk: ${it.plan}`);
-      } else {
-        // V3 — status mirrors plan frontmatter verbatim
-        const planMd = await readFile(planPath, "utf-8");
-        const planStatus = frontmatterField(planMd, "status");
-        if (planStatus !== it.status) err("V3", it.id, `item status '${it.status}' ≠ plan status '${planStatus}' (verbatim mirror)`);
-      }
-    } else {
-      // V5 — planless items own only 'open'
-      if (it.status !== "open") err("V5", it.id, `planless item has status '${it.status}' (only 'open' allowed)`);
+  const scan = async (key: string, dir: string, active: boolean) => {
+    const meta = await readStamped(pathJoin(dir, key, "task.md"));
+    if (meta) {
+      const st = getFmField(parseFrontmatter(meta.content).fields, "status") ?? "";
+      if (!TASK_STATUS.has(st)) err("C11", key, `task.md status '${st}' invalid (active|done|archived)`);
     }
-
-    // V9 — Task KEY grammar + task-context file existence
-    if (it.task != null) {
-      if (!TASK_KEY.test(it.task)) {
-        warn("V9", it.id, `Task '${it.task}' violates KEY grammar ^[A-Z0-9_-]+$`);
-      } else if (!(await exists(join(root, ".agents", "task-context", `${it.task}.md`)))) {
-        warn("V9", it.id, `task-context file missing for Task '${it.task}'`);
+    for (const sec of ["backlog", "closed"] as const) {
+      const blocks = await blocksOf(pathJoin(dir, key, `${sec}.md`));
+      for (const b of blocks) {
+        // C1 — id unique (global) + kebab
+        if (idSeen.has(b.id)) err("C1", b.id, `duplicate id (also at ${idSeen.get(b.id)})`);
+        idSeen.set(b.id, noteId(key, sec, b.id));
+        if (!KEBAB.test(b.id)) err("C1", b.id, "id is not kebab-case");
+        const plan = getField(b, "Plan");
+        const status = getField(b, "Status") ?? "";
+        // C2 — Plan 1:1 (global)
+        if (plan && plan !== "-") planRefs.set(plan, [...(planRefs.get(plan) ?? []), noteId(key, sec, b.id)]);
+        if (sec === "backlog") {
+          if (!BACKLOG_STATUS.has(status)) err("C5", b.id, `backlog status '${status}' invalid (open|draft|active)`);
+          if (!plan || plan === "-") {
+            if (status !== "open") err("C6", b.id, `planless backlog item status '${status}' (only open)`);
+          } else if (active) {
+            // C4 — status mirrors plan frontmatter (active tasks only)
+            const pm = await readStamped(pathJoin(root, plan));
+            if (!pm) err("C7", b.id, `plan path missing: ${plan}`);
+            else {
+              const ps = getFmField(parseFrontmatter(pm.content).fields, "status") ?? "";
+              if (ps !== status) err("C4", b.id, `status '${status}' ≠ plan status '${ps}' (mirror)`);
+            }
+          }
+          // C10 — duplicate Order within a task (warn)
+        } else {
+          if (!CLOSED_STATUS.has(status)) err("C5", b.id, `closed status '${status}' invalid (done|dropped)`);
+          if ((!plan || plan === "-") && status === "done") err("C6", b.id, "planless closed entry recorded as done");
+          if (plan && plan !== "-" && !(await exists(pathJoin(root, plan)))) err("C7", b.id, `closed plan path missing: ${plan}`);
+        }
       }
-    }
-  }
-
-  // Recently Closed checks
-  for (const c of rm.recentlyClosed) {
-    if (c.status !== "done" && c.status !== "dropped") err("V4", c.id, `closed status '${c.status}' not allowed (done|dropped)`);
-    if (!c.plan && c.status === "done") err("V5", c.id, "planless closed entry recorded as done (impossible — no work artifact)");
-    // V9 (closed) — same warn-only grade as open; legacy task:null rows are exempt
-    if (c.task != null) {
-      if (!TASK_KEY.test(c.task)) {
-        warn("V9", c.id, `closed Task '${c.task}' violates KEY grammar ^[A-Z0-9_-]+$`);
-      } else if (!(await exists(join(root, ".agents", "task-context", `${c.task}.md`)))) {
-        warn("V9", c.id, `task-context file missing for closed Task '${c.task}'`);
+      // C10 — duplicate Order within this task's backlog
+      if (sec === "backlog") {
+        const orders = new Map<number, string>();
+        for (const b of blocks) {
+          const o = parseInt(getField(b, "Order") ?? "0", 10) || 0;
+          if (o > 0) { if (orders.has(o)) warn("C10", b.id, `Order ${o} duplicated in task ${key} (also ${orders.get(o)})`); else orders.set(o, b.id); }
+        }
       }
     }
-  }
-  // V10 — trim to most recent 10
-  if (rm.recentlyClosed.length > 10) warn("V10", "-", `## Recently Closed holds ${rm.recentlyClosed.length} entries (trim to 10)`);
+  };
 
-  // V6 — focus is empty or names an ## Open item
-  if (rm.focus && !rm.open.some((i) => i.id === rm.focus)) {
-    err("V6", rm.focus, "focus names no ## Open item (Focus-clear rule violated)");
+  for (const key of keys) await scan(key, tasksDir(root), true);
+  for (const key of archiveKeys) await scan(key, pathJoin(tasksDir(root), "archive"), false);
+  // inbox ids count toward uniqueness (no plan/status invariants there)
+  for (const b of await blocksOf(inboxPath(root))) {
+    if (idSeen.has(b.id)) err("C1", b.id, `duplicate id (also at ${idSeen.get(b.id)})`);
+    idSeen.set(b.id, `_INBOX/${b.id}`);
   }
 
-  // V7 — current.txt consistency
-  const pointerRaw = await readFile(join(root, ".agents", "state", "current.txt"), "utf-8").catch(() => "");
-  const pointer = pointerRaw.trim();
-  if (pointer) {
-    const planPath = join(root, pointer);
-    if (!(await exists(planPath))) {
-      err("V7", "-", `current.txt points to missing plan: ${pointer}`);
-    } else {
-      const planStatus = frontmatterField(await readFile(planPath, "utf-8"), "status");
-      if (planStatus !== "draft" && planStatus !== "active") {
-        err("V7", "-", `current.txt points to '${planStatus}' plan (pointer must be empty unless draft|active)`);
-      }
-      if (rm.recentlyClosed.some((c) => c.plan === pointer)) {
-        err("V7", "-", `current.txt points to a plan recorded in ## Recently Closed: ${pointer}`);
-      }
+  // C2 — plan 1:1
+  for (const [plan, refs] of planRefs) if (refs.length > 1) err("C2", refs.join(","), `plan ${plan} linked by ${refs.length} items (must be 1:1)`);
+
+  // C8 — focus names a backlog item (some active task), not inbox
+  const focus = await readState(root, "focus.txt");
+  if (focus) {
+    const inInbox = (await blocksOf(inboxPath(root))).some((b) => b.id === focus);
+    if (inInbox) err("C8", focus, "focus names an _INBOX item (triage first)");
+    else {
+      let ok = false;
+      for (const key of keys) if ((await blocksOf(taskFile(root, key, "backlog.md"))).some((b) => b.id === focus)) { ok = true; break; }
+      if (!ok) err("C8", focus, "focus names no open backlog item");
     }
   }
 
-  return { missingRoadmap: false, errors, warns };
+  // C3/C9 — current.txt points to a draft|active plan linked by exactly one backlog item (unless pm_loop:false)
+  const current = await readState(root, "current.txt");
+  if (current) {
+    const pm = await readStamped(pathJoin(root, current));
+    if (!pm) err("C9", "-", `current.txt points to missing plan: ${current}`);
+    else {
+      const fm = parseFrontmatter(pm.content).fields;
+      const ps = getFmField(fm, "status") ?? "";
+      const pmLoop = (getFmField(fm, "pm_loop") ?? "true").toLowerCase() !== "false";
+      if (ps !== "draft" && ps !== "active") err("C9", "-", `current.txt plan status '${ps}' (must be draft|active)`);
+      const linked = (planRefs.get(current) ?? []).length;
+      if (pmLoop && linked === 0) err("C3", "-", `in-flight plan ${current} is not linked by any backlog item (orphan; set pm_loop:false if intentional)`);
+    }
+  }
+
+  return { errors, warns };
 }
 
-export function formatReport(report: ValidationReport): string {
-  if (report.missingRoadmap) return "no roadmap — run `/pm-roadmap init`";
+export function formatReport(r: ValidationReport): string {
   const lines = [
-    ...report.errors.map((v) => `[error] ${v.check} ${v.id}: ${v.message}`),
-    ...report.warns.map((v) => `[warn]  ${v.check} ${v.id}: ${v.message}`),
+    ...r.errors.map((v) => `[error] ${v.check} ${v.id}: ${v.message}`),
+    ...r.warns.map((v) => `[warn]  ${v.check} ${v.id}: ${v.message}`),
   ];
-  lines.push(
-    report.errors.length === 0 && report.warns.length === 0
-      ? "roadmap valid — 0 errors, 0 warnings"
-      : `${report.errors.length} error(s), ${report.warns.length} warning(s)`,
-  );
+  lines.push(r.errors.length === 0 && r.warns.length === 0 ? "roadmap valid — 0 errors, 0 warnings" : `${r.errors.length} error(s), ${r.warns.length} warning(s)`);
   return lines.join("\n");
 }
 
-// CLI entry: tsx validate.ts [root]
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (process.argv[1] && (await import("node:url")).fileURLToPath(import.meta.url) === process.argv[1]) {
   const root = process.argv[2] || process.env.TASK_CONTEXT_ROOT || process.cwd();
   const report = await validateRoadmap(root);
   console.log(formatReport(report));

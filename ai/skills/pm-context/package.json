@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx server.ts"
+    "start": "tsx server.ts",
+    "test": "tsx server.test.ts"
   },
   "dependencies": {
     "tsx": "^4.0.0",
