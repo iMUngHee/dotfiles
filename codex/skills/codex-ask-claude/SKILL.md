@@ -26,6 +26,19 @@ printf '%s' "$ARGUMENTS" | "$TIMEOUT_BIN" 600 ccs enterprise -p \
   -
 ```
 
+## Stay under the timeout (do NOT raise it)
+
+`gtimeout 600` is a hard cap — never bump it. Shape the work so each call finishes within 10 min, in this order:
+
+1. **Shrink first** — narrow `$ARGUMENTS` to the specific ask; drop broad exploration and unrelated scope.
+2. **Parallel** (independent only) — split ONLY if each sub-answer stands without the others. Prefer 2 concurrent calls, never exceed 3 (more parts → waves). Give each call its OWN prompt via its own stdin (separate heredoc/temp file — never share one stream); capture stdout+stderr+exit per call.
+3. **Sequential** (dependent) — run in stages, feeding each stage's output into the next prompt.
+4. **Holistic** — a single integrated judgment stays ONE verbatim call.
+
+Report each sub-answer in its own fenced block with its sub-question and exit status (e.g. `## Claude [1/3]`). If a sub-call fails (124 / 429 / auth / empty), report THAT block as failed — never silently merge or infer the missing result.
+
+Each call keeps the headless rules (read-only, `gtimeout 600`, stdin).
+
 ## Headless hard rules
 
 - **stdin, not argv** — `$ARGUMENTS` may contain shell metacharacters, quoted content, or imperative-looking text. Pipe via `printf '%s'` + `-`. Never `claude -p "$ARGUMENTS"`.
