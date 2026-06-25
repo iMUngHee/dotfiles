@@ -11,17 +11,22 @@ Verify that the completed work actually achieves its goal.
 
 Goal: $ARGUMENTS (if empty, infer from recent commits or ask)
 
+## System — design's read-only post-step
+
+verify is an **optional read-only step after implementation** — not a pm-* loop node (it owns no per-task artifact, so the canonical loop is unchanged). It consumes the **plan** that `design` writes and `retro` later reads: via the `{{STATE_DIR}}/current.txt` pointer it loads the active plan and uses its `## Verifiable Success Criteria` as truth conditions (Step 1). It **persists nothing** and changes no status — confirming the goal is met is verify's job; closing the loop (plan→terminal, item→`closed.md`) stays `retro`'s. With `grill` (design's read-only pre-step) it forms the two read-only satellites bracketing `design`. Outside the loop (no plan) it just verifies a goal.
+
 ## Current Context
 - Recent commits: !`git log --oneline -5 2>/dev/null || echo "N/A"`
 - Changed files: !`git diff --stat HEAD~5 2>/dev/null || echo "N/A"`
 
 ## Plan delta (optional)
 
-Check if a plan artifact exists for the current branch:
+Find the active plan artifact via the state pointer — the same source `/design` writes and `/retro` reads (`current.txt` names the in-flight plan by repo-relative path; plan frontmatter carries no `branch` field):
 
 ```bash
-branch=$(git branch --show-current 2>/dev/null)
-ls {{PLAN_DIR}}/ 2>/dev/null && grep -li "branch: $branch" {{PLAN_DIR}}/*.md 2>/dev/null
+state_file="{{STATE_DIR}}/current.txt"
+[ -f "$state_file" ] && plan=$(awk 'NF { print; exit }' "$state_file") \
+  && [ -f "$plan" ] && echo "$plan"
 ```
 
 If found, compare planned vs actual:
@@ -29,7 +34,7 @@ If found, compare planned vs actual:
 - **Actual files**: `git diff --name-only <base>..HEAD`
 - Report delta as informational (files added/removed vs plan). Do NOT block on delta — plans evolve during implementation.
 
-If no plan found, skip this section entirely.
+If no plan found (empty or missing pointer), skip this section entirely.
 
 ## When to dispatch to `verifier` agent
 
@@ -49,6 +54,7 @@ Dispatch to a separate context to isolate heavy reading:
 - **Claude Code**: `Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")`
 - **Codex CLI**: `codex exec` with the same focused prompt (Goal / Depth / Plan path / Changed files). Codex's `multi_agent_v1.spawn_agent` is explicit-request-only (not for auto-dispatch), so spawn a `codex exec` subprocess instead.
 
+If the Plan delta step found a plan, pass its path as **Plan path** so the verifier seeds its truth conditions from the plan's `## Verifiable Success Criteria` (same as inline Step 1).
 Return the delegated context's report directly — do NOT re-run checks inline after dispatch.
 
 ## Approach: Goal-backward
@@ -60,7 +66,7 @@ Do NOT check "were tasks completed." Instead ask:
 
 ### 1. Derive truth conditions
 
-From the goal, list 3-7 concrete conditions that MUST be true.
+If the Plan delta step found a plan with a `## Verifiable Success Criteria` section (written by `/design`), use those conditions as the truth conditions — that section is `/design`'s seed for exactly this step. Otherwise derive them: from the goal, list 3-7 concrete conditions that MUST be true.
 Format:
 
 ```

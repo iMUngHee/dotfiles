@@ -26,7 +26,7 @@ The dispatcher (usually the `/verify` skill) provides:
 
 ### 1. Derive truth conditions
 
-From the goal, list 3–7 concrete conditions that MUST be true. Format:
+If a plan artifact path was provided and it has a `## Verifiable Success Criteria` section (written by `/design`), use those conditions as the truth conditions — that section is `/design`'s seed for exactly this step. Otherwise derive them from the goal. List 3–7 concrete conditions that MUST be true. Format:
 
 ```
 Truth conditions for: <goal>
