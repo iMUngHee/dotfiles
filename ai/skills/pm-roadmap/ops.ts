@@ -17,8 +17,8 @@ const PRIORITIES = new Set(["P0", "P1", "P2", "P3"]);
 const TASK_KEY = /^[A-Z0-9_-]+$/;
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-export interface ItemInput { id: string; title: string; priority?: string; order?: number; note?: string; plan?: string; }
-export interface Deferred { id: string; title: string; priority?: string; order?: number; note?: string; }
+export interface ItemInput { id: string; title: string; priority?: string; order?: string; note?: string; plan?: string; }
+export interface Deferred { id: string; title: string; priority?: string; order?: string; note?: string; }
 export interface MemoryInput { title: string; note?: string; date?: string; }
 export interface LinkInput { label: string; url: string; triggers?: string; summary?: string; }
 
@@ -42,11 +42,16 @@ function setFm(fields: [string, string][], key: string, val: string): void {
   fields.push([key, val]);
 }
 
+// Shared Order policy: a positive-integer string (no lossy parse). Used by reorder, add, and harvest.
+function assertOrder(s: string): void {
+  if (!/^[1-9]\d*$/.test(s)) throw new OpError(`order must be a positive integer (got '${s}')`);
+}
+
 function backlogBlock(it: ItemInput, status: string): Block {
   const b: Block = { id: it.id, title: it.title, fields: [] };
   setField(b, "Priority", it.priority && PRIORITIES.has(it.priority) ? it.priority : "P2");
   setField(b, "Status", status);
-  if (it.order && it.order > 0) setField(b, "Order", String(it.order));
+  if (it.order !== undefined) { assertOrder(it.order); setField(b, "Order", it.order); }
   setField(b, "Plan", it.plan ?? "-");
   setField(b, "Note", it.note ?? "");
   return b;
@@ -168,6 +173,26 @@ async function _itemSetPlan(root: string, key: string, id: string, planPath: str
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
 }
 
+async function _itemSetPriority(root: string, key: string, id: string, priority: string): Promise<void> {
+  await assertActiveTask(root, key);
+  if (!PRIORITIES.has(priority)) throw new OpError(`priority must be one of P0|P1|P2|P3 (got '${priority}')`);
+  const f = await loadBlocks(taskFile(root, key, "backlog.md"));
+  const it = findItem(f.blocks, id);
+  if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
+  setField(it, "Priority", priority);
+  await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
+}
+
+async function _itemSetOrder(root: string, key: string, id: string, order: string): Promise<void> {
+  await assertActiveTask(root, key);
+  assertOrder(order); // shared positive-integer-string policy (no lossy parseInt: 1.5/1abc/1e2 rejected)
+  const f = await loadBlocks(taskFile(root, key, "backlog.md"));
+  const it = findItem(f.blocks, id);
+  if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
+  setField(it, "Order", order);
+  await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
+}
+
 async function _itemSetStatus(root: string, key: string, id: string, status: string): Promise<void> {
   const f = await loadBlocks(taskFile(root, key, "backlog.md"));
   const it = findItem(f.blocks, id);
@@ -211,6 +236,7 @@ async function _harvestPreflight(root: string, deferred: Deferred[]): Promise<vo
   for (const d of deferred) {
     if (!KEBAB.test(d.id)) throw new OpError(`deferred id '${d.id}' is not kebab-case`);
     if (reserved.has(d.id) || seen.has(d.id)) throw new OpError(`deferred id '${d.id}' collides — aborting whole harvest`);
+    if (d.order !== undefined) assertOrder(d.order); // raw Order validated before any write (backlogBlock throw in _harvestApply would be a partial write)
     seen.add(d.id);
   }
 }
@@ -295,6 +321,12 @@ export const itemApprove = (root: string, key: string, id: string, o: LockOpts =
 
 export const itemSetPlan = (root: string, key: string, id: string, planPath: string, o: LockOpts = {}) =>
   withLock(root, "itemSetPlan", () => _itemSetPlan(root, key, id, planPath), o);
+
+export const itemSetPriority = (root: string, key: string, id: string, priority: string, o: LockOpts = {}) =>
+  withLock(root, "itemSetPriority", () => _itemSetPriority(root, key, id, priority), o);
+
+export const itemSetOrder = (root: string, key: string, id: string, order: string, o: LockOpts = {}) =>
+  withLock(root, "itemSetOrder", () => _itemSetOrder(root, key, id, order), o);
 
 export const itemClose = (root: string, key: string, id: string, opt: { status: "done" | "dropped"; reason?: string; closedDate?: string; plan?: string } & LockOpts) =>
   withLock(root, "itemClose", () => _itemClose(root, key, id, { status: opt.status, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.plan }), opt);

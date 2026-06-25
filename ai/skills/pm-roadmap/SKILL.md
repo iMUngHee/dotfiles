@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add/close/focus a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | recent | validate | migrate [--apply] | task <create|done|archive|restore> <KEY> | add <id> <title> (--task KEY | --inbox) [-p P0..P3] [-o N] | plan <KEY> <id> <path> | approve <KEY> <id> | close <KEY> <id> --status done|dropped [--reason R] | drop <KEY> <id> --reason R | triage <id> <KEY> | focus <id>|--clear | memory <KEY> add <title> [--note T] [--date YYYY-MM-DD] | links <KEY> add <label> --url U [--triggers C] [--summary S] | links <KEY> remove <match> | current-task | manage"
+argument-hint: "list | tree | get <id> | next [id] | recent | validate | migrate [--apply] | task <create|done|archive|restore> <KEY> | add <id> <title> (--task KEY | --inbox) [-p P0..P3] [-o N] [--note T] | plan <KEY> <id> <path> | reprioritize <KEY> <id> <P0..P3> | reorder <KEY> <id> <N> | approve <KEY> <id> | close <KEY> <id> --status done|dropped [--reason R] | drop <KEY> <id> --reason R | triage <id> <KEY> | focus <id>|--clear | memory <KEY> add <title> [--note T] [--date YYYY-MM-DD] | links <KEY> add <label> --url U [--triggers C] [--summary S] | links <KEY> remove <match> | current-task | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -72,13 +72,13 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
 
 - **list** / **tree** — eligible next candidates (sorted `priority, taskKey, order, id`) + blocked + inbox count / per-task backlog.
 - **get `<id>`** — an item's join view (plan goal + next step, task links + memory, recent done-sibling notes, note).
-- **next `[id]`** — paste-ready kickoff prompt. No id → lists candidates (never auto-picks); explicit id → that item. Blocked focus reports "blocked by <id>". `_INBOX` items aren't selected.
+- **next `[id]`** — paste-ready kickoff prompt. Target: explicit id, else focus, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). After emitting, ask whether to run it **here** (no copy — proceed into `/design <id>`, or resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
 - **recent** — derived recent-closed view (all `closed.md` merged by date, capped).
 - **validate** — full-scan invariant check (C1..C11; see below). Exit 1 on errors. `/retro` runs it after its sink.
 - **migrate `[--apply]`** — convert a legacy repo's `.agents/` to the task-first model. Default dry-run (prints the mapping). `--apply` after review. See Migration.
 - **task `create|done|archive|restore` `<KEY>`** — task lifecycle. `archive` refuses if open items remain; `restore` re-activates an archived task.
-- **add `<id> <title>` (`--task KEY` | `--inbox`) [-p] [-o]** — append a workable unit (or an untriaged inbox item).
-- **plan / approve / close / drop / triage / focus** — item transitions (normally driven by /design + /retro; manual is the escape hatch). `triage <id> <KEY>` moves an inbox item to a task. `focus` rejects inbox items.
+- **add `<id> <title>` (`--task KEY` | `--inbox`) [-p] [-o] [--note]** — append a workable unit (or an untriaged inbox item). `-o` takes a positive-integer order; `--note` attaches a note.
+- **plan / reprioritize / reorder / approve / close / drop / triage / focus** — item transitions (normally driven by /design + /retro; manual is the escape hatch). `reprioritize <KEY> <id> <P0..P3>` and `reorder <KEY> <id> <N>` change an item's Priority/Order in place (N = positive integer). `triage <id> <KEY>` moves an inbox item to a task. `focus` rejects inbox items.
 - **memory `<KEY> add <title>` [`--note T`] [`--date D`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today.
 - **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI.
 - **current-task** — read-only: prints the KEY of the task owning the `focus` item (empty if no focus). pm-context's default-`KEY` resolver for `get`.

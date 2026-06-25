@@ -42,10 +42,15 @@ async function main() {
     assert.ok(sib.some((s) => s.id === "a-6"), "newest kept");
     assert.ok(!sib.some((s) => s.id === "a-1"), "oldest dropped by cap");
 
+    // cap<=0 ⇒ unlimited (show-older path)
+    const sibAll = await j.doneSiblings(root, "A", "a-cur", 0);
+    assert.equal(sibAll.length, 6, "cap=0 → all 6 siblings");
+    assert.ok(sibAll.some((s) => s.id === "a-1"), "oldest present when unlimited");
+
     // ── next candidates: Order gate + blocked focus reporting + inbox exclusion ──
     await ops.taskCreate(root, "C", "Task C", O);
-    await ops.itemAdd(root, { task: "C" }, { id: "c-1", title: "C1", order: 1 }, O);
-    await ops.itemAdd(root, { task: "C" }, { id: "c-2", title: "C2", order: 2 }, O);
+    await ops.itemAdd(root, { task: "C" }, { id: "c-1", title: "C1", order: "1" }, O);
+    await ops.itemAdd(root, { task: "C" }, { id: "c-2", title: "C2", order: "2" }, O);
     await ops.itemAdd(root, { inbox: true }, { id: "inb-1", title: "Inbox" }, O);
 
     const nc = await j.nextCandidates(root);
@@ -69,6 +74,10 @@ async function main() {
     const view = await j.resolveItem(root, "A", "a-cur");
     assert.ok(view && view.key === "A" && !view.closed);
     assert.equal(view!.siblings.length, 5);
+    assert.equal(view!.siblingsTotal, 6, "siblingsTotal = full count before cap");
+    const viewAll = await j.resolveItem(root, "A", "a-cur", 0);
+    assert.equal(viewAll!.siblings.length, 6, "cap=0 ⇒ all siblings shown");
+    assert.equal(viewAll!.siblingsTotal, 6);
     const prompt = j.buildNextPrompt(view!, nc.inbox);
     assert.ok(prompt.includes("# Next: a-cur"));
     assert.ok(prompt.includes("> task: A"));
@@ -77,6 +86,12 @@ async function main() {
     // closed item is also resolvable
     const closedView = await j.resolveItem(root, "A", "a-6");
     assert.ok(closedView && closedView.closed && closedView.status === "done");
+
+    // ── Post-Impl notes surfaced on PlanInfo (closed-item-postimpl) ──
+    assert.equal(closedView!.plan?.postImplNotes, "A note 6", "closed item's plan carries its Post-Impl notes");
+    // planInfo unit: extracts the section; placeholder-only (HTML comment) → "" (server adapter then normalizes to null)
+    assert.equal(j.planInfo("p.md", "---\nstatus: done\n---\n## Post-Implementation Notes\n\nhello\n").postImplNotes, "hello");
+    assert.equal(j.planInfo("p.md", "---\nstatus: done\n---\n## Post-Implementation Notes\n\n<!-- placeholder -->\n").postImplNotes, "");
 
     console.log("join.test.ts OK");
   } finally {

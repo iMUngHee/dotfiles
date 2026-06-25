@@ -18,6 +18,10 @@ async function main() {
     assert.equal((await cli("add", "a-1", "--task", "ALPHA", "--title", "One")).code, 0);
     assert.equal((await cli("add", "inb-1", "--inbox", "--title", "I")).code, 0);
 
+    // add --note forwards the note to itemAdd (regression: the CLI add case previously dropped it)
+    assert.equal((await cli("add", "noted-1", "--task", "ALPHA", "--title", "N", "--note", "hello note")).code, 0);
+    assert.ok((await readFile(join(root, ".agents/tasks/ALPHA/backlog.md"), "utf8")).includes("Note: hello note"), "add --note written to backlog.md");
+
     let r = await cli("list");
     assert.ok(r.out.includes("ALPHA/a-1") && r.out.includes("inbox: 1"), "list shows item + inbox");
     r = await cli("tree");
@@ -42,6 +46,17 @@ async function main() {
     assert.equal((await cli("plan", "ALPHA", "a-1", ".agents/plans/2026-06-22-a-1.md")).code, 0);
     assert.ok((await cli("get", "a-1")).out.includes("a-1"));
     assert.equal((await cli("validate")).code, 0, "validate clean after plan link");
+
+    // reprioritize via CLI: success path wiring + output (bad-enum is covered at op level in ops.test)
+    assert.equal((await cli("reprioritize", "ALPHA", "a-1", "P0")).code, 0);
+    assert.ok((await cli("get", "a-1")).out.includes("\"priority\": \"P0\""), "priority changed to P0");
+    await assert.rejects(() => cli("reprioritize", "ALPHA", "a-1", "P9"), /P0\|P1\|P2\|P3/, "CLI surfaces bad-enum throw");
+
+    // reorder via CLI: success path wiring (raw string → Order field written); bad input surfaces throw, no lossy parse
+    assert.equal((await cli("reorder", "ALPHA", "a-1", "5")).code, 0);
+    assert.ok((await readFile(join(root, ".agents/tasks/ALPHA/backlog.md"), "utf8")).includes("Order: 5"), "Order field written to backlog.md");
+    await assert.rejects(() => cli("reorder", "ALPHA", "a-1", "0"), /positive integer/, "CLI rejects zero");
+    await assert.rejects(() => cli("reorder", "ALPHA", "a-1", "1.5"), /positive integer/, "CLI rejects non-integer (no parseInt truncation)");
 
     // close done → recent
     assert.equal((await cli("close", "ALPHA", "a-1", "--status", "done")).code, 0);
