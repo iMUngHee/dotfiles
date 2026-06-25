@@ -75,7 +75,7 @@ state_file="{{STATE_DIR}}/current.txt"
 
 If a plan exists, read it — the delta between plan and reality is a key input. **Also capture its current frontmatter `status:` and whether it is linked to a backlog item** (run `pm-roadmap.ts get <id>`, where `<id>` is the plan's frontmatter `id` — see Phase 5 setup). Phase 5 routes on these: a **linked** plan closes via the `complete` CLI (which sets the status itself); an **unlinked** plan (general /design, no backlog) gets a direct status edit built from the captured value. If the plan is already terminal (`done`/`dropped`), skip the close.
 
-If `/self-review` was run in this session, reference its findings (especially violations).
+If `/self-review` was run in this session, reference its findings (especially violations). Likewise, if `/verify` ran, reference its truth-condition verdict — a failed or partial verdict means the plan's goal was not fully met, which the close should account for.
 
 ### 2. Analyze
 
@@ -84,6 +84,8 @@ Answer these questions based on the collected data:
 - What diverged from the plan (if one existed)?
 - Was the same type of change repeated 3+ times in this session? (pattern signal)
 - Were there false starts or wasted iterations? What would have prevented them?
+- Did a manual workflow repeat that no skill covers, or that an existing skill should have owned? (missed-skill signal — flag a skill candidate; do NOT author it here)
+- Was there a wrong turn a memory/rule would have prevented, had it existed? (missed-memory signal)
 - Are any existing memories/rules now outdated given this work?
 
 Do NOT force insights. If the session was routine, say so and skip to Phase 5 (propose nothing).
@@ -120,6 +122,7 @@ Present all proposed changes in a single table:
 
 For **Consolidate** actions: show the proposed merged content inline so the user can judge quality.
 For **Add** actions: show the full proposed file content.
+For a **skill candidate** (missed-skill signal from Phase 2): list it as a one-line proposal only — retro never authors skills. Authoring is a separate `/design` or explicit user request.
 
 Wait for the user to approve by number (e.g., "1,2,3" or "all" or "none").
 

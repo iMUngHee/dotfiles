@@ -59,8 +59,9 @@ Present design section by section with confirmation. Do NOT dump all sections at
 After design approval, present the implementation plan as response text. **Do NOT begin executing edits in this step.**
 
 1. **File Structure**: Map Create/Modify/Test files with responsibilities
-2. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL). During implementation, flip `- [ ]` → `- [x]` in the plan artifact the moment each step meets its PASS output — unconditionally, one step at a time.
-3. If planned output differs from actual during implementation, investigate
+2. **Verifiable Success Criteria**: List the goal-level conditions that must hold for the work to count as done, each phrased so `/verify` can check it against a concrete command or observable output (PASS/FAIL), not prose. These seed `/verify`'s truth conditions — without them verify must re-derive the goal from scratch.
+3. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL). During implementation, flip `- [ ]` → `- [x]` in the plan artifact the moment each step meets its PASS output — unconditionally, one step at a time.
+4. If planned output differs from actual during implementation, investigate
 
 ### 5. Persist plan artifact (BEFORE implementation)
 
@@ -96,7 +97,7 @@ files_affected:
 
 `pm_loop: true` = this plan is tracked in a `pm-roadmap` backlog (persisted in 5.5). Set `pm_loop: false` for a **standalone** plan (general /design, no backlog item) — it is then exempt from the "linked to exactly one backlog item" in-flight invariant, and 5.5 writes `current.txt` directly instead of calling `persist`.
 
-Followed by the approved design content (Goal, Approach, Decisions, Implementation Steps).
+Followed by the approved design content (Goal, Approach, Decisions, Verifiable Success Criteria, Implementation Steps).
 
 5. **Link the plan to the backlog + point `current.txt` via the CLI.** The `id` slug doubles as the backlog item id (1:1 with the plan). Setup:
 
@@ -163,9 +164,11 @@ Report the archiver's output (moved / skipped). Add `--dry-run` to preview witho
 ## Rules
 
 - Do NOT implement until user approves the design
+- **Implement only against an `active` plan.** An explicit build instruction (`승인`/"구현해"/"최대한 작업해"/"ㄱㄱ") IS the `승인` trigger: promote `status: draft → active` (+ `pm approve <KEY> <id>`) first, then implement. A terse go-ahead is no excuse to skip section-by-section approval or a warranted `/grill`.
 - Plan artifact is saved ONLY after explicit design approval (Step 3)
-- **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they look up plans by id) and loses the pre-drift intent snapshot
+- **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they read the in-flight plan via `current.txt`; the plan id is used for backlog linkage) and loses the pre-drift intent snapshot
 - **ALWAYS check off implementation steps as you go.** The instant a step in `## Implementation Steps` lands (meets its PASS output), edit the plan to flip its `- [ ]` → `- [x]` — unconditionally, never batched at the end. The checkbox state is the live progress record `/verify` and `/retro` trust; stale checkboxes break that contract.
+- The plan MUST carry a `## Verifiable Success Criteria` section (goal-level PASS/FAIL conditions). It is the seed `/verify` checks against — a plan whose goal isn't expressed as checkable conditions weakens the design→verify contract.
 - No file writes during design exploration (Steps 1-3)
 - If the user declines to save, skip Step 5 — the plan remains conversation-only
 - Frontmatter MUST be English. Body content can be Korean.
