@@ -25,7 +25,7 @@ async function findTask(root: string, id: string): Promise<string | null> {
 }
 
 // Pure request handler (root injected) — the http layer below just adapts to it.
-export async function handle(root: string, method: string, pathname: string, _params: URLSearchParams, body: any): Promise<Resp> {
+export async function handle(root: string, method: string, pathname: string, params: URLSearchParams, body: any): Promise<Resp> {
   // ── derived roadmap view (legacy shape) ──
   if (pathname === "/api/roadmap" && method === "GET") {
     const nc = await nextCandidates(root);
@@ -35,13 +35,32 @@ export async function handle(root: string, method: string, pathname: string, _pa
   }
   if (pathname === "/api/roadmap/validate" && method === "GET") return { status: 200, json: await validateRoadmap(root) };
 
+  // ── next-candidate list (eligible / blocked / focus / inbox), unflattened ──
+  if (pathname === "/api/next" && method === "GET") return { status: 200, json: await nextCandidates(root) };
+
   const rm = pathname.match(/^\/api\/roadmap\/([a-z0-9-]+)\/(join|next)$/);
   if (rm && method === "GET") {
     const key = await findTask(root, rm[1]);
     if (!key) return { status: 404, json: { error: "item not found" } };
-    const v = await resolveItem(root, key, rm[1]);
+    // ?cap=N caps inherited siblings (default 5); ?cap=0 ⇒ all (show-older)
+    const capRaw = params.get("cap");
+    const cap = capRaw != null && capRaw !== "" && Number.isFinite(Number(capRaw)) ? Number(capRaw) : undefined;
+    const v = await resolveItem(root, key, rm[1], cap);
     if (!v) return { status: 404, json: { error: "item not found" } };
-    if (rm[2] === "join") return { status: 200, json: v };
+    if (rm[2] === "join") {
+      // adapt the flat ItemView → showItem's nested shape (item / task / contextLinks / contextMemory),
+      // reusing the same Block→object projection as GET /api/tasks. resolveItem stays flat for buildNextPrompt.
+      const contextLinks = v.links.map((b) => ({ label: b.id, url: getField(b, "URL") ?? "", triggers: (getField(b, "Triggers") ?? "").split(",").map((s) => s.trim()).filter(Boolean), summary: getField(b, "Summary") ?? "" }));
+      const contextMemory = v.memory.map((b) => ({ title: b.id, note: getField(b, "Note") ?? "", date: getField(b, "Date") ?? "" }));
+      return { status: 200, json: {
+        item: { id: v.id, title: v.title, priority: v.priority, note: v.note, status: v.status, plan: v.plan?.path ?? null, task: v.key },
+        closed: v.closed, task: v.key, plan: v.plan,
+        contextLinks, contextMemory,
+        siblings: v.siblings.map((s) => ({ ...s, status: "done" })), // doneSiblings are all done
+        siblingsTotal: v.siblingsTotal,
+        postImplNotes: v.plan?.postImplNotes || null, // PlanInfo.postImplNotes; || normalizes placeholder-only "" → null
+      } };
+    }
     if (v.closed) return { status: 404, json: { error: "closed item — next unavailable" } };
     return { status: 200, text: buildNextPrompt(v, (await nextCandidates(root)).inbox) };
   }
@@ -86,6 +105,15 @@ export async function handle(root: string, method: string, pathname: string, _pa
       try { await ops.taskArchive(root, key); return { status: 204 }; }
       catch (e: any) { return { status: 409, json: { error: e?.message ?? String(e) } }; }
     }
+  }
+
+  // ── focus pointer (item-level): set via ops.focusSet, clear with empty id ──
+  if (pathname === "/api/focus" && method === "POST") {
+    const id = body && typeof body.id === "string" ? body.id.trim() : "";
+    try {
+      if (id) await ops.focusSet(root, id); else await ops.focusClear(root);
+      return { status: 200, json: { focus: id || null } };
+    } catch (e: any) { return { status: 409, json: { error: e?.message ?? String(e) } }; }
   }
 
   // ── current task: derived from focus (no .current pointer in the new model) ──

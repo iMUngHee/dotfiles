@@ -7,22 +7,28 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
         --crust: #0e0e16; --mantle: #15151f; --base: #1c1c28; --card: #1e1e2e;
+        --void: #08080c; --panel-2: #131520; --line: #1e2030;
         --s0: #2a2b3c; --s1: #393b4d; --s2: #585b70;
         --ov0: #6c7086; --ov1: #838aa3; --sub0: #a6adc8; --sub1: #bac2de; --text: #cdd6f4;
         --mauve: #cba6f7; --blue: #89b4fa; --sapphire: #74c7ec; --green: #a6e3a1;
         --peach: #fab387; --red: #f38ba8; --teal: #94e2d5; --lav: #b4befe; --yellow: #f9e2af;
+        --cyan: #5bd5f0; --cyan-dim: #2a6b7d; --grid: rgba(91,213,240,.04);
         --sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif;
         --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "Playfair Display", Georgia, "Times New Roman", serif;
         --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px -16px rgba(0,0,0,.7); --r: 16px;
+        --glow: 0 0 0 1px rgba(91,213,240,.42), 0 0 22px -6px rgba(91,213,240,.5);
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       html { scrollbar-color: var(--s1) transparent; }
-      body { background: var(--crust); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+      body { background: var(--void); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 32px 32px; color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+      /* boot scanline — one sweep, killed under reduced-motion */
+      body::before { content: ""; position: fixed; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); opacity: 0; pointer-events: none; z-index: 60; animation: scan 0.7s ease-out 1; }
+      @keyframes scan { 0% { transform: translateY(-8vh); opacity: 0; } 12% { opacity: 0.5; } 100% { transform: translateY(100vh); opacity: 0; } }
+      @media (prefers-reduced-motion: reduce) { body::before { display: none; } }
       .mono { font-family: var(--mono); }
       ::-webkit-scrollbar { width: 9px; height: 9px; } ::-webkit-scrollbar-thumb { background: var(--s1); border-radius: 6px; }
 
@@ -30,11 +36,11 @@
       .topbar { display: flex; align-items: center; gap: 20px; padding: 6px 8px 18px; }
       .brand { display: flex; align-items: center; gap: 11px; }
       .brand .logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--blue), var(--mauve)); display: grid; place-items: center; color: var(--crust); font-weight: 800; font-size: 15px; }
-      .brand .nm { font-family: var(--serif); font-size: 18px; font-weight: 700; letter-spacing: 0; }
+      .brand .nm { font-family: var(--mono); font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
       .brand .nm .proj { color: var(--ov1); font-weight: 500; }
       .topbar .spacer { flex: 1; }
       .focus-pill { font-family: var(--mono); font-size: 12px; color: var(--sub0); background: var(--card); border: 1px solid var(--s0); border-radius: 999px; padding: 7px 14px; }
-      .focus-pill b { color: var(--peach); font-weight: 600; }
+      .focus-pill b { color: var(--cyan); font-weight: 600; }
 
       .app { display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 18px; align-items: start; }
       .menu-btn { display: none; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--s1); background: var(--card); color: var(--sub1); font-size: 15px; cursor: pointer; flex: none; }
@@ -47,7 +53,7 @@
         body.nav-open .side { display: block; position: fixed; top: 0; left: 0; bottom: 0; width: 268px; z-index: 15; border-radius: 0; overflow-y: auto; animation: slidein 0.2s ease; }
         body.nav-open .scrim { display: block; }
       }
-      .card { background: var(--card); border: 1px solid var(--s0); border-radius: var(--r); box-shadow: var(--shadow); }
+      .card { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
 
       .side { padding: 14px; position: sticky; top: 18px; }
       .side .grp { font-size: 10px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ov0); padding: 6px 12px; margin-top: 8px; }
@@ -55,12 +61,12 @@
       .nav { display: flex; flex-direction: column; gap: 2px; }
       .navitem { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; cursor: pointer; color: var(--sub0); font-weight: 500; font-size: 13px; transition: background 0.13s ease, color 0.13s ease; }
       .navitem:hover { background: var(--mantle); color: var(--text); }
-      .navitem.on { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); font-weight: 600; }
+      .navitem.on { background: color-mix(in srgb, var(--cyan) 14%, transparent); color: var(--cyan); font-weight: 600; }
       .navitem .ic { width: 14px; text-align: center; opacity: 0.9; }
       .navitem .nm2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; }
       .navitem .ct { font-family: var(--mono); font-size: 11px; color: var(--ov0); }
-      .navitem.on .ct { color: var(--blue); }
-      .navitem .star { color: var(--peach); font-size: 11px; }
+      .navitem.on .ct { color: var(--cyan); }
+      .navitem .star { color: var(--cyan); font-size: 11px; }
       .side .sep { height: 1px; background: var(--s0); margin: 12px 4px; }
       .stat { padding: 11px; background: var(--mantle); border-radius: 12px; margin-top: 12px; }
       .stat .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ov1); padding: 3px 0; }
@@ -68,7 +74,7 @@
 
       .panel { padding: 22px 24px; }
       .secrow { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-      .secrow h2 { font-family: var(--serif); font-size: 18px; font-weight: 700; letter-spacing: 0; }
+      .secrow h2 { font-family: var(--mono); font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
       .secrow .sub { font-family: var(--mono); font-size: 11px; color: var(--ov0); }
       .secrow .spacer { flex: 1; }
 
@@ -76,9 +82,9 @@
       .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--s0); margin: 18px 0 0; }
       .tab { padding: 9px 15px; font-size: 13px; font-weight: 600; color: var(--ov1); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.12s ease; }
       .tab:hover { color: var(--text); }
-      .tab.on { color: var(--blue); border-bottom-color: var(--blue); }
+      .tab.on { color: var(--cyan); border-bottom-color: var(--cyan); }
       .tab .ct { font-family: var(--mono); font-size: 11px; color: var(--ov0); margin-left: 6px; }
-      .tab.on .ct { color: var(--blue); }
+      .tab.on .ct { color: var(--cyan); }
       .tab-panel { display: none; padding-top: 20px; }
       .tab-panel.on { display: block; }
       .panel-tools { display: flex; align-items: center; margin-bottom: 6px; }
@@ -91,17 +97,17 @@
       .back:hover { border-color: var(--s2); color: var(--text); }
       .ficon { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; flex: none; }
       .ficon.task { background: color-mix(in srgb, var(--teal) 18%, transparent); color: var(--teal); }
-      .ficon.item { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); }
+      .ficon.item { background: color-mix(in srgb, var(--cyan) 16%, transparent); color: var(--cyan); }
       .htext { flex: 1; min-width: 0; }
       .eyebrow { font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--ov1); text-transform: uppercase; }
-      .htext h1 { font-family: var(--serif); font-size: 23px; font-weight: 700; letter-spacing: 0; margin-top: 2px; word-break: break-word; }
+      .htext h1 { font-family: var(--sans); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-top: 2px; word-break: break-word; }
       .htext h1.mono { font-family: var(--mono); font-size: 20px; letter-spacing: -0.01em; }
       .star-btn { font-family: var(--mono); font-size: 11.5px; background: var(--mantle); border: 1px solid var(--s1); border-radius: 8px; padding: 6px 12px; cursor: pointer; color: var(--ov1); transition: all 0.12s ease; }
-      .star-btn.on { color: var(--peach); border-color: color-mix(in srgb, var(--peach) 38%, transparent); } .star-btn:hover { border-color: var(--s2); }
+      .star-btn.on { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 38%, transparent); } .star-btn:hover { border-color: var(--s2); }
 
       /* buttons */
       .btn { font-family: var(--sans); font-size: 12.5px; font-weight: 600; border-radius: 9px; padding: 8px 13px; cursor: pointer; border: 1px solid transparent; transition: all 0.13s ease; display: inline-flex; align-items: center; gap: 6px; }
-      .btn.primary { color: var(--crust); background: var(--blue); } .btn.primary:hover { background: var(--sapphire); }
+      .btn.primary { color: var(--void); background: var(--cyan); } .btn.primary:hover { background: color-mix(in srgb, var(--cyan) 86%, #fff); }
       .btn.ghost { background: var(--mantle); color: var(--sub1); border-color: var(--s1); } .btn.ghost:hover { border-color: var(--s2); color: var(--text); }
       .btn.danger { background: transparent; color: var(--red); border-color: color-mix(in srgb, var(--red) 28%, transparent); } .btn.danger:hover { background: color-mix(in srgb, var(--red) 12%, transparent); }
       .btn.sm { padding: 6px 11px; font-size: 12px; }
@@ -130,10 +136,16 @@
       .tl-item { display: grid; grid-template-columns: 30px minmax(0, 1fr) 60px 84px; gap: 12px; align-items: center; padding: 9px 10px; border-radius: 11px; cursor: pointer; position: relative; transition: background 0.12s ease; }
       .tl-item:hover { background: var(--mantle); }
       .tl-num { width: 26px; height: 26px; border-radius: 50%; background: var(--base); border: 1px solid var(--s1); color: var(--sub0); font-family: var(--mono); font-size: 11.5px; font-weight: 700; display: grid; place-items: center; position: relative; z-index: 1; }
-      .tl-item.focus .tl-num { border-color: var(--peach); color: var(--peach); }
-      .tl-item:not(:last-child)::after { content: ""; position: absolute; left: 22px; top: 35px; height: calc(100% - 17px); width: 2px; background: var(--s0); }
+      .tl-item.focus .tl-num { border-color: var(--cyan); color: var(--cyan); }
+      .tl-item:not(:last-child)::after { content: ""; position: absolute; left: 22px; top: 35px; height: calc(100% - 17px); width: 0; border-left: 2px dotted var(--s1); }
       .tl-item.closed { opacity: 0.55; }
       .tl-item.closed .tl-num { border-style: dashed; font-size: 12px; }
+      /* priority left-rail (scan column) — focus cyan wins over priority */
+      .tl-item.tlp-P0 { box-shadow: inset 3px 0 0 var(--red); }
+      .tl-item.tlp-P1 { box-shadow: inset 3px 0 0 var(--peach); }
+      .tl-item.tlp-P2 { box-shadow: inset 3px 0 0 var(--yellow); }
+      .tl-item.tlp-P3 { box-shadow: inset 3px 0 0 var(--ov1); }
+      .tl-item.focus { box-shadow: inset 3px 0 0 var(--cyan); }
 
       /* sections inside task / item view */
       .sec { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--s0); }
@@ -143,7 +155,7 @@
       .v { font-size: 13.5px; color: var(--sub1); line-height: 1.6; }
       .v .muted { color: var(--ov0); } .v .step { color: var(--green); display: block; margin-top: 6px; }
       .v code { font-family: var(--mono); font-size: 12px; color: var(--sub0); background: var(--mantle); padding: 1px 5px; border-radius: 5px; }
-      a { color: var(--blue); text-decoration: none; word-break: break-all; } a:hover { color: var(--lav); }
+      a { color: var(--cyan); text-decoration: none; word-break: break-all; } a:hover { color: color-mix(in srgb, var(--cyan) 80%, #fff); }
 
       /* editable cards (links + memory share .ed) */
       .ed { position: relative; background: var(--mantle); border: 1px solid var(--s0); border-radius: 12px; padding: 15px 16px; margin-top: 11px; }
@@ -152,7 +164,7 @@
       .fld { margin-bottom: 10px; } .fld:last-child { margin-bottom: 0; }
       .fld > label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ov0); margin-bottom: 4px; }
       .fld input { width: 100%; font-family: var(--sans); font-size: 13px; color: var(--text); background: var(--base); border: 1px solid var(--s1); border-radius: 9px; padding: 8px 11px; outline: none; transition: border-color 0.12s ease; }
-      .fld input:focus { border-color: var(--blue); }
+      .fld input:focus { border-color: var(--cyan); }
       .fld input.code { font-family: var(--mono); font-size: 12px; }
       .fld.title-fld input { font-weight: 600; max-width: 440px; }
       .toolbar { display: flex; gap: 8px; align-items: center; }
@@ -160,19 +172,19 @@
       /* stagger reveal (Editorial Ledger, plan Decision 5) */
       @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
       .trow, .tl-item, .ed { animation: rise 0.25s ease backwards; animation-delay: calc(var(--i, 0) * 28ms); }
-      @media (prefers-reduced-motion: reduce) { .trow, .tl-item, .ed { animation: none; } }
+      @media (prefers-reduced-motion: reduce) { .trow, .tl-item, .ed, .tcard, .hero, .nxrow, .prow { animation: none; } }
 
       .copy-path { cursor: pointer; } .copy-path:hover { color: var(--lav) !important; }
 
       /* modal (shared: delete type-to-confirm / new task / drop) */
       .mback { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: grid; place-items: center; z-index: 30; }
       .modal { background: var(--card); border: 1px solid var(--s1); border-radius: var(--r); box-shadow: var(--shadow); padding: 22px; width: min(92vw, 400px); }
-      .modal h3 { font-family: var(--serif); font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+      .modal h3 { font-family: var(--sans); font-size: 17px; font-weight: 700; margin-bottom: 10px; }
       .modal .mbody { font-size: 13px; color: var(--sub0); line-height: 1.6; margin-bottom: 14px; }
       .modal .mbody code { font-family: var(--mono); font-size: 12px; color: var(--peach); background: var(--mantle); padding: 1px 5px; border-radius: 5px; }
       .modal input { width: 100%; font-family: var(--sans); font-size: 13px; color: var(--text); background: var(--base); border: 1px solid var(--s1); border-radius: 9px; padding: 9px 11px; outline: none; margin-bottom: 4px; }
       .modal input.mono { font-family: var(--mono); }
-      .modal input:focus { border-color: var(--blue); }
+      .modal input:focus { border-color: var(--cyan); }
       .modal .merr { font-size: 11.5px; color: var(--red); min-height: 17px; }
       .modal .mrow { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
       .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -190,6 +202,66 @@
       .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
       .toast .ok { color: var(--green); } .toast .bad { color: var(--red); }
       .boot { color: var(--ov0); font-size: 14px; padding: 50px 0; text-align: center; }
+
+      /* overview: per-task card grid */
+      .ovgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+      .tcard { background: var(--mantle); border: 1px solid var(--s0); border-radius: 14px; padding: 16px; cursor: pointer; transition: border-color 0.13s ease, transform 0.13s ease; animation: rise 0.25s ease backwards; animation-delay: calc(var(--i, 0) * 34ms); }
+      .tcard:hover { border-color: var(--s2); transform: translateY(-2px); }
+      .tcard.cur { border-color: color-mix(in srgb, var(--cyan) 38%, var(--line)); box-shadow: inset 3px 0 0 var(--cyan), var(--shadow); }
+      .tcard.inbox { opacity: 0.72; }
+      .tcard .tc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+      .tcard .tc-key { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tcard .tc-star { color: var(--cyan); font-size: 12px; }
+      .tcard .tc-foc { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); flex: none; box-shadow: 0 0 8px -1px var(--cyan); }
+      .tcard .tc-prios { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; min-height: 22px; }
+      .tcard .tc-prios .chip.z { opacity: 0.28; }
+      .tcard .tc-stat { display: flex; align-items: baseline; gap: 7px; margin-bottom: 13px; }
+      .tcard .tc-open { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--text); line-height: 1; font-variant-numeric: tabular-nums; }
+      .tcard .tc-stat .lbl { font-size: 11.5px; color: var(--ov1); }
+      .tcard .tc-stat .closed { color: var(--green); font-family: var(--mono); font-size: 12px; }
+      .tcard .tc-meta { font-family: var(--mono); font-size: 10.5px; color: var(--ov0); margin-left: auto; }
+      .tcard .tc-prev { border-top: 1px solid var(--s0); padding-top: 11px; display: flex; flex-direction: column; gap: 6px; }
+      .tcard .tc-prev .pv { font-size: 12px; color: var(--ov1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tcard .tc-prev .pv b { font-family: var(--mono); font-weight: 600; color: var(--sub0); font-size: 11.5px; }
+      .tcard .tc-prev .pv.foc b { color: var(--cyan); }
+      .tcard .tc-empty { font-size: 11.5px; color: var(--ov0); border-top: 1px solid var(--s0); padding-top: 11px; }
+
+      /* next-candidate panel */
+      /* — Command Center (Home) — */
+      .hero { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin-bottom: 22px; animation: rise 0.3s ease backwards; }
+      .hero:not(.clear) { border-color: color-mix(in srgb, var(--cyan) 36%, var(--line)); box-shadow: var(--glow); }
+      .hero-eyebrow { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--cyan); margin-bottom: 11px; }
+      .hero.clear .hero-eyebrow { color: var(--ov0); }
+      .hero-title { font-family: var(--sans); font-size: 30px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; margin-bottom: 13px; word-break: break-word; }
+      .hero-chips { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
+      .hero-meta { display: block; font-family: var(--mono); font-size: 11.5px; color: var(--ov1); margin-bottom: 16px; }
+      .hero-meta b { color: var(--sub1); font-weight: 600; }
+      .hero-act { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .hud-sec { margin-top: 24px; }
+      .hud-label { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ov1); margin-bottom: 11px; display: flex; align-items: baseline; }
+      .hud-label .ct { margin-left: auto; color: var(--ov0); font-weight: 500; }
+      .nxrow { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background 0.12s ease, box-shadow 0.12s ease; animation: rise 0.25s ease backwards; animation-delay: calc(var(--i, 0) * 30ms); }
+      .nxrow:hover { background: var(--mantle); box-shadow: inset 2px 0 0 var(--cyan); }
+      .nxrow .nx-rank { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--cyan-dim); flex: none; }
+      .nxrow .nx-id { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); flex: none; }
+      .nxrow .nx-leader { flex: 1; border-bottom: 1px dotted var(--s1); transform: translateY(-3px); min-width: 14px; }
+      .nxrow .nx-task { font-family: var(--mono); font-size: 11px; color: var(--ov1); flex: none; }
+      .nxrow .nx-go { color: var(--ov0); font-size: 12px; flex: none; }
+      .nxrow:hover .nx-go { color: var(--cyan); }
+      .nxmore { font-family: var(--mono); font-size: 11.5px; color: var(--ov0); padding: 8px 12px; }
+      .hud-summary { font-family: var(--mono); font-size: 12px; color: var(--ov1); margin-top: 8px; padding: 8px 12px; }
+      .hud-summary .ib { cursor: pointer; color: var(--sub0); }
+      .hud-summary .ib:hover { color: var(--cyan); }
+      .prow { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background 0.12s ease, box-shadow 0.12s ease; animation: rise 0.25s ease backwards; animation-delay: calc(var(--i, 0) * 30ms); }
+      .prow:hover { background: var(--mantle); box-shadow: inset 2px 0 0 var(--cyan); }
+      .prow.cur { box-shadow: inset 2px 0 0 var(--cyan); }
+      .prow .pr-key { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text); flex: none; min-width: 116px; }
+      .prow .pr-key .star { color: var(--cyan); font-size: 11px; margin-left: 5px; }
+      .prow .pr-open { font-family: var(--mono); font-size: 12.5px; color: var(--ov1); }
+      .prow .pr-open b { color: var(--text); font-size: 15px; font-weight: 700; }
+      .prow .pr-closed { font-family: var(--mono); font-size: 11px; color: var(--green); margin-left: auto; }
+      .prow .pr-go { color: var(--ov0); flex: none; }
+      .allproj { font-family: var(--mono); font-size: 11.5px; color: var(--cyan); cursor: pointer; padding: 9px 12px; display: inline-block; }
     </style>
   </head>
   <body>
@@ -294,7 +366,6 @@
         renderValidateBadge(val);
         $("#proj").textContent = rm.project ? `· ${rm.project}` : "";
         $("#focus").textContent = rm.focus || CURRENT || "—";
-        if (VIEW.type === "home") VIEW = CURRENT ? { type: "task", key: CURRENT } : TASKS[0] ? { type: "task", key: TASKS[0].key } : { type: "backlog" };
         renderSide(); renderMain();
       }
 
@@ -315,7 +386,7 @@
       }
 
       function renderSide() {
-        const open = (RM && RM.open) || [], closed = (RM && RM.recentlyClosed) || [];
+        const open = (RM && RM.open) || [];
         const taskNav = TASKS.map((t) => {
           const on = VIEW.type === "task" && VIEW.key === t.key;
           return `<div class="navitem ${on ? "on" : ""}" data-task="${esc(t.key)}"><span class="ic">✦</span><span class="nm2">${esc(t.key)}</span>${t.key === CURRENT ? '<span class="star">★</span>' : ""}<span class="ct">${itemsForTask(t.key).length || ""}</span></div>`;
@@ -324,15 +395,17 @@
         const inboxNav = inboxItems.length
           ? `<div class="navitem ${VIEW.type === "task" && VIEW.key === "_INBOX" ? "on" : ""}" data-task="_INBOX"><span class="ic">▤</span><span class="nm2">_INBOX</span><span class="ct">${inboxItems.length}</span></div>`
           : "";
+        const eligibleCt = open.filter((i) => !i.blockedBy).length;
         $("#side").innerHTML = `
+          <div class="nav">
+            <div class="navitem ${VIEW.type === "home" ? "on" : ""}" data-view="home"><span class="ic">◈</span><span class="nm2" style="font-family:var(--sans);font-size:13px">Home</span>${RM && RM.focus ? '<span class="star">★</span>' : ""}<span class="ct">${eligibleCt || ""}</span></div>
+            <div class="navitem ${VIEW.type === "projects" ? "on" : ""}" data-view="projects"><span class="ic">▤</span><span class="nm2" style="font-family:var(--sans);font-size:13px">Projects</span><span class="ct">${TASKS.length}</span></div>
+          </div>
+          <div class="sep"></div>
           <div class="grp">Tasks</div>
           <div class="nav">${taskNav}${inboxNav}</div>
           <div style="padding:2px 12px 8px"><button class="btn ghost sm" id="newTaskSide">+ new task</button></div>
           <div class="sep"></div>
-          <div class="nav">
-            <div class="navitem ${VIEW.type === "backlog" ? "on" : ""}" data-view="backlog"><span class="ic">❒</span><span class="nm2" style="font-family:var(--sans);font-size:13px">All Backlog</span><span class="ct">${open.length}</span></div>
-            <div class="navitem ${VIEW.type === "closed" ? "on" : ""}" data-view="closed"><span class="ic">✓</span><span class="nm2" style="font-family:var(--sans);font-size:13px">Recently Closed</span><span class="ct">${closed.length}</span></div>
-          </div>
           <div class="stat"><div class="row"><span>tasks</span><b>${TASKS.length}</b></div><div class="row"><span>open items</span><b>${open.length}</b></div><div class="row" style="font-size:11px;margin-top:3px">${PRIOS.map((p) => `${p} ${open.filter((i) => i.priority === p).length}`).join("&nbsp;&nbsp;")}</div></div>`;
         $("#side").querySelectorAll("[data-task]").forEach((n) => n.addEventListener("click", () => guardNav(() => { VIEW = { type: "task", key: n.dataset.task }; closeNav(); renderSide(); renderMain(); })));
         $("#side").querySelectorAll("[data-view]").forEach((n) => n.addEventListener("click", () => guardNav(() => { VIEW = { type: n.dataset.view }; closeNav(); renderSide(); renderMain(); })));
@@ -343,15 +416,15 @@
       function renderMain() {
         if (VIEW.type === "task") return showTask(VIEW.key);
         if (VIEW.type === "item") return showItem(VIEW.id, VIEW.from, VIEW.closed);
-        if (VIEW.type === "closed") return showClosed();
-        return showBacklogAll();
+        if (VIEW.type === "projects") return showProjects();
+        return showHome();
       }
 
       // ── item rows (shared) ──
       function itemRows(items) {
         if (!items.length) return '<div class="hint">아이템 없음</div>';
         return `<div class="tbl" style="--cols: minmax(0,1fr) 64px 88px"><div class="th"><span>Name</span><span>Priority</span><span>Status</span></div>${items.map((it, i) => `
-          <div class="trow" style="--i:${i}" data-item="${esc(it.id)}"><div class="name"><div class="txt"><div class="id">${esc(it.id)}${it.id === (RM && RM.focus) ? ' <span style="color:var(--peach);font-size:10.5px">◀ focus</span>' : ""}</div><div class="ti">${esc(it.title)}</div></div></div><span><span class="chip p-${esc(it.priority)}">${esc(it.priority)}</span></span><span><span class="chip sb-${esc(it.status)}">${esc(it.status)}</span></span></div>`).join("")}</div>`;
+          <div class="trow" style="--i:${i}" data-item="${esc(it.id)}"><div class="name"><div class="txt"><div class="id">${esc(it.id)}${it.id === (RM && RM.focus) ? ' <span style="color:var(--cyan);font-size:10.5px">◀ focus</span>' : ""}</div><div class="ti">${esc(it.title)}</div></div></div><span><span class="chip p-${esc(it.priority)}">${esc(it.priority)}</span></span><span><span class="chip sb-${esc(it.status)}">${esc(it.status)}</span></span></div>`).join("")}</div>`;
       }
       function wireItems(root, from) { root.querySelectorAll("[data-item]").forEach((el) => el.addEventListener("click", () => guardNav(() => { VIEW = { type: "item", id: el.dataset.item, closed: el.dataset.closed === "1", from }; renderSide(); renderMain(); }))); }
       // closed rows under a task timeline — dimmed, ✓/✕ marker, no order number
@@ -367,9 +440,9 @@
       function timelineRows(items, showTaskTag) {
         const sorted = items.slice().sort(byOrder);
         if (!sorted.length) return '<div class="hint">아이템 없음</div>';
-        return sorted.map((it, i) => `<div class="tl-item ${it.id === (RM && RM.focus) ? "focus" : ""}" style="--i:${i}" data-item="${esc(it.id)}">
+        return sorted.map((it, i) => `<div class="tl-item tlp-${esc(it.priority)} ${it.id === (RM && RM.focus) ? "focus" : ""}" style="--i:${i}" data-item="${esc(it.id)}">
           <div class="tl-num">${i + 1}</div>
-          <div class="name"><div class="txt"><div class="id">${esc(it.id)}${showTaskTag ? ` <span class="chip mono" style="background:var(--mantle);color:var(--ov1);font-size:10px;padding:1px 7px">${esc(it.task ?? "_INBOX")}</span>` : ""}${it.id === (RM && RM.focus) ? ' <span style="color:var(--peach);font-size:10.5px">◀ focus</span>' : ""}</div><div class="ti">${esc(it.title)}</div></div></div>
+          <div class="name"><div class="txt"><div class="id">${esc(it.id)}${showTaskTag ? ` <span class="chip mono" style="background:var(--mantle);color:var(--ov1);font-size:10px;padding:1px 7px">${esc(it.task ?? "_INBOX")}</span>` : ""}${it.id === (RM && RM.focus) ? ' <span style="color:var(--cyan);font-size:10.5px">◀ focus</span>' : ""}</div><div class="ti">${esc(it.title)}</div></div></div>
           <span><span class="chip p-${esc(it.priority)}">${esc(it.priority)}</span></span>
           <span><span class="chip sb-${esc(it.status)}">${esc(it.status)}</span></span></div>`).join("");
       }
@@ -467,7 +540,7 @@
         if (!v) return;
         SNAP = null;
         const r = await fetch(`/api/tasks/${encodeURIComponent(key)}`, { method: "DELETE" });
-        if (r.ok || r.status === 204) { toast(`삭제됨 · ${key}`); VIEW = { type: "backlog" }; await load(); } else toast("삭제 실패", false);
+        if (r.ok || r.status === 204) { toast(`삭제됨 · ${key}`); VIEW = { type: "projects" }; await load(); } else toast("삭제 실패", false);
       }
       async function setCurrent(key) {
         const r = await fetch("/api/current", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current: key }) });
@@ -485,25 +558,127 @@
         if (r.ok) { toast(`생성됨 · ${key}`); VIEW = { type: "task", key }; await load(); } else { const e = await r.json().catch(() => ({})); toast(e.error || "생성 실패", false); }
       }
 
-      // ── All Backlog (cross-task, by priority) ──
-      function showBacklogAll() {
+      // ── Home: Command Center (focus/eligible hero + up-next + projects summary) ──
+      async function showHome() {
+        const m = $("#main");
+        m.innerHTML = `<div class="card panel"><div class="boot">reading…</div></div>`;
+        const nc = await fetch("/api/next").then((r) => r.json()).catch(() => null);
+        if (!nc) return void (m.innerHTML = `<div class="card panel"><div class="hint">next 후보 로드 실패</div></div>`);
         const open = (RM && RM.open) || [];
-        const m = $("#main");
-        if (RM && RM.missing) { m.innerHTML = `<div class="card panel"><div class="secrow"><h2>All Backlog</h2></div><div class="hint">no tasks yet — add a backlog item, or run <code>/pm-roadmap migrate</code> for a legacy repo</div></div>`; return; }
-        let body = "";
-        for (const p of PRIOS) { const its = open.filter((i) => i.priority === p).sort(byOrder); if (its.length) body += `<div class="label" style="margin-top:16px">${p} <span class="right">${its.length}</span></div>${timelineRows(its, true)}`; }
-        m.innerHTML = `<div class="card panel"><div class="phead"><div class="ficon item">❒</div><div class="htext"><div class="eyebrow">backlog</div><h1>All Backlog</h1></div></div>${body || '<div class="hint">open 아이템 없음 — 터미널에서 <code>/pm-roadmap add &lt;id&gt; &lt;title&gt;</code> 로 추가 (GUI는 backlog를 쓰지 않음)</div>'}</div>`;
-        wireItems(m, { type: "backlog" });
-      }
-      function showClosed() {
-        const closed = (RM && RM.recentlyClosed) || [];
-        const m = $("#main");
-        const body = closed.length ? `<div class="tbl" style="--cols: minmax(0,1fr) 88px">${closed.map((c, i) => `<div class="trow" style="--i:${i}" data-item="${esc(c.id)}" data-closed="1"><div class="name"><div class="txt"><div class="id">${esc(c.id)}${c.task ? ` <span class="chip mono" style="background:var(--mantle);color:var(--ov1);font-size:10px;padding:1px 7px">${esc(c.task)}</span>` : ""}</div>${c.plan ? `<div class="ti mono">${esc(c.plan)}</div>` : c.note ? `<div class="ti">${esc(c.note)}</div>` : ""}</div></div><span><span class="chip sb-${esc(c.status)}">${esc(c.status)}</span></span></div>`).join("")}</div>` : '<div class="hint">닫힌 항목 없음</div>';
-        m.innerHTML = `<div class="card panel"><div class="phead"><div class="ficon item">✓</div><div class="htext"><div class="eyebrow">archive</div><h1>Recently Closed</h1></div></div>${body}</div>`;
-        wireItems(m, { type: "closed" });
+        const elig = nc.eligible || [], blk = nc.blocked || [];
+        const taskOf = (c) => c.key || c.task || "_INBOX";
+        // D6 focus resolve: id → actual open item; fallback to eligible[0]
+        const focusId = nc.focus || (RM && RM.focus) || null;
+        const focusItem = focusId ? open.find((it) => it.id === focusId) : null;
+        const taskMeta = (key) => `<span class="hero-meta">TASK <b>${esc(key)}</b> · ${itemsForTask(key).length} open${closedForTask(key).length ? ` · ${closedForTask(key).length}✓ recent` : ""}</span>`;
+
+        // HERO — one component, three states (D6). cyan = hero shell / CTA only.
+        let hero, qStart, qBase;
+        if (focusItem) {
+          hero = `<div class="hero foc">
+            <div class="hero-eyebrow">★ NOW_FOCUS</div>
+            <h2 class="hero-title">${esc(focusItem.title)}</h2>
+            <div class="hero-chips"><span class="chip mono" style="background:var(--mantle);color:var(--sub0)">${esc(focusItem.id)}</span><span class="chip p-${esc(focusItem.priority)}">${esc(focusItem.priority)}</span><span class="chip sb-${esc(focusItem.status)}">${esc(focusItem.status)}</span></div>
+            ${taskMeta(focusItem.task ?? "_INBOX")}
+            <div class="hero-act"><button class="btn primary sm" data-copy-id="${esc(focusItem.id)}">▸ kickoff 복사</button><button class="btn ghost sm" data-open-id="${esc(focusItem.id)}">상세 →</button><span style="flex:1"></span><button class="btn ghost sm" data-focus-set="">focus 해제</button></div>
+          </div>`;
+          qStart = 0; qBase = 1;
+        } else if (elig.length) {
+          const h = elig[0];
+          hero = `<div class="hero">
+            <div class="hero-eyebrow">▸ TOP ELIGIBLE · #01</div>
+            <h2 class="hero-title">${esc(h.title)}</h2>
+            <div class="hero-chips"><span class="chip mono" style="background:var(--mantle);color:var(--sub0)">${esc(h.id)}</span><span class="chip p-${esc(h.priority)}">${esc(h.priority)}</span><span class="chip mono" style="background:var(--mantle);color:var(--ov1)">${esc(taskOf(h))}</span></div>
+            ${taskMeta(taskOf(h))}
+            <div class="hero-act"><button class="btn primary sm" data-focus-set="${esc(h.id)}">set focus</button><button class="btn ghost sm" data-copy-id="${esc(h.id)}">▸ kickoff 복사</button><button class="btn ghost sm" data-open-id="${esc(h.id)}">상세 →</button></div>
+          </div>`;
+          qStart = 1; qBase = 2;
+        } else {
+          hero = `<div class="hero clear">
+            <div class="hero-eyebrow">▸ ALL CLEAR</div>
+            <h2 class="hero-title">열린 작업 없음</h2>
+            <div class="hero-act"><button class="btn ghost sm" id="homeNew">+ new task</button></div>
+          </div>`;
+          qStart = 0; qBase = 1;
+        }
+
+        // UP_NEXT — top 3 from qStart; original rank preserved (#02… when hero took #01)
+        const qItems = elig.slice(qStart, qStart + 3);
+        const more = Math.max(elig.length - qStart - qItems.length, 0);
+        const pad2 = (n) => String(n).padStart(2, "0");
+        const upNext = qItems.map((c, i) => `<div class="nxrow" style="--i:${i}" data-open-id="${esc(c.id)}">
+          <span class="nx-rank">#${pad2(qBase + i)}</span><span class="nx-id">${esc(c.id)}</span><span class="nx-leader"></span><span class="chip p-${esc(c.priority)}">${esc(c.priority)}</span><span class="nx-task">${esc(taskOf(c))}</span><span class="nx-go">▸</span></div>`).join("");
+        const summary = (blk.length || nc.inbox)
+          ? `<div class="hud-summary">${blk.length ? `⛔ ${blk.length} blocked` : ""}${blk.length && nc.inbox ? " · " : ""}${nc.inbox ? `<span class="ib" data-inbox>▤ ${nc.inbox} inbox</span>` : ""}</div>`
+          : "";
+        const upBlock = `<div class="hud-sec"><div class="hud-label">UP NEXT<span class="ct">${elig.length}</span></div>${upNext || '<div class="hint">eligible 후보 없음</div>'}${more ? `<div class="nxmore">+${more} more eligible</div>` : ""}${summary}</div>`;
+
+        // PROJECTS — max 5 rows + all-projects entry (D8). closed = recent (50-cap)
+        const projRows = TASKS.slice(0, 5).map((t, i) => {
+          const o = itemsForTask(t.key).length, cl = closedForTask(t.key).length;
+          return `<div class="prow ${t.key === CURRENT ? "cur" : ""}" style="--i:${i}" data-task="${esc(t.key)}">
+            <span class="pr-key">${esc(t.key)}${t.key === CURRENT ? '<span class="star">★</span>' : ""}</span><span class="pr-open"><b>${o}</b> open</span><span class="pr-closed">${cl ? `+${cl}✓ recent` : ""}</span><span class="pr-go">▸</span></div>`;
+        }).join("");
+        const projBlock = TASKS.length
+          ? `<div class="hud-sec"><div class="hud-label">PROJECTS<span class="ct">${TASKS.length}</span></div>${projRows}${TASKS.length > 5 ? `<span class="allproj" data-allproj>▸ all ${TASKS.length} projects</span>` : ""}</div>`
+          : "";
+
+        m.innerHTML = `<div class="card panel">
+          <div class="phead"><div class="ficon item">◈</div><div class="htext"><div class="eyebrow">command center${RM && RM.project ? ` · ${esc(RM.project)}` : ""}</div><h1>Command Center</h1></div></div>
+          ${hero}${upBlock}${projBlock}</div>`;
+
+        // wiring
+        m.querySelectorAll("[data-open-id]").forEach((b) => b.addEventListener("click", () => guardNav(() => { VIEW = { type: "item", id: b.dataset.openId, from: { type: "home" } }; renderSide(); renderMain(); })));
+        m.querySelectorAll("[data-task]").forEach((n) => n.addEventListener("click", () => guardNav(() => { VIEW = { type: "task", key: n.dataset.task }; renderSide(); renderMain(); })));
+        const ib = m.querySelector("[data-inbox]"); if (ib) ib.addEventListener("click", () => guardNav(() => { VIEW = { type: "task", key: "_INBOX" }; renderSide(); renderMain(); }));
+        const ap = m.querySelector("[data-allproj]"); if (ap) ap.addEventListener("click", () => guardNav(() => { VIEW = { type: "projects" }; renderSide(); renderMain(); }));
+        const hn = $("#homeNew"); if (hn) hn.addEventListener("click", newTask);
+        m.querySelectorAll("[data-copy-id]").forEach((b) => b.addEventListener("click", async () => {
+          const txt = await fetch(`/api/roadmap/${encodeURIComponent(b.dataset.copyId)}/next`).then((r) => r.text());
+          try { await navigator.clipboard.writeText(txt); toast("kickoff 프롬프트 복사됨"); } catch { toast("클립보드 차단 — 콘솔 출력", false); console.log(txt); }
+        }));
+        m.querySelectorAll("[data-focus-set]").forEach((b) => b.addEventListener("click", async () => {
+          const id = b.dataset.focusSet; // "" → clear
+          const r = await fetch("/api/focus", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+          if (r.ok) { toast(id ? `focus → ${id}` : "focus 해제"); await load(); } else { const e = await r.json().catch(() => ({})); toast(e.error || "focus 실패", false); }
+        }));
       }
 
-      // ── item detail (drill from task/backlog) ──
+      // ── Projects: per-task card grid ──
+      function showProjects() {
+        const m = $("#main");
+        if (RM && RM.missing) { m.innerHTML = `<div class="card panel"><div class="phead"><div class="ficon item">▤</div><div class="htext"><div class="eyebrow">projects</div><h1>Projects</h1></div></div><div class="hint">no tasks yet — add a backlog item, or run <code>/pm-roadmap migrate</code> for a legacy repo</div></div>`; return; }
+        const cards = TASKS.map((t, i) => taskCard(t.key, i, t)).join("");
+        const inboxItems = itemsForTask("_INBOX");
+        const inboxCard = inboxItems.length ? taskCard("_INBOX", TASKS.length, null) : "";
+        const grid = (cards || inboxCard)
+          ? `<div class="ovgrid">${cards}${inboxCard}</div>`
+          : `<div class="hint">task 없음 — 우측 상단 <b>+ new task</b> 로 시작</div>`;
+        m.innerHTML = `<div class="card panel"><div class="phead"><div class="ficon item">▤</div><div class="htext"><div class="eyebrow">projects${RM && RM.project ? ` · ${esc(RM.project)}` : ""}</div><h1>Projects</h1></div><button class="btn ghost sm" id="ovNew">+ new task</button></div>${grid}</div>`;
+        m.querySelectorAll("[data-task]").forEach((n) => n.addEventListener("click", () => guardNav(() => { VIEW = { type: "task", key: n.dataset.task }; renderSide(); renderMain(); })));
+        const nb = $("#ovNew"); if (nb) nb.addEventListener("click", newTask);
+      }
+      // one task card: priority spread + open/closed counts + 2 recent-item previews
+      function taskCard(key, i, meta) {
+        const isInbox = key === "_INBOX";
+        const open = itemsForTask(key), closed = closedForTask(key);
+        const isCur = key === CURRENT;
+        const hasFocus = open.some((it) => it.id === (RM && RM.focus));
+        const prioChips = isInbox ? "" : PRIOS.map((p) => { const n = open.filter((it) => it.priority === p).length; return `<span class="chip p-${p} ${n ? "" : "z"}">${p} ${n}</span>`; }).join("");
+        const prev = open.slice(0, 2).map((it) => `<div class="pv ${it.id === (RM && RM.focus) ? "foc" : ""}"><b>${esc(it.id)}</b> ${esc(it.title)}</div>`).join("");
+        const prevBlock = open.length
+          ? `<div class="tc-prev">${prev}${open.length > 2 ? `<div class="pv" style="color:var(--ov0)">+${open.length - 2} more…</div>` : ""}</div>`
+          : `<div class="tc-empty">open 아이템 없음${closed.length ? ` · ${closed.length}✓ recent` : ""}</div>`;
+        const metaLine = isInbox ? "untriaged" : `${meta ? meta.linkCount : 0} links · ${meta ? meta.memCount : 0} mem`;
+        return `<div class="tcard ${isCur ? "cur" : ""} ${isInbox ? "inbox" : ""}" style="--i:${i}" data-task="${esc(key)}">
+          <div class="tc-head"><span class="ic" style="color:var(${isInbox ? "--ov1" : "--teal"})">${isInbox ? "▤" : "✦"}</span><span class="tc-key">${esc(key)}</span>${isCur ? '<span class="tc-star">★</span>' : ""}${hasFocus ? '<span class="tc-foc" title="focus"></span>' : ""}</div>
+          ${prioChips ? `<div class="tc-prios">${prioChips}</div>` : ""}
+          <div class="tc-stat"><span class="tc-open">${open.length}</span><span class="lbl">open</span>${closed.length ? `<span class="closed">+${closed.length}✓ recent</span>` : ""}<span class="tc-meta">${metaLine}</span></div>
+          ${prevBlock}</div>`;
+      }
+
+
+      // ── item detail (drill from task / overview / next) ──
       async function showItem(id, from, closedScope) {
         const m = $("#main"); m.innerHTML = `<div class="card panel"><div class="boot">resolving…</div></div>`;
         // closed rows request ?scope=closed — open-wins join would shadow a closed row sharing an open id
@@ -521,7 +696,7 @@
             <div class="sec"><div class="label">What</div><div class="v">${esc(c.note) || '<span class="muted">—</span>'}</div></div>
             <div class="sec"><div class="label">Plan</div><div class="v">${planHtml}</div></div>
             <div class="sec"><div class="label">Post-Implementation Notes</div><div class="v">${j.postImplNotes ? esc(j.postImplNotes).replace(/\n/g, "<br>") : '<span class="muted">—</span>'}</div></div></div>`;
-          $("#back").addEventListener("click", () => { VIEW = from || { type: "closed" }; renderSide(); renderMain(); });
+          $("#back").addEventListener("click", () => { VIEW = from || { type: "home" }; renderSide(); renderMain(); });
           wireCopy(m);
           return;
         }
@@ -530,8 +705,14 @@
         const links = (j.contextLinks || []).map((l) => `<li><div style="color:var(--text);font-weight:600">${esc(l.label)}</div><div class="v"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.url)}</a></div>${l.summary ? `<div class="v">${esc(l.summary)}</div>` : ""}</li>`).join("");
         const mems = (j.contextMemory || []).map((mm) => `<li><div style="color:var(--text);font-weight:600">${esc(mm.title)}</div>${mm.note ? `<div class="v">${esc(mm.note)}</div>` : ""}</li>`).join("");
         const ctx = j.task ? ((links || mems) ? `<ul style="list-style:none;display:flex;flex-direction:column;gap:11px">${mems}${links}</ul>` : `<span class="muted">${esc(j.task)} (context 비어있음)</span>`) : `<span class="muted">연결된 task 없음</span>`;
-        const sibs = (j.siblings || []).filter((s) => s.notes);
-        const sibsHtml = sibs.length ? `<ul style="list-style:none;display:flex;flex-direction:column;gap:9px">${sibs.map((s) => `<li><span style="color:var(--text);font-weight:600">${esc(s.id)}</span> <span class="muted">(${esc(s.status)})</span><div class="v">${esc(s.notes.split("\n")[0])}</div></li>`).join("")}</ul>` : `<span class="muted">—</span>`;
+        // capped-inheritance: server returns up to cap=5 siblings + siblingsTotal; "▸ N more" refetches ?cap=0
+        const siblingsBlock = (items, total) => {
+          const list = (items || []).filter((s) => s.notes);
+          if (!list.length) return `<span class="muted">—</span>`;
+          const more = (total || list.length) - list.length;
+          const ul = `<ul style="list-style:none;display:flex;flex-direction:column;gap:9px">${list.map((s) => `<li><span style="color:var(--text);font-weight:600">${esc(s.id)}</span> <span class="muted">(${esc(s.status)})</span><div class="v">${esc(s.notes.split("\n")[0])}</div></li>`).join("")}</ul>`;
+          return ul + (more > 0 ? `<button class="btn ghost sm" id="showOlder" style="margin-top:10px">▸ ${more} more</button>` : "");
+        };
         const backLabel = from && from.type === "task" ? from.key : "All Backlog";
         m.innerHTML = `<div class="card panel">
           <div class="phead"><button class="back" id="back">←</button><div class="ficon item">❒</div><div class="htext"><div class="eyebrow">backlog item${j.task ? ` · ${esc(j.task)}` : ""}</div><h1>${esc(it.title)}</h1></div></div>
@@ -539,7 +720,7 @@
           <div class="sec"><div class="label">What</div><div class="v">${esc(it.note || it.title)}</div></div>
           <div class="sec"><div class="label">Plan</div><div class="v">${plan}</div></div>
           <div class="sec"><div class="label">Context${j.task ? `<span class="right">${esc(j.task)}</span>` : ""}</div><div class="v">${ctx}</div></div>
-          <div class="sec"><div class="label">Inherited · done siblings</div><div class="v">${sibsHtml}</div></div>
+          <div class="sec" id="sibSec"><div class="label">Inherited · done siblings</div><div class="v">${siblingsBlock(j.siblings, j.siblingsTotal)}</div></div>
           <div class="sec" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <button class="btn primary" id="nextBtn">▸ 다음 세션 프롬프트 복사</button>
             <span style="flex:1"></span>
@@ -547,20 +728,28 @@
               ? `<span class="v muted" style="font-size:12.5px">plan 연동 — close는 <code>/retro</code>로 (drop 시 plan과 desync)</span>`
               : `<button class="btn danger sm" id="dropBtn">drop (폐기)</button>`}
           </div></div>`;
-        $("#back").addEventListener("click", () => { VIEW = from || { type: "backlog" }; renderSide(); renderMain(); });
+        $("#back").addEventListener("click", () => { VIEW = from || { type: "home" }; renderSide(); renderMain(); });
         wireCopy(m);
         const db = $("#dropBtn");
         if (db) db.addEventListener("click", async () => {
           const ok = await modal({ title: `${id} drop`, body: `아이디어 <code>${esc(id)}</code> 를 폐기하고 Recently Closed로 이동합니다.`, confirmLabel: "drop", danger: true });
           if (!ok) return;
           const r = await fetch(`/api/roadmap/${encodeURIComponent(id)}/drop`, { method: "POST" });
-          if (r.ok) { toast(`drop됨 · ${id}`); VIEW = from || { type: "backlog" }; await load(); }
+          if (r.ok) { toast(`drop됨 · ${id}`); VIEW = from || { type: "home" }; await load(); }
           else { const e = await r.json().catch(() => ({})); toast(e.error || "drop 실패", false); }
         });
         const nb = $("#nextBtn");
         if (nb) nb.addEventListener("click", async () => {
           const txt = await fetch(`/api/roadmap/${encodeURIComponent(id)}/next`).then((r) => r.text());
           try { await navigator.clipboard.writeText(txt); toast("kickoff 프롬프트 복사됨"); } catch { toast("클립보드 차단 — 콘솔 출력", false); console.log(txt); }
+        });
+        const so = $("#showOlder");
+        if (so) so.addEventListener("click", async () => {
+          so.disabled = true; so.textContent = "loading…";
+          const j2 = await fetch(`/api/roadmap/${encodeURIComponent(id)}/join?cap=0`).then((r) => (r.ok ? r.json() : null));
+          const sec = $("#sibSec");
+          if (j2 && sec) sec.querySelector(".v").innerHTML = siblingsBlock(j2.siblings, j2.siblingsTotal);
+          else { so.disabled = false; so.textContent = "▸ 재시도"; }
         });
       }
 
