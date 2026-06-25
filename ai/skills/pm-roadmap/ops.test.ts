@@ -67,6 +67,22 @@ async function main() {
     await ops.itemApprove(root, "ALPHA", "a-one", O);
     assert.equal(await field(BL("ALPHA"), "a-one", "Status"), "active");
 
+    // ── reprioritize: changes Priority; rejects bad enum + missing id ──
+    await ops.itemSetPriority(root, "ALPHA", "a-one", "P0", O);
+    assert.equal(await field(BL("ALPHA"), "a-one", "Priority"), "P0");
+    await assert.rejects(() => ops.itemSetPriority(root, "ALPHA", "a-one", "P9", O), ops.OpError); // bad enum
+    await assert.rejects(() => ops.itemSetPriority(root, "ALPHA", "nope", "P1", O), ops.OpError); // missing id
+
+    // ── reorder: sets Order (raw-string preflight, no lossy parseInt); rejects non-int / non-positive / missing id ──
+    await ops.itemSetOrder(root, "ALPHA", "a-one", "3", O);
+    assert.equal(await field(BL("ALPHA"), "a-one", "Order"), "3");
+    await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "a-one", "0", O), ops.OpError); // zero
+    await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "a-one", "-1", O), ops.OpError); // negative
+    await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "a-one", "1.5", O), ops.OpError); // non-integer (parseInt would truncate to 1)
+    await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "a-one", "1abc", O), ops.OpError); // trailing junk (parseInt would yield 1)
+    await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "a-one", "1e2", O), ops.OpError); // exponent literal
+    await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "nope", "1", O), ops.OpError); // missing id
+
     // ── close refusals: planless done; dropped without reason ──
     await assert.rejects(() => ops.itemClose(root, "ALPHA", "untriaged-x", { status: "done", closedDate: "2026-06-22", ...O }), ops.OpError);
     await assert.rejects(() => ops.dropItem(root, "ALPHA", "untriaged-x", { reason: "", ...O }), ops.OpError);
@@ -97,6 +113,21 @@ async function main() {
     // good harvest applies all
     await ops.harvest(root, "ALPHA", [{ id: "fresh-1", title: "F1" }, { id: "fresh-2", title: "F2" }], O);
     assert.ok((await ids(BL("ALPHA"))).includes("fresh-1") && (await ids(BL("ALPHA"))).includes("fresh-2"));
+
+    // ── add: Order is a positive-int-string (shared assertOrder); malformed rejected; note forwarded ──
+    await ops.itemAdd(root, { task: "ALPHA" }, { id: "a-ord", title: "Ord", order: "2", note: "hi" }, O);
+    assert.equal(await field(BL("ALPHA"), "a-ord", "Order"), "2");
+    assert.equal(await field(BL("ALPHA"), "a-ord", "Note"), "hi");
+    await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "a-b1", title: "X", order: "1.5" }, O), ops.OpError); // lossy non-integer
+    await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "a-b2", title: "X", order: "0" }, O), ops.OpError); // non-positive
+
+    // ── harvest: a malformed deferred Order aborts the WHOLE harvest before any write (all-or-nothing) ──
+    const beforeOrd = await ids(BL("ALPHA"));
+    await assert.rejects(
+      () => ops.harvest(root, "ALPHA", [{ id: "ok-ord", title: "OK" }, { id: "bad-ord", title: "Bad", order: "1.5" }], O),
+      ops.OpError,
+    );
+    assert.deepEqual(await ids(BL("ALPHA")), beforeOrd, "no deferred item written when one has a malformed Order");
 
     // ── completePlanFromRetro: all-or-nothing on a bad item id (no plan-status flip, no close) ──
     await assert.rejects(

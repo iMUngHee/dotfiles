@@ -35,11 +35,11 @@ export function section(md: string, heading: string): string {
   for (let i = start + 1; i < lines.length; i++) { if (/^##\s/.test(lines[i])) break; body.push(lines[i]); }
   return body.join("\n").trim();
 }
-export interface PlanInfo { path: string; status: string; goal: string; nextStep: string | null; }
+export interface PlanInfo { path: string; status: string; goal: string; nextStep: string | null; postImplNotes: string; }
 export function planInfo(path: string, md: string): PlanInfo {
   const goal = section(md, "Goal").split(/\n\s*\n/)[0]?.trim() ?? "";
   const next = section(md, "Implementation Steps").split("\n").find((l) => /^-\s+\[ \]/.test(l.trim()));
-  return { path, status: frontmatterField(md, "status"), goal, nextStep: next ? next.trim().replace(/^-\s+\[ \]\s*/, "") : null };
+  return { path, status: frontmatterField(md, "status"), goal, nextStep: next ? next.trim().replace(/^-\s+\[ \]\s*/, "") : null, postImplNotes: postImplNotes(md) };
 }
 export function postImplNotes(md: string): string {
   return section(md, "Post-Implementation Notes").replace(/<!--[\s\S]*?-->/g, "").trim();
@@ -90,17 +90,17 @@ export async function nextCandidates(root: string): Promise<{ eligible: Candidat
 export interface SiblingNote { id: string; notes: string; }
 export interface ItemView {
   key: string; id: string; title: string; priority: string; note: string; status: string; closed: boolean;
-  plan: PlanInfo | null; links: Block[]; memory: Block[]; siblings: SiblingNote[];
+  plan: PlanInfo | null; links: Block[]; memory: Block[]; siblings: SiblingNote[]; siblingsTotal: number;
 }
 
 function closedDateOf(b: Block): string { return getField(b, "Closed") ?? ""; }
 
 // Recent same-task done siblings (by Closed date desc, capped) → their plan Post-Impl notes.
 export async function doneSiblings(root: string, key: string, excludeId: string, cap = DEFAULT_INHERIT_CAP): Promise<SiblingNote[]> {
-  const closed = (await blocksOf(taskFile(root, key, "closed.md")))
+  const sorted = (await blocksOf(taskFile(root, key, "closed.md")))
     .filter((b) => b.id !== excludeId && getField(b, "Status") === "done" && getField(b, "Plan") && getField(b, "Plan") !== "-")
-    .sort((a, b) => closedDateOf(b).localeCompare(closedDateOf(a)))
-    .slice(0, cap);
+    .sort((a, b) => closedDateOf(b).localeCompare(closedDateOf(a)));
+  const closed = cap > 0 ? sorted.slice(0, cap) : sorted; // cap<=0 ⇒ unlimited
   const out: SiblingNote[] = [];
   for (const b of closed) {
     const md = await read(pathJoin(root, getField(b, "Plan")!));
@@ -117,6 +117,7 @@ export async function resolveItem(root: string, key: string, id: string, cap = D
   const planRel = getField(b, "Plan");
   let plan: PlanInfo | null = null;
   if (planRel && planRel !== "-") { const md = await read(pathJoin(root, planRel)); if (md) plan = planInfo(planRel, md); }
+  const allSiblings = await doneSiblings(root, key, id, 0); // 0 ⇒ unlimited; slice locally so siblingsTotal is exact
   return {
     key, id, title: b.title,
     priority: getField(b, "Priority") ?? "P2",
@@ -126,7 +127,8 @@ export async function resolveItem(root: string, key: string, id: string, cap = D
     plan,
     links: await blocksOf(taskFile(root, key, "links.md")),
     memory: await blocksOf(taskFile(root, key, "memory.md")),
-    siblings: await doneSiblings(root, key, id, cap),
+    siblings: cap > 0 ? allSiblings.slice(0, cap) : allSiblings,
+    siblingsTotal: allSiblings.length,
   };
 }
 

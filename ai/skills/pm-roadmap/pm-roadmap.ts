@@ -115,10 +115,12 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const id = pos[0], title = str(opts.title) ?? (pos.slice(1).join(" ") || id);
       const target = opts.inbox ? { inbox: true as const } : { task: str(opts.task)! };
       if (!opts.inbox && !str(opts.task)) return { out: "add needs --task <KEY> or --inbox", code: 1 };
-      await ops.itemAdd(root, target, { id, title, priority: str(opts.p), order: opts.o ? Number(str(opts.o)) : undefined });
+      await ops.itemAdd(root, target, { id, title, priority: str(opts.p), order: str(opts.o), note: str(opts.note) });
       return { out: `added ${id}`, code: 0 };
     }
     case "plan": { await ops.itemSetPlan(root, pos[0], pos[1], pos[2]); return { out: `linked ${pos[1]} → ${pos[2]}`, code: 0 }; }
+    case "reprioritize": { await ops.itemSetPriority(root, pos[0], pos[1], pos[2]); return { out: `reprioritized ${pos[1]} → ${pos[2]}`, code: 0 }; }
+    case "reorder": { await ops.itemSetOrder(root, pos[0], pos[1], pos[2]); return { out: `reordered ${pos[1]} → ${pos[2]}`, code: 0 }; }
     case "approve": { await ops.itemApprove(root, pos[0], pos[1]); return { out: `approved ${pos[1]}`, code: 0 }; }
     case "close": {
       const status = str(opts.status) ?? "done";
@@ -156,7 +158,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
         ? parseBlocks(section(s.content, "Deferred")).blocks.map((b) => ({
             id: b.id, title: b.title,
             priority: getField(b, "Priority") ?? undefined,
-            order: getField(b, "Order") ? Number(getField(b, "Order")) : undefined,
+            order: getField(b, "Order") ?? undefined, // raw string preserved; ops assertOrder validates (no lossy Number())
             note: getField(b, "Note") ?? undefined,
           }))
         : [];
@@ -200,7 +202,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: (await findTask(root, nc.focus)) ?? "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|approve|close|drop|triage|focus|memory|links|current-task|persist|complete>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|approve|close|drop|triage|focus|memory|links|current-task|persist|complete>`, code: cmd ? 1 : 0 };
   }
 }
 
