@@ -52,9 +52,9 @@ statusMessage = "codex active plan context"
 
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
-command = "$HOME/.config/codex/hooks/context-mode.sh userpromptsubmit"
+command = "$HOME/.config/codex/hooks/crux-hook.sh userpromptsubmit"
 timeout = 5
-statusMessage = "context-mode prompt capture"
+statusMessage = "crux prompt capture"
 
 [[hooks.PreToolUse]]
 
@@ -65,13 +65,13 @@ timeout = 5
 statusMessage = "codex file safety"
 
 [[hooks.PreToolUse]]
-matcher = "^(Bash|Read|Grep|WebFetch|Agent|mcp__context_mode__ctx_execute(_file)?)$"
+matcher = "^(Bash|Read|Grep|WebFetch|Agent|mcp__crux__ctx_execute(_file)?)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "$HOME/.config/codex/hooks/context-mode.sh pretooluse"
+command = "$HOME/.config/codex/hooks/crux-hook.sh pretooluse"
 timeout = 5
-statusMessage = "context-mode routing"
+statusMessage = "crux routing"
 
 [[hooks.PostToolUse]]
 matcher = "^(Write|Edit|apply_patch)$"
@@ -95,25 +95,25 @@ matcher = "^(Bash|Read|WebFetch|apply_patch|Write|Edit|Grep|Glob|TodoWrite|Agent
 
 [[hooks.PostToolUse.hooks]]
 type = "command"
-command = "$HOME/.config/codex/hooks/context-mode.sh posttooluse"
+command = "$HOME/.config/codex/hooks/crux-hook.sh posttooluse"
 timeout = 5
-statusMessage = "context-mode output capture"
+statusMessage = "crux output capture"
 
 [[hooks.PreCompact]]
 
 [[hooks.PreCompact.hooks]]
 type = "command"
-command = "$HOME/.config/codex/hooks/context-mode.sh precompact"
+command = "$HOME/.config/codex/hooks/crux-hook.sh precompact"
 timeout = 10
-statusMessage = "context-mode precompact"
+statusMessage = "crux precompact"
 
 [[hooks.SessionStart]]
 
 [[hooks.SessionStart.hooks]]
 type = "command"
-command = "$HOME/.config/codex/hooks/context-mode.sh sessionstart"
+command = "$HOME/.config/codex/hooks/crux-hook.sh sessionstart"
 timeout = 5
-statusMessage = "context-mode session start"
+statusMessage = "crux session start"
 
 [[hooks.Stop]]
 

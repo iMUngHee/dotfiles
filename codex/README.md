@@ -53,7 +53,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 - `[tui].status_line_use_colors`
 - `[tui].status_line`
 - `[tui].terminal_title`
-- Codex safety, context-mode, quality gate, and notification hooks
+- Codex safety, crux, quality gate, and notification hooks
 - `[notice].fast_default_opt_out`
 
 Everything else under `~/.codex/config.toml` is user/machine-managed and is preserved across bootstraps.
@@ -106,7 +106,7 @@ Codex hook blocks are enforced through `config.toml.template`.
 
 - `UserPromptSubmit` → `prompt-guard.sh` blocks high-confidence secrets before submission.
 - `UserPromptSubmit` → `inject-context.sh` injects `.agents/state/current.txt` when it points to a `draft` or `active` plan.
-- `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionStart` → `context-mode.sh` forwards supported Codex hook events to `context-mode-go`.
+- `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionStart` → `crux-hook.sh` forwards supported Codex hook events to `crux`.
 - `PreToolUse` → `protect-files.sh` blocks sensitive file and lockfile access.
 - `PostToolUse` → `post-edit-pipeline.sh` runs bounded format/check feedback after edits.
 - `PostToolUse` → `context-monitor.sh` emits context usage warnings when Codex supplies usage metrics.
