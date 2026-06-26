@@ -6,6 +6,8 @@ Subagents do NOT inherit CLAUDE.md/PERSONAL.md/DEVGUARD.md — they have only th
 
 Not for work doable in one response. Only when: fanning out 3+ independent items (parallel searches, per-file reviews); isolating heavy context (large-file reads for summary); or using a specialized agent (pre-commit-verifier, Explore).
 
+**Read-only investigation** → use the **Explore** agent (no Edit/Write tools). `general-purpose` and Codex (even with `--sandbox read-only`) have edited files despite explicit read-only instructions — if you must use them for research, run `git status` after and revert unrequested changes before trusting the result.
+
 ## Parallelize
 
 Only with 3+ independent failures in different subsystems, no shared state. Not when failures may be related or agents would edit the same files.
