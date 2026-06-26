@@ -14,6 +14,7 @@ Personal configuration files managed via `~/.config/` and synced with git.
 | `nvim/` | Neovim | `init.lua`, `lua/plugins/` |
 | `tmux/` | tmux | `tmux.conf`, `scripts/`, `status/` |
 | `zsh/` | Zsh | `.zshrc`, `custom/plugins/` |
+| `homebrew/` | [Homebrew Bundle](https://docs.brew.sh/Brew-Bundle-and-Brewfile) | `Brewfile`, `bootstrap.sh` (cross-platform packages + shell env; `OS.mac?`/`OS.linux?` guarded) |
 | `.ideavimrc` | IdeaVim (JetBrains) | Standalone file |
 
 ### AI assistant 3-tier layout
@@ -34,7 +35,7 @@ Personal configuration files managed via `~/.config/` and synced with git.
 
 ```bash
 git clone --recurse-submodules <repo> ~/.config
-~/.config/ai/scripts/bootstrap.sh   # deploys both Claude + Codex (Codex skipped if not installed)
+~/.config/bootstrap.sh   # installs packages (brew bundle + ghostty/claude-code + oh-my-zsh), then deploys Claude + Codex config
 ```
 
 For per-tool details: [`ai/`](ai/README.md), [`claude/`](claude/README.md), [`codex/`](codex/README.md).

@@ -11,8 +11,10 @@
 !claude/
 !ai/
 !codex/
+!homebrew/
 !.gitignore
 !README.md
+!bootstrap.sh
 
 # nvim
 nvim/.claude/
@@ -44,3 +46,8 @@ notifier/linux/agent-notifier-send
 
 # codex — site-local sensitive patterns (never committed)
 codex/scripts/sensitive-patterns.local
+
+# homebrew — track Brewfile + bootstrap.sh, not Brewfile.lock.json or dumps
+homebrew/*
+!homebrew/Brewfile
+!homebrew/bootstrap.sh
