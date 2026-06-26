@@ -1,0 +1,57 @@
+# ~/.config/homebrew/Brewfile — cross-platform (macOS + bazzite/Linuxbrew).
+# Apply: brew bundle --file ~/.config/homebrew/Brewfile
+# Ruby file: OS.mac?/OS.linux? guards run at load; brew bundle (6+) handles
+# cask/mas/flatpak natively, so one file covers both machines.
+
+tap "homebrew/bundle"
+
+# ── Shared CLI / TUI ─────────────────────────────────────────
+brew "bat"
+brew "eza"
+brew "fd"
+brew "fzf"
+brew "gh"
+brew "git-delta"
+brew "git-lfs"
+brew "git-filter-repo"
+brew "neovim"
+brew "tmux"
+brew "tree"
+brew "tree-sitter-cli"
+brew "wget"
+brew "yq"
+brew "zoxide"
+brew "fnm"
+brew "uv"
+brew "pipx"
+brew "rtk"      # token-saving CLI proxy (homebrew-core), used by hooks
+brew "ccusage"  # Claude Code usage CLI
+
+# ── Languages / runtimes / build ─────────────────────────────
+brew "luajit"   # neovim runtime dep, pinned explicitly
+brew "go"
+brew "rustup"
+brew "kotlin"
+brew "gradle"
+brew "pipenv"
+brew "python"   # versionless alias → always latest stable (python@3.14 now)
+
+# ── macOS only ───────────────────────────────────────────────
+if OS.mac?
+  brew "coreutils"        # GNU userland (native on bazzite)
+  brew "swift-format"
+  cask "ghostty"
+  cask "obsidian"
+  cask "claude-code@latest"
+  cask "codex"
+  cask "aldente"          # battery limiter — macOS only
+  cask "bettertouchtool"  # trackpad/gestures — macOS only
+end
+
+# ── bazzite (Linux) only ─────────────────────────────────────
+if OS.linux?
+  flatpak "md.obsidian.Obsidian"   # Flathub
+  brew    "codex"                  # Linuxbrew formula
+  # ghostty + claude-code are not brew-installable on Linux
+  # (AppImage/COPR, curl install.sh) — handled by the bootstrap script.
+end
