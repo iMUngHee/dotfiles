@@ -15,7 +15,6 @@
 - **Context monitor**: At 50% and 65% context usage, warnings are injected via PostToolUse hook. Heed the warnings — autocompact triggers at 70%.
 - **Post-compact context**: After compaction, git branch, recent commits, and modified files are automatically injected. Do not re-query basic git state after compact.
 - **Prompt guard**: User prompts are scanned for accidentally pasted secrets (API keys, tokens, private keys). If blocked, remove the secret and retry.
-- **Subagent trust reminder**: On subagent stop, a trust reminder is automatically injected. Do not duplicate the reminder manually.
 
 ## After Compaction
 

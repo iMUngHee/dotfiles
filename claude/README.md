@@ -103,7 +103,6 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format + type check (30s debounce) |
 | `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage (autocompact at 70%) |
 | `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files |
-| `subagent-stop-reminder.sh` | SubagentStop | Inject DEVGUARD subagent trust reminder |
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
 | `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
 | `context-mode-go hook *` | PreToolUse, PostToolUse, UserPromptSubmit, PreCompact, SessionStart | context-mode MCP integration (sandboxed output indexing/search) |
