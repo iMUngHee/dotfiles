@@ -16,11 +16,12 @@ export class OpError extends Error {}
 const PRIORITIES = new Set(["P0", "P1", "P2", "P3"]);
 const TASK_KEY = /^[A-Z0-9_-]+$/;
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const MODES = new Set(["solo", "collab"]);
 
 export interface ItemInput { id: string; title: string; priority?: string; order?: string; note?: string; plan?: string; }
 export interface Deferred { id: string; title: string; priority?: string; order?: string; note?: string; }
-export interface MemoryInput { title: string; note?: string; date?: string; }
-export interface LinkInput { label: string; url: string; triggers?: string; summary?: string; }
+export interface MemoryInput { title: string; note?: string; date?: string; by?: string; }
+export interface LinkInput { label: string; url: string; triggers?: string; summary?: string; by?: string; }
 
 const today = () => new Date().toISOString().slice(0, 10);
 const archiveDir = (root: string) => pathJoin(tasksDir(root), "archive");
@@ -131,16 +132,51 @@ async function assertActiveTask(root: string, key: string): Promise<void> {
   if (!(await exists(taskFile(root, key, "task.md")))) throw new OpError(`task '${key}' does not exist`);
 }
 
+// Collaboration mode (task.md `mode:`). Absence → solo (legacy task.md keeps working).
+async function taskModeOf(root: string, key: string): Promise<string> {
+  const meta = await loadTaskMeta(root, key);
+  return (meta && getFmField(meta.fields, "mode")) || "solo";
+}
+async function assertCollab(root: string, key: string): Promise<void> {
+  await assertActiveTask(root, key);
+  if ((await taskModeOf(root, key)) !== "collab") throw new OpError(`task '${key}' is solo; switch to collab first (pm task set-mode ${key} collab)`);
+}
+
 // ── transitions (impl: lock already held) ──
-async function _taskCreate(root: string, key: string, title: string, nowDate: string): Promise<void> {
+async function _taskCreate(root: string, key: string, title: string, nowDate: string, mode: string): Promise<void> {
   if (!TASK_KEY.test(key)) throw new OpError(`task key '${key}' violates ^[A-Z0-9_-]+$`);
+  if (!MODES.has(mode)) throw new OpError(`mode must be solo|collab (got '${mode}')`);
   if (await exists(taskFile(root, key, "task.md"))) throw new OpError(`task '${key}' already exists`);
   if (await exists(pathJoin(archiveDir(root), key))) throw new OpError(`task '${key}' exists in archive; restore it`);
   await mkdir(taskDir(root, key), { recursive: true });
-  const fm: [string, string][] = [["key", key], ["title", title], ["status", "active"], ["created", nowDate], ["updated", nowDate]];
+  // mode is always written going forward (absence stays solo only for pre-existing task.md).
+  const fm: [string, string][] = [["key", key], ["title", title], ["status", "active"], ["mode", mode], ["created", nowDate], ["updated", nowDate]];
   await writeCAS(taskFile(root, key, "task.md"), serializeFrontmatter(fm, `# ${key} — ${title}\n`), null);
   await writeBlocks(taskFile(root, key, "backlog.md"), `${key} — Backlog`, []);
   await writeBlocks(taskFile(root, key, "closed.md"), `${key} — Closed`, []);
+}
+
+// solo↔collab switch. solo→collab assigns the switcher (actor) as Owner to every backlog.md
+// item lacking one — across all statuses (open|draft|active), since the solo worker owned all
+// in-flight work. closed.md untouched; collab→solo keeps attribution fields (lossless).
+// All-or-nothing: the actor precondition is checked BEFORE any write.
+async function _taskSetMode(root: string, key: string, mode: string, actor: string, nowDate: string): Promise<void> {
+  if (!MODES.has(mode)) throw new OpError(`mode must be solo|collab (got '${mode}')`);
+  const meta = await loadTaskMeta(root, key);
+  if (!meta) throw new OpError(`task '${key}' does not exist`);
+  if (await exists(pathJoin(archiveDir(root), key))) throw new OpError(`task '${key}' is archived; restore it first`);
+  const cur = getFmField(meta.fields, "mode") || "solo";
+  if (mode === "collab" && cur !== "collab") {
+    if (!actor) throw new OpError(`collab switch requires an actor — set PM_ACTOR, pass --actor, run 'pm whoami <name>', or set git user.email`);
+    const f = await loadBlocks(taskFile(root, key, "backlog.md"));
+    for (const b of f.blocks) if (!(getField(b, "Owner") ?? "").trim()) setField(b, "Owner", actor);
+    setFm(meta.fields, "mode", mode);
+    await writeBlocks(taskFile(root, key, "backlog.md"), f.title || `${key} — Backlog`, f.blocks);
+    await writeTaskMeta(root, key, meta.fields, meta.body, nowDate);
+    return;
+  }
+  setFm(meta.fields, "mode", mode);
+  await writeTaskMeta(root, key, meta.fields, meta.body, nowDate);
 }
 
 async function _itemAdd(root: string, target: { task: string } | { inbox: true }, it: ItemInput, nowDate: string): Promise<void> {
@@ -193,6 +229,27 @@ async function _itemSetOrder(root: string, key: string, id: string, order: strin
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
 }
 
+// Owner attribution (collab only). owner === "-" unassigns (drops Owner + OwnerNote).
+// Double-claim guard: refuse overwriting a different existing owner unless force.
+async function _itemSetOwner(root: string, key: string, id: string, owner: string, opts: { note?: string; force?: boolean }): Promise<void> {
+  await assertCollab(root, key);
+  const f = await loadBlocks(taskFile(root, key, "backlog.md"));
+  const it = findItem(f.blocks, id);
+  if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
+  const cur = (getField(it, "Owner") ?? "").trim();
+  if (owner === "-") { // unassign — drop attribution fields
+    it.fields = it.fields.filter(([k]) => k.toLowerCase() !== "owner" && k.toLowerCase() !== "ownernote");
+    await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
+    return;
+  }
+  const next = owner.trim();
+  if (!next) throw new OpError("owner must be non-empty (or '-' to unassign)");
+  if (cur && cur !== next && !opts.force) throw new OpError(`item '${id}' already owned by '${cur}'; pass --force to reassign`);
+  setField(it, "Owner", next);
+  if (opts.note !== undefined) setField(it, "OwnerNote", opts.note);
+  await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
+}
+
 async function _itemSetStatus(root: string, key: string, id: string, status: string): Promise<void> {
   const f = await loadBlocks(taskFile(root, key, "backlog.md"));
   const it = findItem(f.blocks, id);
@@ -201,7 +258,7 @@ async function _itemSetStatus(root: string, key: string, id: string, status: str
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
 }
 
-async function _itemClose(root: string, key: string, id: string, o: { status: "done" | "dropped"; reason?: string; closedDate: string; plan?: string }): Promise<void> {
+async function _itemClose(root: string, key: string, id: string, o: { status: "done" | "dropped"; reason?: string; closedDate: string; plan?: string; closedBy?: string }): Promise<void> {
   if (o.status !== "done" && o.status !== "dropped") throw new OpError(`close status must be 'done' or 'dropped' (got '${o.status}')`);
   if (o.status === "dropped" && !o.reason) throw new OpError("drop requires a Reason");
   const bl = await loadBlocks(taskFile(root, key, "backlog.md"));
@@ -218,6 +275,7 @@ async function _itemClose(root: string, key: string, id: string, o: { status: "d
   if (o.reason) setField(cb, "Reason", o.reason);
   setField(cb, "Closed", o.closedDate);
   setField(cb, "ClosedSource", "op");
+  if (o.closedBy) setField(cb, "ClosedBy", o.closedBy); // collab attribution (CLI passes only on collab tasks)
   cl.blocks.unshift(cb); // newest first
   await writeBlocks(taskFile(root, key, "backlog.md"), bl.title, bl.blocks);
   await writeBlocks(taskFile(root, key, "closed.md"), cl.title, cl.blocks);
@@ -282,8 +340,22 @@ async function _setPlanStatus(root: string, planRel: string, status: string): Pr
 // ── public ops (each takes the lock; composites reuse one lock) ──
 type LockOpts = { nowMs?: number; staleMs?: number; retries?: number; retryMs?: number };
 
-export const taskCreate = (root: string, key: string, title: string, o: { nowDate?: string } & LockOpts = {}) =>
-  withLock(root, "taskCreate", () => _taskCreate(root, key, title, o.nowDate ?? today()), o);
+export const taskCreate = (root: string, key: string, title: string, o: { nowDate?: string; mode?: string } & LockOpts = {}) =>
+  withLock(root, "taskCreate", () => _taskCreate(root, key, title, o.nowDate ?? today(), o.mode ?? "solo"), o);
+
+export const taskSetMode = (root: string, key: string, mode: string, actor: string, o: { nowDate?: string } & LockOpts = {}) =>
+  withLock(root, "taskSetMode", () => _taskSetMode(root, key, mode, actor, o.nowDate ?? today()), o);
+
+// collaborators roster (task.md `collaborators:`), a normalized comma list. Empty csv clears it.
+async function _taskSetCollaborators(root: string, key: string, csv: string, nowDate: string): Promise<void> {
+  const meta = await loadTaskMeta(root, key);
+  if (!meta) throw new OpError(`task '${key}' does not exist`);
+  if (await exists(pathJoin(archiveDir(root), key))) throw new OpError(`task '${key}' is archived; restore it first`);
+  setFm(meta.fields, "collaborators", csv.split(",").map((s) => s.trim()).filter(Boolean).join(", "));
+  await writeTaskMeta(root, key, meta.fields, meta.body, nowDate);
+}
+export const taskSetCollaborators = (root: string, key: string, csv: string, o: { nowDate?: string } & LockOpts = {}) =>
+  withLock(root, "taskSetCollaborators", () => _taskSetCollaborators(root, key, csv, o.nowDate ?? today()), o);
 
 export const taskDone = (root: string, key: string, o: { nowDate?: string } & LockOpts = {}) =>
   withLock(root, "taskDone", async () => {
@@ -316,6 +388,9 @@ export const taskRestore = (root: string, key: string, o: { nowDate?: string } &
 export const itemAdd = (root: string, target: { task: string } | { inbox: true }, it: ItemInput, o: { nowDate?: string } & LockOpts = {}) =>
   withLock(root, "itemAdd", () => _itemAdd(root, target, it, o.nowDate ?? today()), o);
 
+export const itemSetOwner = (root: string, key: string, id: string, owner: string, o: { note?: string; force?: boolean } & LockOpts = {}) =>
+  withLock(root, "itemSetOwner", () => _itemSetOwner(root, key, id, owner, { note: o.note, force: o.force }), o);
+
 export const itemApprove = (root: string, key: string, id: string, o: LockOpts = {}) =>
   withLock(root, "itemApprove", () => _itemSetStatus(root, key, id, "active"), o);
 
@@ -328,11 +403,11 @@ export const itemSetPriority = (root: string, key: string, id: string, priority:
 export const itemSetOrder = (root: string, key: string, id: string, order: string, o: LockOpts = {}) =>
   withLock(root, "itemSetOrder", () => _itemSetOrder(root, key, id, order), o);
 
-export const itemClose = (root: string, key: string, id: string, opt: { status: "done" | "dropped"; reason?: string; closedDate?: string; plan?: string } & LockOpts) =>
-  withLock(root, "itemClose", () => _itemClose(root, key, id, { status: opt.status, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.plan }), opt);
+export const itemClose = (root: string, key: string, id: string, opt: { status: "done" | "dropped"; reason?: string; closedDate?: string; plan?: string; closedBy?: string } & LockOpts) =>
+  withLock(root, "itemClose", () => _itemClose(root, key, id, { status: opt.status, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.plan, closedBy: opt.closedBy }), opt);
 
-export const dropItem = (root: string, key: string, id: string, opt: { reason: string } & LockOpts) =>
-  withLock(root, "dropItem", () => _itemClose(root, key, id, { status: "dropped", reason: opt.reason, closedDate: today() }), opt);
+export const dropItem = (root: string, key: string, id: string, opt: { reason: string; closedBy?: string } & LockOpts) =>
+  withLock(root, "dropItem", () => _itemClose(root, key, id, { status: "dropped", reason: opt.reason, closedDate: today(), closedBy: opt.closedBy }), opt);
 
 export const harvest = (root: string, key: string, deferred: Deferred[], o: { nowDate?: string } & LockOpts = {}) =>
   withLock(root, "harvest", async () => { await _harvestPreflight(root, deferred); await _harvestApply(root, key, deferred, o.nowDate ?? today()); }, o);
@@ -358,7 +433,7 @@ export const completePlanFromRetro = (
   root: string,
   key: string,
   id: string,
-  opt: { planPath: string; terminalStatus: "done" | "dropped"; reason?: string; deferred?: Deferred[]; closedDate?: string; nowDate?: string } & LockOpts,
+  opt: { planPath: string; terminalStatus: "done" | "dropped"; reason?: string; deferred?: Deferred[]; closedDate?: string; nowDate?: string; closedBy?: string } & LockOpts,
 ) => withLock(root, "completePlanFromRetro", async () => {
   const deferred = opt.deferred ?? [];
   // preconditions — EVERY check BEFORE any write, so the transaction is all-or-nothing.
@@ -372,7 +447,7 @@ export const completePlanFromRetro = (
   if (!(await exists(pathJoin(root, opt.planPath)))) throw new OpError(`plan not found: ${opt.planPath}`);
   // writes
   await _setPlanStatus(root, opt.planPath, opt.terminalStatus);
-  await _itemClose(root, key, id, { status: opt.terminalStatus, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.planPath });
+  await _itemClose(root, key, id, { status: opt.terminalStatus, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.planPath, closedBy: opt.closedBy });
   if (deferred.length) await _harvestApply(root, key, deferred, opt.nowDate ?? today());
   await clearCurrentIfNames(root, opt.planPath);
 }, opt);
@@ -392,6 +467,7 @@ async function _addTaskLink(root: string, key: string, l: LinkInput): Promise<vo
   setField(b, "URL", l.url);
   setField(b, "Triggers", l.triggers ?? "");
   setField(b, "Summary", l.summary ?? "");
+  if (l.by) setField(b, "By", l.by); // collab publisher (CLI stamps only on collab tasks)
   await writeBlocks(taskFile(root, key, "links.md"), f.title || `${key} — Links`, f.blocks);
 }
 
@@ -416,6 +492,7 @@ async function _addTaskMemory(root: string, key: string, m: MemoryInput, nowDate
   if (!b) { b = { id: title, title: "", fields: [] }; f.blocks.push(b); }
   setField(b, "Note", m.note ?? "");
   setField(b, "Date", m.date ?? nowDate);
+  if (m.by) setField(b, "By", m.by); // collab publisher (CLI stamps only on collab tasks)
   await writeBlocks(taskFile(root, key, "memory.md"), f.title || `${key} — Memory`, f.blocks);
 }
 

@@ -92,8 +92,23 @@ export async function handle(root: string, method: string, pathname: string, par
       return { status: 200, json: { key, links, memory } };
     }
     if (method === "PUT") {
-      const linkBlocks: Block[] = (body?.links ?? []).map((l: any) => ({ id: (l.label ?? "").trim(), title: "", fields: [["URL", (l.url ?? "").trim()], ["Triggers", Array.isArray(l.triggers) ? l.triggers.join(", ") : ""], ["Summary", (l.summary ?? "").trim()]] }));
-      const memBlocks: Block[] = (body?.memory ?? []).filter((m: any) => (m.title ?? "").trim()).map((m: any) => ({ id: m.title.trim(), title: "", fields: m.date ? [["Note", (m.note ?? "").trim()], ["Date", m.date]] : [["Note", (m.note ?? "").trim()]] }));
+      // Preserve collab `By` attribution: the GUI doesn't author By, so re-attach it by id from
+      // the on-disk blocks — otherwise a full-state PUT would erase every By field (data loss).
+      const curLinks = await blocksOf(taskFile(root, key, "links.md"));
+      const curMem = await blocksOf(taskFile(root, key, "memory.md"));
+      const byOf = (blocks: Block[], id: string): string | null => { const b = blocks.find((x) => x.id.toLowerCase() === id.toLowerCase()); return b ? getField(b, "By") : null; };
+      const linkBlocks: Block[] = (body?.links ?? []).map((l: any) => {
+        const id = (l.label ?? "").trim();
+        const fields: [string, string][] = [["URL", (l.url ?? "").trim()], ["Triggers", Array.isArray(l.triggers) ? l.triggers.join(", ") : ""], ["Summary", (l.summary ?? "").trim()]];
+        const by = byOf(curLinks, id); if (by) fields.push(["By", by]);
+        return { id, title: "", fields };
+      });
+      const memBlocks: Block[] = (body?.memory ?? []).filter((m: any) => (m.title ?? "").trim()).map((m: any) => {
+        const id = m.title.trim();
+        const fields: [string, string][] = m.date ? [["Note", (m.note ?? "").trim()], ["Date", m.date]] : [["Note", (m.note ?? "").trim()]];
+        const by = byOf(curMem, id); if (by) fields.push(["By", by]);
+        return { id, title: "", fields };
+      });
       try {
         if (!(await exists(taskFile(root, key, "task.md")))) await ops.taskCreate(root, key, key);
         await ops.updateTaskLinks(root, key, linkBlocks);

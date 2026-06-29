@@ -13,6 +13,7 @@ const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const BACKLOG_STATUS = new Set(["open", "draft", "active"]);
 const CLOSED_STATUS = new Set(["done", "dropped"]);
 const TASK_STATUS = new Set(["active", "done", "archived"]);
+const TASK_MODE = new Set(["solo", "collab"]);
 
 async function exists(p: string): Promise<boolean> { return stat(p).then(() => true).catch(() => false); }
 async function blocksOf(path: string): Promise<Block[]> { const s = await readStamped(path); return s ? parseBlocks(s.content).blocks : []; }
@@ -36,10 +37,18 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
   const noteId = (key: string, sec: string, id: string) => `${key}/${sec}/${id}`;
 
   const scan = async (key: string, dir: string, active: boolean) => {
+    let taskModeVal = "solo";
+    let roster: string[] = [];
     const meta = await readStamped(pathJoin(dir, key, "task.md"));
     if (meta) {
-      const st = getFmField(parseFrontmatter(meta.content).fields, "status") ?? "";
+      const fm = parseFrontmatter(meta.content).fields;
+      const st = getFmField(fm, "status") ?? "";
       if (!TASK_STATUS.has(st)) err("C11", key, `task.md status '${st}' invalid (active|done|archived)`);
+      // C12 — mode, if present, must be solo|collab (absence → solo, allowed)
+      const mode = getFmField(fm, "mode");
+      if (mode !== null && !TASK_MODE.has(mode)) err("C12", key, `task.md mode '${mode}' invalid (solo|collab)`);
+      taskModeVal = mode || "solo";
+      roster = (getFmField(fm, "collaborators") || "").split(",").map((s) => s.trim()).filter(Boolean);
     }
     for (const sec of ["backlog", "closed"] as const) {
       const blocks = await blocksOf(pathJoin(dir, key, `${sec}.md`));
@@ -64,6 +73,11 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
               const ps = getFmField(parseFrontmatter(pm.content).fields, "status") ?? "";
               if (ps !== status) err("C4", b.id, `status '${status}' ≠ plan status '${ps}' (mirror)`);
             }
+          }
+          // C13 — collab task: an assigned Owner should be in a non-empty roster (warn; empty roster = opt-out)
+          if (active && taskModeVal === "collab" && roster.length) {
+            const owner = (getField(b, "Owner") ?? "").trim();
+            if (owner && !roster.includes(owner)) warn("C13", b.id, `owner '${owner}' not in ${key} collaborators roster`);
           }
           // C10 — duplicate Order within a task (warn)
         } else {

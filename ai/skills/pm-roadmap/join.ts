@@ -23,6 +23,18 @@ export async function listActiveTasks(root: string): Promise<string[]> {
   return ents.filter((e) => e.isDirectory() && e.name !== "archive").map((e) => e.name).sort();
 }
 
+// Collaboration mode from task.md `mode:`. Absence → solo (legacy task.md keeps working).
+export async function taskMode(root: string, key: string): Promise<string> {
+  const md = await read(taskFile(root, key, "task.md"));
+  return (md && frontmatterField(md, "mode")) || "solo";
+}
+// collaborators roster from task.md `collaborators:` (comma list; empty when unset).
+export async function taskCollaborators(root: string, key: string): Promise<string[]> {
+  const md = await read(taskFile(root, key, "task.md"));
+  const raw = md ? frontmatterField(md, "collaborators") : "";
+  return raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+}
+
 // ── plan-file parsing (plans/*.md keep the design/Goal/Steps/Post-Impl format) ──
 export function frontmatterField(md: string, field: string): string {
   return getFmField(parseFrontmatter(md).fields, field) ?? "";
@@ -46,9 +58,10 @@ export function postImplNotes(md: string): string {
 }
 
 // ── next candidates ──
-export interface Candidate { key: string; id: string; title: string; priority: string; order: number; plan: string | null; note: string; status: string; blockedBy?: string; }
+// owner/ownerNote/mode are additive (collab attribution); solo items carry empty owner + mode "solo".
+export interface Candidate { key: string; id: string; title: string; priority: string; order: number; plan: string | null; note: string; status: string; owner: string; ownerNote: string; mode: string; blockedBy?: string; }
 
-function toCandidate(key: string, b: Block): Candidate {
+function toCandidate(key: string, b: Block, mode: string): Candidate {
   const plan = getField(b, "Plan");
   const orderRaw = getField(b, "Order");
   return {
@@ -58,6 +71,9 @@ function toCandidate(key: string, b: Block): Candidate {
     plan: plan && plan !== "-" ? plan : null,
     note: getField(b, "Note") ?? "",
     status: getField(b, "Status") ?? "open",
+    owner: getField(b, "Owner") ?? "",
+    ownerNote: getField(b, "OwnerNote") ?? "",
+    mode,
   };
 }
 
@@ -73,7 +89,8 @@ function candidateSort(a: Candidate, b: Candidate): number {
 export async function nextCandidates(root: string): Promise<{ eligible: Candidate[]; blocked: Candidate[]; focus: string | null; inbox: number }> {
   const all: Candidate[] = [];
   for (const key of await listActiveTasks(root)) {
-    for (const b of await blocksOf(taskFile(root, key, "backlog.md"))) all.push(toCandidate(key, b));
+    const mode = await taskMode(root, key); // one read per task; attached to its candidates
+    for (const b of await blocksOf(taskFile(root, key, "backlog.md"))) all.push(toCandidate(key, b, mode));
   }
   const eligible: Candidate[] = [], blocked: Candidate[] = [];
   for (const c of all) {
@@ -90,6 +107,7 @@ export async function nextCandidates(root: string): Promise<{ eligible: Candidat
 export interface SiblingNote { id: string; notes: string; }
 export interface ItemView {
   key: string; id: string; title: string; priority: string; note: string; status: string; closed: boolean;
+  owner: string; ownerNote: string; mode: string;
   plan: PlanInfo | null; links: Block[]; memory: Block[]; siblings: SiblingNote[]; siblingsTotal: number;
 }
 
@@ -124,6 +142,9 @@ export async function resolveItem(root: string, key: string, id: string, cap = D
     note: getField(b, "Note") ?? "",
     status: getField(b, "Status") ?? (closed ? "done" : "open"),
     closed,
+    owner: getField(b, "Owner") ?? "",
+    ownerNote: getField(b, "OwnerNote") ?? "",
+    mode: await taskMode(root, key),
     plan,
     links: await blocksOf(taskFile(root, key, "links.md")),
     memory: await blocksOf(taskFile(root, key, "memory.md")),
@@ -149,14 +170,30 @@ export async function recentClosed(root: string, limit = 20): Promise<ClosedRow[
   return rows.slice(0, limit);
 }
 
+// ── collab cross-task views (collab tasks only) ──
+// `mine`: open items owned by `actor`. `who`: per-owner board (unassigned grouped under "(unassigned)").
+export async function myItems(root: string, actor: string): Promise<Candidate[]> {
+  const nc = await nextCandidates(root);
+  return [...nc.eligible, ...nc.blocked].filter((c) => c.mode === "collab" && c.owner === actor).sort(candidateSort);
+}
+export interface BoardEntry { owner: string; items: Candidate[]; }
+export async function boardByOwner(root: string): Promise<BoardEntry[]> {
+  const nc = await nextCandidates(root);
+  const all = [...nc.eligible, ...nc.blocked].filter((c) => c.mode === "collab");
+  const map = new Map<string, Candidate[]>();
+  for (const c of all) { const k = c.owner || "(unassigned)"; map.set(k, [...(map.get(k) ?? []), c]); }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([owner, items]) => ({ owner, items: items.sort(candidateSort) }));
+}
+
 // ── kickoff prompt ──
 export function buildNextPrompt(v: ItemView, inbox = 0): string {
   const L: string[] = [];
   L.push(`# Next: ${v.id} — ${v.title}  (${v.priority})`, "");
-  L.push("## What", v.note || v.title, "", `> task: ${v.key}`, "");
+  const ownerLine = v.mode === "collab" ? ` · owner: ${v.owner || "(unassigned)"}${v.ownerNote ? ` — ${v.ownerNote}` : ""}` : "";
+  L.push("## What", v.note || v.title, "", `> task: ${v.key}${ownerLine}`, "");
   if (v.memory.length) {
     L.push("## Task memory (decisions / things to remember)");
-    for (const m of v.memory) { const note = getField(m, "Note"); L.push(`- ${m.title}${note ? `: ${note}` : ""}`); }
+    for (const m of v.memory) { const note = getField(m, "Note"); const by = getField(m, "By"); L.push(`- ${m.title}${note ? `: ${note}` : ""}${by ? ` _(by ${by})_` : ""}`); }
     L.push("");
   }
   if (v.siblings.length) {
@@ -165,7 +202,7 @@ export function buildNextPrompt(v: ItemView, inbox = 0): string {
     L.push("");
   }
   L.push(`## External refs (${v.key} links)`);
-  if (v.links.length) for (const l of v.links) { const url = getField(l, "URL") ?? ""; const sum = getField(l, "Summary") ?? ""; L.push(`- ${l.title || l.id}: ${url}${sum ? ` — ${sum}` : ""}`); }
+  if (v.links.length) for (const l of v.links) { const url = getField(l, "URL") ?? ""; const sum = getField(l, "Summary") ?? ""; const by = getField(l, "By"); L.push(`- ${l.title || l.id}: ${url}${sum ? ` — ${sum}` : ""}${by ? ` _(by ${by})_` : ""}`); }
   else L.push(`- (none yet)`);
   L.push("", "## Prior plan state");
   if (v.plan) L.push(`- ${v.plan.path} (${v.plan.status})${v.plan.nextStep ? ` → next step: ${v.plan.nextStep}` : ""}`);

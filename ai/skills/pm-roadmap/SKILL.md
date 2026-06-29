@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add/close/focus a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | recent | validate | migrate [--apply] | task <create|done|archive|restore> <KEY> | add <id> <title> (--task KEY | --inbox) [-p P0..P3] [-o N] [--note T] | plan <KEY> <id> <path> | reprioritize <KEY> <id> <P0..P3> | reorder <KEY> <id> <N> | approve <KEY> <id> | close <KEY> <id> --status done|dropped [--reason R] | drop <KEY> <id> --reason R | triage <id> <KEY> | focus <id>|--clear | memory <KEY> add <title> [--note T] [--date YYYY-MM-DD] | links <KEY> add <label> --url U [--triggers C] [--summary S] | links <KEY> remove <match> | current-task | manage"
+argument-hint: "list [--owner X] [--all] | tree | get <id> | next [id] [--owner X] [--all] | recent | validate | migrate [--apply] | task <create [--mode collab]|done|archive|restore|set-mode <solo|collab>|collaborators <csv>> <KEY> | add <id> <title> (--task KEY | --inbox) [-p P0..P3] [-o N] [--note T] | assign <KEY> <id> <owner|-> [--note T] [--force] | claim <KEY> <id> [--note T] [--force] | whoami [<name>] | mine | who | plan <KEY> <id> <path> | reprioritize <KEY> <id> <P0..P3> | reorder <KEY> <id> <N> | approve <KEY> <id> | close <KEY> <id> --status done|dropped [--reason R] | drop <KEY> <id> --reason R | triage <id> <KEY> | focus <id>|--clear | memory <KEY> add <title> [--note T] [--date YYYY-MM-DD] [--by W] | links <KEY> add <label> --url U [--triggers C] [--summary S] [--by W] | links <KEY> remove <match> | current-task | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -44,10 +44,13 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
 
 - **task.md**: `status: active | done | archived`. `done` when all items closed; auto-reopens
   to `active` when a new item is added. `archived` = torn down (dir moved to `archive/`).
+  `mode: solo | collab` (absence → solo; **always written** on create) + optional
+  `collaborators:` (comma roster) — see Collaboration mode.
 - **backlog item** (`backlog.md`, block grammar `- **id**` + `Key: Value`): `Priority`,
-  `Status` (open|draft|active), `Order` (per-task sequence), `Plan`, `Note`.
+  `Status` (open|draft|active), `Order` (per-task sequence), `Plan`, `Note`, and (collab only)
+  `Owner` + `OwnerNote`.
 - **closed item** (`closed.md`): `Status` (done|dropped), `Plan`, `Reason` (required for
-  dropped), `Closed` (date), `ClosedSource`. **Unbounded — never trimmed.**
+  dropped), `Closed` (date), `ClosedSource`, and (collab only) `ClosedBy`. **Unbounded — never trimmed.**
 - **id**: globally unique across all tasks' backlog+closed, **never reused** (closed ids stay
   reserved, incl. archived tasks), aligned 1:1 with the plan slug. Kebab-case.
 - **Plan**: 1:1 — at most one item (backlog or closed, any task) per plan path.
@@ -70,17 +73,20 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
 
 ## Subcommands
 
-- **list** / **tree** — eligible next candidates (sorted `priority, taskKey, order, id`) + blocked + inbox count / per-task backlog.
+- **list** / **tree** — eligible next candidates (sorted `priority, taskKey, order, id`) + blocked + inbox count / per-task backlog. In collab tasks both show an `@owner` / `(unassigned)` badge (tree also marks `[collab]`); **list** default-filters collab items to *me + unassigned* (`--owner X` to filter by another, `--all` to show everything; solo items always shown).
 - **get `<id>`** — an item's join view (plan goal + next step, task links + memory, recent done-sibling notes, note).
-- **next `[id]`** — paste-ready kickoff prompt. Target: explicit id, else focus, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). After emitting, ask whether to run it **here** (no copy — proceed into `/design <id>`, or resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
+- **next `[id]` `[--owner X]` `[--all]`** — paste-ready kickoff prompt. Target: explicit id, else focus, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). The candidate-list path applies the same collab default filter as `list` (me + unassigned; `--owner`/`--all` override); an explicit id/focus bypasses the filter. The prompt surfaces item owner + handoff note and memory/link `By` for collab tasks. After emitting, ask whether to run it **here** (no copy — proceed into `/design <id>`, or resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
 - **recent** — derived recent-closed view (all `closed.md` merged by date, capped).
-- **validate** — full-scan invariant check (C1..C11; see below). Exit 1 on errors. `/retro` runs it after its sink.
+- **validate** — full-scan invariant check (C1..C13; see below). Exit 1 on errors. `/retro` runs it after its sink.
 - **migrate `[--apply]`** — convert a legacy repo's `.agents/` to the task-first model. Default dry-run (prints the mapping). `--apply` after review. See Migration.
-- **task `create|done|archive|restore` `<KEY>`** — task lifecycle. `archive` refuses if open items remain; `restore` re-activates an archived task.
+- **task `create|done|archive|restore|set-mode|collaborators` `<KEY>`** — task lifecycle. `archive` refuses if open items remain; `restore` re-activates an archived task. `create [--mode collab]` records mode (default solo, **always written** going forward). `set-mode <solo|collab>` switches a task either way — solo→collab assigns the switcher (resolved actor) as Owner to **every** un-owned `backlog.md` item (open|draft|active) and **requires** a resolvable actor; collab→solo keeps attribution fields (lossless). `collaborators <csv>` sets the roster (empty clears).
 - **add `<id> <title>` (`--task KEY` | `--inbox`) [-p] [-o] [--note]** — append a workable unit (or an untriaged inbox item). `-o` takes a positive-integer order; `--note` attaches a note.
+- **assign `<KEY> <id> <owner|->` [`--note T`] [`--force`]** / **claim `<KEY> <id>` [`--note T`] [`--force`]** — set an item's `Owner` (collab tasks only; refuses solo). `assign` takes an explicit owner (`-` unassigns, dropping `Owner`+`OwnerNote`); `claim` self-assigns the resolved actor. `--note` records a handoff reason (`OwnerNote`). **Double-claim guard**: overwriting a different existing owner needs `--force`.
+- **whoami `[<name>]`** — no arg prints the resolved actor + its source; `<name>` writes `state/actor.txt` (worktree-local identity).
+- **mine** / **who** — collab cross-task views: `mine` = open items owned by the resolved actor; `who` = per-owner board (unassigned grouped).
 - **plan / reprioritize / reorder / approve / close / drop / triage / focus** — item transitions (normally driven by /design + /retro; manual is the escape hatch). `reprioritize <KEY> <id> <P0..P3>` and `reorder <KEY> <id> <N>` change an item's Priority/Order in place (N = positive integer). `triage <id> <KEY>` moves an inbox item to a task. `focus` rejects inbox items.
-- **memory `<KEY> add <title>` [`--note T`] [`--date D`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today.
-- **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI.
+- **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
+- **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
 - **current-task** — read-only: prints the KEY of the task owning the `focus` item (empty if no focus). pm-context's default-`KEY` resolver for `get`.
 - **manage** — open the dashboard GUI (see below).
 
@@ -96,7 +102,7 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
 
 ## Invariants (validate)
 
-Errors: **C1** id global-unique + kebab + no-reuse (scans active+inbox+archive) · **C2** Plan 1:1 global · **C3** in-flight plan (current.txt) linked by exactly one backlog item **unless `pm_loop:false`** · **C4** backlog item status mirrors plan · **C5** section membership · **C6** planless-only-open / planless-never-done · **C7** closed plan path exists · **C8** focus names a backlog item, not inbox · **C9** current.txt → draft|active plan. Warn: **C10** duplicate Order in a task. Never mutates — fix via ops.
+Errors: **C1** id global-unique + kebab + no-reuse (scans active+inbox+archive) · **C2** Plan 1:1 global · **C3** in-flight plan (current.txt) linked by exactly one backlog item **unless `pm_loop:false`** · **C4** backlog item status mirrors plan · **C5** section membership · **C6** planless-only-open / planless-never-done · **C7** closed plan path exists · **C8** focus names a backlog item, not inbox · **C9** current.txt → draft|active plan · **C11** task.md status ∈ active|done|archived · **C12** task.md mode (if present) ∈ solo|collab. Warn: **C10** duplicate Order in a task · **C13** collab item Owner ∉ a non-empty `collaborators` roster (empty roster = opt-out). Never mutates — fix via ops.
 
 ## Plan archiving
 
@@ -124,6 +130,36 @@ TASK_CONTEXT_ROOT="$repo_root" ./node_modules/.bin/tsx server.ts   # run_in_back
 Then open `http://localhost:8484`. The dashboard derives its view from `tasks/*`; all its
 writes route through ops (planless drop, task links/memory edit, delete=archive). A
 task-centric UI redesign is tracked separately (backlog `pm-dashboard-task-centric`).
+
+## Collaboration mode
+
+A task runs **solo** (default, single actor — zero attribution) or **collab** (multiple distinct
+*people* sharing one task). Mode lives in `task.md` `mode:`; absence reads as solo so legacy
+task.md keeps working, and `create` always writes it going forward. `set-mode` switches either
+way (solo→collab assigns the switcher as Owner to every un-owned backlog item; collab→solo keeps
+fields, lossless).
+
+**Identity.** Attribution resolves a person, precedence most-specific first:
+`--actor/--by flag > PM_ACTOR env > state/actor.txt (pm whoami) > git config user.email`. A collab
+operation that *requires* identity (claim, set-mode→collab, By/ClosedBy stamping) **stops with an
+error** when nothing resolves — it never writes an anonymous record. Identity is resolved by the
+**CLI only**; `ops.ts` stays pure (it receives a string), and `join.ts` never sees identity.
+
+**Attribution (collab tasks only).** `Owner`/`OwnerNote` on backlog items (via `assign`/`claim`,
+double-claim-guarded); `By` on memory/links (stamped from the actor — solo tasks get none, so
+retro/pm-context need no change, they get attribution for free via the CLI); `ClosedBy` on
+close/drop/retro-complete. The GUI doesn't author `By` but **preserves** it on save.
+
+**Gate asymmetry (intentional, not a bug).** `assign`/`claim` are collab-specific → they *error*
+on a solo task. memory/links/close are general-purpose → on a solo task they simply *skip*
+attribution (no error), since retro/pm-context call them on solo tasks too.
+
+**Views.** `list`/`tree` badge `@owner`/`(unassigned)`; `list`/`next` default-filter collab items
+to *me + unassigned* (`--owner`/`--all` override); `mine` = my open items, `who` = per-owner board.
+A non-empty `collaborators` roster turns on a C13 typo-guard warning (owner ∉ roster).
+
+**Assumption.** Each person works in their own checkout/worktree, so `state/{current,focus,actor}.txt`
+are per-person; two people sharing one checkout would collide on those worktree-local pointers.
 
 ## Worktrees
 

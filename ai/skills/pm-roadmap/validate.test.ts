@@ -79,6 +79,20 @@ async function main() {
     await writeFile(taskFile(root, "A", "backlog.md"), `# A — Backlog\n\n- **a-1** — x\n  - Priority: P2\n  - Status: open\n  - Order: 1\n  - Plan: -\n  - Note: \n- **a-2** — y\n  - Priority: P2\n  - Status: open\n  - Order: 1\n  - Plan: -\n  - Note: \n`);
     assert.ok((await validateRoadmap(root)).warns.some((w) => w.check === "C10"), "C10 dup order warn");
 
+    // ── C12: invalid task.md mode (absence/solo/collab allowed) ──
+    await ops.taskCreate(root, "M", "M", O);
+    await writeFile(taskFile(root, "M", "task.md"), `---\nkey: M\ntitle: M\nstatus: active\nmode: bogus\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n# M\n`);
+    assert.ok(has(await validateRoadmap(root), "C12"), "C12 bad mode");
+    await writeFile(taskFile(root, "M", "task.md"), `---\nkey: M\ntitle: M\nstatus: active\nmode: collab\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n# M\n`); // → collab
+
+    // ── C13 (warn): collab owner not in non-empty roster ──
+    await ops.taskSetCollaborators(root, "M", "carol, erin", O);
+    await ops.itemAdd(root, { task: "M" }, { id: "m-1", title: "x" }, O);
+    await ops.itemSetOwner(root, "M", "m-1", "mallory", O); // first owner (no guard)
+    assert.ok((await validateRoadmap(root)).warns.some((w) => w.check === "C13"), "C13 owner not in roster");
+    await ops.itemSetOwner(root, "M", "m-1", "carol", { force: true, ...O }); // reassign to a roster member
+    assert.ok(!(await validateRoadmap(root)).warns.some((w) => w.check === "C13"), "C13 clears when owner in roster");
+
     console.log("validate.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });

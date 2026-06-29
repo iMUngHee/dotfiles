@@ -6,7 +6,9 @@
     "test": "for t in *.test.ts; do tsx \"$t\" || exit 1; done"
   },
   "dependencies": {
-    "tsx": "^4.0.0",
+    "tsx": "^4.0.0"
+  },
+  "devDependencies": {
     "@types/node": "^22.0.0"
   }
 }
