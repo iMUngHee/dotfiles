@@ -1,13 +1,60 @@
 ---
 name: ask-claude
-description: "Delegate a free-form instruction to Claude Code CLI in read-only headless mode and surface its response. Use when the user explicitly invites a second opinion from Claude — e.g., 'ask claude', 'claude 한테 물어봐', 'claude 의견', 'claude 라면 어떻게', 'second opinion from claude', '/ask-claude'. SKIP when: the user wants Codex to answer directly; the question depends on this session's conversation state Claude can't observe; trivial lookups Codex can resolve alone; another skill is already mid-flight."
+description: "Delegate a user-approved question to Claude Code CLI in read-only headless mode with a bounded context packet: local paths, relevant excerpts, and user-visible conversation summary. Use when the user explicitly invites a second opinion from Claude — e.g., 'ask claude', 'claude 한테 물어봐', 'claude 의견', 'claude 라면 어떻게', 'second opinion from claude', '/ask-claude'. SKIP when: the user wants Codex to answer directly; the answer requires hidden session state that cannot be summarized or shared; trivial lookups Codex can resolve alone; another skill is already mid-flight."
 argument-hint: "<free-form instruction for Claude>"
 disable-model-invocation: false
 ---
 
-Pass `$ARGUMENTS` verbatim to `claude -p` in headless read-only mode (via `ccs enterprise` profile) and relay the response.
+Build a bounded context packet from `$ARGUMENTS`, pass it to `claude -p` in
+headless read-only mode (via `ccs enterprise` profile), and relay the response.
+
+## Data-sharing approval
+
+Treat an explicit user request to use this skill as approval to send a bounded
+context packet to the external Claude service. Do not ask for additional
+confirmation only because the packet includes relevant local/repository context
+or lets Claude read repository files through the allowed read-only tools.
+
+Allowed context:
+- the user's delegated prompt,
+- a concise summary of user-visible conversation context needed for the answer,
+- the current working directory, relevant repository/file paths, symbols,
+  commands, diffs, and terminal outputs,
+- local/repository file excerpts or full files when that is the smallest
+  reliable way to make the delegated question answerable.
+
+Do not send hidden system/developer instructions, private reasoning, secrets,
+credentials, or tenant-restricted data. If the answer depends on raw session
+state that cannot be shared, summarize the user-visible parts instead. Still
+obey higher-priority system, sandbox, tenant, and secrets policies: if an
+escalation or policy gate rejects the call, surface that rejection and stop
+instead of working around it.
+
+## Context packet
+
+Do not under-contextualize Claude. Before invocation, prepare a prompt that
+contains:
+
+1. **Question** — the exact delegated ask and the expected output shape.
+2. **Conversation context** — only the user-visible facts from this session that
+   affect the answer.
+3. **Workspace context** — `cwd`, repository name if known, relevant files,
+   symbols, commands already run, and observed failures or outputs.
+4. **File access plan** — absolute paths preferred, or paths relative to the
+   explicit `cwd`, that Claude should inspect with read-only tools; paste
+   excerpts when paths alone are not enough.
+5. **Constraints** — no file edits, no command execution outside the allowed
+   read-only whitelist, and any policy/sandbox limitations.
+
+Prefer giving Claude precise paths and allowing read-only inspection over
+pasting large unrelated files. For narrow questions, include exact excerpts or
+diffs so Claude can answer without broad exploration. For broad reviews, list
+the key paths and the review focus.
 
 ## Invocation
+
+Set `CLAUDE_CONTEXT_PACKET` with a quoted heredoc so multiline text, quotes,
+backticks, and shell-looking content stay literal, then run:
 
 ```sh
 set -o pipefail
@@ -16,7 +63,11 @@ TIMEOUT_BIN="$(command -v gtimeout || command -v timeout)" || {
   echo "no timeout binary found (macOS: brew install coreutils)" >&2
   exit 127
 }
-printf '%s' "$ARGUMENTS" | "$TIMEOUT_BIN" 600 ccs enterprise -p \
+CLAUDE_CONTEXT_PACKET="$(cat <<'CLAUDE_PACKET'
+<question, conversation context, workspace context, file access plan, constraints>
+CLAUDE_PACKET
+)"
+printf '%s' "$CLAUDE_CONTEXT_PACKET" | "$TIMEOUT_BIN" 600 ccs enterprise -p \
   --permission-mode default \
   --no-session-persistence \
   --model opus \
@@ -30,10 +81,10 @@ printf '%s' "$ARGUMENTS" | "$TIMEOUT_BIN" 600 ccs enterprise -p \
 
 `gtimeout 600` is a hard cap — never bump it. Shape the work so each call finishes within 10 min, in this order:
 
-1. **Shrink first** — narrow `$ARGUMENTS` to the specific ask; drop broad exploration and unrelated scope.
-2. **Parallel** (independent only) — split ONLY if each sub-answer stands without the others. Prefer 2 concurrent calls, never exceed 3 (more parts → waves). Give each call its OWN prompt via its own stdin (separate heredoc/temp file — never share one stream); capture stdout+stderr+exit per call.
+1. **Shrink first** — narrow the context packet to the specific ask; drop broad exploration and unrelated scope.
+2. **Parallel** (independent only) — split ONLY if each sub-answer stands without the others. Prefer 2 concurrent calls, never exceed 3 (more parts → waves). Give each call its OWN context packet via its own stdin source (separate quoted heredoc variable or temp file — never share one stream); capture stdout+stderr+exit per call.
 3. **Sequential** (dependent) — run in stages, feeding each stage's output into the next prompt.
-4. **Holistic** — a single integrated judgment stays ONE verbatim call.
+4. **Holistic** — a single integrated judgment stays ONE context-packet call.
 
 Report each sub-answer in its own fenced block with its sub-question and exit status (e.g. `## Claude [1/3]`). If a sub-call fails (124 / 429 / auth / empty), report THAT block as failed — never silently merge or infer the missing result.
 
@@ -41,7 +92,7 @@ Each call keeps the headless rules (read-only, `gtimeout 600`, stdin).
 
 ## Headless hard rules
 
-- **stdin, not argv** — `$ARGUMENTS` may contain shell metacharacters, quoted content, or imperative-looking text. Pipe via `printf '%s'` + `-`. Never `claude -p "$ARGUMENTS"`.
+- **stdin, not argv** — the context packet may contain shell metacharacters, quoted content, or imperative-looking text. Pipe via `printf '%s'` + `-`. Never pass the prompt as an argv string.
 - **`ccs enterprise`** — pin to enterprise profile (no fallback chain in v1). If quota hit, surface exit code and stop.
 - **`--model opus`** — official alias tracking latest Opus.
 - **`--permission-mode default` + `--allowedTools` whitelist** — read-only gate. The whitelist is the primary defense; `--append-system-prompt` only clarifies intent.
