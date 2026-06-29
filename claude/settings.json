@@ -231,17 +231,6 @@
         "matcher": "rate_limit"
       }
     ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/subagent-stop-reminder.sh",
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [
