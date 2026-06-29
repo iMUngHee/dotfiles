@@ -13,7 +13,7 @@ codex/
 │   ├── codex-ask-claude/       # Codex-only skill; invokes as `ask-claude`
 │   └── codex-fanout/           # Codex-only skill; invokes as `fanout`
 └── scripts/
-    ├── bootstrap.sh            # Build AGENTS.md, deep-merge config.toml, overlay skills
+    ├── bootstrap.sh            # Build AGENTS.md, deep-merge config.toml, overlay skills, prune bundled skills
     ├── mcp-secret-env.sh       # Load MCP env from the OS secret store, then exec server
     ├── mcp-secret-set.sh       # Store one MCP env value in the OS secret store
     ├── pre-commit-sensitive-scan.sh  # Read-only staged-diff sensitive-info scan
@@ -42,12 +42,19 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
    - existing user-added (non-symlink) entries preserved
    - plan/state/task artifacts are not deployed here; repo-local `.agents/plans`, `.agents/state`, and `.agents/tasks/` are sibling entries
 
+4. **Bundled Codex system skills disabled by default**:
+   - `~/.codex/skills/.system/.codex-system-skills.marker` is preserved
+   - bundled skill directories under `~/.codex/skills/.system/` are removed
+   - user skills under `~/.agents/skills/`, `ai/skills/`, and `codex/skills/` are unaffected
+   - set `CODEX_DISABLE_SYSTEM_SKILLS=0` before bootstrap to keep bundled skills
+
 ## What's enforced via template
 
 `config.toml.template` declares the keys that should always match the repo:
 
 - `project_doc_max_bytes` (sets the AGENTS.md cap, default 65536)
 - `approval_policy` + `approvals_reviewer` + `sandbox_mode` (default startup automation = maximum local autonomy: no approvals + no sandbox)
+- `[features]` disables default apps/plugins and skill MCP dependency install prompts
 - `[tui].theme`
 - `[tui].vim_mode_default`
 - `[tui].status_line_use_colors`
@@ -93,6 +100,8 @@ Codex discovers skills at `~/.agents/skills/` (note: `.agents/`, not `.codex/`).
 - `codex/skills/codex-<id>/` — Codex-only (2: `ask-claude`, `fanout`)
 
 Repo-local artifacts use `.agents/plans`, `.agents/state`, and `.agents/tasks/` (per-task backlog/closed/links/memory); do not place them under `.agents/skills`.
+
+Codex also auto-installs bundled system skills such as `skill-creator` under `~/.codex/skills/.system/`. Bootstrap disables those by preserving the marker file and pruning the bundled skill directories, so custom skills remain available without the default bundled skills appearing in the model prompt.
 
 ## Codex-only instructions
 
