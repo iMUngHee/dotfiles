@@ -9,6 +9,11 @@ approval_policy = "never"
 approvals_reviewer = "user"
 sandbox_mode = "danger-full-access"
 
+[features]
+apps = false
+plugins = false
+skill_mcp_dependency_install = false
+
 [tui]
 theme = "catppuccin-mocha"
 notifications = false

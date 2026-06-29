@@ -112,4 +112,23 @@ for d in "$AI_DIR/skills/private/"*/; do link_skill_dir "$d"; done
 for d in "$CODEX_DIR/skills/"*/; do link_skill_dir "$d"; done
 
 echo "Skills overlay deployed → ~/.agents/skills/"
+
+# ── 6. Built-in system skills opt-out ──
+# Codex installs its bundled skills under ~/.codex/skills/.system when the
+# marker is missing or stale. Keeping the current marker while removing the
+# skill directories suppresses bundled skills without affecting user skills.
+if [ "${CODEX_DISABLE_SYSTEM_SKILLS:-1}" = "1" ]; then
+    SYSTEM_SKILLS_DIR="$HOME/.codex/skills/.system"
+    SYSTEM_SKILLS_MARKER="$SYSTEM_SKILLS_DIR/.codex-system-skills.marker"
+    if [ ! -f "$SYSTEM_SKILLS_MARKER" ] && command -v codex &>/dev/null; then
+        codex debug prompt-input "bootstrap-system-skill-marker" >/dev/null 2>&1 || true
+    fi
+    if [ -f "$SYSTEM_SKILLS_MARKER" ]; then
+        find "$SYSTEM_SKILLS_DIR" -mindepth 1 -maxdepth 1 ! -name ".codex-system-skills.marker" -exec rm -rf {} +
+        echo "Built-in system skills disabled → ~/.codex/skills/.system/"
+    else
+        echo "Built-in system skills disable skipped (marker not available)"
+    fi
+fi
+
 echo "=== codex bootstrap done ==="
