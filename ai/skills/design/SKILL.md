@@ -141,7 +141,7 @@ Followed by the approved design content (Goal, Approach, Decisions, Verifiable S
 <!-- Filled by /retro if run after implementation -->
 ```
 
-7. **Confirm to the user:** "saved as `<path>` — review and reply with **승인** (active 전환), **취소** (dropped), or further edits. Run `/retro` after implementation to mark the plan `done`."
+7. **Confirm to the user:** "saved as `<path>` — review and reply with **승인** (active 전환), **취소** (dropped), or further edits. Run `/retro` after implementation to mark the plan `done`." For high-risk, multi-file, architecture, irreversible, or unclear-scope plans, recommend `/plan-review` before `승인`; if review is intentionally skipped for cost, latency, auth, or low-risk reasons, record an explicit `SKIP` in the plan review loop instead of treating the skip as approval.
 
 **Status values & lifecycle**: `draft` (just saved) → `active` (in progress) → `done` | `dropped` (terminal).
 
