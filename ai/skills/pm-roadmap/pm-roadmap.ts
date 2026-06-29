@@ -4,11 +4,12 @@
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as ops from "./ops.ts";
-import { nextCandidates, resolveItem, buildNextPrompt, recentClosed, listActiveTasks, section, type Candidate } from "./join.ts";
+import { nextCandidates, resolveItem, buildNextPrompt, recentClosed, listActiveTasks, section, taskMode, myItems, boardByOwner, type Candidate } from "./join.ts";
 import { validateRoadmap, formatReport } from "./validate.ts";
 import { parseBlocks, getField, taskFile, readStamped } from "./store.ts";
 import { migrate } from "./migrate.ts";
 import { stat } from "node:fs/promises";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 interface Parsed { pos: string[]; opts: Record<string, string | true>; }
@@ -36,9 +37,19 @@ async function findTask(root: string, id: string): Promise<string | null> {
   return null;
 }
 
+// collab badge: @owner when assigned, (unassigned) otherwise; nothing on solo items.
+function ownerBadge(c: Candidate): string {
+  if (c.mode !== "collab") return "";
+  return c.owner ? `  @${c.owner}` : "  (unassigned)";
+}
 function fmtCandidates(cs: Candidate[]): string {
   if (!cs.length) return "  (none)";
-  return cs.map((c) => `  [${c.priority}] ${c.key}/${c.id} — ${c.title}${c.plan ? " *" : ""}`).join("\n");
+  return cs.map((c) => `  [${c.priority}] ${c.key}/${c.id} — ${c.title}${c.plan ? " *" : ""}${ownerBadge(c)}`).join("\n");
+}
+// Pure CLI-side collab filter (identity never enters join). Solo items always pass; collab items
+// pass when unassigned or owned by `actor`. Used by list/next default (me+unassigned) view.
+function filterForActor(cs: Candidate[], actor: string): Candidate[] {
+  return cs.filter((c) => c.mode !== "collab" || !c.owner || c.owner === actor);
 }
 
 // legacy repo = old ROADMAP.md present but no tasks/ — read paths nudge to migrate.
@@ -47,6 +58,33 @@ async function isLegacy(root: string): Promise<boolean> {
   return !(await has(join(root, ".agents", "tasks"))) && (await has(join(root, ".agents", "ROADMAP.md")));
 }
 const READ_CMDS = new Set(["list", "tree", "get", "next", "recent", "validate"]);
+
+// Identity resolution for collaboration mode. ops.ts stays pure (no env/git); the CLI
+// resolves a person to a plain string. Precedence (most-specific first):
+//   --actor/--by flag  >  PM_ACTOR env  >  state/actor.txt  >  git config user.email
+// Returns "" when nothing resolves; collab ops that REQUIRE identity stop (requireActor / ops).
+function resolveActorSource(root: string, opts: Record<string, string | true>): { actor: string; source: string } {
+  const flag = (typeof opts.actor === "string" && opts.actor) || (typeof opts.by === "string" && opts.by);
+  if (flag) return { actor: String(flag).trim(), source: "flag" };
+  if (process.env.PM_ACTOR && process.env.PM_ACTOR.trim()) return { actor: process.env.PM_ACTOR.trim(), source: "PM_ACTOR" };
+  try { const a = readFileSync(join(root, ".agents", "state", "actor.txt"), "utf-8").trim(); if (a) return { actor: a, source: "state/actor.txt" }; } catch { /* no actor.txt */ }
+  try { const e = execSync("git config user.email", { cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim(); if (e) return { actor: e, source: "git user.email" }; } catch { /* no git identity */ }
+  return { actor: "", source: "" };
+}
+function resolveActor(root: string, opts: Record<string, string | true>): string {
+  return resolveActorSource(root, opts).actor;
+}
+function requireActor(root: string, opts: Record<string, string | true>, ctx: string): string {
+  const a = resolveActor(root, opts);
+  if (!a) throw new Error(`${ctx} requires an actor identity — set PM_ACTOR, pass --actor <name>, run 'pm whoami <name>', or set git user.email`);
+  return a;
+}
+// By/ClosedBy attribution is stamped ONLY on collab tasks. solo → undefined (no field, no error).
+// collab + unresolvable identity → requireActor throws (stop, don't write an anonymous note).
+async function collabBy(root: string, key: string, opts: Record<string, string | true>): Promise<string | undefined> {
+  if ((await taskMode(root, key)) !== "collab") return undefined;
+  return requireActor(root, opts, "collab attribution");
+}
 
 export async function runCli(root: string, argv: string[]): Promise<{ out: string; code: number }> {
   const [cmd, ...rest] = argv;
@@ -60,9 +98,14 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
   switch (cmd) {
     case "list": {
       const nc = await nextCandidates(root);
-      const out = ["## Eligible (next candidates)", fmtCandidates(nc.eligible),
-        nc.blocked.length ? "\n## Blocked (earlier-Order sibling open)" : "",
-        nc.blocked.length ? nc.blocked.map((c) => `  [${c.priority}] ${c.key}/${c.id} — blocked by ${c.blockedBy}`).join("\n") : "",
+      // collab default filter: me + unassigned; --all shows everything; --owner X overrides "me".
+      const ownerArg = str(opts.owner);
+      const actor = ownerArg ?? resolveActor(root, opts);
+      const flt = (cs: Candidate[]) => (opts.all || !actor) ? cs : filterForActor(cs, actor);
+      const elig = flt(nc.eligible), blk = flt(nc.blocked);
+      const out = ["## Eligible (next candidates)", fmtCandidates(elig),
+        blk.length ? "\n## Blocked (earlier-Order sibling open)" : "",
+        blk.length ? blk.map((c) => `  [${c.priority}] ${c.key}/${c.id} — blocked by ${c.blockedBy}${ownerBadge(c)}`).join("\n") : "",
         nc.inbox ? `\n> inbox: ${nc.inbox} awaiting triage` : "",
         nc.focus ? `\n> focus: ${nc.focus}` : ""].filter(Boolean).join("\n");
       return { out, code: 0 };
@@ -72,8 +115,12 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       for (const key of await listActiveTasks(root)) {
         const s = await readStamped(taskFile(root, key, "backlog.md"));
         const bl = s ? parseBlocks(s.content).blocks : [];
-        lines.push(`${key} (${bl.length} open)`);
-        for (const b of bl) lines.push(`  - ${b.id} [${getField(b, "Status")}] ${b.title}`);
+        const collab = (await taskMode(root, key)) === "collab";
+        lines.push(`${key} (${bl.length} open)${collab ? "  [collab]" : ""}`);
+        for (const b of bl) {
+          const badge = collab ? ((getField(b, "Owner") ?? "") ? `  @${getField(b, "Owner")}` : "  (unassigned)") : "";
+          lines.push(`  - ${b.id} [${getField(b, "Status")}] ${b.title}${badge}`);
+        }
       }
       return { out: lines.join("\n") || "(no tasks)", code: 0 };
     }
@@ -87,7 +134,13 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     case "next": {
       const nc = await nextCandidates(root);
       const id = pos[0] ?? nc.focus ?? undefined;
-      if (!id) return { out: "## Choose a candidate (no focus set):\n" + fmtCandidates(nc.eligible), code: 0 };
+      if (!id) {
+        // explicit id/focus bypasses the filter; only the candidate-list path is filtered.
+        const ownerArg = str(opts.owner);
+        const actor = ownerArg ?? resolveActor(root, opts);
+        const elig = (opts.all || !actor) ? nc.eligible : filterForActor(nc.eligible, actor);
+        return { out: "## Choose a candidate (no focus set):\n" + fmtCandidates(elig), code: 0 };
+      }
       const key = str(opts.task) ?? (await findTask(root, id));
       if (!key) return { out: `item '${id}' not found`, code: 1 };
       const v = await resolveItem(root, key, id);
@@ -104,10 +157,18 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     }
     case "task": {
       const sub = pos[0], key = pos[1];
-      if (sub === "create") await ops.taskCreate(root, key, str(opts.title) ?? key);
+      if (sub === "create") await ops.taskCreate(root, key, str(opts.title) ?? key, { mode: str(opts.mode) });
       else if (sub === "done") await ops.taskDone(root, key);
       else if (sub === "archive") await ops.taskArchive(root, key);
       else if (sub === "restore") await ops.taskRestore(root, key);
+      else if (sub === "set-mode") { // ops enforces the actor precondition on solo→collab
+        await ops.taskSetMode(root, key, pos[2], resolveActor(root, opts));
+        return { out: `task ${key}: mode → ${pos[2]}`, code: 0 };
+      }
+      else if (sub === "collaborators") { // set the roster (comma list); empty clears it
+        await ops.taskSetCollaborators(root, key, pos.slice(2).join(" "));
+        return { out: `task ${key}: collaborators → ${pos.slice(2).join(" ") || "(cleared)"}`, code: 0 };
+      }
       else return { out: `unknown task subcmd '${sub}'`, code: 1 };
       return { out: `task ${key}: ${sub} ok`, code: 0 };
     }
@@ -125,10 +186,10 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     case "close": {
       const status = str(opts.status) ?? "done";
       if (status !== "done" && status !== "dropped") return { out: `close --status must be done|dropped (got '${status}')`, code: 1 };
-      await ops.itemClose(root, pos[0], pos[1], { status, reason: str(opts.reason), plan: str(opts.plan) });
+      await ops.itemClose(root, pos[0], pos[1], { status, reason: str(opts.reason), plan: str(opts.plan), closedBy: await collabBy(root, pos[0], opts) });
       return { out: `closed ${pos[1]}`, code: 0 };
     }
-    case "drop": { await ops.dropItem(root, pos[0], pos[1], { reason: str(opts.reason) ?? "" }); return { out: `dropped ${pos[1]}`, code: 0 }; }
+    case "drop": { await ops.dropItem(root, pos[0], pos[1], { reason: str(opts.reason) ?? "", closedBy: await collabBy(root, pos[0], opts) }); return { out: `dropped ${pos[1]}`, code: 0 }; }
     case "triage": { await ops.triage(root, pos[0], pos[1]); return { out: `triaged ${pos[0]} → ${pos[1]}`, code: 0 }; }
     case "focus": {
       if (opts.clear) { await ops.focusClear(root); return { out: "focus cleared", code: 0 }; }
@@ -174,7 +235,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       if (sub !== "add") return { out: "memory subcmd must be 'add'", code: 1 };
       const title = str(opts.title) ?? pos.slice(2).join(" ");
       if (!key || !title) return { out: "memory add needs <KEY> <title> [--note <text>] [--date YYYY-MM-DD]", code: 1 };
-      await ops.addTaskMemory(root, key, { title, note: str(opts.note), date: str(opts.date) });
+      await ops.addTaskMemory(root, key, { title, note: str(opts.note), date: str(opts.date), by: await collabBy(root, key, opts) });
       return { out: `memory ${key}: + ${title}`, code: 0 };
     }
     // pm-context link writes route here (single write path; lock+CAS via ops).
@@ -184,7 +245,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
         const label = str(opts.label) ?? pos[2];
         const url = str(opts.url);
         if (!key || !label || !url) return { out: "links add needs <KEY> <label> --url <url> [--triggers <csv>] [--summary <text>]", code: 1 };
-        await ops.addTaskLink(root, key, { label, url, triggers: str(opts.triggers), summary: str(opts.summary) });
+        await ops.addTaskLink(root, key, { label, url, triggers: str(opts.triggers), summary: str(opts.summary), by: await collabBy(root, key, opts) });
         return { out: `links ${key}: + ${label}`, code: 0 };
       }
       if (sub === "remove") {
@@ -195,6 +256,45 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       }
       return { out: "links subcmd must be 'add' or 'remove'", code: 1 };
     }
+    // collab ownership: assign sets an explicit owner ('-' unassigns); claim self-assigns the resolved actor.
+    case "assign": {
+      const [key, id, owner] = pos;
+      if (!key || !id || !owner) return { out: "assign needs <KEY> <id> <owner|->  [--note <text>] [--force]", code: 1 };
+      await ops.itemSetOwner(root, key, id, owner, { note: str(opts.note), force: !!opts.force });
+      return { out: owner === "-" ? `unassigned ${key}/${id}` : `assign ${key}/${id} → ${owner}`, code: 0 };
+    }
+    case "claim": {
+      const [key, id] = pos;
+      if (!key || !id) return { out: "claim needs <KEY> <id> [--note <text>] [--force]", code: 1 };
+      const actor = requireActor(root, opts, "claim");
+      await ops.itemSetOwner(root, key, id, actor, { note: str(opts.note), force: !!opts.force });
+      return { out: `claim ${key}/${id} → ${actor}`, code: 0 };
+    }
+    // collab cross-task views: `mine` = my open owned items; `who` = per-owner board.
+    case "mine": {
+      const actor = requireActor(root, opts, "mine");
+      const items = await myItems(root, actor);
+      return { out: items.length ? items.map((c) => `  [${c.priority}] ${c.key}/${c.id} — ${c.title}`).join("\n") : `(no open items owned by ${actor})`, code: 0 };
+    }
+    case "who": {
+      const board = await boardByOwner(root);
+      if (!board.length) return { out: "(no collab tasks)", code: 0 };
+      const lines: string[] = [];
+      for (const e of board) { lines.push(`${e.owner} (${e.items.length})`); for (const c of e.items) lines.push(`  [${c.priority}] ${c.key}/${c.id} — ${c.title}`); }
+      return { out: lines.join("\n"), code: 0 };
+    }
+    // collab identity: `whoami` prints resolved actor + source; `whoami <name>` writes state/actor.txt (worktree-local).
+    case "whoami": {
+      const name = pos[0];
+      if (name) {
+        const dir = join(root, ".agents", "state");
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "actor.txt"), `${name.trim()}\n`);
+        return { out: `actor.txt → ${name.trim()}`, code: 0 };
+      }
+      const { actor, source } = resolveActorSource(root, opts);
+      return { out: actor ? `${actor}  (source: ${source})` : "(no actor — set PM_ACTOR, run 'pm whoami <name>', or set git user.email)", code: 0 };
+    }
     // read-only resolver: the task owning the focus item (pm-context's default-KEY source). Empty if no focus.
     case "current-task": {
       const nc = await nextCandidates(root);
@@ -202,7 +302,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: (await findTask(root, nc.focus)) ?? "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|approve|close|drop|triage|focus|memory|links|current-task|persist|complete>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
   }
 }
 

@@ -116,6 +116,38 @@ async function main() {
     assert.equal((await cli("close", "ALPHA", "whatever", "--status", "bogus")).code, 1, "close rejects bad --status");
     assert.equal((await cli("complete", "ALPHA", "whatever", "--plan", ".agents/plans/x.md", "--status", "bogus")).code, 1, "complete rejects bad --status");
 
+    // ── collaboration mode CLI ──
+    const cbBacklog = () => readFile(join(root, ".agents/tasks/CB/backlog.md"), "utf8");
+    assert.equal((await cli("task", "create", "CB", "--mode", "collab")).code, 0);
+    assert.ok((await readFile(join(root, ".agents/tasks/CB/task.md"), "utf8")).includes("mode: collab"), "create --mode collab");
+    assert.equal((await cli("add", "cb-1", "--task", "CB", "--title", "One")).code, 0);
+    // assign + note, double-claim guard, force, unassign
+    assert.equal((await cli("assign", "CB", "cb-1", "carol", "--note", "ctx")).code, 0);
+    assert.ok((await cbBacklog()).includes("Owner: carol") && (await cbBacklog()).includes("OwnerNote: ctx"), "assign + note");
+    await assert.rejects(() => cli("claim", "CB", "cb-1", "--actor", "dave"), /already owned/); // double-claim guard (ops throws)
+    assert.equal((await cli("claim", "CB", "cb-1", "--actor", "dave", "--force")).code, 0, "force reassign");
+    assert.equal((await cli("assign", "CB", "cb-1", "-")).code, 0);
+    assert.ok(!(await cbBacklog()).includes("Owner:"), "unassign drops Owner");
+    // solo-task gate (ops throws)
+    await assert.rejects(() => cli("claim", "ALPHA", "a-1", "--actor", "x"), /solo/);
+    // whoami round-trip (state/actor.txt)
+    assert.equal((await cli("whoami", "bob")).code, 0);
+    assert.ok((await cli("whoami")).out.includes("bob"), "whoami reads actor.txt");
+    // By stamped on collab memory via --actor; solo task gets no By
+    assert.equal((await cli("memory", "CB", "add", "dec", "--note", "n", "--actor", "alice")).code, 0);
+    assert.ok((await readFile(join(root, ".agents/tasks/CB/memory.md"), "utf8")).includes("By: alice"), "collab memory stamped By");
+    assert.equal((await cli("memory", "ALPHA", "add", "sdec", "--note", "n", "--actor", "alice")).code, 0);
+    assert.ok(!(await readFile(join(root, ".agents/tasks/ALPHA/memory.md"), "utf8")).includes("By:"), "solo memory has no By");
+    // owner filter + badges + who/mine
+    assert.equal((await cli("assign", "CB", "cb-1", "carol")).code, 0);
+    assert.ok((await cli("list", "--owner", "carol")).out.includes("cb-1"), "list --owner filters");
+    assert.ok((await cli("list", "--all")).out.includes("@carol"), "list --all shows @owner badge");
+    assert.ok((await cli("who")).out.includes("carol"), "who board");
+    assert.ok((await cli("mine", "--actor", "carol")).out.includes("cb-1"), "mine = my items");
+    // roster + collaborators set
+    assert.equal((await cli("task", "collaborators", "CB", "carol,dave")).code, 0);
+    assert.ok((await readFile(join(root, ".agents/tasks/CB/task.md"), "utf8")).includes("collaborators: carol, dave"), "roster set");
+
     // legacy detection + migrate subcmd on a separate legacy repo
     const leg = await mkdtemp(join(tmpdir(), "cli-legacy-"));
     await mkdir(join(leg, ".agents"), { recursive: true });

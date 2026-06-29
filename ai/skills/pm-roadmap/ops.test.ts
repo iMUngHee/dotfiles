@@ -222,6 +222,58 @@ async function main() {
     await ops.itemAdd(root, { task: "ALPHA" }, { id: "revive-1", title: "R" }, O);
     assert.equal(getFmField(parseFrontmatter((await readStamped(taskFile(root, "ALPHA", "task.md")))!.content).fields, "status"), "active", "adding an item reopens a done task");
 
+    // ── collaboration mode ──
+    const FM = async (k: string, f: string) => getFmField(parseFrontmatter((await readStamped(taskFile(root, k, "task.md")))!.content).fields, f);
+    await ops.taskCreate(root, "SOLOT", "Solo", O);
+    assert.equal(await FM("SOLOT", "mode"), "solo", "create defaults mode solo");
+    await ops.taskCreate(root, "COLT", "Collab", { ...O, mode: "collab" });
+    assert.equal(await FM("COLT", "mode"), "collab");
+    await assert.rejects(() => ops.taskCreate(root, "BADM", "x", { ...O, mode: "bogus" }), ops.OpError, "bad mode rejected at create");
+
+    // solo→collab assigns switcher to ALL backlog items (open|draft|active), not just open
+    await ops.taskCreate(root, "SWT", "Switch", O);
+    await ops.itemAdd(root, { task: "SWT" }, { id: "sw-open", title: "O" }, O);
+    await ops.itemAdd(root, { task: "SWT" }, { id: "sw-act", title: "A" }, O);
+    await ops.itemApprove(root, "SWT", "sw-act", O); // Status → active
+    await ops.taskSetMode(root, "SWT", "collab", "alice", O);
+    assert.equal(await field(BL("SWT"), "sw-open", "Owner"), "alice");
+    assert.equal(await field(BL("SWT"), "sw-act", "Owner"), "alice", "active item also owned on switch");
+    // empty actor stops the collab switch (all-or-nothing)
+    await ops.taskCreate(root, "SWT2", "S2", O);
+    await ops.itemAdd(root, { task: "SWT2" }, { id: "sw2", title: "x" }, O);
+    await assert.rejects(() => ops.taskSetMode(root, "SWT2", "collab", "", O), ops.OpError, "empty actor stops collab switch");
+    assert.equal(await FM("SWT2", "mode"), "solo", "failed switch left mode solo (no partial write)");
+    // collab→solo keeps Owner (lossless)
+    await ops.taskSetMode(root, "SWT", "solo", "alice", O);
+    assert.equal(await field(BL("SWT"), "sw-open", "Owner"), "alice", "downgrade keeps Owner");
+
+    // itemSetOwner: assign+note, double-claim guard, force, unassign, solo gate
+    await ops.itemAdd(root, { task: "COLT" }, { id: "c-itm", title: "C" }, O);
+    await ops.itemSetOwner(root, "COLT", "c-itm", "carol", { note: "ctx", ...O });
+    assert.equal(await field(BL("COLT"), "c-itm", "Owner"), "carol");
+    assert.equal(await field(BL("COLT"), "c-itm", "OwnerNote"), "ctx");
+    await assert.rejects(() => ops.itemSetOwner(root, "COLT", "c-itm", "dave", O), ops.OpError, "double-claim guard");
+    await ops.itemSetOwner(root, "COLT", "c-itm", "dave", { force: true, ...O });
+    assert.equal(await field(BL("COLT"), "c-itm", "Owner"), "dave", "force reassigns");
+    await ops.itemSetOwner(root, "COLT", "c-itm", "-", O);
+    assert.equal(await field(BL("COLT"), "c-itm", "Owner"), null, "unassign drops Owner");
+    assert.equal(await field(BL("COLT"), "c-itm", "OwnerNote"), null, "unassign drops OwnerNote");
+    await ops.itemAdd(root, { task: "SOLOT" }, { id: "s-itm", title: "S" }, O);
+    await assert.rejects(() => ops.itemSetOwner(root, "SOLOT", "s-itm", "x", O), ops.OpError, "owner gate refuses solo task");
+
+    // By on memory/links; ClosedBy on drop
+    await ops.addTaskMemory(root, "COLT", { title: "dec", note: "n", by: "alice" }, O);
+    assert.equal(await field(taskFile(root, "COLT", "memory.md"), "dec", "By"), "alice");
+    await ops.addTaskLink(root, "COLT", { label: "docs", url: "https://x.test", by: "bob" }, O);
+    assert.equal(await field(taskFile(root, "COLT", "links.md"), "docs", "By"), "bob");
+    await ops.itemAdd(root, { task: "COLT" }, { id: "cl-itm", title: "X" }, O);
+    await ops.dropItem(root, "COLT", "cl-itm", { reason: "no", closedBy: "carol", ...O });
+    assert.equal(await field(CL("COLT"), "cl-itm", "ClosedBy"), "carol");
+
+    // roster
+    await ops.taskSetCollaborators(root, "COLT", "carol, erin", O);
+    assert.equal(await FM("COLT", "collaborators"), "carol, erin");
+
     console.log("ops.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });

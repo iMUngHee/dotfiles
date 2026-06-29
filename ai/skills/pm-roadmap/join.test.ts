@@ -93,6 +93,24 @@ async function main() {
     assert.equal(j.planInfo("p.md", "---\nstatus: done\n---\n## Post-Implementation Notes\n\nhello\n").postImplNotes, "hello");
     assert.equal(j.planInfo("p.md", "---\nstatus: done\n---\n## Post-Implementation Notes\n\n<!-- placeholder -->\n").postImplNotes, "");
 
+    // ── collaboration views ──
+    assert.equal(await j.taskMode(root, "A"), "solo", "absence → solo");
+    await ops.taskCreate(root, "CB", "Collab B", { ...O, mode: "collab" });
+    assert.equal(await j.taskMode(root, "CB"), "collab");
+    await ops.itemAdd(root, { task: "CB" }, { id: "cb-1", title: "One" }, O);
+    await ops.itemAdd(root, { task: "CB" }, { id: "cb-2", title: "Two" }, O);
+    await ops.itemSetOwner(root, "CB", "cb-1", "carol", O);
+    const ncb = await j.nextCandidates(root);
+    const cb1 = [...ncb.eligible, ...ncb.blocked].find((c) => c.id === "cb-1")!;
+    assert.equal(cb1.owner, "carol", "candidate carries owner");
+    assert.equal(cb1.mode, "collab", "candidate carries mode");
+    assert.deepEqual((await j.myItems(root, "carol")).map((c) => c.id), ["cb-1"], "myItems = my collab open items");
+    const board = await j.boardByOwner(root);
+    assert.ok(board.find((e) => e.owner === "carol")?.items.some((c) => c.id === "cb-1"), "board groups carol");
+    assert.ok(board.find((e) => e.owner === "(unassigned)")?.items.some((c) => c.id === "cb-2"), "board groups unassigned");
+    await ops.taskSetCollaborators(root, "CB", "carol, dave", O);
+    assert.deepEqual(await j.taskCollaborators(root, "CB"), ["carol", "dave"], "roster parsed");
+
     console.log("join.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });
