@@ -6,17 +6,23 @@ import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join, basename } from "node:path";
 import * as ops from "../pm-roadmap/ops.ts";
-import { nextCandidates, recentClosed, resolveItem, buildNextPrompt, listActiveTasks } from "../pm-roadmap/join.ts";
+import { nextCandidates, recentClosed, resolveItem, buildNextPrompt, listActiveTasks, planInfo } from "../pm-roadmap/join.ts";
 import { validateRoadmap } from "../pm-roadmap/validate.ts";
-import { type Block, parseBlocks, getField, taskFile, readStamped } from "../pm-roadmap/store.ts";
+import { type Block, parseBlocks, getField, taskFile, readStamped, inboxPath } from "../pm-roadmap/store.ts";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const PORT = 8484;
+const DEFAULT_PORT = 8484;
 
 export interface Resp { status: number; json?: unknown; text?: string; }
 
 async function exists(p: string): Promise<boolean> { return stat(p).then(() => true).catch(() => false); }
 async function blocksOf(path: string): Promise<Block[]> { const s = await readStamped(path); return s ? parseBlocks(s.content).blocks : []; }
+function resolvePort(): number {
+  const raw = process.env.TASK_CONTEXT_PORT;
+  if (!raw) return DEFAULT_PORT;
+  const port = Number(raw);
+  return Number.isInteger(port) && port > 0 ? port : DEFAULT_PORT;
+}
 async function findTask(root: string, id: string): Promise<string | null> {
   for (const key of await listActiveTasks(root)) {
     for (const f of ["backlog.md", "closed.md"]) if ((await blocksOf(taskFile(root, key, f))).some((b) => b.id === id)) return key;
@@ -29,7 +35,16 @@ export async function handle(root: string, method: string, pathname: string, par
   // ── derived roadmap view (legacy shape) ──
   if (pathname === "/api/roadmap" && method === "GET") {
     const nc = await nextCandidates(root);
-    const open = [...nc.eligible, ...nc.blocked].map((c) => ({ id: c.id, title: c.title, priority: c.priority, status: c.status, order: c.order, task: c.key, plan: c.plan, note: c.note, blockedBy: c.blockedBy }));
+    // open[] additive read (pm-dashboard-rebuild): expose plan.nextStep — the first unchecked
+    // Implementation Step — beside the existing plan path, so the dock/next-up shows the "next action"
+    // without a per-item join. c.plan is a path string (or null); read + parse via planInfo, degrading to
+    // null on a missing/unreadable plan. join stays authoritative for detail (its top-level `plan` is the
+    // full PlanInfo object; item.plan stays a string path) — this touches open[] only.
+    const open = await Promise.all([...nc.eligible, ...nc.blocked].map(async (c) => {
+      let nextStep: string | null = null;
+      if (c.plan) { try { nextStep = planInfo(c.plan, await readFile(join(root, c.plan), "utf-8")).nextStep; } catch { nextStep = null; } }
+      return { id: c.id, title: c.title, priority: c.priority, status: c.status, order: c.order, task: c.key, plan: c.plan, nextStep, note: c.note, blockedBy: c.blockedBy, owner: c.owner, ownerNote: c.ownerNote, mode: c.mode };
+    }));
     const recentlyClosed = (await recentClosed(root, 50)).map((r) => ({ id: r.id, plan: r.plan, status: r.status, note: r.reason, task: r.key, closed: r.closed }));
     return { status: 200, json: { project: basename(root), focus: nc.focus, updated: "", open, recentlyClosed } };
   }
@@ -37,6 +52,12 @@ export async function handle(root: string, method: string, pathname: string, par
 
   // ── next-candidate list (eligible / blocked / focus / inbox), unflattened ──
   if (pathname === "/api/next" && method === "GET") return { status: 200, json: await nextCandidates(root) };
+
+  // ── inbox contents (read-only; /api/next carries only the count). Triage stays CLI-only. ──
+  if (pathname === "/api/inbox" && method === "GET") {
+    const items = (await blocksOf(inboxPath(root))).map((b) => ({ id: b.id, title: b.title, priority: getField(b, "Priority") ?? "", note: getField(b, "Note") ?? "" }));
+    return { status: 200, json: items };
+  }
 
   const rm = pathname.match(/^\/api\/roadmap\/([a-z0-9-]+)\/(join|next)$/);
   if (rm && method === "GET") {
@@ -50,10 +71,10 @@ export async function handle(root: string, method: string, pathname: string, par
     if (rm[2] === "join") {
       // adapt the flat ItemView → showItem's nested shape (item / task / contextLinks / contextMemory),
       // reusing the same Block→object projection as GET /api/tasks. resolveItem stays flat for buildNextPrompt.
-      const contextLinks = v.links.map((b) => ({ label: b.id, url: getField(b, "URL") ?? "", triggers: (getField(b, "Triggers") ?? "").split(",").map((s) => s.trim()).filter(Boolean), summary: getField(b, "Summary") ?? "" }));
-      const contextMemory = v.memory.map((b) => ({ title: b.id, note: getField(b, "Note") ?? "", date: getField(b, "Date") ?? "" }));
+      const contextLinks = v.links.map((b) => ({ label: b.id, url: getField(b, "URL") ?? "", triggers: (getField(b, "Triggers") ?? "").split(",").map((s) => s.trim()).filter(Boolean), summary: getField(b, "Summary") ?? "", by: getField(b, "By") ?? "" }));
+      const contextMemory = v.memory.map((b) => ({ title: b.id, note: getField(b, "Note") ?? "", date: getField(b, "Date") ?? "", by: getField(b, "By") ?? "" }));
       return { status: 200, json: {
-        item: { id: v.id, title: v.title, priority: v.priority, note: v.note, status: v.status, plan: v.plan?.path ?? null, task: v.key },
+        item: { id: v.id, title: v.title, priority: v.priority, note: v.note, status: v.status, plan: v.plan?.path ?? null, task: v.key, owner: v.owner, ownerNote: v.ownerNote, mode: v.mode },
         closed: v.closed, task: v.key, plan: v.plan,
         contextLinks, contextMemory,
         siblings: v.siblings.map((s) => ({ ...s, status: "done" })), // doneSiblings are all done
@@ -87,8 +108,8 @@ export async function handle(root: string, method: string, pathname: string, par
     const key = tm[1];
     if (method === "GET") {
       if (!(await exists(taskFile(root, key, "task.md")))) return { status: 404, json: { error: "Not found" } };
-      const links = (await blocksOf(taskFile(root, key, "links.md"))).map((b) => ({ label: b.id, url: getField(b, "URL") ?? "", triggers: (getField(b, "Triggers") ?? "").split(",").map((s) => s.trim()).filter(Boolean), summary: getField(b, "Summary") ?? "" }));
-      const memory = (await blocksOf(taskFile(root, key, "memory.md"))).map((b) => ({ title: b.id, note: getField(b, "Note") ?? "", date: getField(b, "Date") ?? "" }));
+      const links = (await blocksOf(taskFile(root, key, "links.md"))).map((b) => ({ label: b.id, url: getField(b, "URL") ?? "", triggers: (getField(b, "Triggers") ?? "").split(",").map((s) => s.trim()).filter(Boolean), summary: getField(b, "Summary") ?? "", by: getField(b, "By") ?? "" }));
+      const memory = (await blocksOf(taskFile(root, key, "memory.md"))).map((b) => ({ title: b.id, note: getField(b, "Note") ?? "", date: getField(b, "Date") ?? "", by: getField(b, "By") ?? "" }));
       return { status: 200, json: { key, links, memory } };
     }
     if (method === "PUT") {
@@ -150,8 +171,9 @@ function readBody(req: IncomingMessage): Promise<string> {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const ROOT = process.env.TASK_CONTEXT_ROOT;
   if (!ROOT) { console.error("TASK_CONTEXT_ROOT not set. Launch via `/pm-context manage` or `/pm-roadmap manage`."); process.exit(1); }
+  const port = resolvePort();
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url!, `http://localhost:${PORT}`);
+    const url = new URL(req.url!, `http://localhost:${port}`);
     if (url.pathname === "/" || url.pathname === "/roadmap") {
       const html = await readFile(join(__dirname, "roadmap.html"), "utf-8");
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(html);
@@ -162,7 +184,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     if (r.text !== undefined) { res.writeHead(r.status, { "Content-Type": "text/plain; charset=utf-8" }); return res.end(r.text); }
     res.writeHead(r.status, { "Content-Type": "application/json" }); res.end(r.json !== undefined ? JSON.stringify(r.json) : "");
   });
-  server.listen(PORT, () => console.log(`pm dashboard: http://localhost:${PORT}`));
+  server.listen(port, () => console.log(`pm dashboard: http://localhost:${port}`));
   process.on("SIGTERM", () => server.close(() => process.exit(0)));
   process.on("SIGINT", () => server.close(() => process.exit(0)));
 }
