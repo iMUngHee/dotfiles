@@ -3,8 +3,6 @@
 # Ruby file: OS.mac?/OS.linux? guards run at load; brew bundle (6+) handles
 # cask/mas/flatpak natively, so one file covers both machines.
 
-tap "homebrew/bundle"
-
 # ── Shared CLI / TUI ─────────────────────────────────────────
 brew "bat"
 brew "eza"
@@ -38,8 +36,11 @@ brew "python"   # versionless alias → always latest stable (python@3.14 now)
 
 # ── macOS only ───────────────────────────────────────────────
 if OS.mac?
+  tap "morantron/tmux-fingers"
   brew "coreutils"        # GNU userland (native on bazzite)
   brew "swift-format"
+  brew "bdw-gc"            # tmux-fingers runtime dylib
+  brew "morantron/tmux-fingers/tmux-fingers"
   cask "ghostty"
   cask "obsidian"
   cask "claude-code@latest"
