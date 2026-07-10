@@ -1,7 +1,7 @@
 ---
 name: design
 description: "Design and plan implementation for multi-file changes or architecture decisions. TRIGGER when: asked to design, plan, or architect a solution; change expected across 3+ files; new architecture decision; scope ambiguous; user says '설계해' / 'design this'. SKIP: single-file bug fixes; renames or typos; small refactors with clear scope."
-argument-hint: "[task description]"
+argument-hint: "[task description | handoff | continue]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
 model: opus
 effort: max
@@ -11,6 +11,14 @@ disable-model-invocation: false
 Design and plan implementation for the given task.
 
 Task: $ARGUMENTS (if empty, ask the user)
+
+## Modes
+
+`$ARGUMENTS` selects the mode. When the **sole** argument is exactly one of these reserved tokens, run that mode instead of the normal plan flow:
+
+- **`handoff`** → package the in-flight plan's mid-execution state into a paste-ready kickoff prompt for a fresh session/agent, then copy it to the clipboard. Read-only — writes nothing. See **Handoff mode** below.
+- **`continue`** → resume the in-flight plan in THIS session: read `{{STATE_DIR}}/current.txt`, find the first unchecked step, and pick up implementation from there. See **Continue mode** below.
+- **anything else (or empty)** → a task description; run the normal plan flow (Steps 1-7). A task whose description merely *contains* `handoff`/`continue` among other words is NOT a mode — only the bare single token dispatches.
 
 ## System — role in the pm-* loop
 
@@ -181,6 +189,31 @@ Report the archiver's output (moved / skipped). Add `--dry-run` to preview witho
 - Frontmatter MUST be English. Body content can be Korean.
 - The `branch` field is NOT in the schema. Git tracks branch separately.
 - Inline `#` comments in frontmatter are NOT used (natural-language triggers replace them).
+
+## Handoff mode (`/design handoff`)
+
+Package the current in-flight plan so a fresh session or another agent can resume it with full context. **Writes nothing** — the plan file (checkbox state) + `{{STATE_DIR}}/current.txt` stay the single source of truth. This is the mid-execution counterpart to `pm next` (which kicks off a *backlog item* before implementation); handoff kicks off an *in-flight plan* mid-implementation, and Continue mode is its consumer.
+
+1. Read `{{STATE_DIR}}/current.txt`. **Empty / missing / the named plan file absent** → report "no in-flight plan to hand off" and stop (suggest `/design <task>` or `pm next`).
+2. Branch on the plan's frontmatter `status`:
+   - **`done` / `dropped`** (stale pointer) → report "not an in-flight plan (already terminal)" and stop; do not hand off.
+   - **`draft`** (unapproved) → hand off, but put "⚠ this plan is still `draft` (unapproved) — reply `승인` in the fresh session before implementing" at the top of the prompt.
+   - **`active`** → normal handoff.
+   - **any other / unknown status** → report "invalid plan status" and stop (the lifecycle only creates draft/active/done/dropped; this is a guard).
+3. Extract from the plan: `id` / `title` / `status`, Goal, Verifiable Success Criteria, Risks, and the `## Implementation Steps` split into **done (`- [x]`)** and **remaining (`- [ ]`)**. If zero steps remain, put "all steps complete — run `/verify` then `/retro` in the fresh session" in the prompt instead of a resume pointer.
+4. For a pm-loop plan (`pm_loop: true`), pull the owning task's links + memory via `pm get <id>` (id == plan slug). **On `pm get` failure / item-not-found (linkage drift)** → note that fact and continue with a plan-only handoff (do not stop). Skip this step for a standalone (`pm_loop: false`) plan.
+5. Emit a paste-ready kickoff prompt (fenced block) containing: plan id/title/status, goal, done-so-far, **resume-from-here** (first remaining step + the rest), key decisions/risks, task memory + links, and the resume command `/design continue`.
+6. Copy the prompt to the clipboard via `/copy`, then tell the user to paste it into the fresh session and stop. **If `/copy` / clipboard access fails, do NOT claim it was copied** — print the prompt inline (fenced) and tell the user to copy it manually.
+
+## Continue mode (`/design continue`)
+
+Resume the in-flight plan in THIS session.
+
+1. Read `{{STATE_DIR}}/current.txt`. Empty / missing / named plan absent → report "no in-flight plan to continue" and stop (suggest `pm next`).
+2. Branch on frontmatter `status`: `draft` → unapproved, so request `승인` (a draft plan is not implementable per the Rules) and stop / `done` · `dropped` (stale pointer) → report and stop / any other · unknown → report "invalid plan status" and stop.
+3. `active`:
+   - **Unchecked `- [ ]` steps remain** → summarize the done steps, locate the first unchecked step, and resume implementation from there (honor the existing Rules: flip `- [ ]` → `- [x]` as each lands; implement only against the active plan).
+   - **No unchecked steps remain** (all `- [x]`) → implementation is complete. Do NOT create new work or re-run steps. Route the user to `/verify` then `/retro` to close it, and stop (the `done` transition is /retro-exclusive per the Rules).
 
 ## Status Update Triggers (post-creation)
 
