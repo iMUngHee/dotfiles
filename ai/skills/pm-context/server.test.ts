@@ -52,6 +52,19 @@ async function main() {
     assert.equal((r.json as any).item.plan, stepRel, "join item.plan stays a string path");
     assert.equal((r.json as any).plan.nextStep, "wire the first thing", "join top-level plan.nextStep present/unchanged");
 
+    // inFlight (dashboard-inflight-surface): /api/roadmap resolves current.txt → the open item whose Plan matches.
+    r = await handle(root, "GET", "/api/roadmap", P, undefined);
+    assert.equal((r.json as any).inFlight, null, "no current.txt → inFlight null");
+    await mkdir(join(root, ".agents", "state"), { recursive: true });
+    await writeFile(join(root, ".agents", "state", "current.txt"), stepRel + "\n");
+    r = await handle(root, "GET", "/api/roadmap", P, undefined);
+    assert.equal((r.json as any).inFlight, "b-step", "current.txt → in-flight open item id (newline trimmed)");
+    // non-matching (non-canonical / stale / standalone) path degrades to null, not a throw (R1 suggestion 1)
+    await writeFile(join(root, ".agents", "state", "current.txt"), ".agents/plans/2026-01-01-nonexistent.md\n");
+    r = await handle(root, "GET", "/api/roadmap", P, undefined);
+    assert.equal((r.json as any).inFlight, null, "non-matching current.txt path → inFlight null");
+    await rm(join(root, ".agents", "state", "current.txt"), { force: true }); // pristine state for later tests
+
     // join + validate — join nests into showItem's shape (item / task / contextLinks / contextMemory)
     r = await handle(root, "GET", "/api/roadmap/a-1/join", P, undefined);
     assert.equal((r.json as any).item.id, "a-1", "join nests item for showItem");
@@ -100,6 +113,19 @@ async function main() {
     r = await handle(root, "POST", "/api/focus", P, { id: "nope" });
     assert.equal(r.status, 409, "focus on unknown id refused");
 
+    // dock-stale-focus-guard: a stale focus.txt (points to a non-open id — reachable because a
+    // per-worktree focus.txt isn't cleared when another worktree closes the item) must be nulled on
+    // /api/roadmap (so the dock falls through to next-up) while /api/next keeps it raw. a-1 is open here.
+    await writeFile(join(root, ".agents", "state", "focus.txt"), "ghost\n"); // stale: not in open[]
+    r = await handle(root, "GET", "/api/roadmap", P, undefined);
+    assert.equal((r.json as any).focus, null, "roadmap nulls a stale focus (not in open[])");
+    r = await handle(root, "GET", "/api/next", P, undefined);
+    assert.equal((r.json as any).focus, "ghost", "next keeps raw stale focus (intentional asymmetry)");
+    await writeFile(join(root, ".agents", "state", "focus.txt"), "a-1\n"); // valid: a-1 is open
+    r = await handle(root, "GET", "/api/roadmap", P, undefined);
+    assert.equal((r.json as any).focus, "a-1", "roadmap preserves a valid (open) focus");
+    await writeFile(join(root, ".agents", "state", "focus.txt"), ""); // restore cleared state for later tests
+
     // planless drop through ops
     r = await handle(root, "POST", "/api/roadmap/a-1/drop", P, { reason: "no" });
     assert.equal((r.json as any).dropped, true);
@@ -118,15 +144,18 @@ async function main() {
     // /api/roadmap open[] + join item{}, by on task-GET/join link+memory projections.
     await ops.itemAdd(root, { task: "COLLAB" }, { id: "c-1", title: "C1" }, { retries: 0 });
     await ops.itemSetOwner(root, "COLLAB", "c-1", "alice", { note: "handoff", retries: 0 });
+    await ops.itemSetDeps(root, "COLLAB", "c-1", ["b-step"], { retries: 0 }); // cross-task dependency exposure
     r = await handle(root, "GET", "/api/roadmap", P, undefined);
     const collabRow = (r.json as any).open.find((i: any) => i.id === "c-1");
     assert.equal(collabRow.owner, "alice", "roadmap open[] exposes owner");
     assert.equal(collabRow.ownerNote, "handoff", "roadmap open[] exposes ownerNote");
     assert.equal(collabRow.mode, "collab", "roadmap open[] exposes mode");
+    assert.deepEqual(collabRow.dependsOn, ["b-step"], "roadmap open[] exposes dependsOn");
     r = await handle(root, "GET", "/api/roadmap/c-1/join", P, undefined);
     assert.equal((r.json as any).item.owner, "alice", "join item exposes owner");
     assert.equal((r.json as any).item.ownerNote, "handoff", "join item exposes ownerNote");
     assert.equal((r.json as any).item.mode, "collab", "join item exposes mode");
+    assert.deepEqual((r.json as any).item.dependsOn, ["b-step"], "join item exposes dependsOn");
     assert.equal((r.json as any).contextLinks[0].by, "alice", "join contextLinks exposes by");
     assert.equal((r.json as any).contextMemory[0].by, "bob", "join contextMemory exposes by");
     r = await handle(root, "GET", "/api/tasks/COLLAB", P, undefined);
