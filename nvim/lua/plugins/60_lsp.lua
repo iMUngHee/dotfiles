@@ -39,6 +39,8 @@ return {
         ensure_installed = {
           "ts_ls",
           "eslint", -- ESLint LSP: real-time diagnostics + code actions (replaces nvim-lint eslint_d)
+          "cssls", -- CSS/SCSS/LESS diagnostics, completion, hover (mason: css-lsp)
+          "somesass_ls", -- SCSS cross-file variables/mixins/@use-@forward module symbols
           "lua_ls",
           "rust_analyzer",
           "clangd",

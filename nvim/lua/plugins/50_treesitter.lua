@@ -23,6 +23,7 @@ return {
         "yaml",
         "html",
         "css",
+        "scss",
         "go",
         "helm",
         "dockerfile",
