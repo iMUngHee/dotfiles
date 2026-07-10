@@ -66,6 +66,9 @@
   .dock .title{font-size:14px;color:var(--muted)}
   .dock .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:6px;letter-spacing:.02em}
   .dock .actions{display:flex;flex-direction:column;gap:8px;min-width:160px}
+  /* secondary focus card: flat (no elevation / no live dot), tucked under the primary dock */
+  .dock.secondary{box-shadow:none;background:var(--surface-2);margin-top:-14px}
+  .dock.secondary .rlabel{color:var(--muted)}
   .nextstep{font-family:var(--mono);font-size:12px;color:var(--accent-strong);background:var(--accent-weak);border-radius:7px;padding:7px 11px;margin:13px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .nextstep .k{color:var(--accent);font-weight:600}
   /* section labels + queue */
@@ -73,7 +76,7 @@
   .seclabel .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
   .seclabel .cnt{font-size:11px;color:var(--faint);letter-spacing:.04em}
   .rows{border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .row{display:grid;grid-template-columns:16px 44px minmax(0,220px) 1fr 150px;align-items:center;gap:13px;min-height:38px;padding:0 14px;border-bottom:1px solid var(--border);font-size:12.5px;cursor:pointer}
+  .row{display:grid;grid-template-columns:16px 44px minmax(0,220px) 1fr minmax(150px,max-content);align-items:center;gap:13px;min-height:38px;padding:0 14px;border-bottom:1px solid var(--border);font-size:12.5px;cursor:pointer}
   .row:last-child{border-bottom:none}
   .row:hover{background:var(--surface-2)} .row:hover .tick{color:var(--accent)}
   .row .tick{color:var(--faint);font-size:11px}
@@ -223,44 +226,58 @@ async function renderHome() {
 
   brand.replaceChildren(el("b", { text: "pm" }), document.createTextNode(" · roadmap"), roadmap.project ? el("span", { class: "proj", text: roadmap.project.replace(/^\./, "") }) : null);
   const open = roadmap.open || [];
-  const dockId = roadmap.focus || (next.eligible && next.eligible[0] && next.eligible[0].id) || null;
+  // dock precedence: in-flight (current.txt) > focus > top eligible (dashboard-inflight-surface).
+  // inFlight elevates current work into the dock without setting focus; the focus-toggle button is
+  // keyed on actual focus identity (not the dock state) so an in-flight ≠ focus item still shows "focus".
+  const dockId = roadmap.inFlight || roadmap.focus || (next.eligible && next.eligible[0] && next.eligible[0].id) || null;
   const dockItem = dockId ? open.find((o) => o.id === dockId) : null;
   const frag = document.createDocumentFragment();
 
-  /* dock */
-  if (dockItem) {
-    const focused = !!roadmap.focus;
+  /* dock — one card builder, reused for the primary dock + an optional secondary Focus card */
+  function dockCard(item, { eyebrow, secondary, ctaText, itemIsFocus }) {
     const actions = el("div", { class: "actions" },
-      el("button", { class: "primary", text: "copy kickoff →", onclick: () => copyKickoff(dockItem.id) }),
-      focused
+      el("button", { class: "primary", text: ctaText, onclick: () => copyKickoff(item.id) }),
+      itemIsFocus
         ? el("button", { text: "clear focus", onclick: () => mutate(() => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "" }) })) })
-        : el("button", { text: "focus", onclick: () => mutate(() => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: dockItem.id }) })) }),
-      el("button", { text: "open →", onclick: () => { location.hash = `#/item/${dockItem.id}`; } }));
-    frag.append(el("section", { class: "dock", "aria-label": focused ? "focused item" : "next up" },
-      el("div", { class: "rlabel" }, el("span", { class: "live" }), focused ? "Focus" : "Next up"),
+        : el("button", { text: "focus", onclick: () => mutate(() => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: item.id }) })) }),
+      el("button", { text: "open →", onclick: () => { location.hash = `#/item/${item.id}`; } }));
+    return el("section", { class: secondary ? "dock secondary" : "dock", "aria-label": eyebrow },
+      el("div", { class: "rlabel" }, secondary ? null : el("span", { class: "live" }), eyebrow),
       el("div", { class: "body" },
         el("div", { class: "main" },
-          el("div", { class: "line1" }, pchip(dockItem.priority),
-            el("span", { class: "id" }, el("a", { href: `#/item/${dockItem.id}`, text: dockItem.id })),
-            el("span", { class: "title", text: dockItem.title })),
-          el("div", { class: "meta" }, "task · ", el("a", { href: `#/task/${dockItem.task}`, class: "tasklink", text: dockItem.task }), (dockItem.owner && dockItem.mode === "collab") ? ` · @${dockItem.owner}` : ""),
-          dockItem.nextStep
-            ? el("div", { class: "nextstep", title: cleanStep(dockItem.nextStep) }, el("span", { class: "k", text: "→ next  " }), cleanStep(dockItem.nextStep))
-            : el("div", { class: "nextstep" }, el("span", { class: "k", text: "→  " }), el("span", { text: dockItem.plan ? "plan set · no open step — /verify or /retro" : `no plan · kickoff to start /design ${dockItem.id}` }))),
-        actions)));
+          el("div", { class: "line1" }, pchip(item.priority),
+            el("span", { class: "id" }, el("a", { href: `#/item/${item.id}`, text: item.id })),
+            el("span", { class: "title", text: item.title })),
+          el("div", { class: "meta" }, "task · ", el("a", { href: `#/task/${item.task}`, class: "tasklink", text: item.task }), (item.owner && item.mode === "collab") ? ` · @${item.owner}` : ""),
+          item.nextStep
+            ? el("div", { class: "nextstep", title: cleanStep(item.nextStep) }, el("span", { class: "k", text: "→ next  " }), cleanStep(item.nextStep))
+            : el("div", { class: "nextstep" }, el("span", { class: "k", text: "→  " }), el("span", { text: item.plan ? "plan set · no open step — /verify or /retro" : `no plan · kickoff to start /design ${item.id}` }))),
+        actions));
   }
+  if (dockItem) {
+    const inflight = !!roadmap.inFlight && dockId === roadmap.inFlight;
+    const isFocusItem = !!roadmap.focus && dockId === roadmap.focus;
+    const eyebrow = inflight ? "In progress" : (isFocusItem ? "Focus" : "Next up");
+    frag.append(dockCard(dockItem, { eyebrow, secondary: false, ctaText: inflight ? "copy resume →" : "copy kickoff →", itemIsFocus: isFocusItem }));
+  }
+  // secondary Focus card: focus is set AND isn't already the (in-flight) dock item — so an explicit
+  // focus is never buried in the queue when the dock is showing in-flight work. Skipped if focus
+  // isn't an open item (stale/closed pointer).
+  const focusItem = (roadmap.focus && roadmap.focus !== dockId) ? open.find((o) => o.id === roadmap.focus) : null;
+  if (focusItem) frag.append(dockCard(focusItem, { eyebrow: "Focus", secondary: true, ctaText: "copy kickoff →", itemIsFocus: true }));
 
-  /* queue */
-  const eligible = open.filter((o) => o.id !== dockId && !o.blockedBy);
-  const blocked = open.filter((o) => o.blockedBy);
+  /* queue — exclude whatever is already shown in a dock card (in-flight + secondary focus) */
+  const docked = new Set([dockId, focusItem && focusItem.id].filter(Boolean));
+  const eligible = open.filter((o) => !docked.has(o.id) && !o.blockedBy);
+  const blocked = open.filter((o) => !docked.has(o.id) && o.blockedBy);
   frag.append(el("div", { class: "seclabel" }, el("span", { class: "lbl", text: "Queue" }), el("span", { class: "cnt", text: `next candidates · ${eligible.length}` })));
   if (eligible.length) frag.append(el("div", { class: "rows" }, eligible.map(queueRow)));
   else frag.append(el("div", { class: "empty" }, "no eligible items.", el("span", { class: "cli mono", text: "pm add <KEY> <id> -p P2 --title …" })));
   if (blocked.length) {
-    frag.append(el("div", { class: "subhead", text: "Blocked · earlier-order sibling open" }));
+    frag.append(el("div", { class: "subhead", text: "Blocked · dependency or earlier order" }));
     frag.append(el("div", { class: "rows" }, blocked.map((o) => el("div", { class: "row blocked" },
       el("span", { class: "tick", text: "✕" }), pchip(o.priority), el("span", { class: "rid", text: o.id }),
-      el("span", { class: "rtitle", text: o.title }), el("span", { class: "rtask", text: "by " + (o.blockedBy || "?") })))));
+      el("span", { class: "rtitle", text: o.title }), el("span", { class: "rtask", title: "by " + (o.blockedBy || "?"), text: "by " + (o.blockedBy || "?") })))));
   }
 
   /* owners (collab visibility) — only when a collab item exists */
@@ -316,6 +333,7 @@ async function renderItem(id) {
   dl.append(el("dt", { text: "task" }), el("dd", {}, el("a", { href: `#/task/${it.task}`, class: "tasklink", text: it.task })));
   kv("mode", it.mode || "solo");
   if (it.owner) kv("owner", it.owner + (it.ownerNote ? ` — ${it.ownerNote}` : ""));
+  if (it.dependsOn && it.dependsOn.length) kv("depends on", it.dependsOn.join(", "));
   if (it.note) kv("note", it.note, true);
   kv("plan", plan ? `${plan.path} (${plan.status})` : "— no plan", !plan);
   if (plan && plan.nextStep) kv("next step", cleanStep(plan.nextStep));

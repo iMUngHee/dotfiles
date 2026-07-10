@@ -43,10 +43,22 @@ export async function handle(root: string, method: string, pathname: string, par
     const open = await Promise.all([...nc.eligible, ...nc.blocked].map(async (c) => {
       let nextStep: string | null = null;
       if (c.plan) { try { nextStep = planInfo(c.plan, await readFile(join(root, c.plan), "utf-8")).nextStep; } catch { nextStep = null; } }
-      return { id: c.id, title: c.title, priority: c.priority, status: c.status, order: c.order, task: c.key, plan: c.plan, nextStep, note: c.note, blockedBy: c.blockedBy, owner: c.owner, ownerNote: c.ownerNote, mode: c.mode };
+      return { id: c.id, title: c.title, priority: c.priority, status: c.status, order: c.order, task: c.key, plan: c.plan, nextStep, note: c.note, blockedBy: c.blockedBy, dependsOn: c.dependsOn, owner: c.owner, ownerNote: c.ownerNote, mode: c.mode };
     }));
     const recentlyClosed = (await recentClosed(root, 50)).map((r) => ({ id: r.id, plan: r.plan, status: r.status, note: r.reason, task: r.key, closed: r.closed }));
-    return { status: 200, json: { project: basename(root), focus: nc.focus, updated: "", open, recentlyClosed } };
+    // in-flight item (dashboard-inflight-surface): the open item whose Plan matches the in-flight plan
+    // pointer (.agents/state/current.txt, draft|active). Read-only, additive — drives the dock's "In
+    // progress" state so current work shows without setting focus. Degrades to null on no match
+    // (standalone pm_loop:false plan, already-closed item, or a stale pointer). No new write route.
+    const cur = (await readStamped(join(root, ".agents", "state", "current.txt")))?.content.trim() || null;
+    const inFlight = cur ? (open.find((o) => o.plan === cur)?.id ?? null) : null;
+    // /api/roadmap.focus is a DOCK-DISPLAY value (dock-stale-focus-guard): null out a non-open (stale)
+    // focus so the dock falls through to inFlight/next-up instead of resolving to a non-open id — which
+    // left dockItem undefined and suppressed the whole primary dock (roadmap.html:232/257). Stale focus
+    // is reachable: per-worktree focus.txt isn't cleared when another worktree closes the item.
+    // /api/next keeps raw nc.focus (CLI targeting) — the asymmetry is intentional and test-locked.
+    const focus = nc.focus && open.some((o) => o.id === nc.focus) ? nc.focus : null;
+    return { status: 200, json: { project: basename(root), focus, inFlight, updated: "", open, recentlyClosed } };
   }
   if (pathname === "/api/roadmap/validate" && method === "GET") return { status: 200, json: await validateRoadmap(root) };
 
@@ -74,7 +86,7 @@ export async function handle(root: string, method: string, pathname: string, par
       const contextLinks = v.links.map((b) => ({ label: b.id, url: getField(b, "URL") ?? "", triggers: (getField(b, "Triggers") ?? "").split(",").map((s) => s.trim()).filter(Boolean), summary: getField(b, "Summary") ?? "", by: getField(b, "By") ?? "" }));
       const contextMemory = v.memory.map((b) => ({ title: b.id, note: getField(b, "Note") ?? "", date: getField(b, "Date") ?? "", by: getField(b, "By") ?? "" }));
       return { status: 200, json: {
-        item: { id: v.id, title: v.title, priority: v.priority, note: v.note, status: v.status, plan: v.plan?.path ?? null, task: v.key, owner: v.owner, ownerNote: v.ownerNote, mode: v.mode },
+        item: { id: v.id, title: v.title, priority: v.priority, note: v.note, status: v.status, plan: v.plan?.path ?? null, task: v.key, owner: v.owner, ownerNote: v.ownerNote, mode: v.mode, dependsOn: v.dependsOn },
         closed: v.closed, task: v.key, plan: v.plan,
         contextLinks, contextMemory,
         siblings: v.siblings.map((s) => ({ ...s, status: "done" })), // doneSiblings are all done
