@@ -1,7 +1,7 @@
 // CLI entry the pm-* skills call — the single deterministic write path (no
 // hand-edited markdown). Read subcmds (list/tree/get/next/recent/validate) +
 // write subcmds routed to ops.ts. root = $PM_ROOT or `git rev-parse --show-toplevel`.
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as ops from "./ops.ts";
 import { nextCandidates, resolveItem, buildNextPrompt, recentClosed, listActiveTasks, section, taskMode, myItems, boardByOwner, type Candidate } from "./join.ts";
@@ -68,7 +68,7 @@ function resolveActorSource(root: string, opts: Record<string, string | true>): 
   if (flag) return { actor: String(flag).trim(), source: "flag" };
   if (process.env.PM_ACTOR && process.env.PM_ACTOR.trim()) return { actor: process.env.PM_ACTOR.trim(), source: "PM_ACTOR" };
   try { const a = readFileSync(join(root, ".agents", "state", "actor.txt"), "utf-8").trim(); if (a) return { actor: a, source: "state/actor.txt" }; } catch { /* no actor.txt */ }
-  try { const e = execSync("git config user.email", { cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim(); if (e) return { actor: e, source: "git user.email" }; } catch { /* no git identity */ }
+  try { const e = execFileSync("git", ["config", "user.email"], { cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim(); if (e) return { actor: e, source: "git user.email" }; } catch { /* no git identity */ }
   return { actor: "", source: "" };
 }
 function resolveActor(root: string, opts: Record<string, string | true>): string {
@@ -104,7 +104,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const flt = (cs: Candidate[]) => (opts.all || !actor) ? cs : filterForActor(cs, actor);
       const elig = flt(nc.eligible), blk = flt(nc.blocked);
       const out = ["## Eligible (next candidates)", fmtCandidates(elig),
-        blk.length ? "\n## Blocked (earlier-Order sibling open)" : "",
+        blk.length ? "\n## Blocked (dependency or earlier-Order sibling)" : "",
         blk.length ? blk.map((c) => `  [${c.priority}] ${c.key}/${c.id} — blocked by ${c.blockedBy}${ownerBadge(c)}`).join("\n") : "",
         nc.inbox ? `\n> inbox: ${nc.inbox} awaiting triage` : "",
         nc.focus ? `\n> focus: ${nc.focus}` : ""].filter(Boolean).join("\n");
@@ -162,8 +162,12 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       else if (sub === "archive") await ops.taskArchive(root, key);
       else if (sub === "restore") await ops.taskRestore(root, key);
       else if (sub === "set-mode") { // ops enforces the actor precondition on solo→collab
-        await ops.taskSetMode(root, key, pos[2], resolveActor(root, opts));
-        return { out: `task ${key}: mode → ${pos[2]}`, code: 0 };
+        const { actor, source } = resolveActorSource(root, opts);
+        const r = await ops.taskSetMode(root, key, pos[2], actor);
+        let out = `task ${key}: mode → ${r.mode}`;
+        if (r.assigned > 0) out += ` — assigned ${r.assigned} unowned item${r.assigned === 1 ? "" : "s"} to ${r.actor}`;
+        if (r.assigned > 0 && source === "git user.email") out += `\n⚠ owner '${r.actor}' resolved from git user.email — if that's a personal address, undo with 'pm task set-mode ${key} solo' or reassign owners; set identity via --actor / PM_ACTOR / 'pm whoami <name>'`;
+        return { out, code: 0 };
       }
       else if (sub === "collaborators") { // set the roster (comma list); empty clears it
         await ops.taskSetCollaborators(root, key, pos.slice(2).join(" "));
@@ -182,6 +186,14 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     case "plan": { await ops.itemSetPlan(root, pos[0], pos[1], pos[2]); return { out: `linked ${pos[1]} → ${pos[2]}`, code: 0 }; }
     case "reprioritize": { await ops.itemSetPriority(root, pos[0], pos[1], pos[2]); return { out: `reprioritized ${pos[1]} → ${pos[2]}`, code: 0 }; }
     case "reorder": { await ops.itemSetOrder(root, pos[0], pos[1], pos[2]); return { out: `reordered ${pos[1]} → ${pos[2]}`, code: 0 }; }
+    // dependency edges: `depend <KEY> <id> <csv|->` sets the full DependsOn list; `-` clears.
+    case "depend": {
+      const [key, id, targets] = pos;
+      if (!key || !id || targets === undefined) return { out: "depend needs <KEY> <id> <csv|->", code: 1 };
+      const deps = targets === "-" ? [] : targets.split(",").map((s) => s.trim()).filter(Boolean);
+      await ops.itemSetDeps(root, key, id, deps);
+      return { out: deps.length ? `depend ${key}/${id} → ${deps.join(", ")}` : `cleared deps on ${key}/${id}`, code: 0 };
+    }
     case "approve": { await ops.itemApprove(root, pos[0], pos[1]); return { out: `approved ${pos[1]}`, code: 0 }; }
     case "close": {
       const status = str(opts.status) ?? "done";
@@ -226,6 +238,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       await ops.completePlanFromRetro(root, key, id, {
         planPath: plan, terminalStatus: status,
         reason: str(opts.reason), deferred,
+        closedBy: await collabBy(root, key, opts),
       });
       return { out: `completed ${id} (${status})${deferred.length ? `, harvested ${deferred.length} deferred` : ""}`, code: 0 };
     }
@@ -302,7 +315,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: (await findTask(root, nc.focus)) ?? "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
   }
 }
 

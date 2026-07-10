@@ -111,6 +111,32 @@ async function main() {
     await ops.taskSetCollaborators(root, "CB", "carol, dave", O);
     assert.deepEqual(await j.taskCollaborators(root, "CB"), ["carol", "dave"], "roster parsed");
 
+    // ── dependency edges (DependsOn): cross-task blocking, precedence, unblock, exposure ──
+    // a closed target never blocks (b-1 is done): c-1 depends on b-1 ⇒ still eligible
+    await ops.itemSetDeps(root, "C", "c-1", ["b-1"], O);
+    let ncd = await j.nextCandidates(root);
+    assert.ok(ncd.eligible.some((c) => c.id === "c-1"), "dep on a closed item does not block");
+    // cross-task open target blocks: c-1 depends on a-cur (open in task A)
+    await ops.itemSetDeps(root, "C", "c-1", ["a-cur"], O);
+    ncd = await j.nextCandidates(root);
+    const c1b = ncd.blocked.find((c) => c.id === "c-1");
+    assert.ok(c1b && c1b.blockedBy === "a-cur", "cross-task dependency blocks");
+    assert.deepEqual(c1b!.dependsOn, ["a-cur"], "candidate carries dependsOn");
+    // dependency blocker takes precedence over an earlier-Order sibling (c-2 is order-blocked by c-1)
+    await ops.itemSetDeps(root, "C", "c-2", ["a-cur"], O);
+    ncd = await j.nextCandidates(root);
+    assert.equal(ncd.blocked.find((c) => c.id === "c-2")!.blockedBy, "a-cur", "dep blocker precedes order blocker");
+    // closing/dropping the dependency unblocks the dependent
+    await ops.dropItem(root, "A", "a-cur", { reason: "test unblock", ...O });
+    ncd = await j.nextCandidates(root);
+    assert.ok(ncd.eligible.some((c) => c.id === "c-1"), "dropping the dep target unblocks the dependent");
+    // ItemView + kickoff expose DependsOn
+    await ops.itemSetDeps(root, "C", "c-1", ["c-2"], O);
+    const cv = await j.resolveItem(root, "C", "c-1");
+    assert.deepEqual(cv!.dependsOn, ["c-2"], "ItemView carries dependsOn");
+    const dprompt = j.buildNextPrompt(cv!);
+    assert.ok(dprompt.includes("## Depends on") && dprompt.includes("c-2"), "kickoff shows Depends on list");
+
     console.log("join.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });
