@@ -26,6 +26,7 @@ A Full Contract should include concrete values for the dimensions it uses:
 - Radius, elevation, border, and divider rules with values.
 - Motion budget with duration/easing values and reduced-motion behavior.
 - Density rules for repeated surfaces such as tables, lists, sidebars, filters, and toolbars.
+- Design tension (dominant + counterpoint) and the surface's signature moment, named concretely (or signature `N/A` with its one-line rationale).
 
 Mark unused dimensions as `N/A` with one reason. Do not create a speculative system for components or states that the surface will not use.
 
@@ -63,6 +64,7 @@ Record concrete unknowns instead of inventing answers:
 
 After drafting a Full Contract, evaluate it with these questions:
 
+- Can you state the design's idea in one sentence without naming colors or fonts?
 - Can another agent implement the first screen without guessing spacing, type, radius, color roles, or component states?
 - Does every component spec map to an actual workflow location?
 - Are dashboard/admin surfaces dense and resilient enough for real data, repeated action, and recovery?

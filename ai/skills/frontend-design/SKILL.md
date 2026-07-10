@@ -13,14 +13,9 @@ Task: $ARGUMENTS (if empty, ask what client surface or UX/UI change to design)
 
 ## Core Principle
 
-Quality means fitness for the user's job, not visual distinctiveness. Do not start from a fixed aesthetic taste. Classify the surface first, then derive craft rules that serve the workflow.
+Fitness for the user's job is the floor; a committed point of view is the job. Classify the surface first, derive the craft rules that serve the workflow, then commit a specific point of view for THIS product, derived from product, audience, and surface job — never an imported house style.
 
-Examples:
-
-- Dashboards and operational tools prioritize density, scanability, fast repeated action, resilient data states, keyboard flow, low decorative chrome, and clear recovery.
-- Landing and marketing pages prioritize first-viewport signal, narrative, trust, conversion flow, brand memory, and asset quality.
-- Games and expressive experiences prioritize feel, feedback, motion, pacing, and legible state.
-- Content and editorial surfaces prioritize reading flow, hierarchy, rhythm, and content integrity.
+**Competent-generic is a named failure mode**: output that passes every floor yet could belong to any product — the design equivalent of lorem ipsum. Boring by decision, never by default: genericness is acceptable only when explicitly chosen (compliance form, explicit "standard" request), stated in one line.
 
 ## Priority Stack
 
@@ -29,10 +24,10 @@ Resolve design conflicts in this order:
 1. Accessibility floor from `references/craft-defaults.md`. If an approved contract or captured UI falls below the floor, flag the conflict instead of copying the inaccessible value.
 2. Approved `design-contract.md` or captured product system.
 3. Surface-fit defaults from `references/craft-defaults.md` for dimensions the contract does not specify.
-4. Aesthetic refinement that improves the user's job on the classified surface.
-5. Delight only when it is low-frequency, non-blocking, and still matches the surface.
+4. Expression of the committed point of view (Workflow step 3) in the surface's visual and interaction choices.
+5. One signature moment per surface — memorable, serving the job, low-frequency, non-blocking, restrained on dense surfaces; functional and subtle counts. `N/A` with a one-line rationale is valid when boring-by-decision was invoked.
 
-For no-reference work, a committed art-direction concept (Workflow step 3) governs how levels 4–5 are expressed, but never overrides levels 1–3.
+Levels 4-5 are obligations, not permissions — and never override levels 1-3: craft-defaults surface profiles (density, restraint, avoid-lists) outrank point-of-view expression.
 
 When no `design-contract.md`, brand guide, screenshot, or external reference exists, produce a complete practical baseline from `references/craft-defaults.md`. External catalogs are optional inspiration only; never make them a prerequisite for quality.
 
@@ -84,30 +79,25 @@ Before build mode, find the applicable `design-contract.md`.
 
 Canonical `design-contract.md` is approved/current contract only. Do not put draft status inside canonical `design-contract.md`. Drafts and deltas are workflow proposals until the user approves writing them.
 
+A user-supplied portable brand snapshot (for example a Google-format `DESIGN.md`) is input, not the contract: treat it as a captured product system for tokens and art direction. When the codebase has an existing shared component, importing it beats re-implementing from the snapshot's component specs.
+
 Do not create or edit `design-contract.md` unless the user explicitly asks for file changes or approves the proposed contract. For greenfield work, prefer persisting the approved contract before build. If the user explicitly wants implementation before persistence, an approved in-session contract may satisfy build mode for that turn, but state that the durable `design-contract.md` artifact is still missing.
 
 `design-contract.md` is separate from `.agents/plans/*.md`: `design-contract.md` says how the product surface should work and feel; plans say how a task will be implemented.
 
-### 3. Art Direction (no-reference work)
+### 3. Concept & Direction Commit
 
-When no applicable `design-contract.md`, brand guide, screenshot, or captured product system exists, commit to ONE concrete art-direction concept before producing any visual values. Do not fall back to a generic default — an undirected surface is why no-reference outputs all look alike.
+Fires for no-reference work (no applicable `design-contract.md`, brand guide, screenshot, or captured product system) AND for any redesign that materially changes the visual direction of an existing surface. Read `references/concept-stage.md` on entry (candidate positions, anatomy, render spec, pick flow, fallbacks).
 
-The concept names a deliberate point of view, derived from the product, audience, and surface job, across:
+Obligations:
 
-- Personality: one line naming the character (for example "calm clinical utility", "warm editorial confidence", "high-energy arcade").
-- Palette character: the role structure AND its character — not just accent plus neutral, but for example "ink-on-paper warm neutrals with one saturated signal" versus "near-black surfaces with one electric accent". Never an evenly-spread timid palette.
-- Type personality: display and body intent with a point of view, not a default UI font by reflex.
-- Motion character: how motion should feel here, within the surface's motion budget.
-- Shape and space character: sharp versus soft, dense versus airy — within the surface's density rules.
-
-Rules:
-
-- Subordinate to fitness. The concept may never lower the accessibility floor or break the surface's job (density, scanability, recovery). A dashboard gets a distinct-but-restrained identity, not decoration; an expressive surface may be bold. The Priority Stack still governs.
-- Commit, do not hedge. One clear direction beats "a bit of everything". If you cannot say why a choice serves the concept and the job, reconsider it.
-- State it. Open build with one line — `Art direction: <concept> — <why it fits the product, audience, and surface>` — visible and overridable.
-- Autonomous by default. Choose and commit without asking. Ask the user for direction first only when the request signals they want to steer (names a vibe or brand, asks for "striking", "beautiful", or "on-brand", or supplies brand assets).
-
-The committed concept becomes the Visual System's through-line and governs how the Priority Stack's refinement and delight levels are expressed. It never overrides the accessibility floor, an approved contract, or surface-fit.
+- Draft divergent candidates spanning the named positions — safe read, sharp read, borrowed read. Variations of one safe idea violate this step.
+- Open the build with a **candidate record**: one line per candidate — position label + concept (personality + palette character) + design tension (dominant + counterpoint) — plus a one-line selection rationale naming why the pick is the sharpest that fits. Bare position labels do not satisfy the record.
+- Classify the audience and commit:
+  - **Owner-taste surface** (the requester IS or directly represents the primary users) → render the candidates as variants of ONE representative screen (real screenshots, realistic content, never ASCII) and let the owner pick before committing.
+  - **External/product surface** (built for other people) → autonomous: commit the sharpest candidate that survives the floor, not the safest. Sharp must be a better reading of the job, not merely different.
+  - Mixed, stakeholder-but-not-primary-user, or unclear → gate.
+- State the commit: `Art direction: <concept> — <why it fits>`.
 
 ### 4. Contract Reconnaissance
 
@@ -119,9 +109,11 @@ Before drafting or changing a contract, inspect the existing product surface at 
 
 Read `references/craft-defaults.md` when no applicable `design-contract.md` exists, when an approved in-session contract is used for build without a durable file, or when an existing contract/delta is silent on a visual, interaction, accessibility, or component dimension the task commits to. Use only the section matching the classified surface plus the shared accessibility floor and neutral mechanics.
 
-Capture concrete facts instead of generic references. During proposal phase, mark inherited existing values as `[captured]` and new or changed values as `[proposed]`, for example `radius: [captured] 6px from --radius-md` or `table row height: [proposed] 36px`.
+Capture concrete facts instead of generic references. During proposal phase, mark inherited existing values as `[captured]` and new or changed values as `[proposed]`.
 
 Proposal annotations are temporary. Once a `design-contract.md` or delta is approved, remove `[captured]` and `[proposed]`; approved values become plain committed contract values. Preserve only meaningful provenance or rationale in Decision Log.
+
+**UX Opportunity Pass** — for a redesign, Full Contract, or material UX change on a surface with an existing implementation (skip greenfield and Seed-level edits): after capturing, run the UX Audit method once and put the top 2-4 opportunities into the contract's UX Model as a `[proposed]` block with one-line user-job impacts for the owner to accept or reject. Nothing material → declare "no material UX gaps found — existing model preserved"; a silent re-skin is a violation. If the step-3 gate also fires, present variants and opportunities at one touchpoint. Method: `references/concept-stage.md`.
 
 ### 5. Contract Depth
 
@@ -170,7 +162,7 @@ controls, validation, destructive actions, keyboard, feedback, power-user afford
 
 ## Visual System
 
-tone, palette roles, typography, spacing, radius, elevation, motion budget
+tone, design tension, signature moment, palette roles, typography, spacing, radius, elevation, motion budget
 
 ## Component Rules
 
@@ -203,7 +195,7 @@ dated decisions, rationale, unresolved product/design questions
 
 For a Presentation/Deck surface, map web dimensions to deck equivalents: `UX Model` describes slide/section flow and speaker narrative instead of routes and navigation; `Responsive & Accessibility` covers fixed-canvas scaling and projection contrast instead of breakpoints and touch targets; presenter notes are first-class. Mark web-only dimensions (`breakpoints`, `touch targets`, CSS/Tailwind tokens where irrelevant) `N/A`.
 
-`design-contract.md` is the source of truth and the agent reads it directly. A Google-format token `DESIGN.md` (the `@google/design.md` spec) is not part of this skill's output; generate one only on demand, as an export of the contract's Visual System tokens, when a mechanical consumer (Tailwind/DTCG export or external tooling) needs it.
+`design-contract.md` is the source of truth and the agent reads it directly. A Google-format token `DESIGN.md` (the `@google/design.md` spec) is not part of this skill's default output; generate one only on demand, as an export of the contract's Visual System tokens and art direction, for consumers that cannot read the contract or codebase: mechanical consumers (Tailwind/DTCG export), external generation tools (Figma Make, Stitch, v0), out-of-repo prototyping, or customer theming. An exported `DESIGN.md` carries tokens and art-direction rationale only — never component re-implementation specs that would steer an agent to rebuild existing shared components.
 
 ### 7. Build Or Handoff
 
@@ -246,11 +238,11 @@ Quality is verified by LOOKING — against the contract, the surface profile, an
 
 Scope by risk, not combinatorics — bound to primary user jobs, fragile states, and changed surfaces, and mark any unrendered area out of scope:
 
-- Seed / small UI: the touched screen with realistic data plus the states it affects. Render the relevant narrow viewport if layout, text wrapping, viewport constraints, media, nav, or touch behavior changed; otherwise mark mobile visual review out of scope.
+- Seed / small UI: the touched screen with realistic data plus the states it affects. Render the relevant narrow viewport if layout, text wrapping, media, nav, or touch behavior changed; otherwise mark mobile visual review out of scope.
 - Focused Delta: the changed screens and states, plus one adjacent state if the change affects layout, data shape, or interaction.
 - Full Contract / multi-screen: build a screen/route map, then render one representative path per primary user job — each primary screen at desktop and mobile, plus only the internal states that matter to that screen's job (empty, loading, error, selected, overflow, edge/long content, validation, destructive). For a Presentation/Deck surface, render slides at the fixed canvas, not desktop/mobile viewports.
 
-This visual review is ADDITIVE — it does not replace the non-visual checks below (keyboard flow, focus order, semantics, contrast, reduced motion stay as their own checks). Common failure modes to look for (not exhaustive): text overflowing or clipping a container; controls in one group with inconsistent height or baseline; rendered density looser or more generic than the surface profile; hidden/empty/loading states wrong on first paint.
+This visual review is ADDITIVE — it does not replace the non-visual checks below. Common failure modes to look for: text overflowing or clipping a container; controls in one group with inconsistent height or baseline; rendered density looser or more generic than the surface profile; hidden/empty/loading states wrong on first paint.
 
 If rendering is not feasible in your environment, say so, list what was not rendered, and mark craft quality NOT VERIFIED — never claim a craft PASS from source alone.
 
@@ -265,8 +257,7 @@ Check:
 - Responsive and accessibility: breakpoints, touch target, contrast, visible focus, semantic HTML, and reduced-motion floors from `references/craft-defaults.md`.
 - Motion: frequency-appropriate, specific transitions only, no `transition: all`, and `prefers-reduced-motion` support.
 - Visual system: tokens, spacing, typography, radius, elevation, and asset rules match `design-contract.md`; committed values name token and value, or proposal values carry `[captured]` / `[proposed]`.
-- Contract language: committed specs contain no naked adjectives such as "clean", "modern", "spacious", or "polished" without the concrete value or rule that makes them true.
-- Committed direction: for no-reference work, a stated art-direction concept exists, and the type, color, hero, and spatial choices express it rather than a generic default.
+- Contract language: committed specs contain no naked adjectives such as "clean" or "modern" without the concrete value or rule that makes them true.
+- Crit pass: (a) the design's idea can be stated in one sentence without naming colors or fonts — else competent-generic FAIL; (b) the named signature moment is visible in the render, or its `N/A` rationale stands; (c) the design tension (dominant + counterpoint) is expressed, not homogenized away; (d) the candidate record exists and its candidates genuinely diverge; (e) on an owner-taste surface the committed concept is the owner-picked one.
+- UX contribution: a redesign of an existing surface carries the `[proposed]` UX improvements block or the explicit no-gaps declaration in its contract.
 - Microcopy: labels, helper text, empty states, validation, and error recovery are clear and task-specific.
-
-For dashboards/admin surfaces, explicitly test dense data, filters, tables, repeated actions, and low-chrome scanability. For landing/marketing surfaces, verify first-viewport signal, real product/brand presence, conversion path, and asset quality.
