@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { runCli } from "./pm-roadmap.ts";
 
 async function makePlan(root: string, rel: string, status = "draft"): Promise<void> {
@@ -148,6 +149,43 @@ async function main() {
     assert.equal((await cli("task", "collaborators", "CB", "carol,dave")).code, 0);
     assert.ok((await readFile(join(root, ".agents/tasks/CB/task.md"), "utf8")).includes("collaborators: carol, dave"), "roster set");
 
+    // set-mode collab: output surfaces assigned count + owner; explicit --actor → NO git-fallback warning
+    assert.equal((await cli("task", "create", "SM", "--title", "SM")).code, 0);
+    assert.equal((await cli("add", "sm-1", "--task", "SM", "--title", "X")).code, 0);
+    assert.equal((await cli("add", "sm-2", "--task", "SM", "--title", "Y")).code, 0);
+    const smOut = (await cli("task", "set-mode", "SM", "collab", "--actor", "alice")).out;
+    assert.ok(smOut.includes("assigned 2 unowned items to alice"), "set-mode surfaces assigned count + owner");
+    assert.ok(!smOut.includes("⚠"), "explicit --actor → no git-fallback warning");
+    const smSolo = (await cli("task", "set-mode", "SM", "solo", "--actor", "alice")).out;
+    assert.ok(smSolo.includes("mode → solo") && !smSolo.includes("assigned") && !smSolo.includes("⚠"), "collab→solo is quiet");
+    // zero-unowned collab switch (items already owned from the prior collab pass) is also quiet
+    const smReco = (await cli("task", "set-mode", "SM", "collab", "--actor", "alice")).out;
+    assert.ok(smReco.includes("mode → collab") && !smReco.includes("assigned") && !smReco.includes("⚠"), "zero-unowned collab switch is quiet");
+
+    // git-fallback warning, ISOLATED so the fallback rung actually reaches `git config user.email`
+    // (fresh root: no actor.txt, PM_ACTOR cleared, no --actor, GIT_CONFIG_*=/dev/null + local user.email)
+    {
+      const groot = await mkdtemp(join(tmpdir(), "cli-gitfb-"));
+      const savedActor = process.env.PM_ACTOR, savedGCG = process.env.GIT_CONFIG_GLOBAL, savedGCS = process.env.GIT_CONFIG_SYSTEM;
+      delete process.env.PM_ACTOR;
+      process.env.GIT_CONFIG_GLOBAL = "/dev/null"; process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+      try {
+        execFileSync("git", ["init", "-q"], { cwd: groot });
+        execFileSync("git", ["config", "user.email", "personal@gmail.com"], { cwd: groot });
+        const g = (...a: string[]) => runCli(groot, a);
+        assert.equal((await g("task", "create", "GF", "--title", "GF")).code, 0);
+        assert.equal((await g("add", "gf-1", "--task", "GF", "--title", "X")).code, 0);
+        const gOut = (await g("task", "set-mode", "GF", "collab")).out; // no --actor / PM_ACTOR / actor.txt → git fallback
+        assert.ok(gOut.includes("⚠") && gOut.includes("git user.email"), "git-fallback owner triggers warning");
+        assert.ok(gOut.includes("personal@gmail.com"), "warning names the fallback owner");
+      } finally {
+        if (savedActor === undefined) delete process.env.PM_ACTOR; else process.env.PM_ACTOR = savedActor;
+        if (savedGCG === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = savedGCG;
+        if (savedGCS === undefined) delete process.env.GIT_CONFIG_SYSTEM; else process.env.GIT_CONFIG_SYSTEM = savedGCS;
+        await rm(groot, { recursive: true, force: true });
+      }
+    }
+
     // legacy detection + migrate subcmd on a separate legacy repo
     const leg = await mkdtemp(join(tmpdir(), "cli-legacy-"));
     await mkdir(join(leg, ".agents"), { recursive: true });
@@ -155,6 +193,19 @@ async function main() {
     assert.ok((await runCli(leg, ["list"])).out.includes("legacy roadmap detected"), "legacy detected on read");
     assert.ok((await runCli(leg, ["migrate"])).out.includes("DRY-RUN"), "migrate subcmd dry-runs");
     await rm(leg, { recursive: true, force: true });
+
+    // ── depend via CLI: deduped csv set, '-' clear, dangling throw, missing-arg usage ──
+    assert.equal((await cli("task", "create", "DPT", "--title", "Dep")).code, 0);
+    assert.equal((await cli("add", "dpt-a", "--task", "DPT", "--title", "A")).code, 0);
+    assert.equal((await cli("add", "dpt-b", "--task", "DPT", "--title", "B")).code, 0);
+    assert.equal((await cli("depend", "DPT", "dpt-a", "dpt-b,dpt-b")).code, 0);
+    const dbl = await readFile(join(root, ".agents/tasks/DPT/backlog.md"), "utf8");
+    assert.ok(dbl.includes("DependsOn: dpt-b") && !dbl.includes("dpt-b, dpt-b"), "depend writes deduped DependsOn");
+    assert.equal((await cli("depend", "DPT", "dpt-a", "-")).code, 0);
+    assert.ok(!(await readFile(join(root, ".agents/tasks/DPT/backlog.md"), "utf8")).includes("DependsOn:"), "'-' clears DependsOn");
+    await assert.rejects(() => cli("depend", "DPT", "dpt-a", "ghost-x"), /not a known item id/, "CLI surfaces dangling throw");
+    assert.equal((await cli("depend", "DPT", "dpt-a")).code, 1, "missing target → usage exit 1");
+    assert.equal((await cli("validate")).code, 0, "validate clean after depend");
 
     console.log("cli.test.ts OK");
   } finally {

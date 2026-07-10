@@ -83,6 +83,12 @@ async function main() {
     await ops.taskCreate(root, "M", "M", O);
     await writeFile(taskFile(root, "M", "task.md"), `---\nkey: M\ntitle: M\nstatus: active\nmode: bogus\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n# M\n`);
     assert.ok(has(await validateRoadmap(root), "C12"), "C12 bad mode");
+    // blank `mode:` value → treated as absence → solo, NOT a C12 error (#8c)
+    await writeFile(taskFile(root, "M", "task.md"), `---\nkey: M\ntitle: M\nstatus: active\nmode: \ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n# M\n`);
+    assert.ok(!has(await validateRoadmap(root), "C12"), "C12: blank mode is not an error (→ solo)");
+    // absent `mode:` line → no error (→ solo), unchanged legacy behavior (no migration needed)
+    await writeFile(taskFile(root, "M", "task.md"), `---\nkey: M\ntitle: M\nstatus: active\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n# M\n`);
+    assert.ok(!has(await validateRoadmap(root), "C12"), "C12: absent mode is not an error (→ solo)");
     await writeFile(taskFile(root, "M", "task.md"), `---\nkey: M\ntitle: M\nstatus: active\nmode: collab\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n# M\n`); // → collab
 
     // ── C13 (warn): collab owner not in non-empty roster ──
@@ -92,6 +98,34 @@ async function main() {
     assert.ok((await validateRoadmap(root)).warns.some((w) => w.check === "C13"), "C13 owner not in roster");
     await ops.itemSetOwner(root, "M", "m-1", "carol", { force: true, ...O }); // reassign to a roster member
     assert.ok(!(await validateRoadmap(root)).warns.some((w) => w.check === "C13"), "C13 clears when owner in roster");
+
+    // ── C14: DependsOn target not a reserved id (hand-written, bypassing the ops guard) ──
+    await ops.taskCreate(root, "DV", "DV", O);
+    await ops.itemAdd(root, { task: "DV" }, { id: "dv-1", title: "one" }, O);
+    await ops.itemAdd(root, { task: "DV" }, { id: "dv-2", title: "two" }, O);
+    const dvBacklog = (dep1: string) =>
+      `# DV — Backlog\n\n- **dv-1** — one\n  - Priority: P2\n  - Status: open\n  - Plan: -\n  - Note: ${dep1 ? `\n  - DependsOn: ${dep1}` : ""}\n- **dv-2** — two\n  - Priority: P2\n  - Status: open\n  - Plan: -\n  - Note: \n`;
+    await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog("totally-unknown-xyz"));
+    assert.ok(has(await validateRoadmap(root), "C14"), "C14 dangling DependsOn target");
+    await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog("dv-2"));
+    assert.ok(!has(await validateRoadmap(root), "C14"), "C14 clears when target is a known id");
+
+    // ── C15: dependency cycle + self-loop ──
+    await writeFile(taskFile(root, "DV", "backlog.md"),
+      `# DV — Backlog\n\n- **dv-1** — one\n  - Priority: P2\n  - Status: open\n  - Plan: -\n  - DependsOn: dv-2\n- **dv-2** — two\n  - Priority: P2\n  - Status: open\n  - Plan: -\n  - DependsOn: dv-1\n`);
+    assert.ok(has(await validateRoadmap(root), "C15"), "C15 dependency cycle");
+    await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog("dv-1"));
+    assert.ok(has(await validateRoadmap(root), "C15"), "C15 self-dependency");
+    await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog(""));
+
+    // ── dep on an archived (still-reserved) id is valid — no C14 ──
+    await ops.taskCreate(root, "ARCH", "Arch", O);
+    await ops.itemAdd(root, { task: "ARCH" }, { id: "arch-1", title: "z" }, O);
+    await ops.dropItem(root, "ARCH", "arch-1", { reason: "x", ...O });
+    await ops.taskArchive(root, "ARCH", O); // arch-1 now lives in archive/ARCH/closed.md, still reserved
+    await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog("arch-1"));
+    assert.ok(!has(await validateRoadmap(root), "C14"), "dep on an archived (reserved) id is valid — no C14");
+    await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog(""));
 
     console.log("validate.test.ts OK");
   } finally {

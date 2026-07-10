@@ -235,7 +235,8 @@ async function main() {
     await ops.itemAdd(root, { task: "SWT" }, { id: "sw-open", title: "O" }, O);
     await ops.itemAdd(root, { task: "SWT" }, { id: "sw-act", title: "A" }, O);
     await ops.itemApprove(root, "SWT", "sw-act", O); // Status → active
-    await ops.taskSetMode(root, "SWT", "collab", "alice", O);
+    const swr = await ops.taskSetMode(root, "SWT", "collab", "alice", O);
+    assert.deepEqual({ assigned: swr.assigned, actor: swr.actor }, { assigned: 2, actor: "alice" }, "taskSetMode returns {assigned, actor} on solo→collab");
     assert.equal(await field(BL("SWT"), "sw-open", "Owner"), "alice");
     assert.equal(await field(BL("SWT"), "sw-act", "Owner"), "alice", "active item also owned on switch");
     // empty actor stops the collab switch (all-or-nothing)
@@ -244,7 +245,8 @@ async function main() {
     await assert.rejects(() => ops.taskSetMode(root, "SWT2", "collab", "", O), ops.OpError, "empty actor stops collab switch");
     assert.equal(await FM("SWT2", "mode"), "solo", "failed switch left mode solo (no partial write)");
     // collab→solo keeps Owner (lossless)
-    await ops.taskSetMode(root, "SWT", "solo", "alice", O);
+    const dsr = await ops.taskSetMode(root, "SWT", "solo", "alice", O);
+    assert.equal(dsr.assigned, 0, "collab→solo assigns nothing");
     assert.equal(await field(BL("SWT"), "sw-open", "Owner"), "alice", "downgrade keeps Owner");
 
     // itemSetOwner: assign+note, double-claim guard, force, unassign, solo gate
@@ -273,6 +275,32 @@ async function main() {
     // roster
     await ops.taskSetCollaborators(root, "COLT", "carol, erin", O);
     assert.equal(await FM("COLT", "collaborators"), "carol, erin");
+
+    // ── dependency edges (itemSetDeps): set/dedup, cross-task, self, dangling, cycle, clear, close-drops ──
+    await ops.taskCreate(root, "DEP", "Deps", O);
+    await ops.itemAdd(root, { task: "DEP" }, { id: "dep-a", title: "A" }, O);
+    await ops.itemAdd(root, { task: "DEP" }, { id: "dep-b", title: "B" }, O);
+    await ops.taskCreate(root, "DEP2", "Deps2", O);
+    await ops.itemAdd(root, { task: "DEP2" }, { id: "dep-x", title: "X" }, O);
+    await ops.itemSetDeps(root, "DEP", "dep-a", ["dep-b", "dep-b"], O); // dedup
+    assert.equal(await field(BL("DEP"), "dep-a", "DependsOn"), "dep-b", "sets + dedups DependsOn");
+    await ops.itemSetDeps(root, "DEP", "dep-a", ["dep-b", "dep-x"], O); // cross-task target allowed
+    assert.equal(await field(BL("DEP"), "dep-a", "DependsOn"), "dep-b, dep-x", "cross-task targets allowed");
+    await assert.rejects(() => ops.itemSetDeps(root, "DEP", "dep-a", ["dep-a"], O), ops.OpError, "self-dependency refused");
+    await assert.rejects(() => ops.itemSetDeps(root, "DEP", "dep-a", ["nope-nope"], O), ops.OpError, "dangling target refused");
+    await ops.itemSetDeps(root, "DEP", "dep-a", [], O); // clear
+    assert.equal(await field(BL("DEP"), "dep-a", "DependsOn"), null, "empty list clears DependsOn");
+    await ops.itemSetDeps(root, "DEP", "dep-b", ["dep-a"], O); // dep-b → dep-a
+    await assert.rejects(() => ops.itemSetDeps(root, "DEP", "dep-a", ["dep-b"], O), ops.OpError, "cycle refused (dep-b already reaches dep-a)");
+    await ops.dropItem(root, "DEP2", "dep-x", { reason: "gone", ...O }); // dep-x → closed (still reserved)
+    await ops.itemSetDeps(root, "DEP", "dep-a", ["dep-x"], O);
+    assert.equal(await field(BL("DEP"), "dep-a", "DependsOn"), "dep-x", "dep on a closed (reserved) id is legal");
+    await ops.itemAdd(root, { inbox: true }, { id: "inb-dep", title: "I" }, O);
+    await ops.itemSetDeps(root, "DEP", "dep-b", ["inb-dep"], O);
+    assert.equal(await field(BL("DEP"), "dep-b", "DependsOn"), "inb-dep", "dep on an inbox (reserved) id is legal");
+    await ops.dropItem(root, "DEP", "dep-b", { reason: "gone", ...O }); // _itemClose builds a fresh block
+    assert.equal(await field(CL("DEP"), "dep-b", "DependsOn"), null, "closed item drops DependsOn");
+    await assert.rejects(() => ops.itemSetDeps(root, "DEP", "missing-x", ["dep-a"], O), ops.OpError, "unknown subject refused");
 
     console.log("ops.test.ts OK");
   } finally {

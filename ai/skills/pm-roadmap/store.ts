@@ -59,6 +59,15 @@ export function setField(b: Block, key: string, val: string): void {
   b.fields.push([key, val]);
 }
 
+// Parse a comma-id field (e.g. DependsOn) into a trimmed, de-duplicated array preserving
+// first-occurrence order. Empty / "-" ⇒ []. Shared by join (read), ops (write), validate (scan).
+export function parseIdList(raw: string | null): string[] {
+  if (!raw || raw.trim() === "-") return [];
+  const out: string[] = [];
+  for (const s of raw.split(",").map((x) => x.trim()).filter(Boolean)) if (!out.includes(s)) out.push(s);
+  return out;
+}
+
 // ── frontmatter (task.md) ──
 export function parseFrontmatter(md: string): { fields: [string, string][]; body: string } {
   const lines = md.split("\n");
@@ -81,6 +90,12 @@ export function getFmField(fields: [string, string][], key: string): string | nu
   const k = key.toLowerCase();
   for (const [fk, fv] of fields) if (fk.toLowerCase() === k) return fv;
   return null;
+}
+
+// Collaboration-mode coercion — absence/blank `mode:` → "solo". Single source shared by
+// join.taskMode (read path) and ops.taskModeOf (write-gate) so the absence→solo rule can't drift.
+export function coerceMode(raw: string | null): string {
+  return (raw && raw.trim()) || "solo";
 }
 
 // ── paths ──

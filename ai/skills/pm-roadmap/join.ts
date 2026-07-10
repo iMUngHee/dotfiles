@@ -4,7 +4,7 @@
 // ops.ts owns all mutation; this module only reads.
 import { readdir } from "node:fs/promises";
 import { join as pathJoin } from "node:path";
-import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
+import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, coerceMode, parseIdList, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const DEFAULT_INHERIT_CAP = 5;
@@ -26,7 +26,7 @@ export async function listActiveTasks(root: string): Promise<string[]> {
 // Collaboration mode from task.md `mode:`. Absence → solo (legacy task.md keeps working).
 export async function taskMode(root: string, key: string): Promise<string> {
   const md = await read(taskFile(root, key, "task.md"));
-  return (md && frontmatterField(md, "mode")) || "solo";
+  return coerceMode(md ? frontmatterField(md, "mode") : null);
 }
 // collaborators roster from task.md `collaborators:` (comma list; empty when unset).
 export async function taskCollaborators(root: string, key: string): Promise<string[]> {
@@ -59,7 +59,7 @@ export function postImplNotes(md: string): string {
 
 // ── next candidates ──
 // owner/ownerNote/mode are additive (collab attribution); solo items carry empty owner + mode "solo".
-export interface Candidate { key: string; id: string; title: string; priority: string; order: number; plan: string | null; note: string; status: string; owner: string; ownerNote: string; mode: string; blockedBy?: string; }
+export interface Candidate { key: string; id: string; title: string; priority: string; order: number; plan: string | null; note: string; status: string; owner: string; ownerNote: string; mode: string; dependsOn: string[]; blockedBy?: string; }
 
 function toCandidate(key: string, b: Block, mode: string): Candidate {
   const plan = getField(b, "Plan");
@@ -74,6 +74,7 @@ function toCandidate(key: string, b: Block, mode: string): Candidate {
     owner: getField(b, "Owner") ?? "",
     ownerNote: getField(b, "OwnerNote") ?? "",
     mode,
+    dependsOn: parseIdList(getField(b, "DependsOn")),
   };
 }
 
@@ -84,7 +85,11 @@ function candidateSort(a: Candidate, b: Candidate): number {
     || a.id.localeCompare(b.id);
 }
 
-// Eligible = not blocked by an earlier-Order open sibling in the SAME task.
+// Eligible = not blocked by (a) an unresolved DependsOn target still in some active backlog, or
+// (b) an earlier-Order open sibling in the SAME task. A dependency blocker takes precedence; the
+// first unresolved target (in DependsOn order) is reported. Cross-task: DependsOn targets resolve
+// against every active task's backlog. A target that has left backlog (done/dropped/archived) or
+// is an inbox/unknown id does not block.
 // Returns sorted eligible + blocked (with blockedBy) + focus + inbox count. No auto-pick.
 export async function nextCandidates(root: string): Promise<{ eligible: Candidate[]; blocked: Candidate[]; focus: string | null; inbox: number }> {
   const all: Candidate[] = [];
@@ -92,10 +97,13 @@ export async function nextCandidates(root: string): Promise<{ eligible: Candidat
     const mode = await taskMode(root, key); // one read per task; attached to its candidates
     for (const b of await blocksOf(taskFile(root, key, "backlog.md"))) all.push(toCandidate(key, b, mode));
   }
+  const backlogIds = new Set(all.map((c) => c.id)); // every item still in an active backlog.md (any status)
   const eligible: Candidate[] = [], blocked: Candidate[] = [];
   for (const c of all) {
+    const depBlocker = c.dependsOn.find((t) => t !== c.id && backlogIds.has(t)); // first unresolved dep (list order)
     const earlier = all.find((o) => o.key === c.key && o.order > 0 && c.order > 0 && o.order < c.order);
-    if (earlier) { blocked.push({ ...c, blockedBy: earlier.id }); } else eligible.push(c);
+    const blocker = depBlocker ?? (earlier ? earlier.id : undefined);
+    if (blocker) { blocked.push({ ...c, blockedBy: blocker }); } else eligible.push(c);
   }
   eligible.sort(candidateSort);
   const focusRaw = await read(pathJoin(root, ".agents", "state", "focus.txt"));
@@ -107,7 +115,7 @@ export async function nextCandidates(root: string): Promise<{ eligible: Candidat
 export interface SiblingNote { id: string; notes: string; }
 export interface ItemView {
   key: string; id: string; title: string; priority: string; note: string; status: string; closed: boolean;
-  owner: string; ownerNote: string; mode: string;
+  owner: string; ownerNote: string; mode: string; dependsOn: string[];
   plan: PlanInfo | null; links: Block[]; memory: Block[]; siblings: SiblingNote[]; siblingsTotal: number;
 }
 
@@ -145,6 +153,7 @@ export async function resolveItem(root: string, key: string, id: string, cap = D
     owner: getField(b, "Owner") ?? "",
     ownerNote: getField(b, "OwnerNote") ?? "",
     mode: await taskMode(root, key),
+    dependsOn: parseIdList(getField(b, "DependsOn")),
     plan,
     links: await blocksOf(taskFile(root, key, "links.md")),
     memory: await blocksOf(taskFile(root, key, "memory.md")),
@@ -191,6 +200,11 @@ export function buildNextPrompt(v: ItemView, inbox = 0): string {
   L.push(`# Next: ${v.id} — ${v.title}  (${v.priority})`, "");
   const ownerLine = v.mode === "collab" ? ` · owner: ${v.owner || "(unassigned)"}${v.ownerNote ? ` — ${v.ownerNote}` : ""}` : "";
   L.push("## What", v.note || v.title, "", `> task: ${v.key}${ownerLine}`, "");
+  if (v.dependsOn.length) {
+    L.push("## Depends on");
+    for (const d of v.dependsOn) L.push(`- ${d}`);
+    L.push("");
+  }
   if (v.memory.length) {
     L.push("## Task memory (decisions / things to remember)");
     for (const m of v.memory) { const note = getField(m, "Note"); const by = getField(m, "By"); L.push(`- ${m.title}${note ? `: ${note}` : ""}${by ? ` _(by ${by})_` : ""}`); }

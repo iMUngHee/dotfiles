@@ -7,7 +7,7 @@ import { readdir, mkdir, rename, stat } from "node:fs/promises";
 import { join as pathJoin } from "node:path";
 import {
   type Block, parseBlocks, serializeBlocks, getField, setField,
-  parseFrontmatter, serializeFrontmatter, getFmField,
+  parseFrontmatter, serializeFrontmatter, getFmField, coerceMode, parseIdList,
   taskDir, taskFile, tasksDir, inboxPath, withLock, readStamped, writeCAS,
 } from "./store.ts";
 
@@ -95,6 +95,30 @@ async function planInUse(root: string, planPath: string): Promise<boolean> {
   return (await scan(tasksDir(root), await listTaskKeys(root))) || (await scan(archiveDir(root), await listArchiveKeys(root)));
 }
 
+// Dependency edges (id → DependsOn targets) over every active task's backlog. Closed items carry
+// no DependsOn (dropped on close), so the dependency graph is backlog-only.
+async function backlogDepGraph(root: string): Promise<Map<string, string[]>> {
+  const g = new Map<string, string[]>();
+  for (const key of await listTaskKeys(root)) {
+    for (const b of (await loadBlocks(taskFile(root, key, "backlog.md"))).blocks) g.set(b.id, parseIdList(getField(b, "DependsOn")));
+  }
+  return g;
+}
+// Can `from` reach `target` by following DependsOn edges? DFS with a visited guard (the pre-existing
+// graph is acyclic by C15, but the guard also makes this safe on a corrupt cyclic graph).
+function reaches(g: Map<string, string[]>, from: string, target: string): boolean {
+  const seen = new Set<string>();
+  const stack = [from];
+  while (stack.length) {
+    const n = stack.pop()!;
+    if (n === target) return true;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    for (const t of g.get(n) ?? []) stack.push(t);
+  }
+  return false;
+}
+
 // ── pointers ──
 async function writeState(root: string, name: string, val: string): Promise<void> {
   await mkdir(pathJoin(root, ".agents", "state"), { recursive: true });
@@ -135,7 +159,7 @@ async function assertActiveTask(root: string, key: string): Promise<void> {
 // Collaboration mode (task.md `mode:`). Absence → solo (legacy task.md keeps working).
 async function taskModeOf(root: string, key: string): Promise<string> {
   const meta = await loadTaskMeta(root, key);
-  return (meta && getFmField(meta.fields, "mode")) || "solo";
+  return coerceMode(meta ? getFmField(meta.fields, "mode") : null);
 }
 async function assertCollab(root: string, key: string): Promise<void> {
   await assertActiveTask(root, key);
@@ -160,7 +184,7 @@ async function _taskCreate(root: string, key: string, title: string, nowDate: st
 // item lacking one — across all statuses (open|draft|active), since the solo worker owned all
 // in-flight work. closed.md untouched; collab→solo keeps attribution fields (lossless).
 // All-or-nothing: the actor precondition is checked BEFORE any write.
-async function _taskSetMode(root: string, key: string, mode: string, actor: string, nowDate: string): Promise<void> {
+async function _taskSetMode(root: string, key: string, mode: string, actor: string, nowDate: string): Promise<{ mode: string; assigned: number; actor: string }> {
   if (!MODES.has(mode)) throw new OpError(`mode must be solo|collab (got '${mode}')`);
   const meta = await loadTaskMeta(root, key);
   if (!meta) throw new OpError(`task '${key}' does not exist`);
@@ -169,14 +193,16 @@ async function _taskSetMode(root: string, key: string, mode: string, actor: stri
   if (mode === "collab" && cur !== "collab") {
     if (!actor) throw new OpError(`collab switch requires an actor — set PM_ACTOR, pass --actor, run 'pm whoami <name>', or set git user.email`);
     const f = await loadBlocks(taskFile(root, key, "backlog.md"));
-    for (const b of f.blocks) if (!(getField(b, "Owner") ?? "").trim()) setField(b, "Owner", actor);
+    let assigned = 0;
+    for (const b of f.blocks) if (!(getField(b, "Owner") ?? "").trim()) { setField(b, "Owner", actor); assigned++; }
     setFm(meta.fields, "mode", mode);
     await writeBlocks(taskFile(root, key, "backlog.md"), f.title || `${key} — Backlog`, f.blocks);
     await writeTaskMeta(root, key, meta.fields, meta.body, nowDate);
-    return;
+    return { mode, assigned, actor };
   }
   setFm(meta.fields, "mode", mode);
   await writeTaskMeta(root, key, meta.fields, meta.body, nowDate);
+  return { mode, assigned: 0, actor: "" };
 }
 
 async function _itemAdd(root: string, target: { task: string } | { inbox: true }, it: ItemInput, nowDate: string): Promise<void> {
@@ -226,6 +252,28 @@ async function _itemSetOrder(root: string, key: string, id: string, order: strin
   const it = findItem(f.blocks, id);
   if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
   setField(it, "Order", order);
+  await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
+}
+
+// Set an item's DependsOn edges (comma id list). deps=[] (or "-" from the CLI) clears the field.
+// Preflight — ALL checks before any write (ops all-or-nothing): trim+dedup → subject is a backlog
+// item → no self-dep → each target is a reserved id (typo guard; closed/inbox/archive ids are
+// legal but non-blocking) → no cycle (no target may already reach the subject via the backlog
+// dependency graph). Cross-task targets are allowed.
+async function _itemSetDeps(root: string, key: string, id: string, deps: string[]): Promise<void> {
+  await assertActiveTask(root, key);
+  const targets = parseIdList(deps.join(",")); // trim + de-dup, first-occurrence order; ["-"] ⇒ []
+  const f = await loadBlocks(taskFile(root, key, "backlog.md"));
+  const it = findItem(f.blocks, id);
+  if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
+  if (targets.includes(id)) throw new OpError(`item '${id}' cannot depend on itself`);
+  const reserved = await reservedIdsImpl(root);
+  for (const t of targets) if (!reserved.has(t)) throw new OpError(`DependsOn target '${t}' is not a known item id`);
+  const g = await backlogDepGraph(root);
+  g.set(id, []); // drop the subject's OLD edges; a new edge cycles iff a target already reaches the subject
+  for (const t of targets) if (reaches(g, t, id)) throw new OpError(`DependsOn '${t}' would create a dependency cycle back to '${id}'`);
+  if (targets.length) setField(it, "DependsOn", targets.join(", "));
+  else it.fields = it.fields.filter(([k]) => k.toLowerCase() !== "dependson"); // clear
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
 }
 
@@ -402,6 +450,9 @@ export const itemSetPriority = (root: string, key: string, id: string, priority:
 
 export const itemSetOrder = (root: string, key: string, id: string, order: string, o: LockOpts = {}) =>
   withLock(root, "itemSetOrder", () => _itemSetOrder(root, key, id, order), o);
+
+export const itemSetDeps = (root: string, key: string, id: string, deps: string[], o: LockOpts = {}) =>
+  withLock(root, "itemSetDeps", () => _itemSetDeps(root, key, id, deps), o);
 
 export const itemClose = (root: string, key: string, id: string, opt: { status: "done" | "dropped"; reason?: string; closedDate?: string; plan?: string; closedBy?: string } & LockOpts) =>
   withLock(root, "itemClose", () => _itemClose(root, key, id, { status: opt.status, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.plan, closedBy: opt.closedBy }), opt);

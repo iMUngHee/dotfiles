@@ -3,8 +3,27 @@
 // Never mutates — fix via ops. CLI: tsx validate.ts [root]  (exit 1 on errors).
 import { readdir, stat } from "node:fs/promises";
 import { join as pathJoin } from "node:path";
-import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
+import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, coerceMode, parseIdList, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
 import { listActiveTasks } from "./join.ts";
+
+// DFS 3-colour cycle detection over a DependsOn graph (id → targets). Returns the cycle path
+// (…→ x → … → x) or null. Targets that are not graph nodes are leaves (no outgoing edges).
+function findDepCycle(g: Map<string, string[]>): string[] | null {
+  const color = new Map<string, number>(); // 0 white / 1 grey / 2 black
+  const stack: string[] = [];
+  const dfs = (n: string): string[] | null => {
+    color.set(n, 1); stack.push(n);
+    for (const t of g.get(n) ?? []) {
+      const c = color.get(t) ?? 0;
+      if (c === 1) return [...stack.slice(stack.indexOf(t)), t];
+      if (c === 0) { const r = dfs(t); if (r) return r; }
+    }
+    stack.pop(); color.set(n, 2);
+    return null;
+  };
+  for (const n of g.keys()) if ((color.get(n) ?? 0) === 0) { const r = dfs(n); if (r) return r; }
+  return null;
+}
 
 export interface Violation { level: "error" | "warn"; check: string; id: string; message: string; }
 export interface ValidationReport { errors: Violation[]; warns: Violation[]; }
@@ -34,6 +53,7 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
   // gather all items (id-uniqueness spans active backlog+closed + inbox + archive)
   const idSeen = new Map<string, string>(); // id → where
   const planRefs = new Map<string, string[]>(); // plan → [where]
+  const depEdges = new Map<string, string[]>(); // active-backlog id → DependsOn targets (for C14/C15)
   const noteId = (key: string, sec: string, id: string) => `${key}/${sec}/${id}`;
 
   const scan = async (key: string, dir: string, active: boolean) => {
@@ -44,10 +64,12 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
       const fm = parseFrontmatter(meta.content).fields;
       const st = getFmField(fm, "status") ?? "";
       if (!TASK_STATUS.has(st)) err("C11", key, `task.md status '${st}' invalid (active|done|archived)`);
-      // C12 — mode, if present, must be solo|collab (absence → solo, allowed)
+      // C12 — mode, if present AND non-blank, must be solo|collab. Absence OR a blank `mode:`
+      // value both read as solo (coerceMode), so a blank value is not an error; only a non-empty
+      // invalid value (e.g. `mode: xyz`) errors.
       const mode = getFmField(fm, "mode");
-      if (mode !== null && !TASK_MODE.has(mode)) err("C12", key, `task.md mode '${mode}' invalid (solo|collab)`);
-      taskModeVal = mode || "solo";
+      if (mode !== null && mode.trim() !== "" && !TASK_MODE.has(mode)) err("C12", key, `task.md mode '${mode}' invalid (solo|collab)`);
+      taskModeVal = coerceMode(mode);
       roster = (getFmField(fm, "collaborators") || "").split(",").map((s) => s.trim()).filter(Boolean);
     }
     for (const sec of ["backlog", "closed"] as const) {
@@ -79,6 +101,8 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
             const owner = (getField(b, "Owner") ?? "").trim();
             if (owner && !roster.includes(owner)) warn("C13", b.id, `owner '${owner}' not in ${key} collaborators roster`);
           }
+          // C14/C15 — collect DependsOn edges (active backlog only; closed items carry none)
+          if (active) { const deps = parseIdList(getField(b, "DependsOn")); if (deps.length) depEdges.set(b.id, deps); }
           // C10 — duplicate Order within a task (warn)
         } else {
           if (!CLOSED_STATUS.has(status)) err("C5", b.id, `closed status '${status}' invalid (done|dropped)`);
@@ -107,6 +131,15 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
 
   // C2 — plan 1:1
   for (const [plan, refs] of planRefs) if (refs.length > 1) err("C2", refs.join(","), `plan ${plan} linked by ${refs.length} items (must be 1:1)`);
+
+  // C14 — every DependsOn target is a reserved id (idSeen spans active backlog+closed + inbox + archive).
+  for (const [id, targets] of depEdges) for (const t of targets) {
+    if (t === id) err("C15", id, "depends on itself");
+    else if (!idSeen.has(t)) err("C14", id, `DependsOn target '${t}' is not a known item id`);
+  }
+  // C15 — no cycle in the backlog dependency graph.
+  const cyc = findDepCycle(depEdges);
+  if (cyc) err("C15", cyc[0], `dependency cycle: ${cyc.join(" → ")}`);
 
   // C8 — focus names a backlog item (some active task), not inbox
   const focus = await readState(root, "focus.txt");
