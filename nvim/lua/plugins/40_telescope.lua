@@ -1,6 +1,7 @@
--- Toggle case-sensitivity at runtime with <C-a> inside Telescope prompt.
+-- Toggle runtime search options inside Telescope prompt.
 -- State is shared across find_files / live_grep; reopens the picker to apply.
 local _ignore_case = false
+local _no_ignore = false
 
 local function find_files_with_case(prompt)
   local opts = { cwd = require("utils.root").get(), hidden = true }
@@ -14,6 +15,10 @@ local function find_files_with_case(prompt)
     if ok then
       opts.sorter = fzf.exports.native_fzf_sorter({ case_mode = "ignore_case", fuzzy = true })
     end
+  end
+
+  if _no_ignore then
+    opts.no_ignore = true
   end
 
   require("telescope.builtin").find_files(opts)
@@ -36,9 +41,19 @@ local function live_grep_with_case(prompt)
     opts.default_text = prompt
   end
 
+  local additional_args = {}
+
   if _ignore_case then
+    table.insert(additional_args, "--ignore-case")
+  end
+
+  if _no_ignore then
+    table.insert(additional_args, "--no-ignore")
+  end
+
+  if #additional_args > 0 then
     opts.additional_args = function()
-      return { "--ignore-case" }
+      return additional_args
     end
   end
 
@@ -50,7 +65,7 @@ local pickers_by_title = {
   ["Live Grep (Args)"] = live_grep_with_case,
 }
 
-local function toggle_case(prompt_bufnr)
+local function reopen_current_picker(prompt_bufnr)
   local action_state = require("telescope.actions.state")
   local picker = action_state.get_current_picker(prompt_bufnr)
   local current_prompt = picker:_get_prompt()
@@ -61,10 +76,34 @@ local function toggle_case(prompt_bufnr)
   end
 
   require("telescope.actions").close(prompt_bufnr)
+  return picker, current_prompt, reopen
+end
+
+local function toggle_case(prompt_bufnr)
+  local picker, current_prompt, reopen = reopen_current_picker(prompt_bufnr)
+
+  if not reopen then
+    return
+  end
+
   _ignore_case = not _ignore_case
   reopen(current_prompt)
 
   local label = _ignore_case and "ignore_case" or "smart_case"
+  vim.notify(picker.prompt_title .. ": " .. label, vim.log.levels.INFO)
+end
+
+local function toggle_ignore(prompt_bufnr)
+  local picker, current_prompt, reopen = reopen_current_picker(prompt_bufnr)
+
+  if not reopen then
+    return
+  end
+
+  _no_ignore = not _no_ignore
+  reopen(current_prompt)
+
+  local label = _no_ignore and "include_ignored" or "respect_ignore"
   vim.notify(picker.prompt_title .. ": " .. label, vim.log.levels.INFO)
 end
 
@@ -113,6 +152,7 @@ return {
           i = {
             ["<C-h>"] = "which_key",
             ["<C-a>"] = toggle_case,
+            ["<C-o>"] = toggle_ignore,
           },
         },
       },
