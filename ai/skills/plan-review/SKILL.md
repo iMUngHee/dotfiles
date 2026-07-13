@@ -31,11 +31,20 @@ If the user explicitly chooses not to run review, record `SKIP` instead of prete
 
 ## Resolve The Plan
 
-1. If a plan path or plan id is supplied, use it.
-2. Otherwise read `.agents/state/current.txt`.
-3. Refuse to review when no plan is resolved.
-4. Read the plan and identify:
+1. Run the shared resolver first:
+
+   ```bash
+   node "$HOME/.config/ai/lib/worktree.mjs" resolve-current --root "$PWD"
+   ```
+
+2. If a plan path or plan id is supplied, resolve it under the returned `main_root` and
+   verify that its worktree mapping is valid with the shared engine.
+3. Otherwise use the resolver's `plan`. Refuse empty/missing current pointers and surface
+   routing or mapping errors verbatim; never guess from old plans.
+4. Use `execution_root` for repository reads and `main_root` for the canonical plan path.
+5. Read the plan and identify:
    - frontmatter `id`, `title`, `status`, `files_affected`,
+   - frontmatter `base_branch`, immutable `base_commit`, `branch`, and `worktree`,
    - `## Goal`, `## Decisions`, `## Verifiable Success Criteria`, `## Risks`, `## Implementation Steps`,
    - existing `## Plan Review Loop` summaries.
 
@@ -46,9 +55,11 @@ If the plan lacks `## Plan Review Loop`, add it before `## Post-Implementation N
 Include as much relevant context as practical without dumping unrelated repository state:
 
 - the full current plan,
+- the resolved `main_root`, `execution_root`, `branch`, and immutable `base_commit`,
 - compact prior review summaries from `## Plan Review Loop`,
-- target files listed in `files_affected` when they are needed to judge the plan,
-- relevant diffs or command outputs already produced,
+- target files listed in `files_affected`, read from `execution_root`, when needed to judge the plan,
+- relevant diffs or command outputs already produced, rooted at `execution_root` and compared
+  from `base_commit`,
 - explicit reviewer instructions and the verdict template below.
 
 For R2+, include only compact prior-round summaries, not previous raw reviewer transcripts.

@@ -1,5 +1,6 @@
 // Tests for archive.ts. Run: ./node_modules/.bin/tsx archive.test.ts
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, mkdir, writeFile, rename, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +30,13 @@ async function closeWithPlan(root: string, id: string, rel: string, status = "do
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "archive-test-"));
   try {
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
+    git("init", "-b", "main");
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "Test");
+    await writeFile(join(root, "README.md"), "x\n");
+    git("add", "README.md");
+    git("commit", "-m", "init");
     await ops.taskCreate(root, "A", "A", O);
     // old terminal unreferenced → archived + closed.md pointer rewritten
     await closeWithPlan(root, "old-1", ".agents/plans/2026-01-01-old.md", "done");
@@ -50,6 +58,18 @@ async function main() {
     const r2 = await archivePlans(root, { today: "2026-06-22" });
     assert.ok(!r2.moved.some((m) => m.plan.includes("cur")), "current.txt plan protected");
     await writeFile(join(root, ".agents", "state", "current.txt"), "");
+
+    // a pointer in a secondary managed worktree protects the terminal plan too.
+    await closeWithPlan(root, "secondary-1", ".agents/plans/2026-01-04-secondary.md", "done");
+    const secondary = join(root, ".agents", "worktrees", "secondary");
+    git("worktree", "add", "-b", "secondary", secondary, "main");
+    await mkdir(join(secondary, ".agents", "state"), { recursive: true });
+    await writeFile(join(secondary, ".agents", "state", "current.txt"), ".agents/plans/2026-01-04-secondary.md\n");
+    const protectedRun = await archivePlans(root, { today: "2026-06-22" });
+    assert.ok(protectedRun.skipped.some((s) => s.plan === "2026-01-04-secondary.md" && s.reason.startsWith("protected-by-current:")));
+    await writeFile(join(secondary, ".agents", "state", "current.txt"), "");
+    const afterCleanup = await archivePlans(root, { today: "2026-06-22" });
+    assert.ok(afterCleanup.moved.some((m) => m.plan.endsWith("2026-01-04-secondary.md")), "archives after secondary pointer cleanup");
 
     // idempotent recovery: file already in archive/, closed.md still points at plans/
     await closeWithPlan(root, "rec-1", ".agents/plans/2026-01-03-rec.md", "done");

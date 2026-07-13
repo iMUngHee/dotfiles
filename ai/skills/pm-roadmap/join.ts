@@ -8,6 +8,7 @@ import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, coerce
 
 const PRIORITY_ORDER: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
 const DEFAULT_INHERIT_CAP = 5;
+const TASK_KEY = /^[A-Z0-9_-]+$/;
 
 async function read(path: string): Promise<string | null> {
   const s = await readStamped(path);
@@ -20,7 +21,7 @@ async function blocksOf(path: string): Promise<Block[]> {
 
 export async function listActiveTasks(root: string): Promise<string[]> {
   const ents = await readdir(tasksDir(root), { withFileTypes: true }).catch(() => []);
-  return ents.filter((e) => e.isDirectory() && e.name !== "archive").map((e) => e.name).sort();
+  return ents.filter((e) => e.isDirectory() && TASK_KEY.test(e.name)).map((e) => e.name).sort();
 }
 
 // Collaboration mode from task.md `mode:`. Absence → solo (legacy task.md keeps working).
@@ -47,11 +48,31 @@ export function section(md: string, heading: string): string {
   for (let i = start + 1; i < lines.length; i++) { if (/^##\s/.test(lines[i])) break; body.push(lines[i]); }
   return body.join("\n").trim();
 }
-export interface PlanInfo { path: string; status: string; goal: string; nextStep: string | null; postImplNotes: string; }
+export interface PlanInfo {
+  path: string;
+  status: string;
+  goal: string;
+  nextStep: string | null;
+  postImplNotes: string;
+  baseBranch: string;
+  baseCommit: string;
+  branch: string;
+  worktree: string;
+}
 export function planInfo(path: string, md: string): PlanInfo {
   const goal = section(md, "Goal").split(/\n\s*\n/)[0]?.trim() ?? "";
   const next = section(md, "Implementation Steps").split("\n").find((l) => /^-\s+\[ \]/.test(l.trim()));
-  return { path, status: frontmatterField(md, "status"), goal, nextStep: next ? next.trim().replace(/^-\s+\[ \]\s*/, "") : null, postImplNotes: postImplNotes(md) };
+  return {
+    path,
+    status: frontmatterField(md, "status"),
+    goal,
+    nextStep: next ? next.trim().replace(/^-\s+\[ \]\s*/, "") : null,
+    postImplNotes: postImplNotes(md),
+    baseBranch: frontmatterField(md, "base_branch"),
+    baseCommit: frontmatterField(md, "base_commit"),
+    branch: frontmatterField(md, "branch"),
+    worktree: frontmatterField(md, "worktree"),
+  };
 }
 export function postImplNotes(md: string): string {
   return section(md, "Post-Implementation Notes").replace(/<!--[\s\S]*?-->/g, "").trim();
@@ -219,7 +240,14 @@ export function buildNextPrompt(v: ItemView, inbox = 0): string {
   if (v.links.length) for (const l of v.links) { const url = getField(l, "URL") ?? ""; const sum = getField(l, "Summary") ?? ""; const by = getField(l, "By"); L.push(`- ${l.title || l.id}: ${url}${sum ? ` — ${sum}` : ""}${by ? ` _(by ${by})_` : ""}`); }
   else L.push(`- (none yet)`);
   L.push("", "## Prior plan state");
-  if (v.plan) L.push(`- ${v.plan.path} (${v.plan.status})${v.plan.nextStep ? ` → next step: ${v.plan.nextStep}` : ""}`);
+  if (v.plan) {
+    L.push(`- ${v.plan.path} (${v.plan.status})${v.plan.nextStep ? ` → next step: ${v.plan.nextStep}` : ""}`);
+    if (v.plan.worktree) {
+      L.push(`- branch: ${v.plan.branch} · worktree: ${v.plan.worktree}`);
+      L.push(`- resume (Codex): codex -C ${v.plan.worktree}`);
+      L.push(`- resume (Claude): cd ${v.plan.worktree} && claude`);
+    }
+  }
   else L.push(`- no plan yet — start with /design ${v.id}`);
   L.push("", "## Start here", v.plan ? "resume at the next unchecked step above" : `/design ${v.id}`);
   if (inbox > 0) L.push("", `> inbox: ${inbox} item(s) awaiting triage (assign via \`triage <id> <KEY>\`)`);

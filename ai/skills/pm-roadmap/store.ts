@@ -1,4 +1,4 @@
-// Filesystem primitives for the task-first model (.agents/tasks/<KEY>/*, inbox.md).
+// Filesystem primitives for the task-first model (.agents/tasks/<KEY>/* + _inbox.md).
 // The ONLY module that touches the filesystem. Provides:
 //   - lossless block parser/serializer (round-trips unknown sub-bullet keys + order)
 //   - frontmatter parse/serialize (task.md)
@@ -108,7 +108,7 @@ export const taskDir = (root: string, key: string) => {
   return pathJoin(tasksDir(root), key);
 };
 export const taskFile = (root: string, key: string, name: string) => pathJoin(taskDir(root, key), name);
-export const inboxPath = (root: string) => pathJoin(root, ".agents", "inbox.md");
+export const inboxPath = (root: string) => pathJoin(tasksDir(root), "_inbox.md");
 export const lockPath = (root: string) => pathJoin(tasksDir(root), ".lock");
 
 // ── advisory lock ──
@@ -177,7 +177,13 @@ export async function withLock<T>(
   opts: { staleMs?: number; nowMs?: number; retries?: number; retryMs?: number } = {},
 ): Promise<T> {
   await acquireLock(root, op, opts);
-  try { return await fn(); }
+  try {
+    // Every mutating PM command enters through withLock. Recover a prior interrupted
+    // multi-file transaction before the command reads authoritative state.
+    const { recoverTransactions } = await import("./transaction.ts");
+    await recoverTransactions(root);
+    return await fn();
+  }
   finally { await releaseLock(root); }
 }
 

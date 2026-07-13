@@ -35,15 +35,20 @@ export async function handle(root: string, method: string, pathname: string, par
   // ── derived roadmap view (legacy shape) ──
   if (pathname === "/api/roadmap" && method === "GET") {
     const nc = await nextCandidates(root);
-    // open[] additive read (pm-dashboard-rebuild): expose plan.nextStep — the first unchecked
-    // Implementation Step — beside the existing plan path, so the dock/next-up shows the "next action"
-    // without a per-item join. c.plan is a path string (or null); read + parse via planInfo, degrading to
-    // null on a missing/unreadable plan. join stays authoritative for detail (its top-level `plan` is the
-    // full PlanInfo object; item.plan stays a string path) — this touches open[] only.
+    // open[] additive plan projection: next action plus the immutable-base/worktree mapping, so the
+    // dock can show where an existing plan resumes without a per-item join. Missing/unreadable plans
+    // degrade to empty mapping fields. join remains authoritative for the full PlanInfo object.
     const open = await Promise.all([...nc.eligible, ...nc.blocked].map(async (c) => {
-      let nextStep: string | null = null;
-      if (c.plan) { try { nextStep = planInfo(c.plan, await readFile(join(root, c.plan), "utf-8")).nextStep; } catch { nextStep = null; } }
-      return { id: c.id, title: c.title, priority: c.priority, status: c.status, order: c.order, task: c.key, plan: c.plan, nextStep, note: c.note, blockedBy: c.blockedBy, dependsOn: c.dependsOn, owner: c.owner, ownerNote: c.ownerNote, mode: c.mode };
+      let info = null;
+      if (c.plan) { try { info = planInfo(c.plan, await readFile(join(root, c.plan), "utf-8")); } catch { info = null; } }
+      return {
+        id: c.id, title: c.title, priority: c.priority, status: c.status, order: c.order,
+        task: c.key, plan: c.plan, nextStep: info?.nextStep ?? null,
+        baseBranch: info?.baseBranch ?? "", baseCommit: info?.baseCommit ?? "",
+        branch: info?.branch ?? "", worktree: info?.worktree ?? "",
+        note: c.note, blockedBy: c.blockedBy, dependsOn: c.dependsOn,
+        owner: c.owner, ownerNote: c.ownerNote, mode: c.mode,
+      };
     }));
     const recentlyClosed = (await recentClosed(root, 50)).map((r) => ({ id: r.id, plan: r.plan, status: r.status, note: r.reason, task: r.key, closed: r.closed }));
     // in-flight item (dashboard-inflight-surface): the open item whose Plan matches the in-flight plan

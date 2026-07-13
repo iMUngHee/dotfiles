@@ -1,68 +1,46 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: inject the current plan as additional context.
-#
-# Reads `.agents/state/current.txt` (a single-line plan path) and looks up the
-# plan's frontmatter `status` to emit a status-aware label:
-#   draft  → ⚙️ draft: <title> — <path>
-#   active → ▶️ active: <title> — <path>
-#   done|dropped|other → no inject
-#
-# Output: JSON { hookSpecificOutput: { hookEventName, additionalContext } }.
-# Fail-open — any error yields empty context (never blocks the prompt).
+# UserPromptSubmit adapter: pass Claude's project root to the shared read-only
+# worktree resolver and inject its execution routing result. Fail-open.
 
 set -euo pipefail
 
-# Drain stdin (Claude Code passes JSON; this hook does not need the prompt body)
 cat > /dev/null
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-STATE_FILE="$PROJECT_DIR/.agents/state/current.txt"
-
-# No state pointer → nothing to inject
-[[ -f "$STATE_FILE" ]] || exit 0
-
-# Read the first non-empty line as the plan's relative path
-PLAN_REL=$(awk 'NF { print; exit }' "$STATE_FILE")
-[[ -n "$PLAN_REL" ]] || exit 0
-
-PLAN_PATH="$PROJECT_DIR/$PLAN_REL"
-[[ -f "$PLAN_PATH" ]] || exit 0   # plan deleted or moved → silent skip
-
-# Extract a frontmatter scalar field, stripping inline `# ...` comments and
-# trailing whitespace (defense in depth — natural-language triggers replace
-# the inline-comment pattern, but a user or external tool could still add one).
-extract() {
-  awk -v key="$1" '
-    $0 ~ "^"key":" {
-      sub("^"key": ?", "")
-      sub(/[[:space:]]*#.*$/, "")
-      sub(/[[:space:]]+$/, "")
-      print
-      exit
-    }
-  ' "$PLAN_PATH"
-}
-
-STATUS=$(extract "status")
-TITLE=$(extract "title")
-
-case "$STATUS" in
-  draft)  ICON="⚙️"; LABEL="draft"  ;;
-  active) ICON="▶️"; LABEL="active" ;;
-  *)      exit 0 ;;  # done | dropped | empty | unknown → no inject
-esac
-
-CONTEXT="$ICON $LABEL: $TITLE — $PLAN_REL"
-
-# TaskList summary (Ab.iii): Claude Code does not currently expose the
-# per-session task list via hook stdin or a stable filesystem location reachable
-# from a subshell. Left as a placeholder — when a future release adds a readable
-# source (e.g. `claude tasks list` or a session JSON path), plug it in here and
-# append to $CONTEXT.
-
 if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
+
+CONFIG_ROOT="${AI_CONFIG_ROOT:-$HOME/.config}"
+ENGINE="$CONFIG_ROOT/ai/lib/worktree.mjs"
+[[ -f "$ENGINE" ]] || exit 0
+RESOLVED=$(node "$ENGINE" resolve-current --root "$PROJECT_DIR" 2>/dev/null) || exit 0
+STATUS=$(printf '%s' "$RESOLVED" | jq -r '.status // empty')
+
+case "$STATUS" in
+  empty|terminal) exit 0 ;;
+  ok)
+    PLAN_STATUS=$(printf '%s' "$RESOLVED" | jq -r '.plan_status')
+    [[ "$PLAN_STATUS" == "draft" || "$PLAN_STATUS" == "active" ]] || exit 0
+    [[ "$PLAN_STATUS" == "draft" ]] && ICON="⚙️" || ICON="▶️"
+    TITLE=$(printf '%s' "$RESOLVED" | jq -r '.title')
+    PLAN=$(printf '%s' "$RESOLVED" | jq -r '.plan')
+    EXECUTION_ROOT=$(printf '%s' "$RESOLVED" | jq -r '.execution_root')
+    BRANCH=$(printf '%s' "$RESOLVED" | jq -r '.branch')
+    BASE=$(printf '%s' "$RESOLVED" | jq -r '(.base_branch + " @ " + .base_commit)')
+    ROUTE_REQUIRED=$(printf '%s' "$RESOLVED" | jq -r '.route_required')
+    [[ "$ROUTE_REQUIRED" == "true" ]] && ROUTE="switch to the execution root" || ROUTE="already at the execution root"
+    CONTEXT="$ICON $PLAN_STATUS: $TITLE — $PLAN
+execution root: $EXECUTION_ROOT
+branch: $BRANCH
+base: $BASE
+route: $ROUTE"
+    ;;
+  *)
+    PLAN=$(printf '%s' "$RESOLVED" | jq -r '.plan // "(unknown)"')
+    CONTEXT="⚠️ plan routing error: $STATUS — $PLAN"
+    ;;
+esac
 
 jq -n --arg ctx "$CONTEXT" '{
   hookSpecificOutput: {

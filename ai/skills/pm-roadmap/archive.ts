@@ -9,6 +9,7 @@ import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseBlocks, serializeBlocks, getField, setField, tasksDir, parseFrontmatter, getFmField, readStamped } from "./store.ts";
 import { listActiveTasks } from "./join.ts";
+import { listGitWorktrees } from "../../lib/worktree.mjs";
 
 const AGE_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -69,7 +70,14 @@ export async function archivePlans(root: string, opts: { today?: string; dryRun?
   const todayMs = opts.today !== undefined ? dayMs(opts.today) : (() => { const d = new Date(); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); })();
   if (Number.isNaN(todayMs)) throw new Error(`invalid today (expected YYYY-MM-DD): ${JSON.stringify(opts.today)}`);
 
-  const current = (await readFile(join(root, ".agents", "state", "current.txt"), "utf-8").catch(() => "")).trim();
+  let checkouts: string[];
+  try { checkouts = listGitWorktrees(root).map((entry: { path: string }) => entry.path); }
+  catch { checkouts = [root]; }
+  const currentOwners = new Map<string, string>();
+  for (const checkout of checkouts) {
+    const current = (await readFile(join(checkout, ".agents", "state", "current.txt"), "utf-8").catch(() => "")).trim();
+    if (current) currentOwners.set(current, checkout);
+  }
   const protectedPlans = await backlogPlanRefs(root);
 
   // ── idempotent recovery: closed.md → plans/X but file already in archive/ ──
@@ -98,7 +106,7 @@ export async function archivePlans(root: string, opts: { today?: string; dryRun?
     const status = getFmField(parseFrontmatter(await readFile(join(plansDir, e.name), "utf-8")).fields, "status");
     if (status !== "done" && status !== "dropped") { result.skipped.push({ plan: e.name, reason: `non-terminal '${status}'` }); continue; }
     const rel = `.agents/plans/${e.name}`;
-    if (rel === current) { result.skipped.push({ plan: e.name, reason: "current.txt" }); continue; }
+    if (currentOwners.has(rel)) { result.skipped.push({ plan: e.name, reason: `protected-by-current:${currentOwners.get(rel)}` }); continue; }
     if (protectedPlans.has(rel)) { result.skipped.push({ plan: e.name, reason: "referenced by a backlog item" }); continue; }
     if (await exists(join(archiveDir, e.name))) { result.skipped.push({ plan: e.name, reason: "archive collision" }); continue; }
     result.moved.push({ plan: rel, to: `.agents/plans/archive/${e.name}` });

@@ -67,6 +67,19 @@ async function main() {
     await ops.itemApprove(root, "ALPHA", "a-one", O);
     assert.equal(await field(BL("ALPHA"), "a-one", "Status"), "active");
 
+    // Interrupted approve recovers before the retry, so plan and item cannot remain split.
+    const crashPlan = ".agents/plans/2026-06-22-approve-crash.md";
+    await makePlan(root, crashPlan);
+    await ops.itemAdd(root, { task: "ALPHA" }, { id: "approve-crash", title: "Crash" }, O);
+    await ops.itemSetPlan(root, "ALPHA", "approve-crash", crashPlan, O);
+    await assert.rejects(
+      ops.itemApprove(root, "ALPHA", "approve-crash", { ...O, transaction: { crashAfter: 1 } }),
+      /simulated process crash/,
+    );
+    await ops.itemApprove(root, "ALPHA", "approve-crash", O);
+    assert.equal(await planStatus(root, crashPlan), "active");
+    assert.equal(await field(BL("ALPHA"), "approve-crash", "Status"), "active");
+
     // ── reprioritize: changes Priority; rejects bad enum + missing id ──
     await ops.itemSetPriority(root, "ALPHA", "a-one", "P0", O);
     assert.equal(await field(BL("ALPHA"), "a-one", "Priority"), "P0");
@@ -89,7 +102,7 @@ async function main() {
 
     // ── done close moves backlog → closed; id stays reserved (no reuse) ──
     await ops.itemClose(root, "ALPHA", "a-one", { status: "done", plan: ".agents/plans/2026-06-22-a-one.md", closedDate: "2026-06-22", ...O });
-    assert.deepEqual(await ids(BL("ALPHA")), ["untriaged-x"]);
+    assert.deepEqual((await ids(BL("ALPHA"))).sort(), ["approve-crash", "untriaged-x"]);
     assert.deepEqual(await ids(CL("ALPHA")), ["a-one"]);
     assert.equal(await field(CL("ALPHA"), "a-one", "Status"), "done");
     await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "a-one", title: "reuse" }, O), ops.OpError); // closed id reserved
@@ -159,6 +172,18 @@ async function main() {
       ops.OpError,
     );
     assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "draft", "bogus terminalStatus: plan NOT flipped (all-or-nothing)");
+
+    await assert.rejects(
+      ops.completePlanFromRetro(root, "ALPHA", "a-two", {
+        planPath: ".agents/plans/2026-06-22-a-two.md", terminalStatus: "done",
+        closedDate: "2026-06-22", ...O, transaction: { crashAfter: 2 },
+      }),
+      /simulated process crash/,
+    );
+    await ops.reservedIds(root, O); // the next mutator recovers before reading authoritative state
+    assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "draft", "interrupted complete rolled back plan status");
+    assert.ok((await ids(BL("ALPHA"))).includes("a-two"), "interrupted complete restored backlog item");
+    assert.ok(!(await ids(CL("ALPHA"))).includes("a-two"), "interrupted complete did not leave a closed item");
 
     // ── completePlanFromRetro success: plan→done + item closed + deferred harvested + current cleared ──
     await ops.completePlanFromRetro(root, "ALPHA", "a-two", {
@@ -234,6 +259,8 @@ async function main() {
     await ops.taskCreate(root, "SWT", "Switch", O);
     await ops.itemAdd(root, { task: "SWT" }, { id: "sw-open", title: "O" }, O);
     await ops.itemAdd(root, { task: "SWT" }, { id: "sw-act", title: "A" }, O);
+    await makePlan(root, ".agents/plans/2026-06-22-sw-act.md");
+    await ops.itemSetPlan(root, "SWT", "sw-act", ".agents/plans/2026-06-22-sw-act.md", O);
     await ops.itemApprove(root, "SWT", "sw-act", O); // Status → active
     const swr = await ops.taskSetMode(root, "SWT", "collab", "alice", O);
     assert.deepEqual({ assigned: swr.assigned, actor: swr.actor }, { assigned: 2, actor: "alice" }, "taskSetMode returns {assigned, actor} on solo→collab");

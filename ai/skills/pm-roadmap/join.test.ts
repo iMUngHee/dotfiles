@@ -71,6 +71,23 @@ async function main() {
     assert.equal(rc.length, 7, "6 from A + 1 from B");
 
     // ── resolveItem + buildNextPrompt ──
+    const currentPlan = ".agents/plans/2026-06-22-a-current.md";
+    await writeFile(join(root, currentPlan), `---
+id: a-current
+status: active
+pm_loop: true
+base_branch: main
+base_commit: abc123
+branch: agent/a-current
+worktree: .agents/worktrees/agent/a-current
+---
+# current
+
+## Implementation Steps
+
+- [ ] wire the mapped checkout
+`);
+    await ops.itemSetPlan(root, "A", "a-cur", currentPlan, O);
     const view = await j.resolveItem(root, "A", "a-cur");
     assert.ok(view && view.key === "A" && !view.closed);
     assert.equal(view!.siblings.length, 5);
@@ -82,6 +99,10 @@ async function main() {
     assert.ok(prompt.includes("# Next: a-cur"));
     assert.ok(prompt.includes("> task: A"));
     assert.ok(prompt.includes("awaiting triage"));
+    assert.ok(prompt.includes("branch: agent/a-current · worktree: .agents/worktrees/agent/a-current"));
+    assert.ok(prompt.includes("codex -C .agents/worktrees/agent/a-current"));
+    assert.ok(prompt.includes("cd .agents/worktrees/agent/a-current && claude"));
+    assert.equal(view!.plan?.baseCommit, "abc123");
 
     // closed item is also resolvable
     const closedView = await j.resolveItem(root, "A", "a-6");
