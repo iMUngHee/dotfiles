@@ -62,9 +62,26 @@ Output gate: "Root cause: [specific line/condition] because [evidence from step 
 3. If test suite exists: run it, show output
 4. Compare Phase 1 output (FAIL) vs Phase 4 output (PASS) explicitly
 
+Then perform proportional secondary verification. Derive one to three plausible secondary effects from the changed mechanism; do not apply a universal checklist. Runtime or operational changes consider only relevant signals such as latency, memory, disk, retry volume, or error rate. Report each risk separately, then the aggregate:
+
+```text
+Secondary Verification
+- Risks checked:
+  - <risk>: PASS | REGRESSION | INCOMPLETE
+- Observation:
+- Observation window:
+- Rollback threshold:
+- Result: PASS | REGRESSION | INCOMPLETE | N/A
+```
+
+`Observation window` and `Rollback threshold` are required for runtime or externally operational effects. If a required signal is unavailable or its observation window has not elapsed, classify that risk `INCOMPLETE`; this blocks a verified/completion claim and must state the exact unblock condition. If an observation crosses its rollback threshold, classify it `REGRESSION`; report it without a silent follow-up fix, and do not claim verification/completion.
+
+Compute the aggregate with strict precedence: `REGRESSION > INCOMPLETE > PASS`. Any regressed risk yields `REGRESSION`; otherwise any unavailable or unelapsed required observation yields `INCOMPLETE`; otherwise all derived risks within threshold yield `PASS`. Use aggregate `N/A` only for a pure local/code-only change with no distinct secondary risk, and state why no separate observation is meaningful.
+
 ## Rules
 
 - No fix without root cause stated first
 - No "it works now" without showing Phase 1 vs Phase 4 comparison
+- No verified/completion claim when Secondary Verification is `REGRESSION` or `INCOMPLETE`
 - Each phase must produce its output gate before proceeding
 - If the user provides reproduction steps, start at Phase 1. If the user provides a root cause, start at Phase 3.
