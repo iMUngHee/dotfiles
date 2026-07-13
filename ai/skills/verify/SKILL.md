@@ -55,7 +55,17 @@ Dispatch to a separate context to isolate heavy reading:
 - **Codex CLI**: `codex exec` with the same focused prompt (Goal / Depth / Plan path / Changed files). Codex's `multi_agent_v1.spawn_agent` is explicit-request-only (not for auto-dispatch), so spawn a `codex exec` subprocess instead.
 
 If the Plan delta step found a plan, pass its path as **Plan path** so the verifier seeds its truth conditions from the plan's `## Verifiable Success Criteria` (same as inline Step 1).
-Return the delegated context's report directly — do NOT re-run checks inline after dispatch.
+The dispatch prompt MUST also include the fixed planned truth conditions, the `Verification Coverage` field names, terminal-classification precedence, both arithmetic invariants, and the verdict rules below.
+
+Do NOT re-run delegated proof inline. Treat the returned checklist as a condition-evidence packet, discard any delegated legacy verdict, and mechanically map each planned condition:
+
+- `[x]` plus required fenced evidence → `Passed`.
+- Explicit failure plus required fenced evidence → `Failed`.
+- Unavailable prerequisite → `Blocked` only with attempted-prerequisite output, or `Evidence: none — no safe/authorized command`, plus a reason and exact unblock condition.
+- Deliberate omission → `Skipped` only with a reason and decision authority (`user`, approved plan/scope, or another explicit authority).
+- Missing condition/evidence, ambiguous state, or unclassifiable reason → `Blocked` with reason `delegated_evidence_incomplete`. Emit a fenced contract-validator result naming the condition and missing/ambiguous field. The exact unblock condition is: a new verification run must return that condition's terminal state and state-appropriate evidence.
+
+The contract-validator fence proves the delegation blockage; it is not feature-proof output. Validate both arithmetic invariants, then append the authoritative ledger and verdict below. Never retry deficient delegated evidence into a pass.
 
 ## Approach: Goal-backward
 
@@ -120,7 +130,21 @@ If unsure about scope, default to all 4 levels.
 
 ### 4. Report
 
-Update the checklist from Step 1 with results:
+Freeze the planned-condition list before executing proof. The counting unit is one planned truth condition, regardless of its number of levels, commands, or observables. Classify every condition into exactly one terminal state, in this precedence order:
+
+1. `Failed`: any required proof conclusively disproves the condition; remaining proofs need not run.
+2. `Blocked`: no proof failed, but a required proof could not run because access, environment, data, a dependency, or another prerequisite was unavailable.
+3. `Skipped`: no proof failed or blocked, but a required proof was deliberately not run.
+4. `Passed`: every required proof ran and satisfied the condition.
+
+Evidence is state-specific:
+
+- `Passed` and `Failed`: include the fenced proof command or observable output.
+- Attempted `Blocked`: include fenced prerequisite failure/unavailability output, the reason, and the exact unblock condition.
+- No-safe/authorized-check `Blocked`: write `Evidence: none — no safe/authorized command`, the reason, and the exact unblock condition; do not fabricate a fence.
+- `Skipped`: include the reason and decision authority; do not fabricate proof output.
+
+Update the checklist and append exactly this summary contract:
 
 ```
 Truth conditions for: [goal]
@@ -128,11 +152,27 @@ Truth conditions for: [goal]
 - [ ] [condition 2] — FAILED at Level 2: stub found at file:line
 ...
 
-Verdict: X/Y conditions verified
+Verification Coverage
+- Planned: N
+- Executed: N
+- Passed: N
+- Failed: N
+- Blocked: N
+- Skipped: N
+- Coverage: Executed / Planned (percentage)
+
+Verdict: PASS | FAIL | INCOMPLETE
+Summary: X/Y conditions passed
 ```
 
-Each condition MUST have a fenced code block showing the verification output.
-Failed conditions — report to the user with specific failure point.
+`Executed` is `Passed + Failed`; partially attempted blocked/skipped conditions are not executed. Enforce both invariants:
+
+- `Planned = Executed + Blocked + Skipped`
+- `Executed = Passed + Failed`
+
+Format `Coverage` as `Executed / Planned`, rounded half-up to one decimal place (for example, `2 / 3 (66.7%)`). With zero planned conditions, report `Coverage: N/A` and `INCOMPLETE`.
+
+Verdict precedence is deterministic: `FAIL` when `Failed > 0`; otherwise `INCOMPLETE` when `Blocked > 0`, `Skipped > 0`, or `Planned = 0`; otherwise `PASS` only when every planned condition passed. The status-bearing verdict replaces the former numeric-only verdict line; numeric progress appears only in `Summary` and the ledger.
 
 ## Rules
 
