@@ -168,6 +168,24 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
     }
   }
 
+  // C16 — a non-terminal mapped plan owns one dedicated (never-main) worktree.
+  const worktreeOwners = new Map<string, string>();
+  const planEntries = await readdir(pathJoin(root, ".agents", "plans"), { withFileTypes: true }).catch(() => []);
+  for (const entry of planEntries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const stamped = await readStamped(pathJoin(root, ".agents", "plans", entry.name));
+    if (!stamped) continue;
+    const fm = parseFrontmatter(stamped.content).fields;
+    const status = getFmField(fm, "status") ?? "";
+    if (status !== "draft" && status !== "active") continue;
+    const worktree = getFmField(fm, "worktree");
+    if (!worktree) continue; // legacy unmapped plans remain adoptable
+    if (worktree === "." || worktree === "./" || worktree === "") err("C16", entry.name, "main checkout cannot be a plan execution mapping");
+    const prior = worktreeOwners.get(worktree);
+    if (prior) err("C16", entry.name, `worktree '${worktree}' already owned by ${prior}`);
+    else worktreeOwners.set(worktree, entry.name);
+  }
+
   return { errors, warns };
 }
 

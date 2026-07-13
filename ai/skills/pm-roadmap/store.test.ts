@@ -1,14 +1,17 @@
 // Tests for store.ts. Run: ./node_modules/.bin/tsx store.test.ts
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile, readFile, mkdir, utimes } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm, writeFile, readFile, mkdir, stat, utimes } from "node:fs/promises";
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import {
   parseBlocks, serializeBlocks, getField, setField,
   parseFrontmatter, serializeFrontmatter, getFmField,
   acquireLock, releaseLock, lockPath, tasksDir,
-  readStamped, writeCAS, ensureGitignore, LockError,
+  readStamped, writeCAS, ensureGitignore, LockError, inboxPath,
 } from "./store.ts";
+import * as ops from "./ops.ts";
+import { ensureManagedWorktree } from "../../lib/worktree.mjs";
 
 const NOW = 1_750_000_000_000;
 
@@ -89,6 +92,9 @@ async function main() {
     await writeCAS(p, "v4", st2!.mtimeMs); // matching mtime → ok
     assert.equal((await readStamped(p))!.content, "v4");
 
+    // inbox is part of the shared tasks store, never a root-level file.
+    assert.equal(inboxPath(root), join(root, ".agents", "tasks", "_inbox.md"));
+
     // ── gitignore ensure (idempotent) ──
     await ensureGitignore(root, ["tasks/", "plans/", "state/", "inbox.md"]);
     let gi = await readFile(join(root, ".agents", ".gitignore"), "utf-8");
@@ -96,6 +102,29 @@ async function main() {
     await ensureGitignore(root, ["tasks/"]); // no dup
     gi = await readFile(join(root, ".agents", ".gitignore"), "utf-8");
     assert.equal(gi.split("\n").filter((l) => l.trim() === "tasks/").length, 1, "tasks/ not duplicated");
+
+    // Two managed worktrees serialize inbox writes through the one shared tasks/.lock.
+    const gitRoot = await mkdtemp(join(tmpdir(), "store-worktrees-"));
+    try {
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: gitRoot, encoding: "utf8" });
+      git("init", "-b", "main");
+      git("config", "user.email", "test@example.com");
+      git("config", "user.name", "Test");
+      await writeFile(join(gitRoot, "README.md"), "x\n");
+      git("add", "README.md");
+      git("commit", "-m", "init");
+      const a = await ensureManagedWorktree({ root: gitRoot, id: "inbox-a", base: "main" });
+      const b = await ensureManagedWorktree({ root: gitRoot, id: "inbox-b", base: "main" });
+      await Promise.all([
+        ops.itemAdd(a.execution_root, { inbox: true }, { id: "from-a", title: "A" }),
+        ops.itemAdd(b.execution_root, { inbox: true }, { id: "from-b", title: "B" }),
+      ]);
+      const shared = parseBlocks(await readFile(join(gitRoot, ".agents", "tasks", "_inbox.md"), "utf8"));
+      assert.deepEqual(shared.blocks.map((entry) => entry.id).sort(), ["from-a", "from-b"]);
+      assert.equal(await stat(join(gitRoot, ".agents", "inbox.md")).then(() => true).catch(() => false), false);
+    } finally {
+      await rm(gitRoot, { recursive: true, force: true });
+    }
 
     console.log("store.test.ts OK");
   } finally {

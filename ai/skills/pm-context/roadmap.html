@@ -249,6 +249,9 @@ async function renderHome() {
             el("span", { class: "id" }, el("a", { href: `#/item/${item.id}`, text: item.id })),
             el("span", { class: "title", text: item.title })),
           el("div", { class: "meta" }, "task · ", el("a", { href: `#/task/${item.task}`, class: "tasklink", text: item.task }), (item.owner && item.mode === "collab") ? ` · @${item.owner}` : ""),
+          item.worktree
+            ? el("div", { class: "meta mono", title: item.worktree, text: `branch · ${item.branch || "?"} · worktree · ${item.worktree}` })
+            : null,
           item.nextStep
             ? el("div", { class: "nextstep", title: cleanStep(item.nextStep) }, el("span", { class: "k", text: "→ next  " }), cleanStep(item.nextStep))
             : el("div", { class: "nextstep" }, el("span", { class: "k", text: "→  " }), el("span", { text: item.plan ? "plan set · no open step — /verify or /retro" : `no plan · kickoff to start /design ${item.id}` }))),
@@ -258,13 +261,13 @@ async function renderHome() {
     const inflight = !!roadmap.inFlight && dockId === roadmap.inFlight;
     const isFocusItem = !!roadmap.focus && dockId === roadmap.focus;
     const eyebrow = inflight ? "In progress" : (isFocusItem ? "Focus" : "Next up");
-    frag.append(dockCard(dockItem, { eyebrow, secondary: false, ctaText: inflight ? "copy resume →" : "copy kickoff →", itemIsFocus: isFocusItem }));
+    frag.append(dockCard(dockItem, { eyebrow, secondary: false, ctaText: dockItem.worktree ? "copy resume →" : "copy kickoff →", itemIsFocus: isFocusItem }));
   }
   // secondary Focus card: focus is set AND isn't already the (in-flight) dock item — so an explicit
   // focus is never buried in the queue when the dock is showing in-flight work. Skipped if focus
   // isn't an open item (stale/closed pointer).
   const focusItem = (roadmap.focus && roadmap.focus !== dockId) ? open.find((o) => o.id === roadmap.focus) : null;
-  if (focusItem) frag.append(dockCard(focusItem, { eyebrow: "Focus", secondary: true, ctaText: "copy kickoff →", itemIsFocus: true }));
+  if (focusItem) frag.append(dockCard(focusItem, { eyebrow: "Focus", secondary: true, ctaText: focusItem.worktree ? "copy resume →" : "copy kickoff →", itemIsFocus: true }));
 
   /* queue — exclude whatever is already shown in a dock card (in-flight + secondary focus) */
   const docked = new Set([dockId, focusItem && focusItem.id].filter(Boolean));
@@ -323,7 +326,7 @@ async function renderItem(id) {
     (j.closed
       ? el("span", { class: "chip p3", text: `closed · ${it.status || "done"}` })
       : el("div", { class: "grp" },
-          el("button", { class: "primary", text: "copy kickoff →", onclick: () => copyKickoff(it.id) }),
+          el("button", { class: "primary", text: plan && plan.worktree ? "copy resume →" : "copy kickoff →", onclick: () => copyKickoff(it.id) }),
           el("button", { text: "focus", onclick: () => mutate(() => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: it.id }) })) }),
           el("button", { class: "danger", text: "drop", onclick: () => dropItem(it.id) })))));
 
@@ -337,6 +340,9 @@ async function renderItem(id) {
   if (it.note) kv("note", it.note, true);
   kv("plan", plan ? `${plan.path} (${plan.status})` : "— no plan", !plan);
   if (plan && plan.nextStep) kv("next step", cleanStep(plan.nextStep));
+  if (plan && plan.branch) kv("branch", plan.branch);
+  if (plan && plan.worktree) kv("worktree", plan.worktree);
+  if (plan && plan.baseCommit) kv("base", `${plan.baseBranch || "?"} @ ${plan.baseCommit}`);
   frag.append(el("div", { class: "card" }, el("h3", { text: "detail" }), dl));
 
   frag.append(contextCard("context links", (j.contextLinks || []).map((l) =>

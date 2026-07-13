@@ -27,9 +27,32 @@ Task: $ARGUMENTS (if empty, ask the user)
 ```
 (pm-context · context | retro · memory | pm-roadmap · backlog)  ──▶  design · plan
 ```
-When invoked on a `pm-roadmap` backlog item, read that task's **context** (`/pm-context`: links) + **memory** (`/retro`: per-task decisions) + the item, then write the plan and link it back through the **`pm-roadmap.ts persist`** CLI — one transaction that creates/links the backlog item and points `current.txt` together. Outside the loop it just plans: a standalone plan carries `pm_loop: false` and is tracked in no backlog. (Plan storage: `{{PLAN_DIR}}/`; pointer: `{{STATE_DIR}}/current.txt`; per-task backlog: `.agents/tasks/<KEY>/`, written only via the CLI.)
+When invoked on a `pm-roadmap` item, read its context/memory, reserve and enter its
+dedicated worktree, stage the approved plan under that reservation, then call
+`pm-roadmap.ts persist`. Persist journal-creates the canonical plan and backlog linkage,
+seeds the worktree execution pointer, and selects or safely parks it in main. Standalone
+plans use the same worktree and plan transaction without a backlog item.
 
-## Context Discovery
+## Execution Bootstrap (before Context Discovery)
+
+Determine a stable kebab-case id and base ref before reading project code. A backlog item
+already supplies its id. For an ad-hoc design, reserve a collision-free id. Explicit base
+intent is authoritative; otherwise use the current branch only when unambiguous.
+
+```bash
+repo_root="$(git rev-parse --show-toplevel)" || exit 1
+engine="$HOME/.config/ai/lib/worktree.mjs"
+node "$engine" ensure --root "$repo_root" --id <id> --base <base-ref>
+```
+
+Announce the returned base ref/OID, branch, and execution root. Then enumerate and read
+the target root's tool-native project instruction chain. All discovery, Git, file, build,
+and test operations after this point are rooted at `execution_root`. If the engine
+returns `migration_required`, run/review PM migration first. Ambiguous base intent,
+non-empty store conflicts, dirty main legacy adoption, or an occupied branch/path stop
+the flow; never guess or fall back to main execution.
+
+## Context Discovery (inside the execution root)
 
 Before starting, search for existing plan artifacts that may be relevant:
 
@@ -81,20 +104,18 @@ After design approval, present the implementation plan as response text. **Do NO
 
 After the user approves the design (Step 3 approval = signal to persist) and **before any file writes that implement the plan**:
 
-1. **Generate id slug** — kebab-case from title (lowercase, hyphens for spaces, ASCII only). Scan `{{PLAN_DIR}}/*.md` for existing `id:` fields. On collision, append `-2`, `-3`, etc.
+1. **Reuse the bootstrap id and mapping.** Do not generate a second id after discovery.
+   Re-run read-only validation if the reservation or target instructions changed.
 
-2. **Check `{{STATE_DIR}}/current.txt` for conflict** — If it names a plan with `status: draft` or `status: active`, present three options to the user:
-   - **(a)** Run `/retro` on the in-flight plan first — it closes the plan + its backlog item via the `complete` transaction (Post-Impl Notes, deferred harvest, pointer clear) — then persist the new one. (design never writes `done` directly; that transition is /retro-exclusive.)
-   - **(b)** Park the in-flight plan and proceed: persisting the new plan repoints `current.txt`, so the previous plan + its backlog item become a parked draft/active (re-activate later by re-pointing `current.txt` at it). The "exactly one backlog item" invariant applies only to the *in-flight* plan, so a parked plan keeps its item without error.
-   - **(c)** Cancel the new plan creation.
+2. **Resolve the existing current automatically.** A draft/active current stays active in
+   its own worktree and becomes parked when the new plan is selected; do not close it or
+   ask merely because another design starts. A terminal current is stale and is eligible
+   for exact cleanup. A different live plan already occupying the new target worktree is
+   a hard conflict. `current.txt` is a selector, not a status field.
 
-   If the existing plan is `done`/`dropped`, just proceed (persist overwrites the pointer).
-
-   > **Note**: `current.txt` is a *pointer* naming the in-flight plan, unrelated to the `status:` value — a plan can be pointed-at while still `draft`. Do not conflate "pointing `current.txt`" with "promoting status to active". The `persist` CLI does the pointing for pm-loop plans.
-
-3. **Create `{{PLAN_DIR}}/` directory** if it does not exist.
-
-4. **Save plan as `{{PLAN_DIR}}/YYYY-MM-DD-<id>.md`** with this English frontmatter:
+3. **Render and stage; do not write the canonical plan directly.** The canonical path is
+   `{{PLAN_DIR}}/YYYY-MM-DD-<id>.md`, but the approved bytes first enter the
+   reservation-bound stage through the engine. Include this English frontmatter:
 
 ```yaml
 ---
@@ -104,16 +125,29 @@ description: <English 1-2 sentence summary, ~150 chars — used for grep/search>
 date: YYYY-MM-DD
 status: draft
 pm_loop: true
+base_branch: <resolved human-readable base ref>
+base_commit: <resolved 40-character OID>
+branch: <dedicated branch from ensure>
+worktree: <repo-relative dedicated worktree path>
 files_affected:
   - <file paths from implementation plan>
 ---
 ```
 
-`pm_loop: true` = this plan is tracked in a `pm-roadmap` backlog (persisted in 5.5). Set `pm_loop: false` for a **standalone** plan (general /design, no backlog item) — it is then exempt from the "linked to exactly one backlog item" in-flight invariant, and 5.5 writes `current.txt` directly instead of calling `persist`.
+`pm_loop: true` tracks a backlog item. `pm_loop: false` is standalone; both still require
+the execution mapping and dedicated worktree.
 
-Followed by the approved design content (Goal, Approach, Decisions, Verifiable Success Criteria, Risks, Implementation Steps).
+Follow with Goal, Approach, Decisions, Verifiable Success Criteria, Risks, Implementation
+Steps, and the empty Post-Implementation Notes section. Pipe the complete bytes to the
+stage without a second persistent input file:
 
-5. **Link the plan to the backlog + point `current.txt` via the CLI.** The `id` slug doubles as the backlog item id (1:1 with the plan). Setup:
+```bash
+node "$engine" stage-plan --root "$repo_root" --id <id> --input /dev/stdin <<'PLAN'
+<complete rendered plan>
+PLAN
+```
+
+5. **Persist through the CLI.** The id doubles as the backlog item id. Setup:
 
    ```bash
    repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
@@ -121,27 +155,29 @@ Followed by the approved design content (Goal, Approach, Decisions, Verifiable S
    pm() { PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.config/ai/skills/pm-roadmap/pm-roadmap.ts "$@"; }
    ```
 
-   Pick the path that matches the backlog:
-   - **The work is already a backlog item** (the canonical loop — you designed *for* an open item, e.g. one from `pm next`): link the plan, then point the pointer. Link first so the in-flight plan is never an orphan:
-     ```bash
-     pm plan <KEY> <id> "<plan-repo-rel-path>"                 # sets Plan + Status → draft
-     printf '%s\n' "<plan-repo-rel-path>" > "$repo_root/.agents/state/current.txt"
-     ```
-   - **No backlog item yet** (ad-hoc design): one transaction creates + links + points. The owning task `<KEY>` is required — ask the user which; create it first if none exists:
-     ```bash
-     pm task create <KEY> --title "<task title>"              # only if the task does not exist yet
-     pm persist <KEY> <id> "<plan-repo-rel-path>" --title "<plan title>"
-     ```
-     `persist` (→ `createPlanAndBacklogItem`) creates the item (Status `draft`, mirroring the plan) **and** points `current.txt`, atomically — no orphan mid-write. (`persist` rejects an id that is already a backlog item; relink an existing item with `plan` above.)
+   A real task key is required for `pm_loop:true`; create/triage it first when needed.
 
-   **Never hand-edit any `tasks/*` file** — `plan`/`persist` are the only writers. The plan `status` stays `draft`; promotion to `active` is the `승인` trigger.
-
-   **Standalone plan (`pm_loop: false`):** skip both — there is no backlog item. Point the pointer directly (`current.txt` is a state pointer, not a `tasks/*` file):
    ```bash
-   mkdir -p "$repo_root/.agents/state" && printf '%s\n' "<plan-repo-rel-path>" > "$repo_root/.agents/state/current.txt"
+   pm task create <KEY> --title "<task title>"   # only when the task does not exist
+   pm persist <KEY> <id> "<plan-repo-rel-path>" --title "<plan title>"
    ```
 
-6. **Append empty Post-Implementation section** to the plan:
+   Persist acquires reservation lock then task-store lock, journal-creates the canonical
+   plan from the staged bytes, creates/links the draft item, seeds the target execution
+   pointer, and attempts the main launcher CAS. Report its exact outcome:
+
+   - `persisted_selected`: main and target point to the new plan.
+   - `persisted_parked`: a newer main selection survived; the target still owns the plan.
+
+   Never retry a parked result by adopting a fresh main expectation. A later explicit
+   `pm select --plan <path>` selects it. Never hand-edit tasks, canonical plan content,
+   reservations, or current pointers.
+
+   Standalone persistence uses `pm persist --standalone --id <id> --plan <path>` and creates no
+   backlog/closed/deferred item; it still consumes the reservation and seeds the mapped
+   target.
+
+6. **The staged content already includes the empty Post-Implementation section:**
 
 ```markdown
 ## Post-Implementation Notes
@@ -181,20 +217,25 @@ Report the archiver's output (moved / skipped). Add `--dry-run` to preview witho
 - **Implement only against an `active` plan.** An explicit build instruction (`승인`/"구현해"/"최대한 작업해"/"ㄱㄱ") IS the `승인` trigger: promote `status: draft → active` (+ `pm approve <KEY> <id>`) first, then implement. A terse go-ahead is no excuse to skip section-by-section approval or a warranted `/grill`.
 - Plan artifact is saved ONLY after explicit design approval (Step 3)
 - **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they read the in-flight plan via `current.txt`; the plan id is used for backlog linkage) and loses the pre-drift intent snapshot
-- **ALWAYS check off implementation steps as you go.** The instant a step in `## Implementation Steps` lands (meets its PASS output), edit the plan to flip its `- [ ]` → `- [x]` — unconditionally, never batched at the end. The checkbox state is the live progress record `/verify` and `/retro` trust; stale checkboxes break that contract.
+- **ALWAYS check off implementation steps as you go.** The instant a step meets its
+  PASS output, call `pm plan-step check <plan> <number>`; never batch at the end and never
+  hand-edit checkbox lines.
 - The plan MUST carry a `## Verifiable Success Criteria` section (goal-level PASS/FAIL conditions). It is the seed `/verify` checks against — a plan whose goal isn't expressed as checkable conditions weakens the design→verify contract.
 - The plan MUST carry a `## Risks` section before `## Implementation Steps`, so known breakage modes and mitigations are visible before implementation starts.
 - No file writes during design exploration (Steps 1-3)
 - If the user declines to save, skip Step 5 — the plan remains conversation-only
 - Frontmatter MUST be English. Body content can be Korean.
-- The `branch` field is NOT in the schema. Git tracks branch separately.
+- `base_branch`, `base_commit`, `branch`, and `worktree` are required execution fields
+  on every new draft/active plan. Surgical lifecycle updates must preserve them.
 - Inline `#` comments in frontmatter are NOT used (natural-language triggers replace them).
 
 ## Handoff mode (`/design handoff`)
 
 Package the current in-flight plan so a fresh session or another agent can resume it with full context. **Writes nothing** — the plan file (checkbox state) + `{{STATE_DIR}}/current.txt` stay the single source of truth. This is the mid-execution counterpart to `pm next` (which kicks off a *backlog item* before implementation); handoff kicks off an *in-flight plan* mid-implementation, and Continue mode is its consumer.
 
-1. Read `{{STATE_DIR}}/current.txt`. **Empty / missing / the named plan file absent** → report "no in-flight plan to hand off" and stop (suggest `/design <task>` or `pm next`).
+1. Run read-only `resolve-current`. Empty/missing/terminal → report no in-flight plan and
+   stop. A routing error is reported verbatim. Use the returned `execution_root` for all
+   subsequent reads.
 2. Branch on the plan's frontmatter `status`:
    - **`done` / `dropped`** (stale pointer) → report "not an in-flight plan (already terminal)" and stop; do not hand off.
    - **`draft`** (unapproved) → hand off, but put "⚠ this plan is still `draft` (unapproved) — reply `승인` in the fresh session before implementing" at the top of the prompt.
@@ -202,14 +243,16 @@ Package the current in-flight plan so a fresh session or another agent can resum
    - **any other / unknown status** → report "invalid plan status" and stop (the lifecycle only creates draft/active/done/dropped; this is a guard).
 3. Extract from the plan: `id` / `title` / `status`, Goal, Verifiable Success Criteria, Risks, and the `## Implementation Steps` split into **done (`- [x]`)** and **remaining (`- [ ]`)**. If zero steps remain, put "all steps complete — run `/verify` then `/retro` in the fresh session" in the prompt instead of a resume pointer.
 4. For a pm-loop plan (`pm_loop: true`), pull the owning task's links + memory via `pm get <id>` (id == plan slug). **On `pm get` failure / item-not-found (linkage drift)** → note that fact and continue with a plan-only handoff (do not stop). Skip this step for a standalone (`pm_loop: false`) plan.
-5. Emit a paste-ready kickoff prompt (fenced block) containing: plan id/title/status, goal, done-so-far, **resume-from-here** (first remaining step + the rest), key decisions/risks, task memory + links, and the resume command `/design continue`.
+5. Emit a paste-ready kickoff prompt containing the mapping and rooted resume commands:
+   `codex -C <execution_root>` and `cd <execution_root> && claude`, plus `/design continue`.
 6. Copy the prompt to the clipboard via `/copy`, then tell the user to paste it into the fresh session and stop. **If `/copy` / clipboard access fails, do NOT claim it was copied** — print the prompt inline (fenced) and tell the user to copy it manually.
 
 ## Continue mode (`/design continue`)
 
 Resume the in-flight plan in THIS session.
 
-1. Read `{{STATE_DIR}}/current.txt`. Empty / missing / named plan absent → report "no in-flight plan to continue" and stop (suggest `pm next`).
+1. Run `resolve-current`; re-anchor the session to its `execution_root`. Empty/missing or
+   a routing error stops with the exact remediation. Never continue from main.
 2. Branch on frontmatter `status`: `draft` → unapproved, so request `승인` (a draft plan is not implementable per the Rules) and stop / `done` · `dropped` (stale pointer) → report and stop / any other · unknown → report "invalid plan status" and stop.
 3. `active`:
    - **Unchecked `- [ ]` steps remain** → summarize the done steps, locate the first unchecked step, and resume implementation from there (honor the existing Rules: flip `- [ ]` → `- [x]` as each lands; implement only against the active plan).
@@ -221,19 +264,24 @@ After `current.txt` points to a `draft` plan, watch for explicit user replies th
 
 | User trigger       | Action                                         |
 | ------------------ | ---------------------------------------------- |
-| `승인` / `approve` | Edit plan frontmatter `status: draft → active`, then mirror the item: `pm approve <KEY> <id>` (item Status → `active`). |
-| `취소` / `cancel`  | Edit plan frontmatter `status: → dropped`, then `pm close <KEY> <id> --status dropped --reason "<why>"` (moves the item to `closed.md`; the op clears `focus`), then truncate `current.txt`. |
+| `승인` / `approve` | Assert the mapped execution root, then `pm approve <KEY> <id>`; the journal changes plan + item together. |
+| `취소` / `cancel`  | `pm complete <KEY> <id> --plan <path> --status dropped --reason "<why>"`; the journal terminals plan + item before exact pointer cleanup. |
 
-**Backlog mirror (pm-loop plans):** the backlog item Status must mirror the plan, so each trigger pairs the plan-frontmatter edit with a CLI op (reuse the `pm` helper from Step 5.5). On `승인` → `pm approve <KEY> <id>`. On `취소` → `pm close <KEY> <id> --status dropped --reason "<why>"` then truncate `current.txt`. The ops take the lock; the plan-frontmatter edit is a direct write (a plan file is a design artifact, not a `tasks/*` file). For a **standalone** (`pm_loop: false`) plan there is no item — edit only the plan frontmatter (+ truncate `current.txt` on 취소).
+**Atomic mirror:** never edit plan status directly. PM-loop plans use the commands above.
+Standalone plans use `pm approve --standalone --plan <path>` and
+`pm complete --standalone --plan <path> --status dropped`. Both use the shared journal.
 
 > The `done` transition is **delegated to `/retro`**. `/retro` Phase 5 closes the plan + item via the `complete` transaction together with `## Post-Implementation Notes`. Do NOT add a `완료` / `done` natural-language trigger here.
 
-> Only the `current.txt`-pointed plan is trigger-eligible. A parked plan (Step 5 option (b)) becomes eligible again by re-pointing `current.txt` at its repo-relative path — a direct one-line write; no new plan artifact is created.
+> A parked plan becomes eligible through explicit `pm select --plan <path>` after its
+> mapped target current is validated. Never hand-edit the launcher pointer.
 
 **Hard rules:**
 
 - Trigger fires ONLY when `state/current.txt` points to a plan with status `draft` or `active`. If `current.txt` is empty or missing, treat user reply as normal conversation — do NOT modify any plan file.
 - NEVER infer status changes from context (e.g., "looks done", "I think we finished"). Status changes ONLY on the explicit trigger words above (or `/retro` for the `done` path).
 - NEVER change status silently. Always confirm in the response: "✅ status: draft → active".
-- After `취소` (status → dropped), **truncate `{{STATE_DIR}}/current.txt` to empty** so no plan is pointed at. Same convention applies to `/retro`'s `done` transition (handled inside retro/SKILL.md). The state pointer is non-empty ONLY while a `draft` or `active` plan exists.
-- Use the `Edit` tool with a precise multi-line `old_string` (e.g., the full frontmatter block around the `status:` line) to avoid mismatches when other plans share the same status value.
+- Terminal commands clear only pointers whose exact content equals the terminal plan;
+  unrelated main/worktree selections survive.
+- During implementation, update checkboxes only with
+  `pm plan-step check|uncheck <plan> <number>`; never edit checkbox lines directly.

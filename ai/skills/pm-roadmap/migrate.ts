@@ -4,11 +4,13 @@
 // missing ROADMAP (no-op), and is idempotent (tasks/ exists → no-op). Self-contained
 // legacy parsers (no roadmap.ts dependency, so roadmap.ts can be deleted afterward).
 // CLI: tsx migrate.ts <root> [--apply] [--yes]  (default = dry-run, writes nothing).
-import { cp, rm, readdir, readFile, writeFile, mkdir, stat } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { cp, rm, readdir, readFile, writeFile, mkdir, stat, lstat, readlink, realpath } from "node:fs/promises";
+import { join, basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Block, serializeBlocks, serializeFrontmatter, taskFile, taskDir, tasksDir, inboxPath, ensureGitignore } from "./store.ts";
+import { type Block, serializeBlocks, serializeFrontmatter, taskFile, taskDir, tasksDir, inboxPath, ensureGitignore, parseBlocks, withLock } from "./store.ts";
 import { validateRoadmap, formatReport } from "./validate.ts";
+import { absentDescriptor, listTransactions, makeTarget, recoverTransactions, regularDescriptor, runTransaction } from "./transaction.ts";
+import { listGitWorktrees, mainCheckout } from "../../lib/worktree.mjs";
 
 const SUPERSEDE_NOTE = "single-file-roadmap-verdict";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -129,9 +131,8 @@ function memBlock(m: LMem): Block {
 
 export interface MigrateResult { out: string; applied: boolean; ok: boolean; noop?: string; }
 
-export async function migrate(root: string, opts: { apply?: boolean; yes?: boolean; today?: string; runid?: string } = {}): Promise<MigrateResult> {
+async function migrateLegacyRoadmap(root: string, opts: { apply?: boolean; yes?: boolean; today?: string; runid?: string } = {}): Promise<MigrateResult> {
   const agents = join(root, ".agents");
-  if (await exists(tasksDir(root))) return { out: "tasks/ already exists — already migrated (no-op)", applied: false, ok: true, noop: "already-migrated" };
   const roadmapPath = join(agents, "ROADMAP.md");
   if (!(await exists(roadmapPath))) return { out: "no .agents/ROADMAP.md — nothing to migrate (no-op)", applied: false, ok: true, noop: "no-legacy" };
 
@@ -212,6 +213,122 @@ export async function migrate(root: string, opts: { apply?: boolean; yes?: boole
   await rm(tcDir, { recursive: true, force: true });
   await rm(memDir, { recursive: true, force: true });
   return { out: `${lines.join("\n")}\n\nAPPLIED ✓ — legacy removed (backup: ${backup}). ${formatReport(report)}`, applied: true, ok: true };
+}
+
+async function canonicalRoot(root: string): Promise<string> {
+  try { return mainCheckout(root); }
+  catch { return resolve(root); }
+}
+
+async function hasTaskFirstData(root: string): Promise<boolean> {
+  const visit = async (dir: string): Promise<boolean> => {
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+        if (await visit(join(dir, entry.name))) return true;
+      } else if (entry.isFile() && entry.name === "task.md") return true;
+    }
+    return false;
+  };
+  return visit(tasksDir(root));
+}
+
+async function managedCheckouts(root: string): Promise<string[]> {
+  try { return listGitWorktrees(root).map((entry: { path: string }) => resolve(entry.path)); }
+  catch { return [resolve(root)]; }
+}
+
+type TransactionFailure = { crashAfter?: number; crashAt?: "prepared" | "applying" | "committed" };
+
+async function relocateInbox(root: string, runid: string, transaction: TransactionFailure = {}): Promise<{ applied: boolean; out: string }> {
+  const oldPath = join(root, ".agents", "inbox.md");
+  const newPath = inboxPath(root);
+  const oldInfo = await lstat(oldPath).catch(() => null);
+  if (oldInfo && !oldInfo.isFile()) throw new Error("legacy main inbox must be a regular file");
+
+  const legacyLinks: string[] = [];
+  for (const checkout of await managedCheckouts(root)) {
+    if (checkout === resolve(root)) continue;
+    const candidate = join(checkout, ".agents", "inbox.md");
+    const info = await lstat(candidate).catch(() => null);
+    if (!info) continue;
+    if (!info.isSymbolicLink()) throw new Error(`inbox migration conflict: ${candidate} is not a symlink`);
+    const raw = await readlink(candidate);
+    const normalizedTarget = await realpath(resolve(dirname(candidate), raw)).catch(() => resolve(dirname(candidate), raw));
+    const normalizedSource = await realpath(oldPath).catch(() => oldPath);
+    if (normalizedTarget !== normalizedSource) throw new Error(`inbox migration conflict: ${candidate} targets ${raw}`);
+    legacyLinks.push(candidate);
+  }
+  if (!oldInfo && !legacyLinks.length) return { applied: false, out: "inbox relocation: already migrated" };
+
+  const targets = [];
+  if (oldInfo) {
+    const oldRaw = await readFile(oldPath, "utf8");
+    const newRaw = await readFile(newPath, "utf8").catch(() => "");
+    const oldParsed = parseBlocks(oldRaw);
+    const newParsed = parseBlocks(newRaw);
+    const newIds = new Set(newParsed.blocks.map((block) => block.id));
+    const collisions = oldParsed.blocks.map((block) => block.id).filter((id) => newIds.has(id));
+    if (collisions.length) throw new Error(`inbox migration collision: ${collisions.join(", ")}`);
+    const merged = serializeBlocks(newParsed.title || oldParsed.title || "_INBOX — Inbox", [...newParsed.blocks, ...oldParsed.blocks]);
+    const backup = join(tasksDir(root), `_inbox.legacy-${runid}.md`);
+    if (await exists(backup)) throw new Error(`inbox migration backup exists: ${backup}`);
+    targets.push(await makeTarget(root, newPath, regularDescriptor(merged)));
+    targets.push(await makeTarget(root, backup, regularDescriptor(oldRaw, oldInfo.mode)));
+    targets.push(await makeTarget(root, oldPath, absentDescriptor()));
+  }
+  for (const link of legacyLinks) targets.push(await makeTarget(root, link, absentDescriptor()));
+  await runTransaction(root, "migrate-inbox", targets, { id: `migrate-inbox-${runid}`, ...transaction });
+  return { applied: true, out: `inbox relocation: ${oldInfo ? "moved to tasks/_inbox.md" : "source already absent"}; removed ${legacyLinks.length} legacy worktree link(s)` };
+}
+
+export async function migrate(root: string, opts: { apply?: boolean; yes?: boolean; today?: string; runid?: string; transaction?: TransactionFailure } = {}): Promise<MigrateResult> {
+  const main = await canonicalRoot(root);
+  const pending = await listTransactions(main);
+  if (!opts.apply && pending.length) {
+    return { out: `recovery_required: ${pending.join(", ")}`, applied: false, ok: true, noop: "recovery-required" };
+  }
+
+  const roadmapPath = join(main, ".agents", "ROADMAP.md");
+  const hasRoadmap = await exists(roadmapPath);
+  const taskData = await hasTaskFirstData(main);
+  const oldInbox = await exists(join(main, ".agents", "inbox.md"));
+  if (hasRoadmap && taskData) {
+    return { out: "migration conflict: legacy ROADMAP.md and task-first task.md data both exist", applied: false, ok: false, noop: "reconciliation-conflict" };
+  }
+  if (!hasRoadmap && !oldInbox && pending.length === 0) {
+    const already = await exists(tasksDir(main));
+    return {
+      out: already ? "task-first store already migrated (no-op)" : "no .agents/ROADMAP.md or legacy inbox — nothing to migrate (no-op)",
+      applied: false,
+      ok: true,
+      noop: already ? "already-migrated" : "no-legacy",
+    };
+  }
+
+  if (!opts.apply) {
+    const parts: string[] = [];
+    if (hasRoadmap) parts.push((await migrateLegacyRoadmap(main, { ...opts, apply: false })).out);
+    if (oldInbox) parts.push("inbox relocation: .agents/inbox.md → .agents/tasks/_inbox.md");
+    parts.push("DRY-RUN — nothing written. Apply re-reads under tasks/.lock.");
+    return { out: parts.join("\n\n"), applied: false, ok: true };
+  }
+
+  return withLock(main, "migrate", async () => {
+    await recoverTransactions(main);
+    const parts: string[] = [];
+    let applied = false;
+    if (await exists(roadmapPath)) {
+      if (await hasTaskFirstData(main)) return { out: "migration conflict after lock: legacy and task-first data coexist", applied: false, ok: false, noop: "reconciliation-conflict" };
+      const legacy = await migrateLegacyRoadmap(main, { ...opts, apply: true });
+      parts.push(legacy.out);
+      if (!legacy.ok) return legacy;
+      applied ||= legacy.applied;
+    }
+    const inbox = await relocateInbox(main, opts.runid ?? String(Date.now()), opts.transaction);
+    parts.push(inbox.out);
+    applied ||= inbox.applied;
+    return { out: parts.join("\n\n"), applied, ok: true, noop: applied ? undefined : "already-migrated" };
+  });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

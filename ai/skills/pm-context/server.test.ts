@@ -40,17 +40,26 @@ async function main() {
     await ops.taskCreate(root, "BETA", "B", { retries: 0 });
     await mkdir(join(root, ".agents", "plans"), { recursive: true });
     const stepRel = ".agents/plans/2026-07-01-b-step.md";
-    await writeFile(join(root, stepRel), `---\nid: b-step\nstatus: active\npm_loop: true\n---\n# b-step\n\n## Implementation Steps\n\n- [ ] wire the first thing\n`);
+    await writeFile(join(root, stepRel), `---\nid: b-step\nstatus: active\npm_loop: true\nbase_branch: main\nbase_commit: 0123456789012345678901234567890123456789\nbranch: agent/b-step\nworktree: .agents/worktrees/agent/b-step\n---\n# b-step\n\n## Implementation Steps\n\n- [ ] wire the first thing\n`);
     await ops.itemAdd(root, { task: "BETA" }, { id: "b-step", title: "BS" }, { retries: 0 });
     await ops.itemSetPlan(root, "BETA", "b-step", stepRel, { retries: 0 });
     r = await handle(root, "GET", "/api/roadmap", P, undefined);
     const stepRow = (r.json as any).open.find((i: any) => i.id === "b-step");
     assert.equal(stepRow.plan, stepRel, "open[] plan path unchanged (still the plan file path)");
     assert.equal(stepRow.nextStep, "wire the first thing", "open[] exposes additive plan.nextStep (first unchecked step)");
+    assert.equal(stepRow.baseBranch, "main", "open[] exposes the immutable-base mapping");
+    assert.equal(stepRow.baseCommit, "0123456789012345678901234567890123456789");
+    assert.equal(stepRow.branch, "agent/b-step", "open[] exposes the execution branch");
+    assert.equal(stepRow.worktree, ".agents/worktrees/agent/b-step", "open[] exposes the execution worktree");
     // join keeps item.plan a string path and top-level plan the PlanInfo object — unaffected by the open[] additive
     r = await handle(root, "GET", "/api/roadmap/b-step/join", P, undefined);
     assert.equal((r.json as any).item.plan, stepRel, "join item.plan stays a string path");
     assert.equal((r.json as any).plan.nextStep, "wire the first thing", "join top-level plan.nextStep present/unchanged");
+    assert.equal((r.json as any).plan.branch, "agent/b-step");
+    assert.equal((r.json as any).plan.worktree, ".agents/worktrees/agent/b-step");
+    r = await handle(root, "GET", "/api/roadmap/b-step/next", P, undefined);
+    assert.ok(r.text?.includes("codex -C .agents/worktrees/agent/b-step"), "copied prompt roots Codex in the worktree");
+    assert.ok(r.text?.includes("cd .agents/worktrees/agent/b-step && claude"), "copied prompt roots Claude in the worktree");
 
     // inFlight (dashboard-inflight-surface): /api/roadmap resolves current.txt → the open item whose Plan matches.
     r = await handle(root, "GET", "/api/roadmap", P, undefined);

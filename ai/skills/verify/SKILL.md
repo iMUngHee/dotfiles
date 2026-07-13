@@ -21,17 +21,20 @@ verify is an **optional read-only step after implementation** — not a pm-* loo
 
 ## Plan delta (optional)
 
-Find the active plan artifact via the state pointer — the same source `/design` writes and `/retro` reads (`current.txt` names the in-flight plan by repo-relative path; plan frontmatter carries no `branch` field):
+Resolve the active plan and execution root through the shared read-only engine:
 
 ```bash
-state_file="{{STATE_DIR}}/current.txt"
-[ -f "$state_file" ] && plan=$(awk 'NF { print; exit }' "$state_file") \
-  && [ -f "$plan" ] && echo "$plan"
+root="$(git rev-parse --show-toplevel)" || exit 1
+node "$HOME/.config/ai/lib/worktree.mjs" resolve-current --root "$root"
 ```
+
+`status: ok` supplies `plan`, immutable `base_commit`, `branch`, and `execution_root`.
+Re-root every file/Git/test command there. Any routing/mapping error blocks verification
+with the engine output as evidence; never fall back to the caller checkout.
 
 If found, compare planned vs actual:
 - **Planned files**: `files_affected` from plan frontmatter
-- **Actual files**: `git diff --name-only <base>..HEAD`
+- **Actual files**: `git -C <execution_root> diff --name-only <base_commit>...HEAD`
 - Report delta as informational (files added/removed vs plan). Do NOT block on delta — plans evolve during implementation.
 
 If no plan found (empty or missing pointer), skip this section entirely.

@@ -7,104 +7,92 @@ model: opus
 disable-model-invocation: true
 ---
 
-Create and set up a git worktree under `.agents/worktrees/<target-branch>` for isolated development. Shared across Claude Code and Codex CLI (tool-specific bits — sandbox invocation — are noted per platform in Rules).
+Create, reuse, validate, or safely prune a managed worktree through the shared engine.
+Never reproduce Git-path, symlink, pointer, reservation, or cleanup logic in the skill.
 
 Arguments: $ARGUMENTS
-- `<target-branch>`: new branch name (required)
-- `[base-branch]`: branch to base from (default: current branch). Always pulled to latest before branching.
+- `<id>`: stable kebab-case plan/item id (required)
+- `[base-ref]`: explicit base branch/ref (required when intent is ambiguous)
 
-## Steps
+## Setup
 
-### 1. Validate
-
-- Confirm inside a git repository
-- Abort if `.agents/worktrees/<target-branch>` already exists
-- Abort if `<target-branch>` branch already exists (`git rev-parse --verify <target-branch>`)
-
-### 2. Fetch and create worktree
-
-Chain with `&&` so a failed fetch (e.g., network offline) does NOT fall through to creating a worktree from a stale ref:
-
-```
-git fetch origin && \
-  git worktree add -b <target-branch> .agents/worktrees/<target-branch> origin/<base-branch>
-```
-
-If `origin/<base-branch>` does not exist (no remote or local-only branch), fall back to local ref:
-
-```
-git worktree add -b <target-branch> .agents/worktrees/<target-branch> <base-branch>
-```
-
-Then `cd` into `.agents/worktrees/<target-branch>`.
-
-### 2.5. Wire the pm store (share main's `.agents`, keep state local)
-
-So pm tooling (`/pm-roadmap`, `/pm-context`, `/design`, `/retro`) in the worktree sees the **same** project backlog/plans/inbox (and the same `tasks/.lock`, so writes across worktrees serialize), while each worktree keeps its **own** in-flight plan + focus. Symlink the shared data; make `state/` a real local dir:
+Resolve the repository root and use the shared engine:
 
 ```bash
-main="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
-mkdir -p .agents/state                       # local: current.txt / focus.txt start empty
-for d in tasks plans inbox.md; do
-  [ -e "$main/.agents/$d" ] || continue       # only share what main actually has
-  if [ -L ".agents/$d" ]; then ln -sfn "$main/.agents/$d" ".agents/$d"        # idempotent re-point
-  elif [ -e ".agents/$d" ]; then echo "WARN: worktree .agents/$d is a real path — skipping (resolve manually)"
-  else ln -s "$main/.agents/$d" ".agents/$d"; fi
-done
-# keep main from surfacing the worktree checkout as untracked (creates the file if absent)
-[ -d "$main/.agents" ] && { grep -qxF 'worktrees/' "$main/.agents/.gitignore" 2>/dev/null || echo 'worktrees/' >> "$main/.agents/.gitignore"; }
+root="$(git rev-parse --show-toplevel)" || exit 1
+engine="$HOME/.config/ai/lib/worktree.mjs"
 ```
 
-`<main>` is the main checkout (`git rev-parse --git-common-dir` resolves to `<main>/.git` from any linked worktree). If main has no `.agents/` (repo never used pm), this no-ops. Skip on a repo you don't want sharing pm state.
+Fetch an explicitly remote base before `ensure`; do not silently fall back after a
+failed fetch. Local-only refs may be passed directly.
 
-### 3. Install dependencies
-
-Detect build/dependency files at project root (lock files, manifests) and run the ecosystem's standard install command. If multiple apply (e.g. monorepo), install all. If none found, skip.
-
-Prefer lock-file-based clean installs when available (e.g. `npm ci` over `npm install`, wrapper scripts like `./gradlew` over global `gradle`).
-
-### 4. Copy untracked files
-
-If `.worktreeinclude` exists at project root, copy matching files from the main worktree:
-
-```
-git ls-files --others --ignored --exclude-from=<main-root>/.worktreeinclude | while read f; do
-  cp <main-root>/$f ./$f
-done
+```bash
+git fetch origin <base-ref>
+node "$engine" ensure --root "$root" --id <id> --base <base-ref>
 ```
 
-If `.worktreeinclude` does not exist but local-only env files are found in the main worktree, suggest creating `.worktreeinclude`.
+The JSON result is authoritative and contains `base_branch`, immutable `base_commit`,
+`branch`, `worktree`, and `execution_root`. `ensure` reuses an exact branch/path match,
+creates a reservation before Git mutation, initializes the main `tasks/` and `plans/`
+stores, wires only those directories into the worktree, creates a real local `state/`,
+and updates Git-common excludes. A legacy `ROADMAP.md` returns `migration_required`
+before creating PM directories.
 
-### 5. Baseline check
+## Finish setup
 
-If a test/build script exists in `package.json` or equivalent, run it. Report result. If it fails, warn and ask whether to continue.
+Run dependency installation, `.worktreeinclude` copying, and the project baseline from
+the returned `execution_root`. Prefer lockfile-based installs. A failed install or
+baseline is reported; never hide it.
 
-### 6. Report
+Report:
+- execution root and branch;
+- base ref and 40-character base commit;
+- created versus reused;
+- shared `tasks/plans` and local `state` status;
+- copied files, dependency result, and baseline result.
 
-Print summary:
-- Worktree path
-- Branch: `<target-branch>` based on `<base-branch>`
-- pm store wired (symlinks + local state) or no-op (repo without `.agents/`)
-- Dependencies installed (or skipped)
-- Untracked files copied (or none)
-- Baseline result (or skipped)
+## Existing plan operations
 
-## Cleanup (manual)
-
-When the worktree is no longer needed (e.g. PR submitted, review pending):
-
+```bash
+node "$engine" resolve-current --root "$root"       # read-only routing
+node "$engine" assert-root --root "$root" --plan <plan-path>
+node "$engine" sync-state --root "$root" --plan <plan-path>
+node "$engine" validate --root "$root"
+node "$engine" validate --root "$root" --all  # repository-wide ownership audit
 ```
-cd <main-worktree>
-git worktree remove --force .agents/worktrees/<target-branch>
+
+Adoption always creates or selects a dedicated worktree; the main checkout is never a
+plan execution target. A dirty main checkout blocks automatic legacy adoption.
+
+```bash
+node "$engine" adopt --root "$root" --plan <plan-path> --base <base-ref> [--select]
 ```
 
-The branch is kept for later checkout (review feedback, etc.). The worktree's local `state/` is discarded with it; the shared `tasks/`/`plans/` (symlink targets in main) are untouched.
+## Cleanup
+
+Use explicit lifecycle commands. Cancellation removes only a clean, commit-free,
+unowned provisional worktree. Terminal prune refuses a dirty/current/mismatched target
+and keeps the branch.
+
+```bash
+node "$engine" cancel-provisional --root "$root" --id <id>
+node "$engine" prune --root "$root" --provisional --id <id>
+node "$engine" prune --root "$root" --plan <terminal-plan-path>
+```
+
+`validate` lists clean provisional reservations separately and fails on abandoned
+dirty/committed/current/missing worktrees, incomplete ownership handoffs, invalid
+mappings, and orphan reservation stage/temp artifacts. Provisional prune is the same
+safe operation as cancellation; it never removes a current, dirty, committed, or
+plan-owned worktree. Terminal prune derives the branch/worktree from a `done` or
+`dropped` plan under the PM lock; a caller-supplied terminal flag is never trusted.
+
+Never call `git worktree remove --force` by default. `--force` is explicit-user-only.
 
 ## Rules
 
-- Do NOT create worktrees outside `.agents/worktrees/`.
-- Always pull base branch to latest before creating the worktree.
-- If dependency install fails, do not silently continue. Report the error.
-- **Sandbox** — the skill writes to `.git/config`, `node_modules/`, local env files, and `.agents/worktrees/`, outside the default write-allow set:
-  - **Claude Code**: run its Bash commands with `dangerouslyDisableSandbox: true`.
-  - **Codex CLI**: invoke with `-s workspace-write --add-dir .agents/worktrees` (or run from a workspace-write session).
+- Do not create managed worktrees outside `.agents/worktrees/`.
+- Do not hand-edit `.agents/tasks`, plan mappings, reservations, or current pointers.
+- Hooks use `resolve-current` only; they never invoke a mutating command.
+- **Sandbox**: Claude uses `dangerouslyDisableSandbox`; Codex uses a workspace-write
+  session that includes `.agents/worktrees`.

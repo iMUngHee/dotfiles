@@ -20,4 +20,4 @@ If the script reports `FAIL` or `WARN`, surface the finding before committing. D
 
 ## Active Plan Context
 
-The Codex `UserPromptSubmit` hook injects the active plan from `.agents/state/current.txt` when it points to a `draft` or `active` plan. Treat that injected context as the current task pointer; when the pointer is empty, do not infer an active plan from old runtime files.
+The Codex `UserPromptSubmit` hook passes the checkout root to the shared read-only worktree resolver. For a mapped `draft` or `active` plan it injects the immutable base, branch, execution root, and whether routing is required; mapping failures are injected as explicit routing errors. Treat that context as the current task pointer. When the resolver reports an empty pointer, do not infer an active plan from old runtime files.

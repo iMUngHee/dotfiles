@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add/close/focus a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list [--owner X] [--all] | tree | get <id> | next [id] [--owner X] [--all] | recent | validate | migrate [--apply] | task <create [--mode collab]|done|archive|restore|set-mode <solo|collab>|collaborators <csv>> <KEY> | add <id> <title> (--task KEY | --inbox) [-p P0..P3] [-o N] [--note T] | assign <KEY> <id> <owner|-> [--note T] [--force] | claim <KEY> <id> [--note T] [--force] | whoami [<name>] | mine | who | plan <KEY> <id> <path> | reprioritize <KEY> <id> <P0..P3> | reorder <KEY> <id> <N> | depend <KEY> <id> <csv|-> | approve <KEY> <id> | close <KEY> <id> --status done|dropped [--reason R] | drop <KEY> <id> --reason R | triage <id> <KEY> | focus <id>|--clear | memory <KEY> add <title> [--note T] [--date YYYY-MM-DD] [--by W] | links <KEY> add <label> --url U [--triggers C] [--summary S] [--by W] | links <KEY> remove <match> | current-task | manage"
+argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree <resolve|ensure|adopt|validate|prune> | triage ... | focus ... | memory ... | links ... | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -35,7 +35,7 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
 .agents/
   tasks/
     <KEY>/  task.md  backlog.md  closed.md  links.md  memory.md
-    _INBOX → inbox.md           # untriaged items (not designable, excluded from next)
+    _inbox.md                   # untriaged items in the shared lock/write domain
     archive/<KEY>/              # torn-down tasks (writes refused; ids stay reserved)
     .lock                       # transient advisory lock (O_EXCL on acquire, unlinked on release — not a resident file)
   plans/*.md                    # design plans (frontmatter `pm_loop: true|false`)
@@ -54,8 +54,9 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
 - **id**: globally unique across all tasks' backlog+closed, **never reused** (closed ids stay
   reserved, incl. archived tasks), aligned 1:1 with the plan slug. Kebab-case.
 - **Plan**: 1:1 — at most one item (backlog or closed, any task) per plan path.
-- **pointers**: `current.txt` = in-flight plan; `focus.txt` = intended-next item. The
-  "current task" is derived from the focus item's directory (no separate pointer).
+- **pointers**: main `current.txt` selects the launcher plan; each managed worktree has a
+  local execution `current.txt`. Every writer uses checkout-local lock+content-CAS.
+  `focus.txt` and `actor.txt` remain checkout-local.
 
 ## Single write path
 
@@ -84,7 +85,16 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
 - **assign `<KEY> <id> <owner|->` [`--note T`] [`--force`]** / **claim `<KEY> <id>` [`--note T`] [`--force`]** — set an item's `Owner` (collab tasks only; refuses solo). `assign` takes an explicit owner (`-` unassigns, dropping `Owner`+`OwnerNote`); `claim` self-assigns the resolved actor. `--note` records a handoff reason (`OwnerNote`). **Double-claim guard**: overwriting a different existing owner needs `--force`.
 - **whoami `[<name>]`** — no arg prints the resolved actor + its source; `<name>` writes `state/actor.txt` (worktree-local identity).
 - **mine** / **who** — collab cross-task views: `mine` = open items owned by the resolved actor; `who` = per-owner board (unassigned grouped).
-- **plan / reprioritize / reorder / depend / approve / close / drop / triage / focus** — item transitions (normally driven by /design + /retro; manual is the escape hatch). `reprioritize <KEY> <id> <P0..P3>` and `reorder <KEY> <id> <N>` change an item's Priority/Order in place (N = positive integer). `depend <KEY> <id> <csv|->` sets an item's `DependsOn` edges (comma id list; `-` clears) — targets must be known ids, cross-task allowed, self-dependency and cycles refused; a dependent is blocked while any target is still in an active backlog (derived `blockedBy`, dep taking precedence over an earlier-Order sibling). `triage <id> <KEY>` moves an inbox item to a task. `focus` rejects inbox items.
+- **persist / approve / complete / plan-step** — recoverable lifecycle commands. Persist
+  consumes reservation-bound staged bytes; approve changes plan+item together; complete
+  terminals plan+item/harvest together; plan-step serializes checkbox writes. Standalone
+  variants journal only the plan.
+- **select / worktree** — explicit launcher selection and thin wrappers around the shared
+  resolve/ensure/adopt/validate/prune engine. Terminal cleanup is
+  `worktree prune --plan <done-or-dropped-plan>`; the engine derives and revalidates its
+  mapping. Main is never an execution mapping.
+- **plan / reprioritize / reorder / depend / close / drop / triage / focus** — lower-level
+  item transitions and escape hatches. Design/retro use the lifecycle commands above.
 - **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
 - **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
 - **current-task** — read-only: prints the KEY of the task owning the `focus` item (empty if no focus). pm-context's default-`KEY` resolver for `get`.
@@ -94,27 +104,33 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
 
 | Moment | Write (via ops) |
 |---|---|
-| design **persist** | `createPlanAndBacklogItem` — create/link item + point `current.txt`, one transaction; item Status mirrors plan = `draft` |
-| **`승인`** | plan draft→active → item `approve` (Status active) |
-| **`취소`** | plan→dropped → item `close --status dropped` (Reason required) + clear pointers |
+| design **persist** | reservation lock → store lock; journal-create canonical plan/item, seed target, main CAS → selected or parked |
+| **`승인`** | `approve` journals plan + item `draft → active` together |
+| **`취소`** | `complete --status dropped` journals plan + item terminal state, then exact pointer cleanup |
 | **`/retro`** done/dropped | `completePlanFromRetro` — plan→terminal + item backlog→closed + structured `## Deferred` harvest + clear pointers, all-or-nothing |
 | **`/retro`** memory harvest | `addTaskMemory` (CLI `memory add`) — durable decisions → `tasks/<KEY>/memory.md`; a separate write, OUTSIDE the close transaction's lock |
 
 ## Invariants (validate)
 
-Errors: **C1** id global-unique + kebab + no-reuse (scans active+inbox+archive) · **C2** Plan 1:1 global · **C3** in-flight plan (current.txt) linked by exactly one backlog item **unless `pm_loop:false`** · **C4** backlog item status mirrors plan · **C5** section membership · **C6** planless-only-open / planless-never-done · **C7** closed plan path exists · **C8** focus names a backlog item, not inbox · **C9** current.txt → draft|active plan · **C11** task.md status ∈ active|done|archived · **C12** task.md mode (if present) ∈ solo|collab. Warn: **C10** duplicate Order in a task · **C13** collab item Owner ∉ a non-empty `collaborators` roster (empty roster = opt-out). Never mutates — fix via ops.
+Errors: **C1–C15** preserve the existing id, plan-link, status, pointer,
+collaboration, and dependency contracts. **C16** rejects duplicate non-terminal worktree
+ownership and main-checkout execution mappings. Never mutates — fix via ops.
 
 ## Plan archiving
 
-`/design` persist runs `archive.ts`: terminal plans **≥30 days** old and **unreferenced** (not `current.txt`, not any backlog item's Plan) move to `plans/archive/`, and each task's `closed.md` `Plan:` pointer is rewritten. Idempotent recovery on crash.
+`/design` persist runs `archive.ts`: terminal plans **≥30 days** old and unreferenced
+move to `plans/archive/`. A match in main or any Git-managed worktree current protects
+the plan; the archiver never clears pointers.
 
 ## Migration
 
 `/pm-roadmap migrate` converts a legacy repo (old `ROADMAP.md` + `task-context/` + `memory/`)
-to the task-first model: per-task dirs, taskless→`inbox.md`, legacy `## Memory` sections split
+to the task-first model: per-task dirs, taskless→`tasks/_inbox.md`, legacy `## Memory` sections split
 out, `Context:`/`Parent:`→`Task`. **Default dry-run** (prints mapping, writes nothing);
 `--apply` backs up `.agents/` → converts → validates → removes legacy only on a clean validate
-(else rolls back). Idempotent (`tasks/` exists → no-op). **Never auto-runs.**
+(else rolls back). Empty tasks scaffolding does not suppress legacy migration. Inbox
+relocation is an independent, journaled phase and dry-run returns `recovery_required`
+without mutation when a journal is pending. **Never auto-runs.**
 
 ## manage (dashboard)
 
@@ -165,7 +181,10 @@ are per-person; two people sharing one checkout would collide on those worktree-
 
 ## Worktrees
 
-In a git worktree set up by the **`worktree`** skill, `.agents/{tasks,plans,inbox.md}` are symlinks to the **main checkout** (shared backlog + plans + the single `tasks/.lock`, so writes across worktrees serialize), while `.agents/state/` is a **real local dir** — so each worktree has its own `current.txt`/`focus.txt` (a different in-flight plan per worktree). pm resolves its root via `git rev-parse --show-toplevel` unchanged; the symlinks do the sharing (no pm-core special-casing). `list`/`tree`/`next` in a worktree show the shared backlog; `focus`/`current-task` are worktree-local.
+Managed worktrees symlink only `.agents/tasks` and `.agents/plans` to canonical main;
+`_inbox.md` lives inside tasks. `.agents/state/` is always real and local. The shared
+worktree engine is the only topology writer, while lifecycle/migration commands
+canonicalize shared writes to main as required.
 
 ## Rules
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: inject the current repo-local plan as context.
-# Fail-open: any parse, jq, or filesystem issue returns no context.
+# UserPromptSubmit adapter: pass Codex's project root to the shared read-only
+# worktree resolver and inject its execution routing result. Fail-open.
 
 set -euo pipefail
 
@@ -13,39 +13,36 @@ fi
 project_dir=$(printf '%s' "$input" | jq -r '.project_dir // .cwd // empty' 2>/dev/null || true)
 [[ -n "$project_dir" ]] || project_dir="$(pwd)"
 
-state_file="$project_dir/.agents/state/current.txt"
-[[ -f "$state_file" ]] || exit 0
-
-plan_rel=$(awk 'NF { print; exit }' "$state_file")
-[[ -n "$plan_rel" ]] || exit 0
-
-case "$plan_rel" in
-  /*) plan_path="$plan_rel" ;;
-  *)  plan_path="$project_dir/$plan_rel" ;;
-esac
-[[ -f "$plan_path" ]] || exit 0
-
-extract_field() {
-  awk -v key="$1" '
-    $0 ~ "^"key":" {
-      sub("^"key": ?", "")
-      sub(/[[:space:]]*#.*$/, "")
-      sub(/[[:space:]]+$/, "")
-      print
-      exit
-    }
-  ' "$plan_path"
-}
-
-status=$(extract_field "status")
-title=$(extract_field "title")
+config_root="${AI_CONFIG_ROOT:-$HOME/.config}"
+engine="$config_root/ai/lib/worktree.mjs"
+[[ -f "$engine" ]] || exit 0
+resolved=$(node "$engine" resolve-current --root "$project_dir" 2>/dev/null) || exit 0
+status=$(printf '%s' "$resolved" | jq -r '.status // empty')
 
 case "$status" in
-  draft|active) ;;
-  *) exit 0 ;;
+  empty|terminal) exit 0 ;;
+  ok)
+    plan_status=$(printf '%s' "$resolved" | jq -r '.plan_status')
+    [[ "$plan_status" == "draft" || "$plan_status" == "active" ]] || exit 0
+    [[ "$plan_status" == "draft" ]] && icon="⚙️" || icon="▶️"
+    title=$(printf '%s' "$resolved" | jq -r '.title')
+    plan=$(printf '%s' "$resolved" | jq -r '.plan')
+    execution_root=$(printf '%s' "$resolved" | jq -r '.execution_root')
+    branch=$(printf '%s' "$resolved" | jq -r '.branch')
+    base=$(printf '%s' "$resolved" | jq -r '(.base_branch + " @ " + .base_commit)')
+    route_required=$(printf '%s' "$resolved" | jq -r '.route_required')
+    [[ "$route_required" == "true" ]] && route="switch to the execution root" || route="already at the execution root"
+    context="$icon $plan_status: $title — $plan
+execution root: $execution_root
+branch: $branch
+base: $base
+route: $route"
+    ;;
+  *)
+    plan=$(printf '%s' "$resolved" | jq -r '.plan // "(unknown)"')
+    context="⚠️ plan routing error: $status — $plan"
+    ;;
 esac
-
-context="[$status] ${title} - ${plan_rel}"
 
 jq -n --arg ctx "$context" '{
   hookSpecificOutput: {

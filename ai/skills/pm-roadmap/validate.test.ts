@@ -6,6 +6,7 @@ import { join } from "node:path";
 import * as ops from "./ops.ts";
 import { validateRoadmap } from "./validate.ts";
 import { taskFile } from "./store.ts";
+import { runCli } from "./pm-roadmap.ts";
 
 const O = { nowMs: 1_750_000_000_000, nowDate: "2026-06-22", retries: 0 as number };
 const has = (r: { errors: { check: string }[] }, c: string) => r.errors.some((e) => e.check === c);
@@ -117,6 +118,16 @@ async function main() {
     await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog("dv-1"));
     assert.ok(has(await validateRoadmap(root), "C15"), "C15 self-dependency");
     await writeFile(taskFile(root, "DV", "backlog.md"), dvBacklog(""));
+
+    // ── C16: duplicate non-terminal worktree ownership is rejected ──
+    await writeFile(join(root, ".agents", "plans", "owner-a.md"), `---\nid: owner-a\nstatus: draft\npm_loop: false\nworktree: .agents/worktrees/shared\n---\n`);
+    await writeFile(join(root, ".agents", "plans", "owner-b.md"), `---\nid: owner-b\nstatus: active\npm_loop: false\nworktree: .agents/worktrees/shared\n---\n`);
+    assert.ok(has(await validateRoadmap(root), "C16"), "C16 duplicate worktree owner");
+    const duplicateCli = await runCli(root, ["validate"]);
+    assert.equal(duplicateCli.code, 1);
+    assert.match(duplicateCli.out, /C16.*already owned/);
+    await rm(join(root, ".agents", "plans", "owner-a.md"));
+    await rm(join(root, ".agents", "plans", "owner-b.md"));
 
     // ── dep on an archived (still-reserved) id is valid — no C14 ──
     await ops.taskCreate(root, "ARCH", "Arch", O);

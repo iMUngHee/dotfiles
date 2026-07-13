@@ -146,6 +146,10 @@ List all task keys, marking the current one.
 ### manage
 
 Open the web GUI for full link management (Label, URL, Triggers, Summary).
+The roadmap reads plan mapping fields (`base_branch`, `base_commit`, `branch`, `worktree`)
+through pm-roadmap's `PlanInfo`. A mapped plan displays its execution location and its copy
+action returns a rooted resume prompt (`codex -C <worktree>` / `cd <worktree> && claude`).
+Legacy, missing, or unreadable mapping data degrades to the normal kickoff display.
 
 1. Install dependencies if needed (subshell — do not change the working dir, the git root must stay resolvable):
    ```bash

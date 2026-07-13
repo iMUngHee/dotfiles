@@ -20,7 +20,11 @@ Range: $ARGUMENTS (if empty, default to HEAD~5)
         ▲___________________________________________________________________│
         retro: on a landed plan → close the pm-roadmap item, harvest follow-up workable units → backlog, harvest durable decisions → that task's MEMORY
 ```
-So retro feeds **memory** and **backlog** back into the loop. The close is **one atomic transaction** — the `pm-roadmap.ts complete` CLI (→ `completePlanFromRetro`): plan → terminal status, the backlog item → `closed.md`, the plan's structured `## Deferred` block harvested into the task backlog, and the `current.txt`/`focus` pointers cleared, all-or-nothing. Memory (durable per-task decisions/learnings) is **retro's domain — retro is its primary writer** — distinct from `pm-context`'s links and from a plan's Post-Impl Notes. Stored per-task at `.agents/tasks/<KEY>/memory.md`, written through the `pm-roadmap.ts memory add` CLI (lock+CAS via ops) — **never hand-edited**; the `pm-context` manage GUI is the other writer, so the file is the single SSOT, not a single-writer store. (Global memory/rules hygiene is retro's other, non-pm job.)
+So retro feeds **memory** and **backlog** back into the loop. The `complete` CLI journals
+plan status, backlog→closed, and Deferred harvest as one recoverable transaction. After
+that commit it best-effort clears only exact matching local pointers across managed
+checkouts; cleanup failure is reported and never rolls back valid terminal state. Memory
+remains retro's separate durable-decision sink through `memory add`.
 
 ## Current Context
 - Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
@@ -68,12 +72,14 @@ git diff --stat <range>
 
 Also check for the active plan artifact via the state pointer:
 ```bash
-state_file="{{STATE_DIR}}/current.txt"
-[ -f "$state_file" ] && plan=$(awk 'NF { print; exit }' "$state_file") \
-  && [ -f "$plan" ] && echo "$plan"
+root="$(git rev-parse --show-toplevel)" || exit 1
+node "$HOME/.config/ai/lib/worktree.mjs" resolve-current --root "$root"
 ```
 
-If a plan exists, read it — the delta between plan and reality is a key input. **Also capture its current frontmatter `status:` and whether it is linked to a backlog item** (run `pm-roadmap.ts get <id>`, where `<id>` is the plan's frontmatter `id` — see Phase 5 setup). Phase 5 routes on these: a **linked** plan closes via the `complete` CLI (which sets the status itself); an **unlinked** plan (general /design, no backlog) gets a direct status edit built from the captured value. If the plan is already terminal (`done`/`dropped`), skip the close.
+If `resolve-current` returns `ok`, re-root all collection to `execution_root` and compare
+from immutable `base_commit`. Capture whether `pm_loop` is true. A routing/mapping error
+blocks retro; never collect or close from the caller checkout. Linked and standalone
+plans both close through the CLI transaction; neither uses a direct status edit.
 
 If `/self-review` was run in this session, reference its findings (especially violations). Likewise, if `/verify` ran, reference its truth-condition verdict — a failed or partial verdict means the plan's goal was not fully met, which the close should account for.
 
@@ -156,8 +162,13 @@ Only apply approved items:
     pm complete <KEY> <id> --plan <plan-path> --status done       # done path
     pm complete <KEY> <id> --plan <plan-path> --status dropped --reason "<why abandoned>"   # dropped path
     ```
-    `complete` (→ `completePlanFromRetro`) atomically sets the plan `status` → terminal, moves the item `backlog.md` → `closed.md`, harvests the plan's `## Deferred` block (preflighted wholesale), and clears `current.txt`/`focus` if they name this plan/item. **Do NOT hand-edit the plan `status` or `current.txt` — `complete` owns both.** The op preflights all-or-nothing: it **refuses** before any write if the item is not actually linked to `<plan-path>` (guards a wrong `--plan`) or if `--status dropped` is missing `--reason` — so a wrong linked/unlinked call fails safely instead of corrupting state.
-  - **Not linked** (plan-only /design, no backlog item): set the plan frontmatter `status: <captured> → done` (or `dropped`) with `Edit` (build `old_string` from the Phase-1 captured status) and truncate `{{STATE_DIR}}/current.txt` to empty. No task store is involved, so no CLI/lock is needed. Guard: if the plan is already terminal, skip and report. This is the canonical path to mark an unlinked plan `done` (the `design` skill carries no `완료` trigger).
+    `complete` journals plan status, item close, and Deferred harvest together, then
+    clears exact matching pointers best-effort. **Do NOT hand-edit plan status or
+    current.** Preconditions fail before the journal is prepared.
+  - **Standalone (`pm_loop:false`)**: `pm complete --standalone --plan <plan-path>
+    --status done` (or dropped with a reason). It journals the plan-only transition and
+    performs the same exact all-worktree pointer cleanup. Never edit status/current
+    directly.
 - **Harvest durable decisions → memory**: for each decision/gotcha worth recalling next session, write it to the task's memory store via the CLI (a separate write, outside the close transaction):
   ```bash
   pm memory <KEY> add "<note title>" --note "<one-line decision>" --date <YYYY-MM-DD>

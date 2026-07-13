@@ -6,11 +6,24 @@ import { fileURLToPath } from "node:url";
 import * as ops from "./ops.ts";
 import { nextCandidates, resolveItem, buildNextPrompt, recentClosed, listActiveTasks, section, taskMode, myItems, boardByOwner, type Candidate } from "./join.ts";
 import { validateRoadmap, formatReport } from "./validate.ts";
-import { parseBlocks, getField, taskFile, readStamped } from "./store.ts";
+import { parseBlocks, parseFrontmatter, getField, getFmField, taskFile, readStamped } from "./store.ts";
 import { migrate } from "./migrate.ts";
 import { stat } from "node:fs/promises";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import {
+  adoptPlan,
+  assertPlanRoot,
+  assertReservationRoot,
+  ensureManagedWorktree,
+  mainCheckout,
+  pruneManagedWorktree,
+  resolveCurrent,
+  readReservation,
+  syncPlanState,
+  validateManagedWorktrees,
+  writeCurrentCAS,
+} from "../../lib/worktree.mjs";
 
 interface Parsed { pos: string[]; opts: Record<string, string | true>; }
 function parseArgs(rest: string[]): Parsed {
@@ -35,6 +48,27 @@ async function findTask(root: string, id: string): Promise<string | null> {
     }
   }
   return null;
+}
+
+async function assertLifecycleRoot(root: string, plan: string): Promise<void> {
+  const stamped = await readStamped(join(root, plan));
+  if (!stamped) throw new Error(`plan not found: ${plan}`);
+  const fields = parseFrontmatter(stamped.content).fields;
+  if (getFmField(fields, "worktree") || getFmField(fields, "branch")) {
+    await assertPlanRoot({ root, plan });
+  }
+}
+
+async function assertPersistRoot(root: string, id: string, plan: string): Promise<void> {
+  let reservation = null;
+  try { reservation = await readReservation(root, id); } catch { reservation = null; }
+  if (reservation) {
+    await assertReservationRoot({ root, id });
+    return;
+  }
+  // A successful persist removes its reservation. Retries still have to execute from
+  // the canonical plan owner; otherwise main could become an accidental execution root.
+  await assertLifecycleRoot(root, plan);
 }
 
 // collab badge: @owner when assigned, (unassigned) otherwise; nothing on solo items.
@@ -194,7 +228,19 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       await ops.itemSetDeps(root, key, id, deps);
       return { out: deps.length ? `depend ${key}/${id} → ${deps.join(", ")}` : `cleared deps on ${key}/${id}`, code: 0 };
     }
-    case "approve": { await ops.itemApprove(root, pos[0], pos[1]); return { out: `approved ${pos[1]}`, code: 0 }; }
+    case "approve": {
+      if (opts.standalone) {
+        const plan = str(opts.plan) ?? pos[0];
+        if (!plan) return { out: "approve --standalone needs --plan <path>", code: 1 };
+        await assertLifecycleRoot(root, plan);
+        await ops.standaloneApprove(root, plan);
+        return { out: `approved standalone ${plan}`, code: 0 };
+      }
+      const approvedView = await resolveItem(root, pos[0], pos[1]);
+      if (approvedView?.plan) await assertLifecycleRoot(root, approvedView.plan.path);
+      await ops.itemApprove(root, pos[0], pos[1]);
+      return { out: `approved ${pos[1]}`, code: 0 };
+    }
     case "close": {
       const status = str(opts.status) ?? "done";
       if (status !== "done" && status !== "dropped") return { out: `close --status must be done|dropped (got '${status}')`, code: 1 };
@@ -213,19 +259,32 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     }
     // design persist hook: create+link the item AND point current.txt, one transaction.
     case "persist": {
-      const [key, id] = pos;
       const plan = str(opts.plan) ?? pos[2];
       if (!plan) return { out: "persist needs a plan path (--plan or 3rd arg)", code: 1 };
-      await ops.createPlanAndBacklogItem(root, key, { id, title: str(opts.title) ?? id }, plan);
-      return { out: `persisted ${id} → ${plan}`, code: 0 };
+      if (opts.standalone) {
+        const id = str(opts.id) ?? pos[0];
+        if (!id) return { out: "persist --standalone needs --id <id>", code: 1 };
+        await assertPersistRoot(root, id, plan);
+        const persisted = await ops.createStandalonePlan(root, id, plan);
+        return { out: `${persisted.outcome} standalone ${id} → ${plan}`, code: 0 };
+      }
+      const [key, id] = pos;
+      await assertPersistRoot(root, id, plan);
+      const persisted = await ops.createPlanAndBacklogItem(root, key, { id, title: str(opts.title) ?? id }, plan);
+      return { out: `${persisted.outcome} ${id} → ${plan}`, code: 0 };
     }
     // retro close hook: plan→terminal + item→closed + structured ## Deferred harvest, atomic.
     case "complete": {
-      const [key, id] = pos;
       const plan = str(opts.plan);
       if (!plan) return { out: "complete needs --plan <path>", code: 1 };
       const status = str(opts.status) ?? "done";
       if (status !== "done" && status !== "dropped") return { out: `complete --status must be done|dropped (got '${status}')`, code: 1 };
+      await assertLifecycleRoot(root, plan);
+      if (opts.standalone) {
+        await ops.standaloneComplete(root, plan, status);
+        return { out: `completed standalone ${plan} (${status})`, code: 0 };
+      }
+      const [key, id] = pos;
       const s = await readStamped(join(root, plan));
       const deferred = s
         ? parseBlocks(section(s.content, "Deferred")).blocks.map((b) => ({
@@ -241,6 +300,36 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
         closedBy: await collabBy(root, key, opts),
       });
       return { out: `completed ${id} (${status})${deferred.length ? `, harvested ${deferred.length} deferred` : ""}`, code: 0 };
+    }
+    case "plan-step": {
+      const [action, plan, rawStep] = pos;
+      if (action !== "check" && action !== "uncheck") return { out: "plan-step needs check|uncheck <plan> <step>", code: 1 };
+      await assertLifecycleRoot(root, plan);
+      await ops.planStep(root, plan, Number(rawStep), action === "check");
+      return { out: `plan-step ${action} ${plan} ${rawStep}`, code: 0 };
+    }
+    case "select": {
+      const plan = str(opts.plan) ?? pos[0];
+      if (!plan) return { out: "select needs --plan <path>", code: 1 };
+      await syncPlanState({ root, plan });
+      const main = mainCheckout(root);
+      let observed = "";
+      try { observed = readFileSync(join(main, ".agents", "state", "current.txt"), "utf8").trim(); }
+      catch (error: any) { if (error?.code !== "ENOENT") throw error; }
+      const result = await writeCurrentCAS(main, observed, plan);
+      if (!result.updated && result.current !== plan) return { out: `selection conflict: ${result.current}`, code: 1 };
+      return { out: `selected ${plan}`, code: 0 };
+    }
+    case "worktree": {
+      const [sub] = pos;
+      let result: unknown;
+      if (sub === "resolve") result = await resolveCurrent(root);
+      else if (sub === "ensure") result = await ensureManagedWorktree({ root, id: str(opts.id), base: str(opts.base), branch: str(opts.branch), worktree: str(opts.path) });
+      else if (sub === "adopt") result = await adoptPlan({ root, plan: str(opts.plan), base: str(opts.base), branch: str(opts.branch), worktree: str(opts.path), select: !!opts.select });
+      else if (sub === "validate") result = await validateManagedWorktrees(root, { all: Boolean(opts.all) });
+      else if (sub === "prune") result = await pruneManagedWorktree({ root, plan: str(opts.plan) });
+      else return { out: "worktree needs resolve|ensure|adopt|validate|prune", code: 1 };
+      return { out: JSON.stringify(result, null, 2), code: 0 };
     }
     // retro durable-decision sink: upsert one note in tasks/<KEY>/memory.md via ops.
     case "memory": {
@@ -315,7 +404,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: (await findTask(root, nc.focus)) ?? "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
   }
 }
 

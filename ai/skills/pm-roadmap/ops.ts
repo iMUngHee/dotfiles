@@ -3,13 +3,16 @@
 // The CLI (pm-roadmap.ts), design, retro, and the GUI all call these — nothing
 // hand-edits markdown. Internal _impl helpers assume the lock is already held;
 // public ops wrap them in withLock so composites reuse one lock (no re-entrancy).
-import { readdir, mkdir, rename, stat } from "node:fs/promises";
+import { readdir, mkdir, rename, stat, unlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join as pathJoin } from "node:path";
 import {
   type Block, parseBlocks, serializeBlocks, getField, setField,
   parseFrontmatter, serializeFrontmatter, getFmField, coerceMode, parseIdList,
   taskDir, taskFile, tasksDir, inboxPath, withLock, readStamped, writeCAS,
 } from "./store.ts";
+import { makeTarget, regularDescriptor, runTransaction, type TransactionOptions } from "./transaction.ts";
+import { listGitWorktrees, mainCheckout, readReservation, withReservationLock, writeCurrentCAS } from "../../lib/worktree.mjs";
 
 export class OpError extends Error {}
 
@@ -61,7 +64,7 @@ function backlogBlock(it: ItemInput, status: string): Block {
 // ── directory scans ──
 async function listTaskKeys(root: string): Promise<string[]> {
   const ents = await readdir(tasksDir(root), { withFileTypes: true }).catch(() => []);
-  return ents.filter((e) => e.isDirectory() && e.name !== "archive").map((e) => e.name);
+  return ents.filter((e) => e.isDirectory() && TASK_KEY.test(e.name)).map((e) => e.name);
 }
 async function listArchiveKeys(root: string): Promise<string[]> {
   const ents = await readdir(archiveDir(root), { withFileTypes: true }).catch(() => []);
@@ -132,7 +135,13 @@ async function clearFocusIfNames(root: string, id: string): Promise<void> {
   if ((await readState(root, "focus.txt")) === id) await writeState(root, "focus.txt", "");
 }
 async function clearCurrentIfNames(root: string, planPath: string): Promise<void> {
-  if ((await readState(root, "current.txt")) === planPath) await writeState(root, "current.txt", "");
+  let checkouts: string[];
+  try { checkouts = listGitWorktrees(root).map((entry: { path: string }) => entry.path); }
+  catch { checkouts = [root]; }
+  for (const checkout of checkouts) {
+    const current = await readState(checkout, "current.txt");
+    if (current === planPath) await writeCurrentCAS(checkout, planPath, "");
+  }
 }
 
 // ── task meta ──
@@ -385,8 +394,49 @@ async function _setPlanStatus(root: string, planRel: string, status: string): Pr
   await writeCAS(pathJoin(root, planRel), fm[1] + block + fm[3] + s.content.slice(fm[0].length), null);
 }
 
+function planContentWithStatus(content: string, status: string): string {
+  const fm = content.match(/^(---\n)([\s\S]*?\n)(---\n?)/);
+  if (!fm) throw new OpError("plan has no frontmatter");
+  const block = /^status:.*$/m.test(fm[2])
+    ? fm[2].replace(/^status:.*$/m, `status: ${status}`)
+    : `status: ${status}\n${fm[2]}`;
+  return fm[1] + block + fm[3] + content.slice(fm[0].length);
+}
+
+async function _approvePlanAndItem(root: string, key: string, id: string, transaction: TransactionOptions = {}): Promise<void> {
+  const backlogPath = taskFile(root, key, "backlog.md");
+  const backlogStamped = await readStamped(backlogPath);
+  if (!backlogStamped) throw new OpError(`task '${key}' has no backlog`);
+  const backlog = parseBlocks(backlogStamped.content);
+  const item = findItem(backlog.blocks, id);
+  if (!item) throw new OpError(`item '${id}' not in ${key} backlog`);
+  const planRel = getField(item, "Plan") ?? "-";
+  if (planRel === "-") throw new OpError(`item '${id}' has no plan`);
+  const planStamped = await readStamped(pathJoin(root, planRel));
+  if (!planStamped) throw new OpError(`plan not found: ${planRel}`);
+  const planStatus = getFmField(parseFrontmatter(planStamped.content).fields, "status");
+  if (planStatus !== "draft" && planStatus !== "active") throw new OpError(`plan status '${planStatus}' cannot be approved`);
+  setField(item, "Status", "active");
+  const targets = [
+    await makeTarget(root, pathJoin(root, planRel), regularDescriptor(planContentWithStatus(planStamped.content, "active"))),
+    await makeTarget(root, backlogPath, regularDescriptor(serializeBlocks(backlog.title, backlog.blocks))),
+  ];
+  await runTransaction(root, "approve-plan", targets, transaction);
+}
+
+async function _setStandalonePlanStatus(root: string, planRel: string, status: "active" | "done" | "dropped", transaction: TransactionOptions = {}): Promise<void> {
+  const path = pathJoin(root, planRel);
+  const stamped = await readStamped(path);
+  if (!stamped) throw new OpError(`plan not found: ${planRel}`);
+  const fm = parseFrontmatter(stamped.content).fields;
+  if ((getFmField(fm, "pm_loop") ?? "false") !== "false") throw new OpError(`plan ${planRel} is not standalone`);
+  await runTransaction(root, `standalone-${status}`, [
+    await makeTarget(root, path, regularDescriptor(planContentWithStatus(stamped.content, status))),
+  ], transaction);
+}
+
 // ── public ops (each takes the lock; composites reuse one lock) ──
-type LockOpts = { nowMs?: number; staleMs?: number; retries?: number; retryMs?: number };
+type LockOpts = { nowMs?: number; staleMs?: number; retries?: number; retryMs?: number; transaction?: TransactionOptions };
 
 export const taskCreate = (root: string, key: string, title: string, o: { nowDate?: string; mode?: string } & LockOpts = {}) =>
   withLock(root, "taskCreate", () => _taskCreate(root, key, title, o.nowDate ?? today(), o.mode ?? "solo"), o);
@@ -440,7 +490,7 @@ export const itemSetOwner = (root: string, key: string, id: string, owner: strin
   withLock(root, "itemSetOwner", () => _itemSetOwner(root, key, id, owner, { note: o.note, force: o.force }), o);
 
 export const itemApprove = (root: string, key: string, id: string, o: LockOpts = {}) =>
-  withLock(root, "itemApprove", () => _itemSetStatus(root, key, id, "active"), o);
+  withLock(root, "itemApprove", () => _approvePlanAndItem(root, key, id, o.transaction), o);
 
 export const itemSetPlan = (root: string, key: string, id: string, planPath: string, o: LockOpts = {}) =>
   withLock(root, "itemSetPlan", () => _itemSetPlan(root, key, id, planPath), o);
@@ -472,12 +522,151 @@ export const setFocus = focusSet;
 
 export const reservedIds = (root: string, o: LockOpts = {}) => withLock(root, "reservedIds", () => reservedIdsImpl(root), o);
 
+async function reconcileMappedPlanOwner(root: string, id: string, planPath: string, key?: string): Promise<{ outcome: "persisted_selected" | "persisted_parked" }> {
+  const canonical = await readStamped(pathJoin(root, planPath));
+  if (!canonical) throw new OpError(`plan not found: ${planPath}`);
+  const fields = parseFrontmatter(canonical.content).fields;
+  const worktree = getFmField(fields, "worktree");
+  const branch = getFmField(fields, "branch");
+  if (getFmField(fields, "id") !== id || getFmField(fields, "status") !== "draft" || !worktree || !branch) {
+    throw new OpError(`canonical mapped owner is not a retryable draft: ${planPath}`);
+  }
+  const pmLoop = (getFmField(fields, "pm_loop") ?? "true").toLowerCase() !== "false";
+  if (!!key !== pmLoop) throw new OpError(`canonical plan pm_loop does not match persist mode: ${planPath}`);
+  if (key) {
+    const item = findItem((await loadBlocks(taskFile(root, key, "backlog.md"))).blocks, id);
+    if (!item || getField(item, "Plan") !== planPath || getField(item, "Status") !== "draft") {
+      throw new OpError(`canonical mapped owner has no exact draft backlog item: ${key}/${id}`);
+    }
+  }
+  const targetRoot = pathJoin(root, worktree);
+  const targetEntry = listGitWorktrees(root).find((entry: { path: string; branch: string }) => pathJoin(entry.path) === pathJoin(targetRoot));
+  if (!targetEntry || targetEntry.branch !== branch) throw new OpError(`mapped worktree/branch is unavailable: ${worktree} (${branch})`);
+  const targetObserved = await readState(targetRoot, "current.txt");
+  if (targetObserved && targetObserved !== planPath) throw new OpError(`target current conflict: ${targetObserved}`);
+  await writeCurrentCAS(targetRoot, targetObserved, planPath);
+  const mainCurrent = await readState(root, "current.txt");
+  return { outcome: mainCurrent === planPath ? "persisted_selected" : "persisted_parked" };
+}
+
 // design persist transaction: create+link the item AND point current.txt together.
-export const createPlanAndBacklogItem = (root: string, key: string, it: ItemInput, planPath: string, o: { nowDate?: string } & LockOpts = {}) =>
-  withLock(root, "createPlanAndBacklogItem", async () => {
-    await _itemAdd(root, { task: key }, { ...it, plan: planPath }, o.nowDate ?? today());
-    await writeState(root, "current.txt", planPath);
-  }, o);
+async function _createPlanAndBacklogItem(
+  root: string,
+  key: string,
+  it: ItemInput,
+  planPath: string,
+  nowDate: string,
+  reservationPaths?: { json: string; stage: string },
+): Promise<{ outcome: "persisted_selected" | "persisted_parked" | "persisted_legacy" }> {
+    await assertActiveTask(root, key);
+    const backlogPath = taskFile(root, key, "backlog.md");
+    const backlog = await loadBlocks(backlogPath);
+    const existing = findItem(backlog.blocks, it.id);
+    if (existing && getField(existing, "Plan") !== planPath) throw new OpError(`id '${it.id}' already used by another plan`);
+    if (!existing && (await reservedIdsImpl(root)).has(it.id)) throw new OpError(`id '${it.id}' already used (reserved, no reuse)`);
+    if (!existing && await planInUse(root, planPath)) throw new OpError(`plan '${planPath}' already linked (1:1)`);
+
+    const targets = [];
+    let reservation: any = null;
+    if (reservationPaths) {
+      const reservationStamped = await readStamped(reservationPaths.json);
+      const stageStamped = await readStamped(reservationPaths.stage);
+      if (!reservationStamped) throw new OpError(`reservation '${it.id}' is missing its JSON`);
+      reservation = JSON.parse(reservationStamped.content);
+      const canonical = await readStamped(pathJoin(root, planPath));
+      const ownerContent = stageStamped?.content ?? canonical?.content;
+      if (!ownerContent) throw new OpError(`reservation '${it.id}' has neither a staged nor canonical plan`);
+      const ownerHash = createHash("sha256").update(ownerContent).digest("hex");
+      if (reservation.id !== it.id || reservation.stage_sha256 !== ownerHash) throw new OpError(`reservation '${it.id}' owner hash mismatch`);
+      const stagedFm = parseFrontmatter(ownerContent).fields;
+      for (const [field, expected] of [["id", it.id], ["status", "draft"], ["branch", reservation.branch], ["worktree", reservation.worktree], ["base_commit", reservation.base_commit]] as [string, string][]) {
+        if (getFmField(stagedFm, field) !== expected) throw new OpError(`staged plan ${field} does not match reservation`);
+      }
+      if (stageStamped && canonical && canonical.content !== stageStamped.content) throw new OpError(`canonical plan conflict: ${planPath}`);
+      if (!canonical) targets.push(await makeTarget(root, pathJoin(root, planPath), regularDescriptor(ownerContent)));
+      const targetRoot = pathJoin(root, reservation.worktree);
+      const targetCurrent = await readState(targetRoot, "current.txt");
+      if (targetCurrent && targetCurrent !== planPath) throw new OpError(`target current conflict: ${targetCurrent}`);
+    } else if (!(await exists(pathJoin(root, planPath)))) throw new OpError(`plan not found: ${planPath}`);
+
+    if (!existing) {
+      backlog.blocks.push(backlogBlock({ ...it, plan: planPath }, "draft"));
+      targets.push(await makeTarget(root, backlogPath, regularDescriptor(serializeBlocks(backlog.title || `${key} — Backlog`, backlog.blocks))));
+    }
+    if (targets.length) await runTransaction(root, "persist-plan", targets);
+
+    if (reservation) {
+      const targetRoot = pathJoin(root, reservation.worktree);
+      const targetObserved = await readState(targetRoot, "current.txt");
+      const targetSeed = await writeCurrentCAS(targetRoot, targetObserved, planPath);
+      if (!targetSeed.updated && targetSeed.current !== planPath) throw new OpError(`target pointer reconciliation failed: ${targetSeed.current}`);
+      const mainResult = await writeCurrentCAS(root, reservation.expected_main_current ?? "", planPath);
+      const outcome = mainResult.updated || mainResult.current === planPath ? "persisted_selected" : "persisted_parked";
+      await unlink(reservationPaths!.stage).catch(() => {});
+      await unlink(reservationPaths!.json).catch(() => {});
+      return { outcome };
+    }
+    const observed = await readState(root, "current.txt");
+    await writeCurrentCAS(root, observed, planPath);
+    return { outcome: "persisted_legacy" };
+}
+
+export const createPlanAndBacklogItem = async (root: string, key: string, it: ItemInput, planPath: string, o: { nowDate?: string } & LockOpts = {}) => {
+  let reservation: any = null;
+  let canonicalRoot = root;
+  try {
+    canonicalRoot = mainCheckout(root);
+    reservation = await readReservation(canonicalRoot, it.id);
+  } catch {
+    reservation = null;
+  }
+  if (!reservation) {
+    return withLock(canonicalRoot, "createPlanAndBacklogItem", async () => {
+      const canonical = await readStamped(pathJoin(canonicalRoot, planPath));
+      const fields = canonical ? parseFrontmatter(canonical.content).fields : [];
+      if (canonical && getFmField(fields, "worktree") && getFmField(fields, "branch")) {
+        return reconcileMappedPlanOwner(canonicalRoot, it.id, planPath, key);
+      }
+      return _createPlanAndBacklogItem(canonicalRoot, key, it, planPath, o.nowDate ?? today());
+    }, o);
+  }
+  return withReservationLock(canonicalRoot, it.id, ({ json, stage }: { json: string; stage: string }) =>
+    withLock(canonicalRoot, "createPlanAndBacklogItem", () => _createPlanAndBacklogItem(canonicalRoot, key, it, planPath, o.nowDate ?? today(), { json, stage }), o));
+};
+
+export const createStandalonePlan = async (root: string, id: string, planPath: string, o: LockOpts = {}) => {
+  const main = mainCheckout(root);
+  const reservation = await readReservation(main, id);
+  if (!reservation) return withLock(main, "createStandalonePlan", () => reconcileMappedPlanOwner(main, id, planPath), o);
+  return withReservationLock(main, id, ({ json, stage }: { json: string; stage: string }) =>
+    withLock(main, "createStandalonePlan", async () => {
+      const reservationStamped = await readStamped(json);
+      const stageStamped = await readStamped(stage);
+      if (!reservationStamped) throw new OpError(`reservation '${id}' is missing its JSON`);
+      const data = JSON.parse(reservationStamped.content);
+      const canonical = await readStamped(pathJoin(main, planPath));
+      const ownerContent = stageStamped?.content ?? canonical?.content;
+      if (!ownerContent) throw new OpError(`reservation '${id}' has neither a staged nor canonical plan`);
+      const ownerHash = createHash("sha256").update(ownerContent).digest("hex");
+      const fm = parseFrontmatter(ownerContent).fields;
+      if (data.stage_sha256 !== ownerHash || getFmField(fm, "id") !== id || getFmField(fm, "pm_loop") !== "false") {
+        throw new OpError(`standalone plan owner does not match reservation '${id}'`);
+      }
+      if (stageStamped && canonical && canonical.content !== stageStamped.content) throw new OpError(`canonical plan conflict: ${planPath}`);
+      const targetRoot = pathJoin(main, data.worktree);
+      const targetObserved = await readState(targetRoot, "current.txt");
+      if (targetObserved && targetObserved !== planPath) throw new OpError(`target current conflict: ${targetObserved}`);
+      if (!canonical) await runTransaction(main, "persist-standalone", [
+        await makeTarget(main, pathJoin(main, planPath), regularDescriptor(ownerContent)),
+      ]);
+      await writeCurrentCAS(targetRoot, targetObserved, planPath);
+      const mainResult = await writeCurrentCAS(main, data.expected_main_current ?? "", planPath);
+      const outcome = mainResult.updated || mainResult.current === planPath ? "persisted_selected" : "persisted_parked";
+      await unlink(stage).catch(() => {});
+      await unlink(json).catch(() => {});
+      return { outcome };
+    }, o));
+};
 
 // retro close transaction: plan→terminal + item backlog→closed + harvest + clear pointers, all-or-nothing.
 export const completePlanFromRetro = (
@@ -496,12 +685,62 @@ export const completePlanFromRetro = (
   const itemPlan = getField(item, "Plan") ?? "-";
   if (itemPlan !== opt.planPath) throw new OpError(`item '${id}' is linked to plan '${itemPlan}', not '${opt.planPath}' — refusing to complete the wrong plan`);
   if (!(await exists(pathJoin(root, opt.planPath)))) throw new OpError(`plan not found: ${opt.planPath}`);
-  // writes
-  await _setPlanStatus(root, opt.planPath, opt.terminalStatus);
-  await _itemClose(root, key, id, { status: opt.terminalStatus, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.planPath, closedBy: opt.closedBy });
-  if (deferred.length) await _harvestApply(root, key, deferred, opt.nowDate ?? today());
+  const planPath = pathJoin(root, opt.planPath);
+  const planStamped = await readStamped(planPath);
+  if (!planStamped) throw new OpError(`plan not found: ${opt.planPath}`);
+  const backlogPath = taskFile(root, key, "backlog.md");
+  const closedPath = taskFile(root, key, "closed.md");
+  const backlog = await loadBlocks(backlogPath);
+  const index = backlog.blocks.findIndex((block) => block.id === id);
+  if (index < 0) throw new OpError(`item '${id}' not in ${key} backlog`);
+  const [closing] = backlog.blocks.splice(index, 1);
+  for (const d of deferred) backlog.blocks.push(backlogBlock({ ...d }, "open"));
+  const closed = await loadBlocks(closedPath);
+  const closedBlock: Block = { id, title: closing.title, fields: [] };
+  setField(closedBlock, "Status", opt.terminalStatus);
+  setField(closedBlock, "Plan", opt.planPath);
+  if (opt.reason) setField(closedBlock, "Reason", opt.reason);
+  setField(closedBlock, "Closed", opt.closedDate ?? today());
+  setField(closedBlock, "ClosedSource", "op");
+  if (opt.closedBy) setField(closedBlock, "ClosedBy", opt.closedBy);
+  closed.blocks.unshift(closedBlock);
+  await runTransaction(root, "complete-plan", [
+    await makeTarget(root, planPath, regularDescriptor(planContentWithStatus(planStamped.content, opt.terminalStatus))),
+    await makeTarget(root, backlogPath, regularDescriptor(serializeBlocks(backlog.title, backlog.blocks))),
+    await makeTarget(root, closedPath, regularDescriptor(serializeBlocks(closed.title, closed.blocks))),
+  ], opt.transaction);
+  await clearFocusIfNames(root, id);
   await clearCurrentIfNames(root, opt.planPath);
 }, opt);
+
+export const standaloneApprove = (root: string, planPath: string, o: LockOpts = {}) =>
+  withLock(root, "standaloneApprove", () => _setStandalonePlanStatus(root, planPath, "active", o.transaction), o);
+
+export const standaloneComplete = (root: string, planPath: string, status: "done" | "dropped", o: LockOpts = {}) =>
+  withLock(root, "standaloneComplete", async () => {
+    await _setStandalonePlanStatus(root, planPath, status, o.transaction);
+    await clearCurrentIfNames(root, planPath);
+  }, o);
+
+export const planStep = (root: string, planPath: string, step: number, checked: boolean, o: LockOpts = {}) =>
+  withLock(root, "planStep", async () => {
+    if (!Number.isInteger(step) || step < 1) throw new OpError("plan step must be a positive integer");
+    const path = pathJoin(root, planPath);
+    const stamped = await readStamped(path);
+    if (!stamped) throw new OpError(`plan not found: ${planPath}`);
+    let seen = 0;
+    let found = false;
+    const next = stamped.content.replace(/^- \[[ x]\] (\d+)\./gm, (line, number) => {
+      seen++;
+      if (Number(number) !== step) return line;
+      found = true;
+      return line.replace(/^- \[[ x]\]/, checked ? "- [x]" : "- [ ]");
+    });
+    if (!found) throw new OpError(`plan step ${step} not found (${seen} numbered steps scanned)`);
+    await runTransaction(root, checked ? "plan-step-check" : "plan-step-uncheck", [
+      await makeTarget(root, path, regularDescriptor(next)),
+    ]);
+  }, o);
 
 // pm-context link write: upsert a single link by label (lock-held).
 // Block shape mirrors migrate's linkBlock: id = label, no inline title, URL + Triggers + Summary.
