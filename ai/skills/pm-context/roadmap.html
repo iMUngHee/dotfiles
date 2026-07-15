@@ -7,8 +7,8 @@
 <style>
   :root{
     --bg:#f6f8fa; --surface:#ffffff; --surface-2:#f0f4f8; --border:#e4e9ef; --border-strong:#d3dbe3;
-    --text:#1a2430; --muted:#5b6b7a; --faint:#98a4b2;
-    --accent:#0d9488; --accent-strong:#0f766e; --accent-weak:#e6f4f2; --accent-line:#a7ddd6;
+    --text:#1a2430; --muted:#5b6b7a; --faint:#647484;
+    --accent:#0d9488; --accent-strong:#0f766e; --accent-hover:#115e59; --accent-weak:#e6f4f2; --accent-line:#a7ddd6;
     --p0:#b42318; --p1:#b54708; --p2:#92600a; --p3:#475467;
     --ok:#16a34a; --warn:#b54708; --err:#b42318;
     --shadow-sm:0 1px 2px rgba(16,24,40,.05);
@@ -22,10 +22,12 @@
   .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
   a{color:inherit;text-decoration:none}
   button{font-family:inherit;font-size:12.5px;color:var(--muted);background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;padding:7px 14px;cursor:pointer;transition:border-color .12s,color .12s,background .12s}
-  button:hover{color:var(--accent);border-color:var(--accent-line)}
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;box-shadow:var(--shadow-sm)}
-  button.primary:hover{background:var(--accent-strong);color:#fff}
+  button:hover{color:var(--accent-strong);border-color:var(--accent-line)}
+  button.primary{background:var(--accent-strong);color:#fff;border-color:var(--accent-strong);font-weight:600;box-shadow:var(--shadow-sm)}
+  button.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff}
   button.danger:hover{color:var(--err);border-color:#f4c4bf}
+  button:disabled{color:#5b6b7a;background:#eef2f6;border-color:#d3dbe3;cursor:wait;box-shadow:none}
+  button.primary:disabled{color:#345a57;background:#d9e8e7;border-color:#a7c8c5}
   button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=link]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   input,textarea{font-family:var(--mono);font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:7px;padding:7px 9px;width:100%}
   textarea{resize:vertical;min-height:44px;line-height:1.5}
@@ -54,6 +56,8 @@
   .banner{border:1px solid #f4c4bf;background:#fef3f2;color:#912018;border-radius:9px;padding:11px 14px;font-size:12.5px;display:flex;gap:10px;align-items:flex-start;white-space:pre-wrap;box-shadow:var(--shadow-sm)}
   .banner .k{color:var(--err);font-weight:700;letter-spacing:.06em;text-transform:uppercase;flex:none}
   .banner button{margin-left:auto;flex:none;border:none;padding:2px 8px;background:none}
+  #status:not(:empty){margin:-6px 0 16px;color:var(--accent-strong);font-size:12px;font-weight:600}
+  .aux-unavailable{color:var(--warn)!important}
   /* dock — next-up carried by an accent rail + elevation + reserved CTA (structural, not type scale) */
   .dock{position:relative;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:18px 22px 18px;margin-bottom:26px;box-shadow:var(--shadow-md)}
   .dock .rlabel{display:flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-strong);font-weight:600;margin-bottom:12px}
@@ -62,7 +66,7 @@
   .dock .main{min-width:0}
   .dock .line1{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
   .dock .id{font-family:var(--mono);font-size:16px;color:var(--text);font-weight:600}
-  .dock .id a:hover{color:var(--accent)}
+  .dock .id a:hover{color:var(--accent-strong)}
   .dock .title{font-size:14px;color:var(--muted)}
   .dock .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:6px;letter-spacing:.02em}
   .dock .actions{display:flex;flex-direction:column;gap:8px;min-width:160px}
@@ -70,7 +74,7 @@
   .dock.secondary{box-shadow:none;background:var(--surface-2);margin-top:-14px}
   .dock.secondary .rlabel{color:var(--muted)}
   .nextstep{font-family:var(--mono);font-size:12px;color:var(--accent-strong);background:var(--accent-weak);border-radius:7px;padding:7px 11px;margin:13px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .nextstep .k{color:var(--accent);font-weight:600}
+  .nextstep .k{color:var(--accent-strong);font-weight:600}
   /* section labels + queue */
   .seclabel{display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px}
   .seclabel .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
@@ -116,27 +120,40 @@
   .edit-row .head{display:flex;align-items:center;gap:8px}
   .edit-row .head input{font-weight:600}
   .edit-row label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:3px}
+  .task-create{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:8px 12px;align-items:end;margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow-sm)}
+  .task-create label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+  .task-create .hint{grid-column:1/-1;color:var(--muted);font-size:11px}
   .prose{font-size:12.5px;color:var(--muted);line-height:1.55;white-space:pre-wrap;word-break:break-word;padding:8px 0;border-bottom:1px solid var(--border)}
   .prose:last-child{border-bottom:none}
   .datehint{color:var(--faint);font-size:10.5px}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-  @media (max-width:900px){.wrap{padding:0 16px}.row{grid-template-columns:16px 40px 1fr 92px}.row .rtitle{display:none}.kv{grid-template-columns:1fr}.dock .body{grid-template-columns:1fr;gap:16px}.dock .actions{flex-direction:row;flex-wrap:wrap;min-width:0}.foot{flex-wrap:wrap}}
+  @media (max-width:900px){.wrap{padding:0 16px}.row{grid-template-columns:16px 40px 1fr 92px}.row .rtitle{display:none}.kv{grid-template-columns:1fr}.dock .body{grid-template-columns:1fr;gap:16px}.dock .actions{flex-direction:row;flex-wrap:wrap;min-width:0}.foot{flex-wrap:wrap}.task-create{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="brand" id="brand"><b>pm</b>&nbsp;·&nbsp;roadmap</div>
-    <div class="htools"><span class="pill" id="validate" role="button" tabindex="0" title="validation health"><span class="dot"></span><span id="validate-txt">validate</span></span></div>
+    <div class="htools"><button class="pill" id="validate" type="button" title="validation health"><span class="dot"></span><span id="validate-txt">validate</span></button></div>
   </header>
   <div id="banner" aria-live="assertive"></div>
+  <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
   <main id="app"></main>
 </div>
 
 <script type="module">
 const app = document.getElementById("app");
 const bannerBox = document.getElementById("banner");
+const statusBox = document.getElementById("status");
 const brand = document.getElementById("brand");
+history.scrollRestoration = "manual";
+const scrollPositions = new Map();
+let routeVersion = 0;
+function routeHash(url = location.href) {
+  const hash = new URL(url, location.href).hash;
+  return hash && hash !== "#" ? hash : "#/";
+}
+function rememberScroll(hash = routeHash()) { scrollPositions.set(hash, window.scrollY); }
 
 /* ---------- DOM helper (textContent-only → XSS-safe) ---------- */
 function el(tag, props = {}, ...kids) {
@@ -177,25 +194,44 @@ function showConflict(e) {
 }
 const clearBanner = () => bannerBox.replaceChildren();
 
+let statusTimer;
+function announce(msg) {
+  clearTimeout(statusTimer);
+  statusBox.textContent = "";
+  void statusBox.offsetWidth;
+  statusBox.textContent = msg;
+  statusTimer = setTimeout(() => { statusBox.textContent = ""; }, 3200);
+}
+async function withPending(control, pendingText, fn) {
+  if (!control || control.disabled) return;
+  const previousText = control.textContent;
+  control.disabled = true;
+  control.setAttribute("aria-busy", "true");
+  control.textContent = pendingText;
+  try { return await fn(); }
+  finally {
+    if (control.isConnected) {
+      control.disabled = false;
+      control.removeAttribute("aria-busy");
+      control.textContent = previousText;
+    }
+  }
+}
 /* after a successful mutation: refetch by re-running the router (no optimistic patching) */
-async function mutate(fn) {
+async function mutate(control, pendingText, fn) {
   clearBanner();
-  try { await fn(); await route(); }
+  try { await withPending(control, pendingText, async () => { await fn(); rememberScroll(); await route(); }); }
   catch (e) { showConflict(e); }
 }
-async function copyKickoff(id) {
+async function copyKickoff(id, control) {
   clearBanner();
   try {
-    const text = await api(`/api/roadmap/${id}/next`);
-    await navigator.clipboard.writeText(text);
-    flashPill(`kickoff copied · /design ${id}`);
+    await withPending(control, "copying…", async () => {
+      const text = await api(`/api/roadmap/${id}/next`);
+      await navigator.clipboard.writeText(text);
+      announce(`kickoff copied · /design ${id}`);
+    });
   } catch (e) { showConflict(e); }
-}
-let flashTimer;
-function flashPill(msg) {
-  const t = document.getElementById("validate-txt"); if (!t) return;
-  const prev = t.textContent; t.textContent = msg;
-  clearTimeout(flashTimer); flashTimer = setTimeout(() => { t.textContent = prev; }, 2200);
 }
 
 /* ---------- shared bits ---------- */
@@ -206,23 +242,47 @@ function setCrumb(...parts) {
 }
 async function loadValidate() {
   const pill = document.getElementById("validate");
+  const text = document.getElementById("validate-txt");
+  pill.disabled = true;
+  pill.setAttribute("aria-busy", "true");
+  pill.classList.remove("has-err", "aux-unavailable");
+  text.textContent = "validating…";
   try {
     const v = await api("/api/roadmap/validate");
     const errs = (v.errors || []).length, warns = (v.warnings || []).length;
     pill.classList.toggle("has-err", errs > 0 || warns > 0);
-    document.getElementById("validate-txt").textContent = errs ? `${errs} error${errs > 1 ? "s" : ""}` : warns ? `${warns} warn` : "0 errors";
-  } catch { /* leave default */ }
+    text.textContent = errs ? `${errs} error${errs > 1 ? "s" : ""}` : warns ? `${warns} warn` : "0 errors";
+  } catch {
+    pill.classList.add("aux-unavailable");
+    text.textContent = "unavailable";
+  } finally {
+    pill.disabled = false;
+    pill.removeAttribute("aria-busy");
+  }
 }
 function skeletonRows(n = 3) { return el("div", { class: "rows" }, Array.from({ length: n }, () => el("div", { class: "sk" }))); }
+function fetchError(surface, e, { back = false } = {}) {
+  const actions = el("span", { class: "grp", style: "display:inline-flex;gap:8px;margin-left:8px" },
+    el("button", { text: "retry", onclick: (event) => withPending(event.currentTarget, "retrying…", route) }),
+    back ? el("button", { text: "back", onclick: () => history.back() }) : null);
+  return el("div", { class: "empty" }, `${surface} unavailable — ${e.message || String(e)}`, actions);
+}
+async function loadTaskCount(target) {
+  target.textContent = "loading…";
+  target.classList.remove("aux-unavailable");
+  try { target.textContent = String((await api("/api/tasks")).length); }
+  catch { target.textContent = "unavailable"; target.classList.add("aux-unavailable"); }
+}
 
 /* ---------- HOME (operating view) ---------- */
-async function renderHome() {
+async function renderHome(version = routeVersion) {
   setCrumb();
   app.replaceChildren(el("div", {}, el("div", { class: "seclabel" }, el("span", { class: "lbl", text: "loading" })), skeletonRows()));
   loadValidate();
   let roadmap, next;
   try { [roadmap, next] = await Promise.all([api("/api/roadmap"), api("/api/next")]); }
-  catch (e) { app.replaceChildren(el("div", { class: "empty" }, "failed to load roadmap — ", el("button", { text: "retry", onclick: route }), el("div", { text: e.message }))); return; }
+  catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("roadmap", e)); return; }
+  if (version !== routeVersion) return;
 
   brand.replaceChildren(el("b", { text: "pm" }), document.createTextNode(" · roadmap"), roadmap.project ? el("span", { class: "proj", text: roadmap.project.replace(/^\./, "") }) : null);
   const open = roadmap.open || [];
@@ -236,10 +296,10 @@ async function renderHome() {
   /* dock — one card builder, reused for the primary dock + an optional secondary Focus card */
   function dockCard(item, { eyebrow, secondary, ctaText, itemIsFocus }) {
     const actions = el("div", { class: "actions" },
-      el("button", { class: "primary", text: ctaText, onclick: () => copyKickoff(item.id) }),
+      el("button", { class: "primary", text: ctaText, onclick: (event) => copyKickoff(item.id, event.currentTarget) }),
       itemIsFocus
-        ? el("button", { text: "clear focus", onclick: () => mutate(() => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "" }) })) })
-        : el("button", { text: "focus", onclick: () => mutate(() => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: item.id }) })) }),
+        ? el("button", { text: "clear focus", onclick: (event) => mutate(event.currentTarget, "clearing…", () => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "" }) })) })
+        : el("button", { text: "focus", onclick: (event) => mutate(event.currentTarget, "focusing…", () => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: item.id }) })) }),
       el("button", { text: "open →", onclick: () => { location.hash = `#/item/${item.id}`; } }));
     return el("section", { class: secondary ? "dock secondary" : "dock", "aria-label": eyebrow },
       el("div", { class: "rlabel" }, secondary ? null : el("span", { class: "live" }), eyebrow),
@@ -275,7 +335,7 @@ async function renderHome() {
   const blocked = open.filter((o) => !docked.has(o.id) && o.blockedBy);
   frag.append(el("div", { class: "seclabel" }, el("span", { class: "lbl", text: "Queue" }), el("span", { class: "cnt", text: `next candidates · ${eligible.length}` })));
   if (eligible.length) frag.append(el("div", { class: "rows" }, eligible.map(queueRow)));
-  else frag.append(el("div", { class: "empty" }, "no eligible items.", el("span", { class: "cli mono", text: "pm add <KEY> <id> -p P2 --title …" })));
+  else frag.append(el("div", { class: "empty" }, "no eligible items · ", el("span", { class: "cli mono", text: "pm add <id> --task <KEY> -p P2 --title …" })));
   if (blocked.length) {
     frag.append(el("div", { class: "subhead", text: "Blocked · dependency or earlier order" }));
     frag.append(el("div", { class: "rows" }, blocked.map((o) => el("div", { class: "row blocked" },
@@ -294,30 +354,30 @@ async function renderHome() {
   }
 
   /* footer chips */
-  let taskCount = "·"; try { taskCount = (await api("/api/tasks")).length; } catch {}
+  const taskCount = el("b", { text: "loading…" });
   frag.append(el("div", { class: "foot" },
     el("button", { class: "fchip", onclick: () => { location.hash = "#/inbox"; } }, el("span", { class: "lbl", text: "inbox" }), el("b", { text: String(next.inbox ?? 0) })),
-    el("button", { class: "fchip", onclick: () => { location.hash = "#/tasks"; } }, el("span", { class: "lbl", text: "tasks" }), el("b", { text: String(taskCount) })),
+    el("button", { class: "fchip", onclick: () => { location.hash = "#/tasks"; } }, el("span", { class: "lbl", text: "tasks" }), taskCount),
     el("button", { class: "fchip", onclick: () => document.getElementById("validate").click() }, el("span", { class: "lbl", text: "validate" }), el("b", { class: "ok", text: "✓" }))));
 
   app.replaceChildren(frag);
+  loadTaskCount(taskCount);
 }
 function queueRow(o) {
-  return el("div", { class: "row", role: "link", tabindex: "0",
-    onclick: () => { location.hash = `#/item/${o.id}`; },
-    onkeydown: (e) => { if (e.key === "Enter") location.hash = `#/item/${o.id}`; } },
+  return el("a", { class: "row", href: `#/item/${o.id}` },
     el("span", { class: "tick", text: "▸" }), pchip(o.priority),
     el("span", { class: "rid", text: o.id }), el("span", { class: "rtitle", text: o.title }),
     el("span", { class: "rtask", text: (o.owner && o.mode === "collab") ? "@" + o.owner : o.task }));
 }
 
 /* ---------- ITEM view ---------- */
-async function renderItem(id) {
+async function renderItem(id, version = routeVersion) {
   setCrumb(id);
   app.replaceChildren(el("div", { class: "empty", text: "loading item…" }));
   let j;
   try { j = await api(`/api/roadmap/${id}/join`); }
-  catch (e) { app.replaceChildren(el("div", { class: "empty" }, `item unavailable — ${e.message} `, el("button", { text: "back", onclick: () => { location.hash = "#/"; } }))); return; }
+  catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("item", e, { back: true })); return; }
+  if (version !== routeVersion) return;
   const it = j.item, plan = j.plan;
   setCrumb({ text: it.task, href: `#/task/${it.task}` }, it.id);
   const frag = document.createDocumentFragment();
@@ -326,9 +386,9 @@ async function renderItem(id) {
     (j.closed
       ? el("span", { class: "chip p3", text: `closed · ${it.status || "done"}` })
       : el("div", { class: "grp" },
-          el("button", { class: "primary", text: plan && plan.worktree ? "copy resume →" : "copy kickoff →", onclick: () => copyKickoff(it.id) }),
-          el("button", { text: "focus", onclick: () => mutate(() => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: it.id }) })) }),
-          el("button", { class: "danger", text: "drop", onclick: () => dropItem(it.id) })))));
+          el("button", { class: "primary", text: plan && plan.worktree ? "copy resume →" : "copy kickoff →", onclick: (event) => copyKickoff(it.id, event.currentTarget) }),
+          el("button", { text: "focus", onclick: (event) => mutate(event.currentTarget, "focusing…", () => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: it.id }) })) }),
+          el("button", { class: "danger", text: "drop", onclick: (event) => dropItem(it.id, event.currentTarget) })))));
 
   const dl = el("dl", { class: "kv" });
   const kv = (k, v, mut) => { dl.append(el("dt", { text: k }), el("dd", { class: mut ? "mut" : "", text: v })); };
@@ -358,41 +418,58 @@ function contextCard(title, nodes, emptyHint) {
   return el("div", { class: "card" }, el("h3", { text: title }),
     nodes.length ? el("div", {}, nodes) : el("div", { class: "empty", style: "padding:6px 0" }, "none · ", el("span", { class: "cli mono", text: emptyHint })));
 }
-function dropItem(id) {
+function dropItem(id, control) {
   if (!confirm(`Drop item "${id}"? This closes it as dropped.`)) return;
-  mutate(async () => { await api(`/api/roadmap/${id}/drop`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: "dropped via GUI" }) }); location.hash = "#/"; });
+  clearBanner();
+  withPending(control, "dropping…", async () => {
+    try {
+      await api(`/api/roadmap/${id}/drop`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: "dropped via GUI" }) });
+      location.hash = "#/";
+    } catch (e) { showConflict(e); }
+  });
 }
 
 /* ---------- TASK view (drill: backlog / closed / links / memory) ---------- */
-async function renderTask(key, tab = "backlog") {
+const expandedClosedTasks = new Set();
+async function renderTask(key, tab = "backlog", version = routeVersion) {
   setCrumb(key);
   app.replaceChildren(el("div", { class: "empty", text: "loading task…" }));
   let roadmap, task;
-  try { [roadmap, task] = await Promise.all([api("/api/roadmap"), api(`/api/tasks/${key}`)]); }
-  catch (e) { app.replaceChildren(el("div", { class: "empty" }, `task unavailable — ${e.message} `, el("button", { text: "back", onclick: () => { location.hash = "#/"; } }))); return; }
+  const closedCap = expandedClosedTasks.has(key) ? 0 : 5;
+  try { [roadmap, task] = await Promise.all([api("/api/roadmap"), api(`/api/tasks/${encodeURIComponent(key)}?closed=${closedCap}`)]); }
+  catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("task", e, { back: true })); return; }
+  if (version !== routeVersion) return;
   const backlog = (roadmap.open || []).filter((o) => o.task === key);
-  const closed = (roadmap.recentlyClosed || []).filter((r) => r.task === key);
+  const closed = task.closed || [];
+  const closedTotal = task.closedTotal || 0;
   const frag = document.createDocumentFragment();
   frag.append(el("div", { class: "toolbar" },
     el("div", { class: "grp" }, el("button", { text: "← back", onclick: () => history.back() }), el("span", { class: "id", text: key })),
-    el("div", { class: "grp" }, el("button", { class: "danger", text: "archive task", onclick: () => archiveTask(key) }))));
+    el("div", { class: "grp" }, el("button", { class: "danger", text: "archive task", onclick: (event) => archiveTask(key, event.currentTarget) }))));
 
-  const tabnames = [["backlog", `backlog · ${backlog.length}`], ["closed", `closed · ${closed.length}`], ["links", `links · ${task.links.length}`], ["memory", `memory · ${task.memory.length}`]];
+  const tabnames = [["backlog", `backlog · ${backlog.length}`], ["closed", `closed · ${closedTotal}`], ["links", `links · ${task.links.length}`], ["memory", `memory · ${task.memory.length}`]];
   frag.append(el("div", { class: "tabs", role: "tablist" }, tabnames.map(([t, lbl]) =>
     el("button", { role: "tab", "aria-selected": String(t === tab), text: lbl, onclick: () => { location.hash = `#/task/${key}/${t}`; } }))));
 
   const panel = el("div", { class: "panel" });
-  if (tab === "backlog") panel.append(backlog.length ? el("div", { class: "rows" }, backlog.map(queueRow)) : emptyCli("no open items", `pm add ${key} <id> -p P2 --title …`));
-  else if (tab === "closed") panel.append(closed.length ? el("div", { class: "rows" }, closed.map(closedRow)) : emptyCli("no recently-closed items", `pm close ${key} <id> --status done`));
+  if (tab === "backlog") panel.append(backlog.length ? el("div", { class: "rows" }, backlog.map(queueRow)) : emptyCli("no open items", `pm add <id> --task ${key} -p P2 --title …`));
+  else if (tab === "closed") {
+    panel.append(closed.length ? el("div", { class: "rows" }, closed.map(closedRow)) : emptyCli("no closed items", `pm close ${key} <id> --status done`));
+    if (closedTotal > closed.length) panel.append(el("div", { class: "empty", style: "padding-top:14px" },
+      el("button", { text: `show older · ${closedTotal - closed.length}`, onclick: (event) => {
+        expandedClosedTasks.add(key);
+        withPending(event.currentTarget, "loading older…", route);
+      } })));
+  }
   else if (tab === "links") panel.append(editor(key, "links", task.links));
   else if (tab === "memory") panel.append(editor(key, "memory", task.memory));
   frag.append(panel);
   app.replaceChildren(frag);
 }
 function closedRow(r) {
-  return el("div", { class: "row", role: "link", tabindex: "0", onclick: () => { location.hash = `#/item/${r.id}`; } },
+  return el("a", { class: "row", href: `#/item/${r.id}` },
     el("span", { class: "tick", text: "✓" }), el("span", { class: "chip p3", text: r.status || "done" }),
-    el("span", { class: "rid", text: r.id }), el("span", { class: "rtitle", text: r.note || "" }), el("span", { class: "rtask", text: r.closed || "" }));
+    el("span", { class: "rid", text: r.id }), el("span", { class: "rtitle", title: r.reason || r.title || "", text: r.reason || r.title || "" }), el("span", { class: "rtask", text: r.closed || "" }));
 }
 function emptyCli(msg, cli) { return el("div", { class: "empty" }, msg + " · ", el("span", { class: "cli mono", text: cli })); }
 
@@ -421,29 +498,32 @@ function editor(key, kind, items) {
   draw();
   box.append(list, el("div", { class: "grp", style: "display:flex;gap:9px;margin-top:8px" },
     el("button", { text: `+ add ${kind === "links" ? "link" : "memory"}`, onclick: () => { model.push(kind === "links" ? { label: "", url: "", triggers: [], summary: "" } : { title: "", note: "", date: "" }); draw(); } }),
-    el("button", { class: "primary", text: "save", onclick: () => saveEditor(key, kind, model) })));
+    el("button", { class: "primary", text: "save", onclick: (event) => saveEditor(key, kind, model, event.currentTarget) })));
   return box;
 }
-async function saveEditor(key, kind, model) {
-  clearBanner();
-  try {
+async function saveEditor(key, kind, model, control) {
+  await mutate(control, "saving…", async () => {
     const cur = await api(`/api/tasks/${key}`);
     const payload = { links: cur.links, memory: cur.memory };
     payload[kind] = model;
     await api(`/api/tasks/${key}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    await route();
-  } catch (e) { showConflict(e); }
+  });
 }
-function archiveTask(key) {
+function archiveTask(key, control) {
   if (!confirm(`Archive task "${key}"? Refused if it still has open items.`)) return;
-  mutate(async () => { await api(`/api/tasks/${key}`, { method: "DELETE" }); location.hash = "#/"; });
+  clearBanner();
+  withPending(control, "archiving…", async () => {
+    try { await api(`/api/tasks/${key}`, { method: "DELETE" }); location.hash = "#/"; }
+    catch (e) { showConflict(e); }
+  });
 }
 
 /* ---------- INBOX (read-only; triage is CLI-only) ---------- */
-async function renderInbox() {
+async function renderInbox(version = routeVersion) {
   setCrumb("inbox");
   app.replaceChildren(el("div", { class: "empty", text: "loading inbox…" }));
-  let items; try { items = await api("/api/inbox"); } catch (e) { app.replaceChildren(el("div", { class: "empty", text: "inbox unavailable — " + e.message })); return; }
+  let items; try { items = await api("/api/inbox"); } catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("inbox", e)); return; }
+  if (version !== routeVersion) return;
   const frag = document.createDocumentFragment();
   frag.append(el("div", { class: "toolbar" }, el("div", { class: "grp" }, el("button", { text: "← back", onclick: () => history.back() }), el("span", { class: "id", text: "inbox" }))));
   if (!items.length) { frag.append(emptyCli("inbox clear — nothing to triage", "pm triage <id> <KEY>")); }
@@ -457,13 +537,35 @@ async function renderInbox() {
 }
 
 /* ---------- TASKS index (read; drill target) ---------- */
-async function renderTasks() {
+function taskCreateForm() {
+  const input = el("input", { id: "task-key", name: "key", required: "", pattern: "[A-Z0-9_-]+", autocomplete: "off", placeholder: "TASK_KEY", "aria-describedby": "task-create-hint", oninput: (event) => event.currentTarget.setCustomValidity("") });
+  const submit = el("button", { class: "primary", type: "submit", text: "create task" });
+  return el("form", { class: "task-create", onsubmit: async (event) => {
+    event.preventDefault();
+    const key = input.value.trim();
+    input.setCustomValidity(/^[A-Z0-9_-]+$/.test(key) ? "" : "Use uppercase letters, digits, underscore, or hyphen.");
+    if (!input.reportValidity()) return;
+    clearBanner();
+    try {
+      await withPending(submit, "creating…", () => api(`/api/tasks/${encodeURIComponent(key)}`, {
+        method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ links: [], memory: [] })
+      }));
+      location.hash = `#/task/${encodeURIComponent(key)}`;
+    } catch (e) { showConflict(e); }
+  } },
+    el("div", {}, el("label", { for: "task-key", text: "task key" }), input),
+    submit,
+    el("div", { class: "hint", id: "task-create-hint" }, "key only · richer task setup remains CLI-only: ", el("span", { class: "mono", text: "pm task create <KEY> --title …" })));
+}
+async function renderTasks(version = routeVersion) {
   setCrumb("tasks");
   app.replaceChildren(el("div", { class: "empty", text: "loading tasks…" }));
-  let tasks; try { tasks = await api("/api/tasks"); } catch (e) { app.replaceChildren(el("div", { class: "empty", text: "tasks unavailable — " + e.message })); return; }
+  let tasks; try { tasks = await api("/api/tasks"); } catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("tasks", e)); return; }
+  if (version !== routeVersion) return;
   const frag = document.createDocumentFragment();
   frag.append(el("div", { class: "toolbar" }, el("div", { class: "grp" }, el("button", { text: "← back", onclick: () => history.back() }), el("span", { class: "id", text: "tasks" }))));
-  frag.append(tasks.length ? el("div", { class: "rows" }, tasks.map((t) => el("div", { class: "row", role: "link", tabindex: "0", onclick: () => { location.hash = `#/task/${t.key}`; } },
+  frag.append(taskCreateForm());
+  frag.append(tasks.length ? el("div", { class: "rows" }, tasks.map((t) => el("a", { class: "row", href: `#/task/${t.key}` },
     el("span", { class: "tick", text: "▸" }), el("span", {}), el("span", { class: "rid", text: t.key }),
     el("span", { class: "rtitle", text: `${t.linkCount} links · ${t.memCount} memory` }), el("span", { class: "rtask", text: "" }))))
     : emptyCli("no active tasks", "pm task create <KEY> --title …"));
@@ -472,17 +574,25 @@ async function renderTasks() {
 
 /* ---------- router ---------- */
 async function route() {
+  const version = ++routeVersion;
+  const target = routeHash();
   const h = location.hash.replace(/^#\/?/, "");
   const seg = h.split("/").map(decodeURIComponent);
-  if (seg[0] === "item" && seg[1]) return renderItem(seg[1]);
-  if (seg[0] === "task" && seg[1]) return renderTask(seg[1], seg[2] || "backlog");
-  if (seg[0] === "inbox") return renderInbox();
-  if (seg[0] === "tasks") return renderTasks();
-  return renderHome();
+  if (seg[0] === "item" && seg[1]) await renderItem(seg[1], version);
+  else if (seg[0] === "task" && seg[1]) await renderTask(seg[1], seg[2] || "backlog", version);
+  else if (seg[0] === "inbox") await renderInbox(version);
+  else if (seg[0] === "tasks") await renderTasks(version);
+  else await renderHome(version);
+  if (version !== routeVersion || target !== routeHash()) return;
+  requestAnimationFrame(() => {
+    if (version === routeVersion && target === routeHash()) window.scrollTo(0, scrollPositions.get(target) || 0);
+  });
 }
 document.getElementById("validate").addEventListener("click", loadValidate);
-document.getElementById("validate").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") loadValidate(); });
-window.addEventListener("hashchange", route);
+window.addEventListener("hashchange", (event) => {
+  rememberScroll(routeHash(event.oldURL));
+  route();
+});
 route();
 </script>
 </body>
