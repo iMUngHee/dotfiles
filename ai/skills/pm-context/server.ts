@@ -125,9 +125,22 @@ export async function handle(root: string, method: string, pathname: string, par
     const key = tm[1];
     if (method === "GET") {
       if (!(await exists(taskFile(root, key, "task.md")))) return { status: 404, json: { error: "Not found" } };
+      const closedRaw = params.get("closed");
+      const closedLimit = closedRaw == null ? null : Number(closedRaw);
+      if (closedRaw != null && (!/^\d+$/.test(closedRaw) || !Number.isSafeInteger(closedLimit))) {
+        return { status: 400, json: { error: "closed must be a non-negative integer" } };
+      }
       const links = (await blocksOf(taskFile(root, key, "links.md"))).map((b) => ({ label: b.id, url: getField(b, "URL") ?? "", triggers: (getField(b, "Triggers") ?? "").split(",").map((s) => s.trim()).filter(Boolean), summary: getField(b, "Summary") ?? "", by: getField(b, "By") ?? "" }));
       const memory = (await blocksOf(taskFile(root, key, "memory.md"))).map((b) => ({ title: b.id, note: getField(b, "Note") ?? "", date: getField(b, "Date") ?? "", by: getField(b, "By") ?? "" }));
-      return { status: 200, json: { key, links, memory } };
+      let closedProjection = {};
+      if (closedLimit != null) {
+        const allClosed = (await blocksOf(taskFile(root, key, "closed.md"))).map((b) => ({
+          id: b.id, title: b.title, status: getField(b, "Status") ?? "", plan: getField(b, "Plan") ?? null,
+          closed: getField(b, "Closed") ?? "", reason: getField(b, "Reason") ?? "",
+        })).sort((a, b) => b.closed.localeCompare(a.closed));
+        closedProjection = { closed: closedLimit === 0 ? allClosed : allClosed.slice(0, closedLimit), closedTotal: allClosed.length };
+      }
+      return { status: 200, json: { key, links, memory, ...closedProjection } };
     }
     if (method === "PUT") {
       // Preserve collab `By` attribution: the GUI doesn't author By, so re-attach it by id from
