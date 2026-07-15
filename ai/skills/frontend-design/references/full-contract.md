@@ -16,6 +16,10 @@ For a Presentation/Deck surface, substitute deck dimensions for web ones: slide/
 
 Use `[captured]` for existing values and `[proposed]` for new or changed values while proposing. Do not write "use existing tokens" when committing to a value; name the token and the value.
 
+## User-Job Closure
+
+For additions or refinements to an existing surface, record the requested action, its successful result, the applicable failure/retry path, and preserved invariants before implementation. Treat this as a workflow acceptance record, not a visual-change request. Existing UI authority constrains how the action is added; it cannot remove the action from scope.
+
 ## Full Contract Concreteness Bar
 
 A Full Contract should include concrete values for the dimensions it uses:
@@ -59,6 +63,7 @@ Record concrete unknowns instead of inventing answers:
 - Accessibility not verified: list the missing contrast, keyboard, screen-reader, or reduced-motion check.
 - Workflow not verified: list the user role, task, or edge case that needs product confirmation.
 - Implementation bridge not verified: list the token, component, library, or routing detail that needs technical planning.
+- Material gap status: record `Material gaps: none | <comma-separated gaps>` after the existing approval transition; do not create another gate for this field.
 
 ## Iteration Guide
 
