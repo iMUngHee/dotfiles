@@ -113,7 +113,11 @@ Capture concrete facts instead of generic references. During proposal phase, mar
 
 Proposal annotations are temporary. Once a `design-contract.md` or delta is approved, remove `[captured]` and `[proposed]`; approved values become plain committed contract values. Preserve only meaningful provenance or rationale in Decision Log.
 
+For an additive or refining change to an existing surface, emit the **User-job closure** record from `references/output-formats.md` before implementation. The requested action and its successful result must remain user-visible; preserving the existing shell, controls, or visual direction never excuses omitting the requested action. Record the applicable failure/retry path and the invariants that must remain intact.
+
 **UX Opportunity Pass** — for a redesign, Full Contract, or material UX change on a surface with an existing implementation (skip greenfield and Seed-level edits): after capturing, run the UX Audit method once and put the top 2-4 opportunities into the contract's UX Model as a `[proposed]` block with one-line user-job impacts for the owner to accept or reject. Nothing material → declare "no material UX gaps found — existing model preserved"; a silent re-skin is a violation. If the step-3 gate also fires, present variants and opportunities at one touchpoint. Method: `references/concept-stage.md`.
+
+After the existing opportunity decision, emit `Material gaps: none | <comma-separated gaps>`. This records that transition; it is not another user gate or approval question.
 
 ### 5. Contract Depth
 
@@ -232,9 +236,13 @@ The audit does not invent a contract or impose an aesthetic — findings are sco
 
 Before claiming frontend work is ready, verify the UI against the contract and show evidence in the response.
 
+Read `references/output-formats.md` before the final result. Keep subjective product judgment separate from objective verification; design confidence cannot turn a failed or missing check into readiness.
+
 ### Render-grounded review (required)
 
 Quality is verified by LOOKING — against the contract, the surface profile, and the user job, NOT "does this look polished?". A self-rated PASS without an inspected render is "not verified" for craft quality. Render the surface, look at the screenshots (do not just generate them as evidence), fix, and re-render.
+
+One correction cycle is one source change followed by a fresh render and fresh browser measurement. When an applicable browser measurement fails, correct and rerender while implementation is authorized and fewer than two correction cycles have been used. `NOT VERIFIED` is not an early exit. Use it only after two cycles are exhausted or correction is unauthorized or impossible, and report the failed selector/control, observed value, required threshold, cycles used, and stop reason.
 
 Scope by risk, not combinatorics — bound to primary user jobs, fragile states, and changed surfaces, and mark any unrendered area out of scope:
 
@@ -250,6 +258,7 @@ If rendering is not feasible in your environment, say so, list what was not rend
 
 Check:
 
+- User-job closure: the requested action, successful result, failure/retry path, and preserved invariants agree across the request, contract, code, and render.
 - Surface type and craft priorities: the UI optimizes for the stated job.
 - UX states: empty, loading, error, partial, overflow, long text, large numbers, and realistic data volume.
 - Interaction: keyboard path, focus, validation, destructive actions, undo/recovery, feedback, and disabled/loading states.
@@ -261,3 +270,5 @@ Check:
 - Crit pass: (a) the design's idea can be stated in one sentence without naming colors or fonts — else competent-generic FAIL; (b) the named signature moment is visible in the render, or its `N/A` rationale stands; (c) the design tension (dominant + counterpoint) is expressed, not homogenized away; (d) the candidate record exists and its candidates genuinely diverge; (e) on an owner-taste surface the committed concept is the owner-picked one.
 - UX contribution: a redesign of an existing surface carries the `[proposed]` UX improvements block or the explicit no-gaps declaration in its contract.
 - Microcopy: labels, helper text, empty states, validation, and error recovery are clear and task-specific.
+
+The final `Verification status:` must classify user-job closure, required states/recovery, inspected render coverage, geometry/overflow, accessibility floors, and contract/code/render agreement as `PASS`, `FAIL`, or justified `N/A`. Emit `Outcome: READY | NOT VERIFIED`; `READY` is valid only when every applicable row passes and every `N/A` has a concrete reason. Report subjective conclusions under `Design judgment:` only.

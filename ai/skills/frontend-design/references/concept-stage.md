@@ -22,6 +22,7 @@ Each candidate names, in one line each:
 - Design tension: one dominant + one counterpoint ("monochrome austerity + one saturated signal color in exactly three places"). The tension is the kick generator — without a counterpoint the direction flattens into wallpaper.
 - Signature moment: the ONE memorable element serving the job (a satisfying completion motion, a distinctive data-viz treatment, an inspired empty state). Functional and subtle counts.
 - One convention it breaks, and why the job tolerates it.
+- Job closure: the requested action and how success/recovery remain obvious in this direction. A visually stronger candidate that weakens the requested action is not viable.
 
 Motion and shape/space character follow from the concept within the surface's motion budget and density rules.
 
