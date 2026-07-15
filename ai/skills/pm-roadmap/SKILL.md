@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add/close/focus a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree <resolve|ensure|adopt|validate|prune> | triage ... | focus ... | memory ... | links ... | manage"
+argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree <resolve|ensure|adopt|validate|prune> | triage ... | focus ... | memory ... | links ... | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -89,6 +89,10 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
   consumes reservation-bound staged bytes; approve changes plan+item together; complete
   terminals plan+item/harvest together; plan-step serializes checkbox writes. Standalone
   variants journal only the plan.
+- **reclassify `<KEY> <id> --plan P --status done|dropped [--reason T]`** — journaled
+  correction for an already-closed linked plan+item. Requires exact id/plan linkage and
+  `pm_loop: true`; `dropped` requires a non-empty reason, while `done` rejects a reason
+  and removes any stale one. Reports `reclassified` or an idempotent `unchanged`.
 - **select / worktree** — explicit launcher selection and thin wrappers around the shared
   resolve/ensure/adopt/validate/prune engine. Terminal cleanup is
   `worktree prune --plan <done-or-dropped-plan>`; the engine derives and revalidates its

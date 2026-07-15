@@ -1,10 +1,11 @@
 // Tests for ops.ts. Run: ./node_modules/.bin/tsx ops.test.ts
 import assert from "node:assert/strict";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as ops from "./ops.ts";
-import { taskFile, inboxPath, parseBlocks, parseFrontmatter, getField, getFmField, readStamped } from "./store.ts";
+import { taskFile, inboxPath, parseBlocks, serializeBlocks, parseFrontmatter, getField, setField, getFmField, readStamped } from "./store.ts";
+import { listTransactions } from "./transaction.ts";
 
 const O = { nowMs: 1_750_000_000_000, nowDate: "2026-06-22", retries: 0 as number };
 
@@ -22,9 +23,9 @@ async function planStatus(root: string, rel: string): Promise<string | null> {
   const s = await readStamped(join(root, rel));
   return s ? getFmField(parseFrontmatter(s.content).fields, "status") : null;
 }
-async function makePlan(root: string, rel: string, status = "draft"): Promise<void> {
+async function makePlan(root: string, rel: string, status = "draft", id = "p", pmLoop = "true"): Promise<void> {
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
-  await writeFile(join(root, rel), `---\nid: p\nstatus: ${status}\npm_loop: true\nfiles_affected:\n  - a.ts\n  - b.ts\n---\n# p\n`);
+  await writeFile(join(root, rel), `---\nid: ${id}\nstatus: ${status}\npm_loop: ${pmLoop}\nfiles_affected:\n  - a.ts\n  - b.ts\n---\n# ${id}\n`);
 }
 
 async function main() {
@@ -195,6 +196,143 @@ async function main() {
     assert.ok((await ids(CL("ALPHA"))).includes("a-two"));
     assert.ok((await ids(BL("ALPHA"))).includes("followup-1"));
     assert.equal((await readStamped(join(root, ".agents", "state", "current.txt")))!.content.trim(), "");
+
+    // ── reclassifyClosedPlan: terminal-only desired-state correction + exact preservation ──
+    await ops.taskCreate(root, "RECLASS", "Reclassification", O);
+    await ops.itemAdd(root, { task: "RECLASS" }, { id: "reclass-one", title: "Reclass One" }, O);
+    const reclassPlan = ".agents/plans/2026-06-22-reclass-one.md";
+    await makePlan(root, reclassPlan, "draft", "reclass-one");
+    await ops.itemSetPlan(root, "RECLASS", "reclass-one", reclassPlan, O);
+    await ops.itemApprove(root, "RECLASS", "reclass-one", O);
+    const openBytes = await Promise.all([
+      readFile(join(root, reclassPlan), "utf8"),
+      readFile(BL("RECLASS"), "utf8"),
+      readFile(CL("RECLASS"), "utf8"),
+    ]);
+    await assert.rejects(
+      () => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "done", ...O }),
+      /still in .* backlog/,
+      "open items cannot be reclassified",
+    );
+    assert.deepEqual(
+      await Promise.all([
+        readFile(join(root, reclassPlan), "utf8"),
+        readFile(BL("RECLASS"), "utf8"),
+        readFile(CL("RECLASS"), "utf8"),
+      ]),
+      openBytes,
+      "open-item refusal leaves the plan, backlog, and closed file byte-identical",
+    );
+    await ops.completePlanFromRetro(root, "RECLASS", "reclass-one", {
+      planPath: reclassPlan, terminalStatus: "done", closedDate: "2026-06-23", closedBy: "alice", ...O,
+    });
+    await ops.itemAdd(root, { task: "RECLASS" }, { id: "reclass-sibling", title: "Sibling" }, O);
+    await ops.itemClose(root, "RECLASS", "reclass-sibling", { status: "dropped", reason: "unrelated", closedDate: "2026-06-24", ...O });
+    const reclassClosedStamped = (await readStamped(CL("RECLASS")))!;
+    const reclassClosed = parseBlocks(reclassClosedStamped.content);
+    const reclassBlock = reclassClosed.blocks.find((block) => block.id === "reclass-one")!;
+    setField(reclassBlock, "AuditNote", "preserve-me");
+    await writeFile(CL("RECLASS"), serializeBlocks(reclassClosed.title, reclassClosed.blocks));
+    const closedOrderBefore = await ids(CL("RECLASS"));
+    await mkdir(join(root, ".agents", "state"), { recursive: true });
+    await writeFile(join(root, ".agents", "state", "current.txt"), "other-plan\n");
+    await writeFile(join(root, ".agents", "state", "focus.txt"), "other-focus\n");
+    const pointerBefore = await Promise.all([
+      readFile(join(root, ".agents", "state", "current.txt"), "utf8"),
+      readFile(join(root, ".agents", "state", "focus.txt"), "utf8"),
+    ]);
+
+    const toDropped = await ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", {
+      planPath: reclassPlan, terminalStatus: "dropped", reason: "  superseded  ", ...O,
+    });
+    assert.deepEqual(toDropped, { outcome: "changed", planFrom: "done", itemFrom: "done", status: "dropped" });
+    assert.equal(await planStatus(root, reclassPlan), "dropped");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Status"), "dropped");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Reason"), "superseded");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Closed"), "2026-06-23");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "ClosedSource"), "op");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "ClosedBy"), "alice");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "AuditNote"), "preserve-me");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Plan"), reclassPlan, "reclassify preserves the exact plan mapping");
+    assert.deepEqual(await ids(CL("RECLASS")), closedOrderBefore, "reclassify preserves closed block order");
+    assert.deepEqual(await Promise.all([
+      readFile(join(root, ".agents", "state", "current.txt"), "utf8"),
+      readFile(join(root, ".agents", "state", "focus.txt"), "utf8"),
+    ]), pointerBefore, "reclassify leaves current/focus byte-identical");
+
+    const droppedBytes = await Promise.all([readFile(join(root, reclassPlan), "utf8"), readFile(CL("RECLASS"), "utf8")]);
+    const noChange = await ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", {
+      planPath: reclassPlan, terminalStatus: "dropped", reason: "superseded", ...O,
+    });
+    assert.deepEqual(noChange, { outcome: "unchanged", planFrom: "dropped", itemFrom: "dropped", status: "dropped" });
+    assert.deepEqual(await Promise.all([readFile(join(root, reclassPlan), "utf8"), readFile(CL("RECLASS"), "utf8")]), droppedBytes, "true no-op preserves both files byte-for-byte");
+
+    const reasonChange = await ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", {
+      planPath: reclassPlan, terminalStatus: "dropped", reason: "new evidence", ...O,
+    });
+    assert.equal(reasonChange.outcome, "changed", "same status with a different Reason mutates desired state");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Reason"), "new evidence");
+    const toDone = await ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", {
+      planPath: reclassPlan, terminalStatus: "done", ...O,
+    });
+    assert.equal(toDone.outcome, "changed");
+    assert.equal(await planStatus(root, reclassPlan), "done");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Status"), "done");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Reason"), null, "done removes stale Reason");
+    assert.equal((await ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", {
+      planPath: reclassPlan, terminalStatus: "done", ...O,
+    })).outcome, "unchanged");
+
+    const driftedClosed = parseBlocks((await readStamped(CL("RECLASS")))!.content);
+    const driftedItem = driftedClosed.blocks.find((block) => block.id === "reclass-one")!;
+    setField(driftedItem, "Status", "dropped");
+    setField(driftedItem, "Reason", "stale drift reason");
+    await writeFile(CL("RECLASS"), serializeBlocks(driftedClosed.title, driftedClosed.blocks));
+    const repairedDrift = await ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", {
+      planPath: reclassPlan, terminalStatus: "done", ...O,
+    });
+    assert.deepEqual(repairedDrift, { outcome: "changed", planFrom: "done", itemFrom: "dropped", status: "done" });
+    assert.equal(await planStatus(root, reclassPlan), "done");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Status"), "done");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Reason"), null, "drift repair removes stale Reason for done");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Plan"), reclassPlan);
+    assert.deepEqual(await ids(CL("RECLASS")), closedOrderBefore, "drift repair preserves block order");
+
+    // Every refusal happens before either target changes.
+    const terminalBefore = await Promise.all([readFile(join(root, reclassPlan), "utf8"), readFile(CL("RECLASS"), "utf8")]);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "cancelled" as "done", ...O }), /status must be/);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "done", reason: "not allowed", ...O }), /done.*Reason/);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "dropped", ...O }), /Reason/);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "dropped", reason: "   ", ...O }), /Reason/);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "missing", { planPath: reclassPlan, terminalStatus: "done", ...O }), /closed/);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: ".agents/plans/other.md", terminalStatus: "done", ...O }), /linked/);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "MISSING", "reclass-one", { planPath: reclassPlan, terminalStatus: "done", ...O }), /does not exist/);
+    await ops.taskCreate(root, "ARCHIVED", "Archived", O);
+    await ops.taskArchive(root, "ARCHIVED", O);
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "ARCHIVED", "reclass-one", { planPath: reclassPlan, terminalStatus: "done", ...O }), /archived/);
+    await writeFile(join(root, reclassPlan), terminalBefore[0].replace("pm_loop: true", "pm_loop: false"));
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "dropped", reason: "x", ...O }), /pm_loop/);
+    await writeFile(join(root, reclassPlan), terminalBefore[0].replace("id: reclass-one", "id: other-id"));
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "dropped", reason: "x", ...O }), /id/);
+    await writeFile(join(root, reclassPlan), terminalBefore[0].replace("status: done", "status: active"));
+    await assert.rejects(() => ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", { planPath: reclassPlan, terminalStatus: "dropped", reason: "x", ...O }), /terminal/);
+    await writeFile(join(root, reclassPlan), terminalBefore[0]);
+    assert.deepEqual(await Promise.all([readFile(join(root, reclassPlan), "utf8"), readFile(CL("RECLASS"), "utf8")]), terminalBefore, "refused transitions leave both targets unchanged");
+
+    // Simulated process crash leaves a journal/partial state; the next lock recovers both bytes.
+    await assert.rejects(
+      ops.reclassifyClosedPlan(root, "RECLASS", "reclass-one", {
+        planPath: reclassPlan, terminalStatus: "dropped", reason: "crash", ...O,
+        transaction: { id: "reclass-crash", crashAfter: 1 },
+      }),
+      /simulated process crash/,
+    );
+    assert.equal(await planStatus(root, reclassPlan), "dropped", "first transaction target applied before simulated crash");
+    assert.equal(await field(CL("RECLASS"), "reclass-one", "Status"), "done", "second target not yet applied");
+    assert.deepEqual(await listTransactions(root), ["reclass-crash.json"]);
+    await ops.reservedIds(root, O);
+    assert.deepEqual(await Promise.all([readFile(join(root, reclassPlan), "utf8"), readFile(CL("RECLASS"), "utf8")]), terminalBefore, "next locked op rolls both targets back");
+    assert.deepEqual(await listTransactions(root), [], "recovery removes transaction journal");
 
     // ── addTaskMemory: upsert by title + reject block-breaking titles ──
     const MEM = taskFile(root, "ALPHA", "memory.md");

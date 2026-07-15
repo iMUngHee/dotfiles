@@ -301,6 +301,21 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       });
       return { out: `completed ${id} (${status})${deferred.length ? `, harvested ${deferred.length} deferred` : ""}`, code: 0 };
     }
+    case "reclassify": {
+      const [key, id] = pos;
+      const plan = str(opts.plan);
+      if (!key || !id || !plan) return { out: "reclassify needs <KEY> <id> --plan <path> --status done|dropped [--reason <text>]", code: 1 };
+      const status = str(opts.status);
+      if (status !== "done" && status !== "dropped") return { out: `reclassify --status must be done|dropped (got '${status ?? ""}')`, code: 1 };
+      const reason = str(opts.reason);
+      if (status === "done" && opts.reason !== undefined) return { out: "reclassify --status done does not accept --reason", code: 1 };
+      if (status === "dropped" && !reason?.trim()) return { out: "reclassify --status dropped requires a non-empty --reason", code: 1 };
+      const result = await ops.reclassifyClosedPlan(root, key, id, {
+        planPath: plan, terminalStatus: status, reason,
+      });
+      if (result.outcome === "unchanged") return { out: `unchanged ${id} (${status})`, code: 0 };
+      return { out: `reclassified ${id} (plan ${result.planFrom}→${status}, item ${result.itemFrom}→${status})`, code: 0 };
+    }
     case "plan-step": {
       const [action, plan, rawStep] = pos;
       if (action !== "check" && action !== "uncheck") return { out: "plan-step needs check|uncheck <plan> <step>", code: 1 };
@@ -404,7 +419,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: (await findTask(root, nc.focus)) ?? "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|reclassify|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
   }
 }
 
