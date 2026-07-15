@@ -95,7 +95,7 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `rtk-rewrite.sh` | PreToolUse (Bash) | Rewrite commands through RTK for token savings |
 | `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files) |
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
-| `inject-context.sh` | UserPromptSubmit | Adapt the Claude project root to the shared plan/worktree resolver and inject execution routing |
+| `inject-context.sh` | UserPromptSubmit | Run safe one-time legacy ownership normalization, then inject shared plan/worktree execution routing (30s bound) |
 | `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |
 | `stop-handler.sh` | Stop | Final gate — auto-format then type check before completion |
 | `on-rate-limit.sh` | StopFailure | Auto-switch CCS quota account on rate limit |

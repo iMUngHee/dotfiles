@@ -230,6 +230,49 @@ async function main() {
     assert.equal((await cli("depend", "DPT", "dpt-a")).code, 1, "missing target → usage exit 1");
     assert.equal((await cli("validate")).code, 0, "validate clean after depend");
 
+    // worktree adopt forwards historical base/source options and preserves the engine outcome JSON.
+    const worktreeRoot = await mkdtemp(join(tmpdir(), "cli-worktree-"));
+    try {
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: worktreeRoot, encoding: "utf8" }).trim();
+      git("init", "-b", "main");
+      git("config", "user.email", "test@example.com");
+      git("config", "user.name", "Test");
+      await writeFile(join(worktreeRoot, "README.md"), "main\n");
+      git("add", "README.md");
+      git("commit", "-m", "main");
+      git("checkout", "-b", "release/test");
+      await writeFile(join(worktreeRoot, "BASE.txt"), "historical\n");
+      git("add", "BASE.txt");
+      git("commit", "-m", "historical base");
+      const historicalBase = git("rev-parse", "HEAD");
+      await writeFile(join(worktreeRoot, "START.txt"), "newer\n");
+      git("add", "START.txt");
+      git("commit", "-m", "newer start");
+      const startCommit = git("rev-parse", "HEAD");
+      git("checkout", "main");
+      await mkdir(join(worktreeRoot, ".agents", "tasks"), { recursive: true });
+      await mkdir(join(worktreeRoot, ".agents", "plans"), { recursive: true });
+      await mkdir(join(worktreeRoot, ".agents", "state"), { recursive: true });
+      const planRel = ".agents/plans/2026-07-15-wrapper-adopt.md";
+      await writeFile(join(worktreeRoot, planRel), "---\nid: wrapper-adopt\nstatus: draft\n---\n");
+
+      const result = await runCli(worktreeRoot, [
+        "worktree", "adopt",
+        "--plan", planRel,
+        "--base", "release/test",
+        "--base-commit", historicalBase,
+        "--start", "release/test",
+      ]);
+      assert.equal(result.code, 0);
+      const adopted = JSON.parse(result.out);
+      assert.equal(adopted.outcome, "adopted_parked");
+      assert.equal(adopted.base_commit, historicalBase);
+      assert.equal(adopted.start_commit, startCommit);
+      assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: adopted.execution_root, encoding: "utf8" }).trim(), startCommit);
+    } finally {
+      await rm(worktreeRoot, { recursive: true, force: true });
+    }
+
     console.log("cli.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });

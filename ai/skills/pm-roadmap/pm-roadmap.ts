@@ -339,8 +339,8 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const [sub] = pos;
       let result: unknown;
       if (sub === "resolve") result = await resolveCurrent(root);
-      else if (sub === "ensure") result = await ensureManagedWorktree({ root, id: str(opts.id), base: str(opts.base), branch: str(opts.branch), worktree: str(opts.path) });
-      else if (sub === "adopt") result = await adoptPlan({ root, plan: str(opts.plan), base: str(opts.base), branch: str(opts.branch), worktree: str(opts.path), select: !!opts.select });
+      else if (sub === "ensure") result = await ensureManagedWorktree({ root, id: str(opts.id), base: str(opts.base), baseCommit: str(opts["base-commit"]), start: str(opts.start), branch: str(opts.branch), worktree: str(opts.path) });
+      else if (sub === "adopt") result = await adoptPlan({ root, plan: str(opts.plan), base: str(opts.base), baseCommit: str(opts["base-commit"]), start: str(opts.start), branch: str(opts.branch), worktree: str(opts.path), select: !!opts.select });
       else if (sub === "validate") result = await validateManagedWorktrees(root, { all: Boolean(opts.all) });
       else if (sub === "prune") result = await pruneManagedWorktree({ root, plan: str(opts.plan) });
       else return { out: "worktree needs resolve|ensure|adopt|validate|prune", code: 1 };

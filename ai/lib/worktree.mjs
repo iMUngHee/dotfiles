@@ -5,7 +5,6 @@ import {
   cp,
   lstat,
   mkdir,
-  open,
   readFile,
   readdir,
   readlink,
@@ -17,9 +16,18 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { OwnerLockError, withOwnerLock } from "./owner-lock.mjs";
 
 const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+class AutoAdoptionError extends Error {
+  constructor(code, message, details = {}) {
+    super(message);
+    this.code = code;
+    this.details = details;
+  }
+}
 
 function runGit(cwd, args, { allowFailure = false } = {}) {
   try {
@@ -49,25 +57,8 @@ async function atomicWrite(path, content) {
   await rename(tmp, path);
 }
 
-async function withExclusiveFileLock(path, fn, { retries = 100, retryMs = 25 } = {}) {
-  await mkdir(dirname(path), { recursive: true });
-  let handle;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      handle = await open(path, "wx");
-      await handle.writeFile(JSON.stringify({ pid: process.pid, started: new Date().toISOString() }));
-      break;
-    } catch (error) {
-      if (error?.code !== "EEXIST" || attempt === retries) throw error;
-      await sleep(retryMs);
-    }
-  }
-  try {
-    return await fn();
-  } finally {
-    await handle?.close().catch(() => {});
-    await unlink(path).catch(() => {});
-  }
+async function withExclusiveFileLock(path, fn, { operation = "worktree", retries = 100, retryMs = 25 } = {}) {
+  return withOwnerLock(path, operation, fn, { retries, retryMs });
 }
 
 export function parseFrontmatter(markdown) {
@@ -207,10 +198,10 @@ export function reservationPaths(main, id) {
   return { dir, lock: join(dir, ".lock"), json: join(dir, `${id}.json`), stage: join(dir, `${id}.plan.md`) };
 }
 
-export async function withReservationLock(root, id, fn) {
+export async function withReservationLock(root, id, fn, options = {}) {
   const main = mainCheckout(root);
   const paths = reservationPaths(main, id);
-  return withExclusiveFileLock(paths.lock, () => fn({ main, ...paths }));
+  return withExclusiveFileLock(paths.lock, () => fn({ main, ...paths }), { operation: `reservation:${id}`, ...options });
 }
 
 export async function readReservation(root, id) {
@@ -233,66 +224,112 @@ export async function stagePlan({ root = process.cwd(), id, content }) {
   });
 }
 
-export async function ensureManagedWorktree({ root = process.cwd(), id, base, branch, worktree } = {}) {
-  if (!ID_RE.test(id || "")) throw new Error(`invalid worktree id '${id ?? ""}'`);
+function assertAncestor(main, ancestor, descendant, label) {
+  const result = runGit(main, ["merge-base", "--is-ancestor", ancestor, descendant], { allowFailure: true });
+  if (result === null) throw new Error(`${label}: ${ancestor} is not an ancestor of ${descendant}`);
+}
+
+function resolveBaseAndStart(main, { base, baseCommit, start }) {
   if (!base) throw new Error("base ref is required");
+  const baseTip = runGit(main, ["rev-parse", "--verify", `${base}^{commit}`]);
+  let historical = baseTip;
+  if (baseCommit !== undefined) {
+    if (!/^[0-9a-f]{40}$/i.test(baseCommit)) throw new Error("base commit must be a 40-character OID");
+    historical = runGit(main, ["rev-parse", "--verify", `${baseCommit}^{commit}`]);
+    if (historical.toLowerCase() !== baseCommit.toLowerCase()) throw new Error(`base commit does not resolve exactly: ${baseCommit}`);
+  }
+  assertAncestor(main, historical, baseTip, "historical base mismatch");
+  const startCommit = start
+    ? runGit(main, ["rev-parse", "--verify", `${start}^{commit}`])
+    : historical;
+  assertAncestor(main, historical, startCommit, "start commit mismatch");
+  return { baseTip, baseCommit: historical, startCommit };
+}
+
+function normalizeReservation(reservation) {
+  return { ...reservation, start_commit: reservation.start_commit || reservation.base_commit };
+}
+
+function assertReservationIdentity(existing, expected) {
+  const normalized = normalizeReservation(existing);
+  for (const key of ["id", "base_branch", "base_commit", "start_commit", "branch", "worktree"]) {
+    if (normalized[key] !== expected[key]) throw new Error(`reservation conflict for ${expected.id}: ${key}`);
+  }
+  return normalized;
+}
+
+async function ensureManagedWorktreeLocked({ main, root, id, base, baseCommit, start, branch, worktree, paths }) {
+  const refs = resolveBaseAndStart(main, { base, baseCommit, start });
+  const targetBranch = branch || `agent/${id}`;
+  const targetAbs = worktree
+    ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
+    : join(main, ".agents", "worktrees", id);
+  if (targetAbs === main) throw new Error("main checkout cannot be a plan execution worktree");
+  assertManagedTarget(main, targetAbs);
+  const managedRel = relativeManagedPath(main, targetAbs);
+  const worktrees = listGitWorktrees(main);
+  const byPath = worktrees.find((entry) => resolve(entry.path) === resolve(targetAbs));
+  const byBranch = worktrees.find((entry) => entry.branch === targetBranch);
+  if (byPath && byPath.branch !== targetBranch) throw new Error(`worktree path is occupied by branch ${byPath.branch}`);
+  if (byBranch && resolve(byBranch.path) !== resolve(targetAbs)) throw new Error(`branch ${targetBranch} is already checked out at ${byBranch.path}`);
+
+  const branchCommit = runGit(main, ["rev-parse", "--verify", `refs/heads/${targetBranch}^{commit}`], { allowFailure: true });
+  const existingRaw = await readText(paths.json);
+  const existing = existingRaw ? JSON.parse(existingRaw) : null;
+  let expectedStart = refs.startCommit;
+  if (existing) expectedStart = normalizeReservation(existing).start_commit;
+  else if (byPath?.head || branchCommit) expectedStart = byPath?.head || branchCommit;
+  if (start && expectedStart !== refs.startCommit) throw new Error(`existing branch ${targetBranch} does not match start commit`);
+  assertAncestor(main, refs.baseCommit, expectedStart, "target start mismatch");
+
+  await mkdir(paths.dir, { recursive: true });
+  const reservation = {
+    id,
+    base_branch: base,
+    base_commit: refs.baseCommit,
+    start_commit: expectedStart,
+    branch: targetBranch,
+    worktree: managedRel,
+    source_checkout: relativeManagedPath(main, runGit(root, ["rev-parse", "--show-toplevel"])),
+    expected_main_current: (await readText(join(main, ".agents", "state", "current.txt"))).trim(),
+    created_at: new Date().toISOString(),
+  };
+  const persisted = existing ? assertReservationIdentity(existing, reservation) : reservation;
+  if (!existing) await atomicWrite(paths.json, `${JSON.stringify(reservation, null, 2)}\n`);
+
+  if (!byPath) {
+    await mkdir(dirname(targetAbs), { recursive: true });
+    if (branchCommit) runGit(main, ["worktree", "add", targetAbs, targetBranch]);
+    else runGit(main, ["worktree", "add", "-b", targetBranch, targetAbs, expectedStart]);
+  }
+  await wireManagedStore(main, targetAbs);
+  return {
+    status: byPath ? "reused" : "created",
+    main_root: main,
+    execution_root: targetAbs,
+    base_branch: base,
+    base_commit: refs.baseCommit,
+    start_commit: persisted.start_commit,
+    branch: targetBranch,
+    worktree: managedRel,
+    reservation: relativeManagedPath(main, paths.json),
+  };
+}
+
+export async function ensureManagedWorktree({ root = process.cwd(), id, base, baseCommit, start, branch, worktree } = {}) {
+  if (!ID_RE.test(id || "")) throw new Error(`invalid worktree id '${id ?? ""}'`);
   const main = mainCheckout(root);
-  const paths = reservationPaths(main, id);
-  return withExclusiveFileLock(paths.lock, async () => {
-    const baseCommit = runGit(main, ["rev-parse", "--verify", `${base}^{commit}`]);
-    const targetBranch = branch || `agent/${id}`;
-    const targetAbs = worktree
-      ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
-      : join(main, ".agents", "worktrees", id);
-    if (targetAbs === main) throw new Error("main checkout cannot be a plan execution worktree");
-    assertManagedTarget(main, targetAbs);
-    const managedRel = relativeManagedPath(main, targetAbs);
-    const worktrees = listGitWorktrees(main);
-    const byPath = worktrees.find((entry) => resolve(entry.path) === resolve(targetAbs));
-    const byBranch = worktrees.find((entry) => entry.branch === targetBranch);
-    if (byPath && byPath.branch !== targetBranch) throw new Error(`worktree path is occupied by branch ${byPath.branch}`);
-    if (byBranch && resolve(byBranch.path) !== resolve(targetAbs)) throw new Error(`branch ${targetBranch} is already checked out at ${byBranch.path}`);
-
-    await mkdir(paths.dir, { recursive: true });
-    const mainCurrent = (await readText(join(main, ".agents", "state", "current.txt"))).trim();
-    const reservation = {
-      id,
-      base_branch: base,
-      base_commit: baseCommit,
-      branch: targetBranch,
-      worktree: managedRel,
-      source_checkout: relativeManagedPath(main, runGit(root, ["rev-parse", "--show-toplevel"])),
-      expected_main_current: mainCurrent,
-      created_at: new Date().toISOString(),
-    };
-    const existingReservation = await readText(paths.json);
-    if (existingReservation) {
-      const parsed = JSON.parse(existingReservation);
-      for (const key of ["id", "base_commit", "branch", "worktree"]) {
-        if (parsed[key] !== reservation[key]) throw new Error(`reservation conflict for ${id}: ${key}`);
-      }
-    } else {
-      await atomicWrite(paths.json, `${JSON.stringify(reservation, null, 2)}\n`);
-    }
-
-    if (!byPath) {
-      await mkdir(dirname(targetAbs), { recursive: true });
-      const branchCommit = runGit(main, ["rev-parse", "--verify", `refs/heads/${targetBranch}^{commit}`], { allowFailure: true });
-      if (branchCommit) runGit(main, ["worktree", "add", targetAbs, targetBranch]);
-      else runGit(main, ["worktree", "add", "-b", targetBranch, targetAbs, baseCommit]);
-    }
-    await wireManagedStore(main, targetAbs);
-    return {
-      status: byPath ? "reused" : "created",
-      main_root: main,
-      execution_root: targetAbs,
-      base_branch: base,
-      base_commit: baseCommit,
-      branch: targetBranch,
-      worktree: managedRel,
-      reservation: relativeManagedPath(main, paths.json),
-    };
-  });
+  return withReservationLock(main, id, ({ json, stage, lock, dir }) => ensureManagedWorktreeLocked({
+    main,
+    root,
+    id,
+    base,
+    baseCommit,
+    start,
+    branch,
+    worktree,
+    paths: { json, stage, lock, dir },
+  }));
 }
 
 async function loadPlan(main, planRel) {
@@ -311,13 +348,15 @@ function executionRootFor(main, fields) {
   return assertManagedTarget(main, target);
 }
 
-async function findNonterminalPlanOwner(main, worktree) {
+async function findNonterminalPlanOwner(main, worktree, { excludePlan = null } = {}) {
   const target = resolve(main, worktree);
   const plansDir = join(main, ".agents", "plans");
   for (const file of (await readdir(plansDir).catch(() => [])).filter((name) => name.endsWith(".md"))) {
+    const rel = `.agents/plans/${file}`;
+    if (rel === excludePlan) continue;
     const fields = parseFrontmatter(await readText(join(plansDir, file)));
     if (["draft", "active"].includes(fields.status) && fields.worktree && resolve(main, fields.worktree) === target) {
-      return `.agents/plans/${file}`;
+      return rel;
     }
   }
   return null;
@@ -342,7 +381,22 @@ export async function resolveCurrent(root = process.cwd()) {
     return { status: "invalid_plan_status", plan: pointer, plan_status: fields.status || null, checkout_root: checkout, main_root: main };
   }
   if (!fields.base_branch || !/^[0-9a-f]{40}$/i.test(fields.base_commit || "") || !fields.branch || !fields.worktree) {
-    return { status: "legacy_unmapped", plan: pointer, plan_status: fields.status, checkout_root: checkout, main_root: main };
+    const candidates = await adoptionCandidates(main, pointer);
+    return {
+      status: "legacy_unmapped",
+      plan: pointer,
+      plan_status: fields.status,
+      checkout_root: checkout,
+      main_root: main,
+      recovery: {
+        action: "worktree_adopt",
+        plan: pointer,
+        required_options: ["base"],
+        optional_options: candidates.length === 0 ? ["base_commit", "start", "branch", "path", "select"] : ["base_commit", "branch", "path", "select"],
+        candidate_count: candidates.length,
+        candidates: candidates.map((entry) => ({ execution_root: entry.path, branch: entry.branch, head: entry.head })),
+      },
+    };
   }
   let executionRoot;
   try {
@@ -379,17 +433,19 @@ export async function writeCurrentCAS(checkoutRoot, expected, next) {
   return withExclusiveFileLock(lock, async () => {
     const current = (await readText(pointer)).trim();
     if (current !== (expected || "").trim()) return { updated: false, current, reason: "cas_conflict" };
-    await atomicWrite(pointer, next ? `${next.trim()}\n` : "");
-    return { updated: true, current: next.trim(), reason: "updated" };
-  });
+    const normalizedNext = next?.trim() || "";
+    if (current === normalizedNext) return { updated: false, current, reason: "unchanged" };
+    await atomicWrite(pointer, normalizedNext ? `${normalizedNext}\n` : "");
+    return { updated: true, current: normalizedNext, reason: "updated" };
+  }, { operation: "current-cas" });
 }
 
-async function withCurrentLock(checkoutRoot, fn) {
+async function withCurrentLock(checkoutRoot, fn, options = {}) {
   const state = join(checkoutRoot, ".agents", "state");
   return withExclusiveFileLock(join(state, "current.lock"), async () => {
     const current = (await readText(join(state, "current.txt"))).trim();
     return fn(current);
-  });
+  }, { operation: "current", ...options });
 }
 
 export async function syncPlanState({ root = process.cwd(), plan }) {
@@ -408,10 +464,16 @@ export async function syncPlanState({ root = process.cwd(), plan }) {
 export async function ensureCurrent({ root = process.cwd() } = {}) {
   const result = await resolveCurrent(root);
   if (result.status === "ok") {
-    await syncPlanState({ root, plan: result.plan });
-    if (result.route_required && resolve(result.checkout_root) !== resolve(result.main_root)) {
-      await writeCurrentCAS(result.checkout_root, result.plan, "");
-    }
+    return ensureMappedCurrent({ root, result });
+  } else if (result.status === "legacy_unmapped") {
+    const adoption = await autoAdoptLegacy({ root, legacy: result });
+    if (adoption.status === "legacy_unmapped") return adoption;
+    const resolved = await resolveCurrent(root);
+    if (resolved.status !== "ok") return resolved;
+    const ensured = await ensureMappedCurrent({ root, result: resolved });
+    if (ensured.status !== "ok") return ensured;
+    if (adoption.auto_adoption) ensured.auto_adoption = adoption.auto_adoption;
+    return ensured;
   } else if (result.status === "terminal") {
     await writeCurrentCAS(result.checkout_root, result.plan, "");
   }
@@ -443,26 +505,520 @@ export async function assertReservationRoot({ root = process.cwd(), id }) {
   return { ok: true, execution_root: actual, branch };
 }
 
-export async function adoptPlan({ root = process.cwd(), plan, base, branch, worktree, select = false }) {
-  const main = mainCheckout(root);
-  const dirty = runGit(main, ["status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude).agents/**"]);
-  if (dirty) throw new Error("dirty main checkout: commit or stash project changes before legacy adoption");
-  const ensured = await ensureManagedWorktree({ root: main, id: parseFrontmatter((await loadPlan(main, plan)).markdown).id, base, branch, worktree });
-  const loaded = await loadPlan(main, plan);
-  if (loaded.fields.worktree && loaded.fields.worktree !== ensured.worktree) throw new Error("plan already has a different worktree mapping");
-  const updated = setFrontmatterFields(loaded.markdown, {
-    base_branch: ensured.base_branch,
-    base_commit: ensured.base_commit,
-    branch: ensured.branch,
-    worktree: ensured.worktree,
-  });
-  await atomicWrite(loaded.path, updated);
-  await writeCurrentCAS(ensured.execution_root, "", plan);
-  if (select) {
-    const observed = (await readText(join(main, ".agents", "state", "current.txt"))).trim();
-    await writeCurrentCAS(main, observed, plan);
+async function adoptionCandidates(main, plan) {
+  const candidates = [];
+  for (const entry of listGitWorktrees(main)) {
+    if (resolve(entry.path) === resolve(main)) continue;
+    const pointer = (await readText(join(entry.path, ".agents", "state", "current.txt"))).trim();
+    if (pointer === plan) candidates.push(entry);
   }
-  return ensured;
+  return candidates;
+}
+
+function hasOwnField(fields, key) {
+  return Object.prototype.hasOwnProperty.call(fields, key);
+}
+
+function mappedFieldsComplete(fields) {
+  return Boolean(fields.base_branch && /^[0-9a-f]{40}$/i.test(fields.base_commit || "") && fields.branch && fields.worktree);
+}
+
+function autoFailure(legacy, code, message, candidates = legacy.recovery?.candidates || [], details = {}) {
+  const candidateDetails = candidates.map((entry) => ({
+    execution_root: entry.path || entry.execution_root,
+    branch: entry.branch,
+    head: entry.head,
+  }));
+  const manualCommand = `pm worktree adopt --plan ${legacy.plan} --base <base-ref>`;
+  return {
+    ...legacy,
+    status: "legacy_unmapped",
+    failure_code: code,
+    message,
+    manual_command: manualCommand,
+    candidate_count: candidateDetails.length,
+    candidates: candidateDetails,
+    ...details,
+    recovery: {
+      ...(legacy.recovery || {}),
+      plan: legacy.plan,
+      candidate_count: candidateDetails.length,
+      candidates: candidateDetails,
+      manual_command: manualCommand,
+    },
+  };
+}
+
+function ownerLockFailureCode(error, main) {
+  const message = error?.message || "";
+  let scope = "reservation";
+  if (message.includes(`${join(main, ".agents", "tasks", ".lock")}`)) scope = "pm_store";
+  else if (message.includes("current.lock")) {
+    scope = message.includes(join(main, ".agents", "state", "current.lock")) ? "main" : "target";
+  }
+  return `${scope}_lock_${error.code === "owner_lock_timeout" ? "timeout" : "blocked"}`;
+}
+
+function resolveExactCommit(main, value, code, label) {
+  if (!value || !/^[0-9a-f]{40}$/i.test(value)) throw new AutoAdoptionError(code, `${label} must be a 40-character OID`);
+  const resolvedCommit = runGit(main, ["rev-parse", "--verify", `${value}^{commit}`], { allowFailure: true });
+  if (!resolvedCommit || resolvedCommit.toLowerCase() !== value.toLowerCase()) {
+    throw new AutoAdoptionError(code, `${label} does not resolve exactly: ${value}`);
+  }
+  return resolvedCommit;
+}
+
+function assertAutomaticAncestor(main, ancestor, descendant) {
+  if (runGit(main, ["merge-base", "--is-ancestor", ancestor, descendant], { allowFailure: true }) === null) {
+    throw new AutoAdoptionError("base_ancestry_invalid", `${ancestor} is not an ancestor of ${descendant}`);
+  }
+}
+
+function defaultBaseRef(main) {
+  const origin = runGit(main, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], { allowFailure: true });
+  if (origin) return origin;
+  const raw = runGit(main, ["for-each-ref", "--format=%(refname:short)%09%(symref:short)", "refs/remotes"], { allowFailure: true }) || "";
+  const defaults = raw.split("\n")
+    .map((line) => line.split("\t"))
+    .filter(([name, target]) => name?.endsWith("/HEAD") && target)
+    .map(([, target]) => target);
+  const distinct = [...new Set(defaults)];
+  if (distinct.length > 1) throw new AutoAdoptionError("default_ref_ambiguous", `multiple symbolic remote defaults: ${distinct.join(", ")}`);
+  if (distinct.length === 1) return distinct[0];
+  const branch = runGit(main, ["branch", "--show-current"], { allowFailure: true });
+  if (!branch) throw new AutoAdoptionError("default_ref_missing", "no symbolic remote default or main checkout branch");
+  return branch;
+}
+
+function uniqueMergeBase(main, baseTip, sourceHead) {
+  const raw = runGit(main, ["merge-base", "--all", baseTip, sourceHead], { allowFailure: true });
+  const commits = [...new Set((raw || "").split(/\s+/).filter(Boolean))];
+  if (commits.length === 0) throw new AutoAdoptionError("merge_base_missing", `no merge base for ${baseTip} and ${sourceHead}`);
+  if (commits.length > 1 || !/^[0-9a-f]{40}$/i.test(commits[0])) {
+    throw new AutoAdoptionError("merge_base_ambiguous", `merge base is not one exact OID for ${baseTip} and ${sourceHead}`);
+  }
+  return commits[0];
+}
+
+function inferAutomaticBase(main, fields, sourceHead) {
+  const hasBranch = hasOwnField(fields, "base_branch");
+  const hasCommit = hasOwnField(fields, "base_commit");
+  if (hasBranch && !fields.base_branch) throw new AutoAdoptionError("invalid_mapping_fields", "base_branch is present but empty");
+  if (hasCommit && !fields.base_commit) throw new AutoAdoptionError("invalid_mapping_fields", "base_commit is present but empty");
+  const baseRef = hasBranch ? fields.base_branch : defaultBaseRef(main);
+  const baseTip = runGit(main, ["rev-parse", "--verify", `${baseRef}^{commit}`], { allowFailure: true });
+  if (!baseTip) throw new AutoAdoptionError("base_ref_invalid", `base ref does not resolve: ${baseRef}`);
+  const baseCommit = hasCommit
+    ? resolveExactCommit(main, fields.base_commit, "base_commit_invalid", "base_commit")
+    : uniqueMergeBase(main, baseTip, sourceHead);
+  assertAutomaticAncestor(main, baseCommit, baseTip);
+  assertAutomaticAncestor(main, baseCommit, sourceHead);
+  return { baseRef, baseTip, baseCommit };
+}
+
+function normalizeAutomaticTopology(main, id, fields, candidate) {
+  const conventional = requestedAdoptionTarget(main, id);
+  const hasBranch = hasOwnField(fields, "branch");
+  const hasWorktree = hasOwnField(fields, "worktree");
+  if (hasBranch) {
+    if (!fields.branch || runGit(main, ["check-ref-format", "--branch", fields.branch], { allowFailure: true }) === null) {
+      throw new AutoAdoptionError("invalid_mapping_fields", `invalid branch constraint: ${fields.branch || "(empty)"}`);
+    }
+  }
+  let worktreeConstraint = null;
+  if (hasWorktree) {
+    if (!fields.worktree || isAbsolute(fields.worktree)) {
+      throw new AutoAdoptionError("invalid_mapping_fields", "worktree constraint must be a non-empty relative managed path");
+    }
+    try {
+      const absolute = assertManagedTarget(main, resolve(main, fields.worktree));
+      worktreeConstraint = relativeManagedPath(main, absolute);
+    } catch (error) {
+      throw new AutoAdoptionError("invalid_mapping_fields", error.message);
+    }
+  }
+  if (candidate) {
+    if (!candidate.branch) throw new AutoAdoptionError("candidate_detached", "the sole adoption candidate is detached");
+    const candidateWorktree = relativeManagedPath(main, assertManagedTarget(main, candidate.path));
+    if ((hasBranch && fields.branch !== candidate.branch) || (hasWorktree && worktreeConstraint !== candidateWorktree)) {
+      throw new AutoAdoptionError("topology_constraint_mismatch", "legacy topology fields do not match the sole candidate");
+    }
+    return { branch: candidate.branch, worktree: candidate.path };
+  }
+  if ((hasBranch && fields.branch !== conventional.targetBranch) || (hasWorktree && worktreeConstraint !== conventional.managedRel)) {
+    throw new AutoAdoptionError("topology_constraint_mismatch", "legacy topology fields do not match the conventional managed target");
+  }
+  return { branch: conventional.targetBranch, worktree: conventional.targetAbs };
+}
+
+function requestedAdoptionTarget(main, id, branch, worktree) {
+  const targetBranch = branch || `agent/${id}`;
+  const targetAbs = worktree
+    ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
+    : join(main, ".agents", "worktrees", id);
+  if (resolve(targetAbs) === resolve(main)) throw new Error("main checkout cannot be a plan execution worktree");
+  assertManagedTarget(main, targetAbs);
+  return { targetBranch, targetAbs, managedRel: relativeManagedPath(main, targetAbs) };
+}
+
+async function reserveAdoptionCandidate({ main, root, id, base, baseCommit, candidate, paths }) {
+  if (!candidate.branch) throw new Error("detached worktree cannot be an adoption candidate");
+  const refs = resolveBaseAndStart(main, { base, baseCommit });
+  const head = runGit(candidate.path, ["rev-parse", "HEAD"]);
+  assertAncestor(main, refs.baseCommit, head, "candidate base mismatch");
+  const expected = {
+    id,
+    base_branch: base,
+    base_commit: refs.baseCommit,
+    start_commit: head,
+    branch: candidate.branch,
+    worktree: relativeManagedPath(main, candidate.path),
+    source_checkout: relativeManagedPath(main, runGit(root, ["rev-parse", "--show-toplevel"])),
+    expected_main_current: (await readText(join(main, ".agents", "state", "current.txt"))).trim(),
+    created_at: new Date().toISOString(),
+  };
+  const raw = await readText(paths.json);
+  const reservation = raw ? assertReservationIdentity(JSON.parse(raw), expected) : expected;
+  if (!raw) {
+    await mkdir(paths.dir, { recursive: true });
+    await atomicWrite(paths.json, `${JSON.stringify(expected, null, 2)}\n`);
+  }
+  return {
+    status: "reused",
+    main_root: main,
+    execution_root: candidate.path,
+    base_branch: base,
+    base_commit: refs.baseCommit,
+    start_commit: reservation.start_commit,
+    branch: candidate.branch,
+    worktree: expected.worktree,
+    reservation: relativeManagedPath(main, paths.json),
+  };
+}
+
+async function cleanupAdoptionReservation(paths) {
+  await unlink(paths.stage).catch((error) => {
+    if (error?.code !== "ENOENT") throw error;
+  });
+  await unlink(paths.json).catch((error) => {
+    if (error?.code !== "ENOENT") throw error;
+  });
+}
+
+async function withPmStoreLock(main, operation, fn, options = {}) {
+  return withOwnerLock(join(main, ".agents", "tasks", ".lock"), operation, fn, options);
+}
+
+async function adoptPlanLocked({
+  main,
+  root,
+  plan,
+  id,
+  base,
+  baseCommit,
+  start,
+  branch,
+  worktree,
+  select,
+  automatic = false,
+  automaticOutcome = "adopted_parked",
+  paths,
+  candidates: classifiedCandidates,
+}) {
+    const candidates = classifiedCandidates || await adoptionCandidates(main, plan);
+    if (candidates.length > 1) throw new Error(`multiple adoption candidates for ${plan}`);
+
+    let topology;
+    if (candidates.length === 1) {
+      if (start) throw new Error("--start cannot be used when reusing an adoption candidate");
+      const candidate = candidates[0];
+      assertManagedTarget(main, candidate.path);
+      if (branch && branch !== candidate.branch) throw new Error(`adoption candidate branch mismatch: ${candidate.branch}`);
+      if (worktree) {
+        const requested = isAbsolute(worktree) ? worktree : resolve(main, worktree);
+        if (resolve(requested) !== resolve(candidate.path)) throw new Error(`adoption candidate path mismatch: ${candidate.path}`);
+      }
+      const owner = await findNonterminalPlanOwner(main, relativeManagedPath(main, candidate.path), { excludePlan: plan });
+      if (owner) throw new Error(`target already owned by plan ${owner}`);
+      topology = await reserveAdoptionCandidate({ main, root, id, base, baseCommit, candidate, paths });
+    } else {
+      const requested = requestedAdoptionTarget(main, id, branch, worktree);
+      const existingRaw = await readText(paths.json);
+      if (!existingRaw) {
+        const worktrees = listGitWorktrees(main);
+        const occupiedPath = worktrees.some((entry) => resolve(entry.path) === resolve(requested.targetAbs));
+        const occupiedBranch = worktrees.some((entry) => entry.branch === requested.targetBranch)
+          || Boolean(runGit(main, ["rev-parse", "--verify", `refs/heads/${requested.targetBranch}^{commit}`], { allowFailure: true }));
+        if (occupiedPath || occupiedBranch || await exists(requested.targetAbs)) {
+          throw new Error("occupied topology has no exact adoption reservation");
+        }
+        const dirty = runGit(main, ["status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude).agents/**"]);
+        if (dirty) throw new Error("dirty main checkout: commit or stash project changes before legacy adoption");
+      }
+      topology = await ensureManagedWorktreeLocked({
+        main,
+        root,
+        id,
+        base,
+        baseCommit,
+        start,
+        branch: requested.targetBranch,
+        worktree: requested.targetAbs,
+        paths,
+      });
+    }
+
+    return withPmStoreLock(main, `adopt:${id}`, async () => {
+      const loaded = await loadPlan(main, plan);
+      if (!["draft", "active"].includes(loaded.fields.status)) throw new Error(`cannot adopt ${loaded.fields.status || "statusless"} plan`);
+      const owner = await findNonterminalPlanOwner(main, topology.worktree, { excludePlan: plan });
+      if (owner) throw new Error(`target already owned by plan ${owner}`);
+      const entry = listGitWorktrees(main).find((item) => resolve(item.path) === resolve(topology.execution_root));
+      if (!entry) throw new Error(`adoption target is no longer registered: ${topology.execution_root}`);
+      if (entry.branch !== topology.branch) throw new Error(`adoption target branch changed: ${entry.branch}`);
+      const head = runGit(topology.execution_root, ["rev-parse", "HEAD"]);
+      assertAncestor(main, topology.base_commit, head, "adoption target base mismatch");
+
+      for (const [key, expected] of Object.entries({
+        base_branch: topology.base_branch,
+        base_commit: topology.base_commit,
+        branch: topology.branch,
+        worktree: topology.worktree,
+      })) {
+        if (loaded.fields[key] && loaded.fields[key] !== expected) throw new Error(`plan already has a different ${key} mapping`);
+      }
+
+      return withCurrentLock(topology.execution_root, async (targetCurrent) => {
+        if (targetCurrent && targetCurrent !== plan) throw new Error(`target current conflict: ${targetCurrent}`);
+        if (!targetCurrent) {
+          await atomicWrite(join(topology.execution_root, ".agents", "state", "current.txt"), `${plan}\n`);
+        }
+        const updated = setFrontmatterFields(loaded.markdown, {
+          base_branch: topology.base_branch,
+          base_commit: topology.base_commit,
+          branch: topology.branch,
+          worktree: topology.worktree,
+        });
+        if (updated !== loaded.markdown) await atomicWrite(loaded.path, updated);
+
+        let outcome = "adopted_parked";
+        if (automatic) {
+          outcome = automaticOutcome;
+        } else if (select) {
+          const reservation = normalizeReservation(JSON.parse(await readText(paths.json)));
+          outcome = await withCurrentLock(main, async (mainCurrent) => {
+            if (mainCurrent === plan) return "adopted_selected";
+            if (mainCurrent !== (reservation.expected_main_current || "")) return "adopted_parked";
+            await atomicWrite(join(main, ".agents", "state", "current.txt"), `${plan}\n`);
+            return "adopted_selected";
+          });
+        }
+        await cleanupAdoptionReservation(paths);
+        return { ...topology, outcome };
+      });
+    });
+}
+
+export async function adoptPlan({ root = process.cwd(), plan, base, baseCommit, start, branch, worktree, select = false }) {
+  const main = mainCheckout(root);
+  const initial = await loadPlan(main, plan);
+  const id = initial.fields.id;
+  if (!ID_RE.test(id || "")) throw new Error(`invalid plan id '${id ?? ""}'`);
+  return withReservationLock(main, id, async (paths) => adoptPlanLocked({
+    main,
+    root,
+    plan,
+    id,
+    base,
+    baseCommit,
+    start,
+    branch,
+    worktree,
+    select,
+    paths,
+  }));
+}
+
+function automaticDomainError(error) {
+  if (error instanceof AutoAdoptionError) return error;
+  const message = error?.message || String(error);
+  if (message.includes("multiple adoption candidates")) return new AutoAdoptionError("candidate_ambiguous", message);
+  if (message.includes("detached worktree")) return new AutoAdoptionError("candidate_detached", message);
+  if (message.includes("reservation conflict")) return new AutoAdoptionError("reservation_identity_mismatch", message);
+  if (message.includes("occupied topology")) return new AutoAdoptionError("topology_occupied", message);
+  if (message.includes("dirty main checkout")) return new AutoAdoptionError("main_dirty", message);
+  if (message.includes("target current conflict")) return new AutoAdoptionError("foreign_pointer", message);
+  if (message.includes("target already owned")) return new AutoAdoptionError("foreign_owner", message);
+  if (message.includes("candidate branch mismatch") || message.includes("candidate path mismatch")) {
+    return new AutoAdoptionError("topology_constraint_mismatch", message);
+  }
+  if (message.includes("different base_") || message.includes("different branch") || message.includes("different worktree")) {
+    return new AutoAdoptionError("invalid_mapping_fields", message);
+  }
+  return null;
+}
+
+async function autoAdoptLegacy({ root, legacy }) {
+  const main = mainCheckout(root);
+  const initial = await loadPlan(main, legacy.plan);
+  const id = initial.fields.id;
+  if (!ID_RE.test(id || "")) return autoFailure(legacy, "invalid_mapping_fields", `invalid plan id '${id ?? ""}'`);
+  let candidates = [];
+  try {
+    const result = await withReservationLock(main, id, async (paths) => {
+      const loaded = await loadPlan(main, legacy.plan);
+      if (loaded.fields.id !== id) throw new AutoAdoptionError("invalid_mapping_fields", "plan id changed during automatic adoption");
+      if (!["draft", "active"].includes(loaded.fields.status)) {
+        throw new AutoAdoptionError("invalid_mapping_fields", `automatic adoption requires draft/active status, found ${loaded.fields.status || "unknown"}`);
+      }
+      if (mappedFieldsComplete(loaded.fields)) return { converged: true };
+
+      candidates = await adoptionCandidates(main, legacy.plan);
+      if (candidates.length > 1) throw new AutoAdoptionError("candidate_ambiguous", `multiple adoption candidates for ${legacy.plan}`);
+      const candidate = candidates[0] || null;
+      const reservationRaw = await readText(paths.json);
+      const existingReservation = reservationRaw ? normalizeReservation(JSON.parse(reservationRaw)) : null;
+      const sourceKind = candidate ? "candidate" : existingReservation ? "reservation" : "main_checkout";
+      const sourceHead = candidate
+        ? runGit(candidate.path, ["rev-parse", "--verify", "HEAD^{commit}"], { allowFailure: true })
+        : existingReservation
+          ? runGit(main, ["rev-parse", "--verify", `${existingReservation.start_commit}^{commit}`], { allowFailure: true })
+          : runGit(main, ["rev-parse", "--verify", "HEAD^{commit}"], { allowFailure: true });
+      if (!sourceHead || !/^[0-9a-f]{40}$/i.test(sourceHead)) {
+        throw new AutoAdoptionError("source_invalid", "automatic adoption source does not resolve to one commit");
+      }
+      const inferenceFields = { ...loaded.fields };
+      if (existingReservation && !hasOwnField(inferenceFields, "base_branch")) inferenceFields.base_branch = existingReservation.base_branch;
+      if (existingReservation && !hasOwnField(inferenceFields, "base_commit")) inferenceFields.base_commit = existingReservation.base_commit;
+      const inferred = inferAutomaticBase(main, inferenceFields, sourceHead);
+      let target;
+      if (!candidate && existingReservation) {
+        if (existingReservation.id !== id) throw new AutoAdoptionError("reservation_identity_mismatch", "reservation id differs from the plan");
+        const reserved = requestedAdoptionTarget(main, id, existingReservation.branch, existingReservation.worktree);
+        if ((hasOwnField(loaded.fields, "branch") && loaded.fields.branch !== reserved.targetBranch)
+          || (hasOwnField(loaded.fields, "worktree") && resolve(main, loaded.fields.worktree) !== reserved.targetAbs)) {
+          throw new AutoAdoptionError("reservation_identity_mismatch", "legacy topology fields differ from the existing reservation");
+        }
+        target = { branch: reserved.targetBranch, worktree: reserved.targetAbs };
+      } else target = normalizeAutomaticTopology(main, id, loaded.fields, candidate);
+      const automaticOutcome = await withCurrentLock(main, async (mainCurrent) => mainCurrent === legacy.plan ? "adopted_selected" : "adopted_parked");
+      const topology = await adoptPlanLocked({
+        main,
+        root,
+        plan: legacy.plan,
+        id,
+        base: inferred.baseRef,
+        baseCommit: inferred.baseCommit,
+        start: candidate ? undefined : sourceHead,
+        branch: target.branch,
+        worktree: target.worktree,
+        select: false,
+        automatic: true,
+        automaticOutcome,
+        paths,
+        candidates,
+      });
+      return {
+        auto_adoption: {
+          source_kind: sourceKind,
+          source_head: sourceHead,
+          base_ref: inferred.baseRef,
+          base_tip: inferred.baseTip,
+          base_commit: inferred.baseCommit,
+          topology: topology.status,
+          outcome: topology.outcome,
+        },
+      };
+    }, { deadlineMs: 20_000, retryMs: 25 });
+    return { status: "adopted", ...result };
+  } catch (error) {
+    if (error instanceof OwnerLockError) {
+      return autoFailure(legacy, ownerLockFailureCode(error, main), error.message, candidates);
+    }
+    const domain = automaticDomainError(error);
+    if (domain) return autoFailure(legacy, domain.code, domain.message, candidates, domain.details);
+    throw error;
+  }
+}
+
+async function reconcileMappedReservation(result) {
+  const paths = reservationPaths(result.main_root, result.id);
+  if (!await exists(paths.json) && !await exists(paths.stage)) return result;
+  const legacy = {
+    ...result,
+    status: "legacy_unmapped",
+    recovery: { action: "worktree_adopt", plan: result.plan, candidate_count: 0, candidates: [] },
+  };
+  try {
+    return await withReservationLock(result.main_root, result.id, async (locked) => {
+      const raw = await readText(locked.json);
+      const stagePresent = await exists(locked.stage);
+      if (!raw) {
+        if (stagePresent) throw new AutoAdoptionError("residual_stage_pending", "residual staged content requires the manual PM lifecycle path");
+        return result;
+      }
+      const reservation = normalizeReservation(JSON.parse(raw));
+      if (reservation.stage_sha256 !== undefined || stagePresent) {
+        throw new AutoAdoptionError("residual_stage_pending", "residual staged content requires the manual PM lifecycle path");
+      }
+      for (const [key, expected] of Object.entries({
+        id: result.id,
+        base_branch: result.base_branch,
+        base_commit: result.base_commit,
+        branch: result.branch,
+        worktree: result.worktree,
+      })) {
+        if (reservation[key] !== expected) {
+          throw new AutoAdoptionError("residual_reservation_mismatch", `residual reservation differs at ${key}`);
+        }
+      }
+      const startCommit = resolveExactCommit(result.main_root, reservation.start_commit, "residual_reservation_mismatch", "reservation start_commit");
+      const entry = listGitWorktrees(result.main_root).find((item) => resolve(item.path) === resolve(result.execution_root));
+      if (!entry || entry.branch !== result.branch) {
+        throw new AutoAdoptionError("residual_reservation_mismatch", "residual target registration or branch differs from the mapped plan");
+      }
+      const head = runGit(result.execution_root, ["rev-parse", "--verify", "HEAD^{commit}"], { allowFailure: true });
+      if (!head || runGit(result.main_root, ["merge-base", "--is-ancestor", startCommit, head], { allowFailure: true }) === null) {
+        throw new AutoAdoptionError("residual_reservation_mismatch", "target HEAD is not a descendant of reservation start_commit");
+      }
+      const pointer = (await readText(join(result.execution_root, ".agents", "state", "current.txt"))).trim();
+      if (pointer !== result.plan) throw new AutoAdoptionError("residual_reservation_mismatch", "target pointer differs from the mapped plan");
+      const baseTip = runGit(result.main_root, ["rev-parse", "--verify", `${result.base_branch}^{commit}`], { allowFailure: true }) || result.base_commit;
+
+      return withPmStoreLock(result.main_root, `reconcile:${result.id}`, async () => withCurrentLock(result.execution_root, async (targetCurrent) => {
+        if (targetCurrent !== result.plan) throw new AutoAdoptionError("residual_reservation_mismatch", "target pointer changed during reconciliation");
+        const outcome = await withCurrentLock(result.main_root, async (mainCurrent) => mainCurrent === result.plan ? "adopted_selected" : "adopted_parked");
+        await unlink(locked.json);
+        return {
+          ...result,
+          auto_adoption: {
+            source_kind: "reservation",
+            source_head: startCommit,
+            base_ref: result.base_branch,
+            base_tip: baseTip,
+            base_commit: result.base_commit,
+            topology: "reconciled",
+            outcome,
+          },
+        };
+      }));
+    }, { deadlineMs: 20_000, retryMs: 25 });
+  } catch (error) {
+    if (error instanceof OwnerLockError) return autoFailure(legacy, ownerLockFailureCode(error, result.main_root), error.message);
+    if (error instanceof AutoAdoptionError) return autoFailure(legacy, error.code, error.message);
+    throw error;
+  }
+}
+
+async function ensureMappedCurrent({ result }) {
+  const reconciled = await reconcileMappedReservation(result);
+  if (reconciled.status !== "ok") return reconciled;
+  const targetPointer = (await readText(join(reconciled.execution_root, ".agents", "state", "current.txt"))).trim();
+  if (targetPointer !== reconciled.plan) await syncPlanState({ root: reconciled.main_root, plan: reconciled.plan });
+  if (reconciled.route_required && resolve(reconciled.checkout_root) !== resolve(reconciled.main_root)) {
+    await writeCurrentCAS(reconciled.checkout_root, reconciled.plan, "");
+  }
+  return reconciled;
 }
 
 export async function cancelProvisional({ root = process.cwd(), id }) {
@@ -483,7 +1039,7 @@ export async function cancelProvisional({ root = process.cwd(), id }) {
       const dirty = runGit(target, ["status", "--porcelain"], { allowFailure: true });
       if (dirty) return { removed: false, reason: "dirty" };
       const head = runGit(target, ["rev-parse", "HEAD"], { allowFailure: true });
-      if (head && head !== reservation.base_commit) return { removed: false, reason: "committed" };
+      if (head && head !== (reservation.start_commit || reservation.base_commit)) return { removed: false, reason: "committed" };
       runGit(main, ["worktree", "remove", target]);
       await unlink(stage).catch(() => {});
       await unlink(json).catch(() => {});
@@ -606,7 +1162,8 @@ export async function validateManagedWorktrees(root = process.cwd(), { all = fal
         const pointer = (await readText(join(target, ".agents", "state", "current.txt"))).trim();
         const dirty = runGit(target, ["status", "--porcelain"], { allowFailure: true });
         const head = runGit(target, ["rev-parse", "HEAD"], { allowFailure: true });
-        const state = pointer ? "current" : dirty ? "dirty" : head !== reservation.base_commit ? "committed" : "provisional";
+        const expectedHead = reservation.start_commit || reservation.base_commit;
+        const state = pointer ? "current" : dirty ? "dirty" : head !== expectedHead ? "committed" : "provisional";
         reservations.push({ id, state, worktree: reservation.worktree, branch: reservation.branch });
         if (state !== "provisional") issues.push({ code: `abandoned_reservation_${state}`, id, ...(pointer ? { plan: pointer } : {}) });
 
@@ -652,9 +1209,9 @@ export async function main(argv = process.argv.slice(2)) {
   const root = options.root || process.cwd();
   let result;
   if (command === "resolve-current") result = await resolveCurrent(root);
-  else if (command === "ensure") result = await ensureManagedWorktree({ root, id: options.id, base: options.base, branch: options.branch, worktree: options.path });
+  else if (command === "ensure") result = await ensureManagedWorktree({ root, id: options.id, base: options.base, baseCommit: options.base_commit, start: options.start, branch: options.branch, worktree: options.path });
   else if (command === "ensure-current") result = await ensureCurrent({ root });
-  else if (command === "adopt") result = await adoptPlan({ root, plan: options.plan, base: options.base, branch: options.branch, worktree: options.path, select: Boolean(options.select) });
+  else if (command === "adopt") result = await adoptPlan({ root, plan: options.plan, base: options.base, baseCommit: options.base_commit, start: options.start, branch: options.branch, worktree: options.path, select: Boolean(options.select) });
   else if (command === "assert-root") result = await assertPlanRoot({ root, plan: options.plan });
   else if (command === "sync-state") result = await syncPlanState({ root, plan: options.plan });
   else if (command === "cancel-provisional") result = await cancelProvisional({ root, id: options.id });

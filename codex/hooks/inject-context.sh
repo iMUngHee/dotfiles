@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# UserPromptSubmit adapter: pass Codex's project root to the shared read-only
-# worktree resolver and inject its execution routing result. Fail-open.
+# UserPromptSubmit adapter: normalize safe legacy plan ownership once, then
+# inject the shared execution routing result. Fail-open with a visible diagnostic.
 
 set -euo pipefail
 
@@ -16,7 +16,9 @@ project_dir=$(printf '%s' "$input" | jq -r '.project_dir // .cwd // empty' 2>/de
 config_root="${AI_CONFIG_ROOT:-$HOME/.config}"
 engine="$config_root/ai/lib/worktree.mjs"
 [[ -f "$engine" ]] || exit 0
-resolved=$(node "$engine" resolve-current --root "$project_dir" 2>/dev/null) || exit 0
+if ! resolved=$(node "$engine" ensure-current --root "$project_dir" 2>/dev/null); then
+  resolved='{"status":"internal_error"}'
+fi
 status=$(printf '%s' "$resolved" | jq -r '.status // empty')
 
 case "$status" in
@@ -37,6 +39,18 @@ execution root: $execution_root
 branch: $branch
 base: $base
 route: $route"
+    ;;
+  legacy_unmapped)
+    plan=$(printf '%s' "$resolved" | jq -r '.recovery.plan // .plan // "(unknown)"')
+    candidate_count=$(printf '%s' "$resolved" | jq -r '.recovery.candidate_count // 0')
+    [[ "$candidate_count" == "0" ]] && source_option=" [--start <ref-or-oid>]" || source_option=""
+    context="⚠️ plan routing error: legacy_unmapped — $plan
+recovery: pm worktree adopt --plan $plan --base <base-ref> [--base-commit <40-char-oid>]$source_option
+candidate worktrees: $candidate_count"
+    ;;
+  internal_error)
+    context="⚠️ plan routing error: ensure-current failed
+recovery: node $engine resolve-current --root $project_dir; then run pm worktree adopt manually if reported"
     ;;
   *)
     plan=$(printf '%s' "$resolved" | jq -r '.plan // "(unknown)"')

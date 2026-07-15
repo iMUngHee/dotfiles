@@ -242,7 +242,7 @@
           },
           {
             "command": "$HOME/.claude/hooks/inject-context.sh",
-            "timeout": 3000,
+            "timeout": 30000,
             "type": "command"
           },
           {

@@ -181,11 +181,11 @@ async function main() {
       await writeFile(join(root, ".agents", "inbox.md"), `# _INBOX — Inbox\n\n- **linked-1** — Linked\n`);
       await symlink(join(root, ".agents", "inbox.md"), join(linked, ".agents", "inbox.md"));
 
-      await acquireLock(root, "migration-barrier", { retries: 0 });
+      const migrationBarrier = await acquireLock(root, "migration-barrier", { retries: 0 });
       const migration = migrate(linked, { ...APPLY, runid: "linked" });
       const writer = ops.itemAdd(linked, { inbox: true }, { id: "writer-1", title: "Writer" });
       await new Promise((resolve) => setTimeout(resolve, 50));
-      await releaseLock(root);
+      await releaseLock(migrationBarrier);
       const [applied] = await Promise.all([migration, writer]);
       assert.ok(applied.applied && applied.ok, applied.out);
       assert.deepEqual((await ids(join(root, ".agents", "tasks", "_inbox.md"))).sort(), ["linked-1", "writer-1"]);
