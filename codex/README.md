@@ -114,7 +114,7 @@ Commit-time sensitive-info scanning uses `codex/scripts/pre-commit-sensitive-sca
 Codex hook blocks are enforced through `config.toml.template`.
 
 - `UserPromptSubmit` → `prompt-guard.sh` blocks high-confidence secrets before submission.
-- `UserPromptSubmit` → `inject-context.sh` passes the Codex project root to the shared read-only resolver and injects a draft/active plan's execution routing.
+- `UserPromptSubmit` → `inject-context.sh` runs safe one-time legacy ownership normalization through `ensure-current`, then injects a draft/active plan's execution routing within a 30-second bound. Direct `resolve-current` remains read-only.
 - `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionStart` → `crux-hook.sh` forwards supported Codex hook events to `crux`.
 - `PreToolUse` → `protect-files.sh` blocks sensitive file and lockfile access.
 - `PostToolUse` → `post-edit-pipeline.sh` runs bounded format/check feedback after edits.
