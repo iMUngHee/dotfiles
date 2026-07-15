@@ -7,6 +7,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "./pm-roadmap.ts";
+import * as ops from "./ops.ts";
 import { ensureManagedWorktree, reservationPaths, stagePlan } from "../../lib/worktree.mjs";
 
 async function writePlan(root: string, rel: string, opts: { status?: string; deferred?: string; pmLoop?: boolean } = {}): Promise<void> {
@@ -85,6 +86,74 @@ async function main() {
       git("commit", "-m", "init");
       const gitCli = (...a: string[]) => runCli(gitRoot, a);
       assert.equal((await gitCli("task", "create", "TKA", "--title", "Task A")).code, 0);
+
+      // Existing open/Plan:- item: both journal targets roll back together, then CLI persist
+      // links the same block without replacing its title or metadata.
+      assert.equal((await gitCli(
+        "add", "reserved-existing", "Reserved Existing", "--task", "TKA",
+        "-p", "P1", "-o", "7", "--note", "keep-me",
+      )).code, 0);
+      const ensureExisting = await ensureManagedWorktree({ root: gitRoot, id: "reserved-existing", base: "main" });
+      const targetExisting = (...a: string[]) => runCli(ensureExisting.execution_root, a);
+      const planExisting = ".agents/plans/2026-07-15-reserved-existing.md";
+      const stagedExisting = `---\nid: reserved-existing\nstatus: draft\npm_loop: true\nbase_branch: main\nbase_commit: ${ensureExisting.base_commit}\nbranch: ${ensureExisting.branch}\nworktree: ${ensureExisting.worktree}\n---\n# Reserved existing\n`;
+      await stagePlan({ root: gitRoot, id: "reserved-existing", content: stagedExisting });
+      const existingBacklogBefore = await read(gitRoot, ".agents/tasks/TKA/backlog.md");
+      await assert.rejects(
+        ops.createPlanAndBacklogItem(
+          ensureExisting.execution_root,
+          "TKA",
+          { id: "reserved-existing", title: "Replacement title" },
+          planExisting,
+          { retries: 0, transaction: { failAfter: 1 } },
+        ),
+        /injected transaction failure after 1/,
+      );
+      assert.equal(await read(gitRoot, planExisting), "", "failed persist leaves canonical plan absent");
+      assert.equal(await read(gitRoot, ".agents/tasks/TKA/backlog.md"), existingBacklogBefore, "failed persist restores backlog bytes");
+      const existingPersisted = await targetExisting("persist", "TKA", "reserved-existing", planExisting, "--title", "Replacement title");
+      assert.match(existingPersisted.out, /^persisted_selected /);
+      assert.equal(await read(gitRoot, planExisting), stagedExisting);
+      const existingBacklogAfter = await read(gitRoot, ".agents/tasks/TKA/backlog.md");
+      assert.match(existingBacklogAfter, /\*\*reserved-existing\*\* — Reserved Existing/);
+      assert.match(existingBacklogAfter, /Status: draft/);
+      assert.match(existingBacklogAfter, new RegExp(`Plan: ${planExisting.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+      assert.match(existingBacklogAfter, /Priority: P1/);
+      assert.match(existingBacklogAfter, /Order: 7/);
+      assert.match(existingBacklogAfter, /Note: keep-me/);
+      assert.equal(await read(gitRoot, ".agents/worktree-reservations/reserved-existing.json"), "", "successful link consumes reservation");
+      assert.equal((await gitCli("validate")).code, 0, "existing-item persist leaves roadmap valid");
+
+      // A committed journal is recoverable, but a foreign target pointer must survive the
+      // retry and keep the reservation available instead of being re-baselined/overwritten.
+      assert.equal((await gitCli("add", "pointer-conflict", "Pointer Conflict", "--task", "TKA")).code, 0);
+      const ensureConflict = await ensureManagedWorktree({ root: gitRoot, id: "pointer-conflict", base: "main" });
+      const planConflict = ".agents/plans/2026-07-15-pointer-conflict.md";
+      const stagedConflict = `---\nid: pointer-conflict\nstatus: draft\npm_loop: true\nbase_branch: main\nbase_commit: ${ensureConflict.base_commit}\nbranch: ${ensureConflict.branch}\nworktree: ${ensureConflict.worktree}\n---\n# Pointer conflict\n`;
+      await stagePlan({ root: gitRoot, id: "pointer-conflict", content: stagedConflict });
+      await assert.rejects(
+        ops.createPlanAndBacklogItem(
+          ensureConflict.execution_root,
+          "TKA",
+          { id: "pointer-conflict", title: "Pointer Conflict" },
+          planConflict,
+          { retries: 0, transaction: { crashAt: "committed" } },
+        ),
+        /simulated process crash at committed/,
+      );
+      await writeFile(join(ensureConflict.execution_root, ".agents/state/current.txt"), "foreign-plan.md\n");
+      await assert.rejects(
+        ops.createPlanAndBacklogItem(
+          ensureConflict.execution_root,
+          "TKA",
+          { id: "pointer-conflict", title: "Pointer Conflict" },
+          planConflict,
+          { retries: 0 },
+        ),
+        /target current conflict: foreign-plan\.md/,
+      );
+      assert.equal((await read(ensureConflict.execution_root, ".agents/state/current.txt")).trim(), "foreign-plan.md");
+      assert.notEqual(await read(gitRoot, ".agents/worktree-reservations/pointer-conflict.json"), "", "pointer conflict retains reservation");
 
       const ensureA = await ensureManagedWorktree({ root: gitRoot, id: "reserved-a", base: "main" });
       const targetCliA = (...a: string[]) => runCli(ensureA.execution_root, a);
