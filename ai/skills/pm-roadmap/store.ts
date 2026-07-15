@@ -2,13 +2,13 @@
 // The ONLY module that touches the filesystem. Provides:
 //   - lossless block parser/serializer (round-trips unknown sub-bullet keys + order)
 //   - frontmatter parse/serialize (task.md)
-//   - a repo-level advisory lock (.agents/tasks/.lock, O_EXCL + pid/host/start/op)
+//   - a repo-level token-owned advisory lock (.agents/tasks/.lock owner directory)
 //   - mtime-CAS temp+rename writes
 //   - gitignore-ensure
 // ops.ts builds atomic lifecycle transitions on top of these; nothing else writes files.
-import { open, readFile, writeFile, rename, stat, unlink, mkdir } from "node:fs/promises";
+import { readFile, writeFile, rename, stat, mkdir } from "node:fs/promises";
 import { join as pathJoin } from "node:path";
-import { hostname } from "node:os";
+import { acquireOwnerLock, OwnerLockError, releaseOwnerLock } from "../../lib/owner-lock.mjs";
 
 // ── block grammar (shared by backlog/closed/links/memory/inbox) ──
 // `- **id** — title` (title optional) opens a block; `  - Key: Value` are its
@@ -112,62 +112,37 @@ export const inboxPath = (root: string) => pathJoin(tasksDir(root), "_inbox.md")
 export const lockPath = (root: string) => pathJoin(tasksDir(root), ".lock");
 
 // ── advisory lock ──
-export interface LockInfo { pid: number; host: string; start: string; op: string; }
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-function pidAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; }
-  catch (e: any) { return e?.code === "EPERM"; } // EPERM = exists but not ours → alive; ESRCH = dead
+export interface LockHandle {
+  path: string;
+  token: string;
+  marker: string;
+  owner: { host: string; pid: number; token: string; operation: string; started: string };
 }
 
 export class LockError extends Error {}
 
-// Acquire the repo-level advisory lock. O_EXCL create wins. On contention:
-//  - same host + dead pid + past staleMs → break (the holder crashed) and retry
-//  - same host + live pid → active holder; retry then fail (never break a live lock)
-//  - different host → liveness unverifiable → abort (conservative; no split-brain)
+// Acquire the repo-level owner-directory lock shared with the worktree engine.
+// Only a valid dead same-host owner is reclaimed; every release is token-bound.
 export async function acquireLock(
   root: string,
   op: string,
   opts: { staleMs?: number; nowMs?: number; retries?: number; retryMs?: number } = {},
-): Promise<void> {
-  const staleMs = opts.staleMs ?? 30_000;
-  const retries = opts.retries ?? 50;
-  const retryMs = opts.retryMs ?? 100;
-  const nowMs = opts.nowMs ?? Date.now();
+): Promise<LockHandle> {
   await mkdir(tasksDir(root), { recursive: true });
-  const path = lockPath(root);
-  const info: LockInfo = { pid: process.pid, host: hostname(), start: new Date(nowMs).toISOString(), op };
-
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const fh = await open(path, "wx"); // O_CREAT | O_EXCL
-      await fh.writeFile(JSON.stringify(info));
-      await fh.close();
-      return;
-    } catch (e: any) {
-      if (e?.code !== "EEXIST") throw e;
-    }
-    // contention — inspect the holder
-    let held: LockInfo | null = null;
-    try { held = JSON.parse(await readFile(path, "utf-8")); } catch { held = null; }
-    if (held) {
-      const sameHost = held.host === info.host;
-      const ageMs = nowMs - Date.parse(held.start);
-      if (sameHost && !pidAlive(held.pid) && ageMs > staleMs) {
-        await unlink(path).catch(() => {}); // crashed holder → break, then retry immediately
-        continue;
-      }
-      if (!sameHost) throw new LockError(`lock held by another host (${held.host}, pid ${held.pid}); refusing to break`);
-    }
-    if (attempt >= retries) throw new LockError(`could not acquire lock after ${retries} retries (held by pid ${held?.pid ?? "?"})`);
-    await sleep(retryMs);
+  try {
+    return await acquireOwnerLock(lockPath(root), {
+      operation: op,
+      retries: opts.retries ?? 50,
+      retryMs: opts.retryMs ?? 100,
+    }) as LockHandle;
+  } catch (error: any) {
+    if (error instanceof OwnerLockError) throw new LockError(error.message);
+    throw error;
   }
 }
 
-export async function releaseLock(root: string): Promise<void> {
-  await unlink(lockPath(root)).catch(() => {});
+export async function releaseLock(handle: LockHandle): Promise<boolean> {
+  return releaseOwnerLock(handle);
 }
 
 export async function withLock<T>(
@@ -176,7 +151,7 @@ export async function withLock<T>(
   fn: () => Promise<T>,
   opts: { staleMs?: number; nowMs?: number; retries?: number; retryMs?: number } = {},
 ): Promise<T> {
-  await acquireLock(root, op, opts);
+  const owner = await acquireLock(root, op, opts);
   try {
     // Every mutating PM command enters through withLock. Recover a prior interrupted
     // multi-file transaction before the command reads authoritative state.
@@ -184,7 +159,7 @@ export async function withLock<T>(
     await recoverTransactions(root);
     return await fn();
   }
-  finally { await releaseLock(root); }
+  finally { await releaseLock(owner); }
 }
 
 // ── CAS read/write ──

@@ -52,7 +52,7 @@ statusMessage = "codex prompt guard"
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
 command = "$HOME/.config/codex/hooks/inject-context.sh"
-timeout = 5
+timeout = 30
 statusMessage = "codex active plan context"
 
 [[hooks.UserPromptSubmit.hooks]]
@@ -70,7 +70,7 @@ timeout = 5
 statusMessage = "codex file safety"
 
 [[hooks.PreToolUse]]
-matcher = "^(Bash|Read|Grep|WebFetch|Agent|mcp__crux__ctx_execute(_file)?)$"
+matcher = "^(Bash|Read|Grep|WebFetch|Agent|mcp__crux__cx_execute(_file)?)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"

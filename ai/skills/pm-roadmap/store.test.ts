@@ -1,7 +1,7 @@
 // Tests for store.ts. Run: ./node_modules/.bin/tsx store.test.ts
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile, readFile, mkdir, stat, utimes } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, mkdir, readdir, stat, utimes } from "node:fs/promises";
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import {
@@ -55,30 +55,36 @@ async function main() {
     assert.equal(fmRound.body.trim(), fm.body.trim());
 
     // ── lock: writers serialize (second acquire blocked while held) ──
-    await acquireLock(root, "a", { retries: 0, nowMs: NOW });
+    const firstOwner = await acquireLock(root, "a", { retries: 0, nowMs: NOW });
     await assert.rejects(() => acquireLock(root, "b", { retries: 0, nowMs: NOW }), LockError);
-    await releaseLock(root);
-    await acquireLock(root, "c", { retries: 0, nowMs: NOW }); // free again
-    await releaseLock(root);
+    assert.equal(await releaseLock({ ...firstOwner, token: "not-the-owner" }), false);
+    assert.equal((await readdir(lockPath(root))).length, 1, "foreign release leaves the owner directory intact");
+    await releaseLock(firstOwner);
+    const nextOwner = await acquireLock(root, "c", { retries: 0, nowMs: NOW }); // free again
+    await releaseLock(nextOwner);
 
     // ── lock: a LIVE pid is never broken (even when stale by time) ──
-    await mkdir(tasksDir(root), { recursive: true });
-    await writeFile(lockPath(root), JSON.stringify({
-      pid: process.pid, host: hostname(), start: new Date(NOW - 9_999_999).toISOString(), op: "held",
+    const liveToken = "live-owner";
+    await mkdir(lockPath(root), { recursive: true });
+    await writeFile(join(lockPath(root), `owner-${liveToken}.json`), JSON.stringify({
+      pid: process.pid, host: hostname(), token: liveToken, started: new Date(NOW - 9_999_999).toISOString(), operation: "held",
     }));
     await assert.rejects(
       () => acquireLock(root, "intruder", { retries: 0, nowMs: NOW, staleMs: 1000 }),
       LockError, "live-pid lock must not be broken",
     );
-    await releaseLock(root);
+    await rm(lockPath(root), { recursive: true, force: true });
 
-    // ── lock: a DEAD pid past staleMs IS broken, then acquired ──
-    await writeFile(lockPath(root), JSON.stringify({
-      pid: 2_147_483_646, host: hostname(), start: new Date(NOW - 9_999_999).toISOString(), op: "crashed",
+    // ── lock: a valid DEAD local owner is reclaimed with the shared owner protocol ──
+    const deadToken = "dead-owner";
+    await mkdir(lockPath(root), { recursive: true });
+    await writeFile(join(lockPath(root), `owner-${deadToken}.json`), JSON.stringify({
+      pid: 2_147_483_646, host: hostname(), token: deadToken, started: new Date(NOW - 9_999_999).toISOString(), operation: "crashed",
     }));
-    await acquireLock(root, "recover", { retries: 0, nowMs: NOW, staleMs: 1000 });
-    assert.equal(JSON.parse(await readFile(lockPath(root), "utf-8")).pid, process.pid);
-    await releaseLock(root);
+    const recoveredOwner = await acquireLock(root, "recover", { retries: 0, nowMs: NOW, staleMs: 1000 });
+    assert.equal(recoveredOwner.owner.pid, process.pid);
+    assert.deepEqual(await readdir(lockPath(root)), [`owner-${recoveredOwner.token}.json`]);
+    await releaseLock(recoveredOwner);
 
     // ── CAS: a changed-under-window write is aborted; a matching one succeeds ──
     const p = join(root, ".agents", "tasks", "K", "backlog.md");
