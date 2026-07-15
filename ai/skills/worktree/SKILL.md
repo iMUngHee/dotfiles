@@ -32,7 +32,7 @@ node "$engine" ensure --root "$root" --id <id> --base <base-ref>
 ```
 
 The JSON result is authoritative and contains `base_branch`, immutable `base_commit`,
-`branch`, `worktree`, and `execution_root`. `ensure` reuses an exact branch/path match,
+immutable `start_commit`, `branch`, `worktree`, and `execution_root`. `ensure` reuses an exact branch/path match,
 creates a reservation before Git mutation, initializes the main `tasks/` and `plans/`
 stores, wires only those directories into the worktree, creates a real local `state/`,
 and updates Git-common excludes. A legacy `ROADMAP.md` returns `migration_required`
@@ -55,18 +55,46 @@ Report:
 
 ```bash
 node "$engine" resolve-current --root "$root"       # read-only routing
+node "$engine" ensure-current --root "$root"        # one-time safe legacy normalization + routing
 node "$engine" assert-root --root "$root" --plan <plan-path>
 node "$engine" sync-state --root "$root" --plan <plan-path>
 node "$engine" validate --root "$root"
 node "$engine" validate --root "$root" --all  # repository-wide ownership audit
 ```
 
-Adoption always creates or selects a dedicated worktree; the main checkout is never a
-plan execution target. A dirty main checkout blocks automatic legacy adoption.
+Adoption always creates or reuses a dedicated worktree; the main checkout is never a
+plan execution target. `--base` is the human-readable historical-base label.
+`--base-commit` optionally pins an older 40-character diff base while requiring it to
+remain an ancestor of the base ref tip and target/source HEAD. `--start` controls only
+the source of a newly created adoption branch; existing callers that pass only `--base`
+still start at its resolved commit.
 
 ```bash
-node "$engine" adopt --root "$root" --plan <plan-path> --base <base-ref> [--select]
+node "$engine" adopt --root "$root" --plan <plan-path> --base <base-ref> \
+  [--base-commit <40-char-oid>] [--start <ref-or-oid>] \
+  [--branch <branch>] [--path <managed-path>] [--select]
 ```
+
+Candidate discovery scans only Git-registered non-main worktrees whose local
+`state/current.txt` exactly names the legacy plan. Zero candidates creates new topology
+only when branch/path are unoccupied; one candidate is reused without changing its
+branch or HEAD; multiple candidates stop before writes. Explicit branch/path options
+may confirm the unique candidate but never claim a pointerless checkout, and `--start`
+is rejected for candidate reuse. Dirty main project files block only new creation, not
+reuse of the exact candidate.
+
+Prompt adapters call `ensure-current`. For an unambiguous legacy plan it infers the
+immutable base from committed Git state under the reservation lock, reuses the sole
+exact pointer-bearing candidate or creates the conventional managed worktree from a
+clean main HEAD, persists the mapping, and returns normal routed context. Ambiguous,
+dirty, detached, occupied, foreign-owned, malformed, or staged-residual states remain
+`legacy_unmapped` with a stable failure code and the manual `adopt` recovery command.
+Direct `resolve-current` remains physically read-only.
+
+Adoption serializes reservation → PM-store → target/main current through token-owned
+directory locks. Successful handoff removes its reservation last and reports topology
+`created|reused` plus `adopted_selected|adopted_parked`; a parked result preserves the
+newer main selection while the target remains the valid plan owner.
 
 ## Cleanup
 
@@ -84,7 +112,8 @@ node "$engine" prune --root "$root" --plan <terminal-plan-path>
 dirty/committed/current/missing worktrees, incomplete ownership handoffs, invalid
 mappings, and orphan reservation stage/temp artifacts. Provisional prune is the same
 safe operation as cancellation; it never removes a current, dirty, committed, or
-plan-owned worktree. Terminal prune derives the branch/worktree from a `done` or
+plan-owned worktree. Untouched detection compares HEAD with reservation `start_commit`
+(`base_commit` only for legacy reservations). Terminal prune derives the branch/worktree from a `done` or
 `dropped` plan under the PM lock; a caller-supplied terminal flag is never trusted.
 
 Never call `git worktree remove --force` by default. `--force` is explicit-user-only.
@@ -93,6 +122,7 @@ Never call `git worktree remove --force` by default. `--force` is explicit-user-
 
 - Do not create managed worktrees outside `.agents/worktrees/`.
 - Do not hand-edit `.agents/tasks`, plan mappings, reservations, or current pointers.
-- Hooks use `resolve-current` only; they never invoke a mutating command.
+- Hooks use `ensure-current` only. It may perform the one lock-protected lazy adoption
+  described above; hooks never invoke raw topology or lifecycle commands.
 - **Sandbox**: Claude uses `dangerouslyDisableSandbox`; Codex uses a workspace-write
   session that includes `.agents/worktrees`.

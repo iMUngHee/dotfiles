@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add/close/focus a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree <resolve|ensure|adopt|validate|prune> | triage ... | focus ... | memory ... | links ... | manage"
+argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | triage ... | focus ... | memory ... | links ... | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -37,7 +37,7 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
     <KEY>/  task.md  backlog.md  closed.md  links.md  memory.md
     _inbox.md                   # untriaged items in the shared lock/write domain
     archive/<KEY>/              # torn-down tasks (writes refused; ids stay reserved)
-    .lock                       # transient advisory lock (O_EXCL on acquire, unlinked on release — not a resident file)
+    .lock/                      # transient token-owned directory lock; absent while idle
   plans/*.md                    # design plans (frontmatter `pm_loop: true|false`)
   state/  current.txt  focus.txt
 ```
@@ -94,7 +94,11 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
   `pm_loop: true`; `dropped` requires a non-empty reason, while `done` rejects a reason
   and removes any stale one. Reports `reclassified` or an idempotent `unchanged`.
 - **select / worktree** — explicit launcher selection and thin wrappers around the shared
-  resolve/ensure/adopt/validate/prune engine. Terminal cleanup is
+  resolve/ensure/adopt/validate/prune engine. `worktree adopt` forwards `--base-commit`
+  (immutable historical diff base) and `--start` (new-branch source only). It discovers
+  exact current-bearing candidates with zero/create, one/reuse, many/stop semantics,
+  rejects unowned occupied topology, and preserves `adopted_selected|adopted_parked`
+  JSON outcomes. Terminal cleanup is
   `worktree prune --plan <done-or-dropped-plan>`; the engine derives and revalidates its
   mapping. Main is never an execution mapping.
 - **plan / reprioritize / reorder / depend / close / drop / triage / focus** — lower-level

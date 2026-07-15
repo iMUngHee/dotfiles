@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, unlink, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   adoptPlan,
@@ -13,15 +14,18 @@ import {
   reservationPaths,
   resolveCurrent,
   validateManagedWorktrees,
+  wireManagedStore,
   writeCurrentCAS,
   pruneManagedWorktree,
 } from "./worktree.mjs";
 import { acquireLock, releaseLock } from "../skills/pm-roadmap/store.ts";
+import * as ops from "../skills/pm-roadmap/ops.ts";
+import { acquireOwnerLock, inspectOwnerLock, releaseOwnerLock } from "./owner-lock.mjs";
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "worktree-engine-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "worktree-engine-")));
   git(root, "init", "-b", "main");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test");
@@ -156,6 +160,207 @@ test("pointer CAS preserves a newer selection", async (t) => {
   assert.ok(selected === "winner-a.md" || selected === "winner-b.md");
 });
 
+test("pointer CAS is a physical no-op when the value is unchanged", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const pointer = join(root, ".agents", "state", "current.txt");
+  await writeFile(pointer, "same.md\n");
+  const before = await stat(pointer);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const result = await writeCurrentCAS(root, "same.md", "same.md");
+
+  assert.deepEqual(result, { updated: false, current: "same.md", reason: "unchanged" });
+  assert.equal((await stat(pointer)).mtimeMs, before.mtimeMs);
+});
+
+test("ensure-current transparently reuses one legacy candidate with inferred base", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = ".agents/plans/2026-07-13-auto-reuse.md";
+  await writeFile(join(root, planRel), "---\nid: auto-reuse\ntitle: Auto reuse\nstatus: draft\nbase_branch: main\nbranch: feature/auto-reuse\n---\n");
+  const candidate = await createCandidate(root, "feature/auto-reuse", "auto-reuse-existing", planRel);
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${planRel}\n`);
+  const planBeforeResolve = await readFile(join(root, planRel), "utf8");
+  const topologyBeforeResolve = git(root, "worktree", "list", "--porcelain");
+
+  const readOnly = await resolveCurrent(root);
+  assert.equal(readOnly.status, "legacy_unmapped");
+  assert.equal(await readFile(join(root, planRel), "utf8"), planBeforeResolve);
+  assert.equal(git(root, "worktree", "list", "--porcelain"), topologyBeforeResolve);
+
+  const result = await ensureCurrent({ root });
+  assert.equal(result.status, "ok");
+  assert.equal(result.execution_root, candidate);
+  assert.equal(result.auto_adoption.source_kind, "candidate");
+  assert.equal(result.auto_adoption.topology, "reused");
+  assert.equal(result.auto_adoption.outcome, "adopted_selected");
+  assert.equal(result.base_branch, "main");
+  assert.equal(git(candidate, "branch", "--show-current"), "feature/auto-reuse");
+  assert.equal(git(root, "worktree", "list", "--porcelain"), topologyBeforeResolve);
+  assert.doesNotMatch(await readFile(join(root, planRel), "utf8"), /legacy_unmapped/);
+});
+
+test("automatic base inference covers commit-only and fully specified historical inputs", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const head = git(root, "rev-parse", "main");
+
+  const commitOnly = ".agents/plans/2026-07-13-auto-commit-only.md";
+  await writeFile(join(root, commitOnly), `---\nid: auto-commit-only\nstatus: draft\nbase_commit: ${head}\n---\n`);
+  await createCandidate(root, "feature/auto-commit-only", "auto-commit-only", commitOnly);
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${commitOnly}\n`);
+  const commitOnlyResult = await ensureCurrent({ root });
+  assert.equal(commitOnlyResult.status, "ok");
+  assert.equal(commitOnlyResult.base_branch, "main");
+  assert.equal(commitOnlyResult.base_commit, head);
+
+  const completeBase = ".agents/plans/2026-07-13-auto-complete-base.md";
+  await writeFile(join(root, completeBase), `---\nid: auto-complete-base\nstatus: draft\nbase_branch: main\nbase_commit: ${head}\n---\n`);
+  await createCandidate(root, "feature/auto-complete-base", "auto-complete-base", completeBase);
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${completeBase}\n`);
+  const completeBaseResult = await ensureCurrent({ root });
+  assert.equal(completeBaseResult.status, "ok");
+  assert.equal(completeBaseResult.base_branch, "main");
+  assert.equal(completeBaseResult.base_commit, head);
+});
+
+test("ensure-current creates a safe zero-candidate mapping once without rewriting main selection", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = await writeLegacyPlan(root, "auto-create");
+  const mainPointer = join(root, ".agents", "state", "current.txt");
+  await writeFile(mainPointer, `${planRel}\n`);
+  const mainPointerBefore = await stat(mainPointer);
+
+  const first = await ensureCurrent({ root });
+  assert.equal(first.status, "ok");
+  assert.equal(first.auto_adoption.source_kind, "main_checkout");
+  assert.equal(first.auto_adoption.topology, "created");
+  assert.equal(first.auto_adoption.outcome, "adopted_selected");
+  assert.equal(await readFile(mainPointer, "utf8"), `${planRel}\n`);
+  assert.equal((await stat(mainPointer)).mtimeMs, mainPointerBefore.mtimeMs);
+  const targetPointer = join(first.execution_root, ".agents", "state", "current.txt");
+  const targetBefore = await stat(targetPointer);
+  const topologyBefore = git(root, "worktree", "list", "--porcelain");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const second = await ensureCurrent({ root });
+  assert.equal(second.status, "ok");
+  assert.equal(second.auto_adoption, undefined);
+  assert.equal((await stat(targetPointer)).mtimeMs, targetBefore.mtimeMs);
+  assert.equal(git(root, "worktree", "list", "--porcelain"), topologyBefore);
+  assert.equal(await readFile(reservationPaths(root, "auto-create").json, "utf8").catch(() => ""), "");
+});
+
+test("ensure-current fails closed for ambiguous candidates and partial topology mismatch", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const ambiguous = await writeLegacyPlan(root, "auto-ambiguous");
+  await createCandidate(root, "feature/auto-ambiguous-a", "auto-ambiguous-a", ambiguous);
+  await createCandidate(root, "feature/auto-ambiguous-b", "auto-ambiguous-b", ambiguous);
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${ambiguous}\n`);
+  const ambiguousBefore = await readFile(join(root, ambiguous), "utf8");
+  const topologyBefore = git(root, "worktree", "list", "--porcelain");
+
+  const ambiguousResult = await ensureCurrent({ root });
+  assert.equal(ambiguousResult.status, "legacy_unmapped");
+  assert.equal(ambiguousResult.failure_code, "candidate_ambiguous");
+  assert.equal(await readFile(join(root, ambiguous), "utf8"), ambiguousBefore);
+  assert.equal(git(root, "worktree", "list", "--porcelain"), topologyBefore);
+
+  const mismatch = ".agents/plans/2026-07-13-auto-mismatch.md";
+  await writeFile(join(root, mismatch), "---\nid: auto-mismatch\nstatus: draft\nbranch: feature/not-the-candidate\n---\n");
+  await createCandidate(root, "feature/auto-mismatch", "auto-mismatch", mismatch);
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${mismatch}\n`);
+  const mismatchBefore = await readFile(join(root, mismatch), "utf8");
+  const mismatchResult = await ensureCurrent({ root });
+  assert.equal(mismatchResult.status, "legacy_unmapped");
+  assert.equal(mismatchResult.failure_code, "topology_constraint_mismatch");
+  assert.equal(await readFile(join(root, mismatch), "utf8"), mismatchBefore);
+});
+
+test("ensure-current returns typed no-write failures for dirty main and blocked main selection", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const dirtyPlan = await writeLegacyPlan(root, "auto-dirty");
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${dirtyPlan}\n`);
+  await writeFile(join(root, "README.md"), "dirty\n");
+  const dirtyTopology = git(root, "worktree", "list", "--porcelain");
+  const dirtyResult = await ensureCurrent({ root });
+  assert.equal(dirtyResult.status, "legacy_unmapped");
+  assert.equal(dirtyResult.failure_code, "main_dirty");
+  assert.equal(git(root, "worktree", "list", "--porcelain"), dirtyTopology);
+
+  git(root, "checkout", "--", "README.md");
+  const blockedPlan = await writeLegacyPlan(root, "auto-main-lock");
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${blockedPlan}\n`);
+  const mainLock = await acquireOwnerLock(join(root, ".agents", "state", "current.lock"), { operation: "test-main-lock", retries: 0 });
+  const blockedTopology = git(root, "worktree", "list", "--porcelain");
+  const blockedResult = await ensureCurrent({ root });
+  await releaseOwnerLock(mainLock);
+  assert.equal(blockedResult.status, "legacy_unmapped");
+  assert.equal(blockedResult.failure_code, "main_lock_blocked");
+  assert.equal(git(root, "worktree", "list", "--porcelain"), blockedTopology);
+  assert.equal(await readFile(reservationPaths(root, "auto-main-lock").json, "utf8").catch(() => ""), "");
+});
+
+test("a contender waiting beyond the old lock budget reclassifies zero to one candidate", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = await writeLegacyPlan(root, "auto-zero-one");
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${planRel}\n`);
+  const lockPath = reservationPaths(root, "auto-zero-one").lock;
+  const firstOwner = await acquireOwnerLock(lockPath, { operation: "test-first-owner", retries: 0 });
+  const contender = ensureCurrent({ root });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const candidate = await createCandidate(root, "feature/auto-zero-one", "auto-zero-one-existing", planRel);
+  await new Promise((resolve) => setTimeout(resolve, 2600));
+  await releaseOwnerLock(firstOwner);
+
+  const result = await contender;
+  assert.equal(result.status, "ok");
+  assert.equal(result.execution_root, candidate);
+  assert.equal(result.auto_adoption.topology, "reused");
+  assert.equal(listCount(root), 2);
+  assert.equal(await readFile(reservationPaths(root, "auto-zero-one").json, "utf8").catch(() => ""), "");
+});
+
+test("ensure-current reconciles only stage-free exact mapped reservations", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const exactPlan = await writeLegacyPlan(root, "auto-residual-exact");
+  const exact = await ensureManagedWorktree({ root, id: "auto-residual-exact", base: "main" });
+  const exactSource = await readFile(join(root, exactPlan), "utf8");
+  await writeFile(join(root, exactPlan), setMappedPlan(exactSource, exact));
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${exactPlan}\n`);
+  await writeFile(join(exact.execution_root, ".agents", "state", "current.txt"), `${exactPlan}\n`);
+
+  const reconciled = await ensureCurrent({ root });
+  assert.equal(reconciled.status, "ok");
+  assert.equal(reconciled.auto_adoption.topology, "reconciled");
+  assert.equal(await readFile(reservationPaths(root, "auto-residual-exact").json, "utf8").catch(() => ""), "");
+
+  const stagedPlan = await writeLegacyPlan(root, "auto-residual-staged");
+  const staged = await ensureManagedWorktree({ root, id: "auto-residual-staged", base: "main" });
+  const stagedSource = await readFile(join(root, stagedPlan), "utf8");
+  await writeFile(join(root, stagedPlan), setMappedPlan(stagedSource, staged));
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${stagedPlan}\n`);
+  await writeFile(join(staged.execution_root, ".agents", "state", "current.txt"), `${stagedPlan}\n`);
+  const reservationPath = reservationPaths(root, "auto-residual-staged");
+  const reservation = JSON.parse(await readFile(reservationPath.json, "utf8"));
+  reservation.stage_sha256 = "0".repeat(64);
+  await writeFile(reservationPath.json, `${JSON.stringify(reservation, null, 2)}\n`);
+  await writeFile(reservationPath.stage, "pending staged content\n");
+  const reservationBefore = await readFile(reservationPath.json, "utf8");
+
+  const blocked = await ensureCurrent({ root });
+  assert.equal(blocked.status, "legacy_unmapped");
+  assert.equal(blocked.failure_code, "residual_stage_pending");
+  assert.equal(await readFile(reservationPath.json, "utf8"), reservationBefore);
+  assert.equal(await readFile(reservationPath.stage, "utf8"), "pending staged content\n");
+});
+
 test("legacy adoption maps a clean main checkout", async (t) => {
     const { root } = await fixture();
     t.after(() => rm(root, { recursive: true, force: true }));
@@ -169,6 +374,200 @@ test("legacy adoption maps a clean main checkout", async (t) => {
     assert.match(markdown, new RegExp(`worktree: ${adopted.worktree.replaceAll("/", "\\/")}`));
     assert.equal((await resolveCurrent(root)).status, "ok");
     assert.equal(git(root, "status", "--short"), "");
+});
+
+test("legacy adoption preserves a historical base while starting a new branch at a newer commit", async (t) => {
+  const { root, baseCommit: historicalBase } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  git(root, "checkout", "release/test");
+  await writeFile(join(root, "NEXT.txt"), "newer source\n");
+  git(root, "add", "NEXT.txt");
+  git(root, "commit", "-m", "advance source");
+  const startCommit = git(root, "rev-parse", "HEAD");
+  git(root, "checkout", "main");
+  const planRel = await writeLegacyPlan(root, "adopt-split");
+
+  const adopted = await adoptPlan({
+    root,
+    plan: planRel,
+    base: "release/test",
+    baseCommit: historicalBase,
+    start: "release/test",
+    select: true,
+  });
+  const markdown = await readFile(join(root, planRel), "utf8");
+  assert.equal(adopted.status, "created");
+  assert.equal(adopted.outcome, "adopted_selected");
+  assert.equal(git(adopted.execution_root, "rev-parse", "HEAD"), startCommit);
+  assert.match(markdown, new RegExp(`base_commit: ${historicalBase}`));
+  assert.equal(await readFile(reservationPaths(root, "adopt-split").json, "utf8").catch(() => ""), "");
+  assert.equal(await readFile(reservationPaths(root, "adopt-split").stage, "utf8").catch(() => ""), "");
+  assert.equal((await validateManagedWorktrees(root, { all: true })).ok, true);
+});
+
+test("legacy adoption reuses the one exact current-bearing worktree despite unrelated dirty main", async (t) => {
+  const { root, baseCommit } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = await writeLegacyPlan(root, "adopt-existing");
+  const candidate = await createCandidate(root, "feature/adopt-existing", "adopt-existing-checkout", planRel, "release/test");
+  const beforeCount = listCount(root);
+  const beforeHead = git(candidate, "rev-parse", "HEAD");
+  await writeFile(join(root, "README.md"), "unrelated dirty main\n");
+
+  const adopted = await adoptPlan({ root, plan: planRel, base: "release/test", baseCommit, select: false });
+  assert.equal(adopted.status, "reused");
+  assert.equal(adopted.outcome, "adopted_parked");
+  assert.equal(adopted.execution_root, candidate);
+  assert.equal(listCount(root), beforeCount);
+  assert.equal(git(candidate, "rev-parse", "HEAD"), beforeHead);
+  assert.equal(git(candidate, "branch", "--show-current"), "feature/adopt-existing");
+  assert.equal(await readFile(reservationPaths(root, "adopt-existing").json, "utf8").catch(() => ""), "");
+});
+
+test("raw adopt CLI forwards an explicit historical base commit for candidate reuse", async (t) => {
+  const { root, baseCommit: historicalBase } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = await writeLegacyPlan(root, "adopt-cli-historical");
+  const candidate = await createCandidate(
+    root,
+    "feature/adopt-cli-historical",
+    "adopt-cli-historical",
+    planRel,
+    "release/test",
+  );
+  const candidateHead = git(candidate, "rev-parse", "HEAD");
+  git(root, "checkout", "release/test");
+  await writeFile(join(root, "LATER.txt"), "base advanced after candidate\n");
+  git(root, "add", "LATER.txt");
+  git(root, "commit", "-m", "advance base after candidate");
+  git(root, "checkout", "main");
+
+  const output = execFileSync(process.execPath, [
+    fileURLToPath(new URL("./worktree.mjs", import.meta.url)),
+    "adopt",
+    "--root", root,
+    "--plan", planRel,
+    "--base", "release/test",
+    "--base-commit", historicalBase,
+  ], { encoding: "utf8" });
+  const adopted = JSON.parse(output);
+  assert.equal(adopted.status, "reused");
+  assert.equal(adopted.base_commit, historicalBase);
+  assert.equal(adopted.execution_root, candidate);
+  assert.equal(git(candidate, "rev-parse", "HEAD"), candidateHead);
+});
+
+test("legacy adoption rejects ambiguous candidates and pointerless occupied topology before writes", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const ambiguousPlan = await writeLegacyPlan(root, "adopt-ambiguous");
+  const original = await readFile(join(root, ambiguousPlan), "utf8");
+  await createCandidate(root, "feature/adopt-ambiguous-a", "adopt-ambiguous-a", ambiguousPlan);
+  await createCandidate(root, "feature/adopt-ambiguous-b", "adopt-ambiguous-b", ambiguousPlan);
+  const beforeCount = listCount(root);
+  await assert.rejects(adoptPlan({ root, plan: ambiguousPlan, base: "main" }), /multiple adoption candidates/);
+  assert.equal(await readFile(join(root, ambiguousPlan), "utf8"), original);
+  assert.equal(listCount(root), beforeCount);
+  assert.equal(await readFile(reservationPaths(root, "adopt-ambiguous").json, "utf8").catch(() => ""), "");
+
+  const occupiedPlan = await writeLegacyPlan(root, "adopt-occupied");
+  const occupiedPath = join(root, ".agents", "worktrees", "occupied-checkout");
+  git(root, "worktree", "add", "-b", "feature/occupied-checkout", occupiedPath, "main");
+  await assert.rejects(
+    adoptPlan({ root, plan: occupiedPlan, base: "main", branch: "feature/occupied-checkout", worktree: occupiedPath }),
+    /occupied topology has no exact adoption reservation/,
+  );
+  assert.equal(await readFile(reservationPaths(root, "adopt-occupied").json, "utf8").catch(() => ""), "");
+});
+
+test("adoption reservations track start_commit for cancellation and park on stale main selection", async (t) => {
+  const { root, baseCommit: historicalBase } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const startCommit = git(root, "rev-parse", "release/test");
+  const cancellable = await ensureManagedWorktree({
+    root,
+    id: "cancel-start",
+    base: "release/test",
+    baseCommit: historicalBase,
+    start: "release/test",
+  });
+  const reservation = JSON.parse(await readFile(reservationPaths(root, "cancel-start").json, "utf8"));
+  assert.equal(reservation.base_commit, historicalBase);
+  assert.equal(reservation.start_commit, startCommit);
+  assert.equal(git(cancellable.execution_root, "rev-parse", "HEAD"), startCommit);
+  assert.equal((await cancelProvisional({ root, id: "cancel-start" })).reason, "cancelled");
+
+  await writeFile(join(root, ".agents", "state", "current.txt"), "older-selection.md\n");
+  const planRel = await writeLegacyPlan(root, "adopt-parked");
+  const prepared = await ensureManagedWorktree({ root, id: "adopt-parked", base: "main" });
+  await writeFile(join(root, ".agents", "state", "current.txt"), "newer-selection.md\n");
+  const adopted = await adoptPlan({ root, plan: planRel, base: "main", select: true });
+  assert.equal(adopted.execution_root, prepared.execution_root);
+  assert.equal(adopted.outcome, "adopted_parked");
+  assert.equal(await readFile(join(root, ".agents", "state", "current.txt"), "utf8"), "newer-selection.md\n");
+  assert.equal(await readFile(join(prepared.execution_root, ".agents", "state", "current.txt"), "utf8"), `${planRel}\n`);
+  assert.equal(await readFile(reservationPaths(root, "adopt-parked").json, "utf8").catch(() => ""), "");
+});
+
+test("adoption retry reconciles an exact mapped owner with residual handoff files", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = await writeLegacyPlan(root, "adopt-residual");
+  const prepared = await ensureManagedWorktree({ root, id: "adopt-residual", base: "main" });
+  const original = await readFile(join(root, planRel), "utf8");
+  await writeFile(join(root, planRel), original.replace("---\n", `---\nbase_branch: main\nbase_commit: ${prepared.base_commit}\nbranch: ${prepared.branch}\nworktree: ${prepared.worktree}\n`));
+  await writeFile(join(prepared.execution_root, ".agents", "state", "current.txt"), `${planRel}\n`);
+  await writeFile(reservationPaths(root, "adopt-residual").stage, "residual-stage\n");
+
+  const retried = await adoptPlan({ root, plan: planRel, base: "main", select: false });
+  assert.equal(retried.status, "reused");
+  assert.equal(retried.outcome, "adopted_parked");
+  assert.equal(await readFile(reservationPaths(root, "adopt-residual").json, "utf8").catch(() => ""), "");
+  assert.equal(await readFile(reservationPaths(root, "adopt-residual").stage, "utf8").catch(() => ""), "");
+  assert.equal((await validateManagedWorktrees(root, { all: true })).ok, true);
+});
+
+test("legacy adoption rejects a candidate already mapped by another non-terminal plan", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = await writeLegacyPlan(root, "adopt-foreign-owner");
+  const candidate = await createCandidate(root, "feature/adopt-foreign-owner", "adopt-foreign-owner", planRel);
+  const foreignRel = ".agents/plans/2026-07-13-foreign-owner.md";
+  await writeFile(join(root, foreignRel), `---\nid: foreign-owner\nstatus: active\nbase_branch: main\nbase_commit: ${git(root, "rev-parse", "main")}\nbranch: feature/adopt-foreign-owner\nworktree: ${candidate.slice(root.length + 1)}\n---\n`);
+  const original = await readFile(join(root, planRel), "utf8");
+
+  await assert.rejects(adoptPlan({ root, plan: planRel, base: "main" }), /target already owned by.*foreign-owner/);
+  assert.equal(await readFile(join(root, planRel), "utf8"), original);
+  assert.equal(await readFile(reservationPaths(root, "adopt-foreign-owner").json, "utf8").catch(() => ""), "");
+});
+
+test("adoption holds the shared PM-store lock while waiting for target ownership", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = await writeLegacyPlan(root, "adopt-store-chain");
+  const prepared = await ensureManagedWorktree({ root, id: "adopt-store-chain", base: "main" });
+  const currentBarrier = await acquireOwnerLock(join(prepared.execution_root, ".agents", "state", "current.lock"), {
+    operation: "test-current-barrier",
+    retries: 0,
+  });
+  const adoption = adoptPlan({ root, plan: planRel, base: "main", select: false });
+  const storeLock = join(root, ".agents", "tasks", ".lock");
+  let observed;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    observed = await inspectOwnerLock(storeLock).catch(() => null);
+    if (observed?.state === "owned" && observed.owner.operation === "adopt:adopt-store-chain") break;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.equal(observed?.owner?.operation, "adopt:adopt-store-chain", "adoption reached the PM-store critical section");
+
+  const writer = ops.itemAdd(root, { inbox: true }, { id: "blocked-writer", title: "Blocked until adoption exits" });
+  await new Promise((resolve) => setTimeout(resolve, 75));
+  assert.equal(await readFile(join(root, ".agents", "tasks", "_inbox.md"), "utf8").catch(() => ""), "");
+
+  await releaseOwnerLock(currentBarrier);
+  const [adopted] = await Promise.all([adoption, writer]);
+  assert.equal(adopted.outcome, "adopted_parked");
+  assert.match(await readFile(join(root, ".agents", "tasks", "_inbox.md"), "utf8"), /blocked-writer/);
 });
 
 test("legacy adoption rejects a dirty main checkout without creating ownership", async (t) => {
@@ -190,11 +589,11 @@ test("provisional cancellation shares the PM lock and rechecks durable plan owne
   const { root } = await fixture();
   t.after(() => rm(root, { recursive: true, force: true }));
   const ensured = await ensureManagedWorktree({ root, id: "cancel-race", base: "main" });
-  await acquireLock(root, "test-barrier", { retries: 0 });
+  const testBarrier = await acquireLock(root, "test-barrier", { retries: 0 });
   const cancellation = cancelProvisional({ root, id: "cancel-race" });
   const planRel = ".agents/plans/2026-07-13-cancel-race.md";
   await writeFile(join(root, planRel), `---\nid: cancel-race\nstatus: draft\nbase_branch: main\nbase_commit: ${ensured.base_commit}\nbranch: ${ensured.branch}\nworktree: ${ensured.worktree}\n---\n`);
-  await releaseLock(root);
+  await releaseLock(testBarrier);
   const result = await cancellation;
   assert.equal(result.reason, "owned_by_plan");
   assert.equal(git(root, "worktree", "list", "--porcelain").includes(ensured.execution_root), true);
@@ -278,4 +677,22 @@ test("prune requires a terminal plan, refuses current/dirty worktrees, and prese
 
 function listCount(root) {
   return git(root, "worktree", "list", "--porcelain").match(/^worktree /gm)?.length ?? 0;
+}
+
+async function writeLegacyPlan(root, id) {
+  const planRel = `.agents/plans/2026-07-13-${id}.md`;
+  await writeFile(join(root, planRel), `---\nid: ${id}\ntitle: Adopt legacy\nstatus: draft\n---\n`);
+  return planRel;
+}
+
+async function createCandidate(root, branch, directory, planRel, ref = "main") {
+  const target = join(root, ".agents", "worktrees", directory);
+  git(root, "worktree", "add", "-b", branch, target, ref);
+  await wireManagedStore(root, target);
+  await writeFile(join(target, ".agents", "state", "current.txt"), `${planRel}\n`);
+  return target;
+}
+
+function setMappedPlan(markdown, topology) {
+  return markdown.replace("---\n", `---\nbase_branch: ${topology.base_branch}\nbase_commit: ${topology.base_commit}\nbranch: ${topology.branch}\nworktree: ${topology.worktree}\n`);
 }
