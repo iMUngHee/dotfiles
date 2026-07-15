@@ -713,6 +713,61 @@ export const completePlanFromRetro = (
   await clearCurrentIfNames(root, opt.planPath);
 }, opt);
 
+export const reclassifyClosedPlan = (
+  root: string,
+  key: string,
+  id: string,
+  opt: { planPath: string; terminalStatus: "done" | "dropped"; reason?: string } & LockOpts,
+) => withLock(root, "reclassifyClosedPlan", async () => {
+  const target = opt.terminalStatus;
+  const reason = opt.reason?.trim();
+  if (target !== "done" && target !== "dropped") {
+    throw new OpError(`reclassify status must be 'done' or 'dropped' (got '${target}')`);
+  }
+  if (target === "done" && opt.reason !== undefined) throw new OpError("done reclassification does not accept a Reason");
+  if (target === "dropped" && !reason) throw new OpError("dropped reclassification requires a non-empty Reason");
+
+  await assertActiveTask(root, key);
+  const backlog = await loadBlocks(taskFile(root, key, "backlog.md"));
+  if (findItem(backlog.blocks, id)) throw new OpError(`item '${id}' is still in ${key} backlog; only closed items can be reclassified`);
+
+  const closedPath = taskFile(root, key, "closed.md");
+  const closed = await loadBlocks(closedPath);
+  const item = findItem(closed.blocks, id);
+  if (!item) throw new OpError(`item '${id}' not in ${key} closed items`);
+  const itemPlan = getField(item, "Plan") ?? "-";
+  if (itemPlan !== opt.planPath) {
+    throw new OpError(`item '${id}' is linked to plan '${itemPlan}', not '${opt.planPath}' — refusing to reclassify the wrong plan`);
+  }
+
+  const planPath = pathJoin(root, opt.planPath);
+  const planStamped = await readStamped(planPath);
+  if (!planStamped) throw new OpError(`plan not found: ${opt.planPath}`);
+  const planFields = parseFrontmatter(planStamped.content).fields;
+  if (getFmField(planFields, "id") !== id) throw new OpError(`plan id does not match closed item '${id}'`);
+  if (getFmField(planFields, "pm_loop") !== "true") throw new OpError(`plan ${opt.planPath} must declare pm_loop: true`);
+
+  const planFrom = getFmField(planFields, "status") ?? "";
+  const itemFrom = getField(item, "Status") ?? "";
+  if (planFrom !== "done" && planFrom !== "dropped") throw new OpError(`plan status '${planFrom}' is not terminal`);
+  if (itemFrom !== "done" && itemFrom !== "dropped") throw new OpError(`closed item status '${itemFrom}' is not terminal`);
+
+  const currentReason = getField(item, "Reason");
+  const desiredReason = target === "dropped" ? reason! : null;
+  const unchanged = planFrom === target && itemFrom === target && currentReason === desiredReason;
+  const result = { outcome: unchanged ? "unchanged" as const : "changed" as const, planFrom, itemFrom, status: target };
+  if (unchanged) return result;
+
+  setField(item, "Status", target);
+  item.fields = item.fields.filter(([field]) => field.toLowerCase() !== "reason");
+  if (desiredReason !== null) setField(item, "Reason", desiredReason);
+  await runTransaction(root, "reclassify-closed-plan", [
+    await makeTarget(root, planPath, regularDescriptor(planContentWithStatus(planStamped.content, target))),
+    await makeTarget(root, closedPath, regularDescriptor(serializeBlocks(closed.title, closed.blocks))),
+  ], opt.transaction);
+  return result;
+}, opt);
+
 export const standaloneApprove = (root: string, planPath: string, o: LockOpts = {}) =>
   withLock(root, "standaloneApprove", () => _setStandalonePlanStatus(root, planPath, "active", o.transaction), o);
 

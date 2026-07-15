@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { runCli } from "./pm-roadmap.ts";
 
-async function makePlan(root: string, rel: string, status = "draft"): Promise<void> {
+async function makePlan(root: string, rel: string, status = "draft", id = "p"): Promise<void> {
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
-  await writeFile(join(root, rel), `---\nid: p\nstatus: ${status}\npm_loop: true\n---\n# p\n\n## Post-Implementation Notes\n\n-\n`);
+  await writeFile(join(root, rel), `---\nid: ${id}\nstatus: ${status}\npm_loop: true\n---\n# ${id}\n\n## Post-Implementation Notes\n\n-\n`);
 }
 
 async function main() {
@@ -78,6 +78,29 @@ async function main() {
     assert.equal((await cli("complete", "ALPHA", "pi-item", "--plan", ".agents/plans/2026-06-22-pi.md", "--status", "done")).code, 0);
     assert.ok((await cli("recent")).out.includes("pi-item"), "completed item lands in recent");
     assert.ok((await cli("tree")).out.includes("followup-x"), "## Deferred harvested into backlog");
+
+    // terminal reclassification CLI: changed vs unchanged output + strict Reason contract
+    assert.equal((await cli("task", "create", "RECLASS", "--title", "Reclass")).code, 0);
+    assert.equal((await cli("add", "reclass-cli", "--task", "RECLASS", "--title", "Reclass CLI")).code, 0);
+    const reclassPlan = ".agents/plans/2026-06-22-reclass-cli.md";
+    await makePlan(root, reclassPlan, "draft", "reclass-cli");
+    assert.equal((await cli("plan", "RECLASS", "reclass-cli", reclassPlan)).code, 0);
+    assert.equal((await cli("approve", "RECLASS", "reclass-cli")).code, 0);
+    assert.equal((await cli("complete", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "done")).code, 0);
+    const changedDrop = await cli("reclassify", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "dropped", "--reason", "  evidence changed  ");
+    assert.equal(changedDrop.code, 0);
+    assert.equal(changedDrop.out, "reclassified reclass-cli (plan done→dropped, item done→dropped)");
+    const unchangedDrop = await cli("reclassify", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "dropped", "--reason", "evidence changed");
+    assert.equal(unchangedDrop.out, "unchanged reclass-cli (dropped)");
+    const changedDone = await cli("reclassify", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "done");
+    assert.equal(changedDone.out, "reclassified reclass-cli (plan dropped→done, item dropped→done)");
+    const missingReclassPlan = await cli("reclassify", "RECLASS", "reclass-cli", "--status", "done");
+    assert.equal(missingReclassPlan.code, 1, "reclassify requires --plan");
+    assert.ok(missingReclassPlan.out.includes("[--reason <text>]"), "reclassify usage exposes the conditional Reason option");
+    assert.equal((await cli("reclassify", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "bogus")).code, 1, "reclassify validates status");
+    assert.equal((await cli("reclassify", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "done", "--reason", "x")).code, 1, "done rejects --reason");
+    assert.equal((await cli("reclassify", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "dropped", "--reason", "   ")).code, 1, "dropped rejects whitespace Reason");
+    assert.ok((await cli("bogus")).out.includes("reclassify"), "default usage lists reclassify");
 
     // retro durable-decision sink: memory <KEY> add → upsert a note via ops (lock+CAS)
     assert.equal((await cli("memory", "ALPHA", "add", "lock-policy", "--note", "writes go through ops", "--date", "2026-06-22")).code, 0);
