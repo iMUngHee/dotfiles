@@ -20,6 +20,8 @@ async function main() {
     assert.equal((r.json as any).links[0].label, "W");
     assert.deepEqual((r.json as any).links[0].triggers, ["a", "b"]);
     assert.equal((r.json as any).memory[0].title, "n1");
+    assert.equal("closed" in (r.json as any), false, "default task GET shape omits closed projection");
+    assert.equal("closedTotal" in (r.json as any), false, "default task GET shape omits closedTotal");
 
     // task list with counts
     r = await handle(root, "GET", "/api/tasks", P, undefined);
@@ -170,6 +172,34 @@ async function main() {
     r = await handle(root, "GET", "/api/tasks/COLLAB", P, undefined);
     assert.equal((r.json as any).links[0].by, "alice", "task GET exposes link by");
     assert.equal((r.json as any).memory[0].by, "bob", "task GET exposes memory by");
+    assert.equal("closed" in (r.json as any), false, "default task GET keeps additive fields absent");
+
+    // Optional task-scoped Closed projection: newest-first capped read, exact total,
+    // closed=0 show-all, invalid-cap rejection, and no default response-shape drift.
+    await ops.taskCreate(root, "HISTORY", "History", { retries: 0 });
+    for (let i = 1; i <= 7; i++) {
+      await ops.itemAdd(root, { task: "HISTORY" }, { id: `h-${i}`, title: `History ${i}` }, { retries: 0 });
+    }
+    for (let i = 1; i <= 7; i++) {
+      const dropped = i === 6;
+      await ops.itemClose(root, "HISTORY", `h-${i}`, {
+        status: dropped ? "dropped" : "done",
+        reason: dropped ? "superseded" : undefined,
+        plan: dropped ? undefined : `.agents/plans/h-${i}.md`,
+        closedDate: `2026-07-0${i}`,
+        retries: 0,
+      });
+    }
+    r = await handle(root, "GET", "/api/tasks/HISTORY", new URLSearchParams({ closed: "5" }), undefined);
+    assert.equal(r.status, 200);
+    assert.equal((r.json as any).closedTotal, 7, "Closed projection exposes the exact task total");
+    assert.deepEqual((r.json as any).closed.map((x: any) => x.id), ["h-7", "h-6", "h-5", "h-4", "h-3"], "Closed projection is newest-first and capped");
+    assert.equal((r.json as any).closed[1].status, "dropped", "Closed projection preserves status");
+    assert.equal((r.json as any).closed[1].reason, "superseded", "Closed projection preserves drop reason");
+    r = await handle(root, "GET", "/api/tasks/HISTORY", new URLSearchParams({ closed: "0" }), undefined);
+    assert.equal((r.json as any).closed.length, 7, "closed=0 returns all task-scoped history");
+    r = await handle(root, "GET", "/api/tasks/HISTORY", new URLSearchParams({ closed: "1.5" }), undefined);
+    assert.equal(r.status, 400, "malformed Closed cap is rejected without truncation");
 
     // GET /api/inbox — read-only inbox contents (the /api/next inbox field is a count)
     r = await handle(root, "GET", "/api/inbox", P, undefined);
