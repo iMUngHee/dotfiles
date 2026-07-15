@@ -98,6 +98,34 @@ async function planInUse(root: string, planPath: string): Promise<boolean> {
   return (await scan(tasksDir(root), await listTaskKeys(root))) || (await scan(archiveDir(root), await listArchiveKeys(root)));
 }
 
+async function assertNoOtherOwners(
+  root: string,
+  targetPath: string,
+  targetIndex: number,
+  id: string,
+  planPath: string,
+): Promise<void> {
+  const normalizedTarget = pathJoin(targetPath);
+  const scan = async (path: string) => {
+    const { blocks } = await loadBlocks(path);
+    for (let index = 0; index < blocks.length; index++) {
+      if (pathJoin(path) === normalizedTarget && index === targetIndex) continue;
+      const block = blocks[index];
+      if (block.id === id) throw new OpError(`duplicate id owner for '${id}': ${path}`);
+      if (getField(block, "Plan") === planPath) throw new OpError(`plan '${planPath}' already linked (duplicate plan owner): ${path}`);
+    }
+  };
+  await scan(inboxPath(root));
+  for (const key of await listTaskKeys(root)) {
+    await scan(taskFile(root, key, "backlog.md"));
+    await scan(taskFile(root, key, "closed.md"));
+  }
+  for (const key of await listArchiveKeys(root)) {
+    await scan(pathJoin(archiveDir(root), key, "backlog.md"));
+    await scan(pathJoin(archiveDir(root), key, "closed.md"));
+  }
+}
+
 // Dependency edges (id → DependsOn targets) over every active task's backlog. Closed items carry
 // no DependsOn (dropped on close), so the dependency graph is backlog-only.
 async function backlogDepGraph(root: string): Promise<Map<string, string[]>> {
@@ -534,10 +562,14 @@ async function reconcileMappedPlanOwner(root: string, id: string, planPath: stri
   const pmLoop = (getFmField(fields, "pm_loop") ?? "true").toLowerCase() !== "false";
   if (!!key !== pmLoop) throw new OpError(`canonical plan pm_loop does not match persist mode: ${planPath}`);
   if (key) {
-    const item = findItem((await loadBlocks(taskFile(root, key, "backlog.md"))).blocks, id);
+    const backlogPath = taskFile(root, key, "backlog.md");
+    const backlog = await loadBlocks(backlogPath);
+    const itemIndex = backlog.blocks.findIndex((block) => block.id === id);
+    const item = backlog.blocks[itemIndex];
     if (!item || getField(item, "Plan") !== planPath || getField(item, "Status") !== "draft") {
       throw new OpError(`canonical mapped owner has no exact draft backlog item: ${key}/${id}`);
     }
+    await assertNoOtherOwners(root, backlogPath, itemIndex, id, planPath);
   }
   const targetRoot = pathJoin(root, worktree);
   const targetEntry = listGitWorktrees(root).find((entry: { path: string; branch: string }) => pathJoin(entry.path) === pathJoin(targetRoot));
@@ -557,17 +589,35 @@ async function _createPlanAndBacklogItem(
   planPath: string,
   nowDate: string,
   reservationPaths?: { json: string; stage: string },
+  transaction: TransactionOptions = {},
 ): Promise<{ outcome: "persisted_selected" | "persisted_parked" | "persisted_legacy" }> {
     await assertActiveTask(root, key);
     const backlogPath = taskFile(root, key, "backlog.md");
     const backlog = await loadBlocks(backlogPath);
-    const existing = findItem(backlog.blocks, it.id);
-    if (existing && getField(existing, "Plan") !== planPath) throw new OpError(`id '${it.id}' already used by another plan`);
-    if (!existing && (await reservedIdsImpl(root)).has(it.id)) throw new OpError(`id '${it.id}' already used (reserved, no reuse)`);
-    if (!existing && await planInUse(root, planPath)) throw new OpError(`plan '${planPath}' already linked (1:1)`);
+    const existingIndex = backlog.blocks.findIndex((block) => block.id === it.id);
+    const existing = backlog.blocks[existingIndex];
+    let linkExisting = false;
+    if (existing) {
+      const existingPlan = getField(existing, "Plan");
+      const existingStatus = getField(existing, "Status");
+      const exactRetry = existingPlan === planPath && existingStatus === "draft";
+      linkExisting = !!reservationPaths && existingPlan === "-" && existingStatus === "open";
+      if (!exactRetry && !linkExisting) {
+        if (!reservationPaths && existingPlan === "-" && existingStatus === "open") {
+          throw new OpError(`existing item '${it.id}' requires reservation-backed persist`);
+        }
+        if (existingPlan !== planPath) throw new OpError(`id '${it.id}' already used by another plan`);
+        throw new OpError(`existing item '${it.id}' is not a retryable draft (status: ${existingStatus ?? "missing"})`);
+      }
+      await assertNoOtherOwners(root, backlogPath, existingIndex, it.id, planPath);
+    } else {
+      if ((await reservedIdsImpl(root)).has(it.id)) throw new OpError(`id '${it.id}' already used (reserved, no reuse)`);
+      if (await planInUse(root, planPath)) throw new OpError(`plan '${planPath}' already linked (1:1)`);
+    }
 
     const targets = [];
     let reservation: any = null;
+    let preflightTargetCurrent = "";
     if (reservationPaths) {
       const reservationStamped = await readStamped(reservationPaths.json);
       const stageStamped = await readStamped(reservationPaths.stage);
@@ -585,20 +635,23 @@ async function _createPlanAndBacklogItem(
       if (stageStamped && canonical && canonical.content !== stageStamped.content) throw new OpError(`canonical plan conflict: ${planPath}`);
       if (!canonical) targets.push(await makeTarget(root, pathJoin(root, planPath), regularDescriptor(ownerContent)));
       const targetRoot = pathJoin(root, reservation.worktree);
-      const targetCurrent = await readState(targetRoot, "current.txt");
-      if (targetCurrent && targetCurrent !== planPath) throw new OpError(`target current conflict: ${targetCurrent}`);
+      preflightTargetCurrent = await readState(targetRoot, "current.txt");
+      if (preflightTargetCurrent && preflightTargetCurrent !== planPath) throw new OpError(`target current conflict: ${preflightTargetCurrent}`);
     } else if (!(await exists(pathJoin(root, planPath)))) throw new OpError(`plan not found: ${planPath}`);
 
     if (!existing) {
       backlog.blocks.push(backlogBlock({ ...it, plan: planPath }, "draft"));
       targets.push(await makeTarget(root, backlogPath, regularDescriptor(serializeBlocks(backlog.title || `${key} — Backlog`, backlog.blocks))));
+    } else if (linkExisting) {
+      setField(existing, "Plan", planPath);
+      setField(existing, "Status", "draft");
+      targets.push(await makeTarget(root, backlogPath, regularDescriptor(serializeBlocks(backlog.title || `${key} — Backlog`, backlog.blocks))));
     }
-    if (targets.length) await runTransaction(root, "persist-plan", targets);
+    if (targets.length) await runTransaction(root, "persist-plan", targets, transaction);
 
     if (reservation) {
       const targetRoot = pathJoin(root, reservation.worktree);
-      const targetObserved = await readState(targetRoot, "current.txt");
-      const targetSeed = await writeCurrentCAS(targetRoot, targetObserved, planPath);
+      const targetSeed = await writeCurrentCAS(targetRoot, preflightTargetCurrent, planPath);
       if (!targetSeed.updated && targetSeed.current !== planPath) throw new OpError(`target pointer reconciliation failed: ${targetSeed.current}`);
       const mainResult = await writeCurrentCAS(root, reservation.expected_main_current ?? "", planPath);
       const outcome = mainResult.updated || mainResult.current === planPath ? "persisted_selected" : "persisted_parked";
@@ -627,11 +680,11 @@ export const createPlanAndBacklogItem = async (root: string, key: string, it: It
       if (canonical && getFmField(fields, "worktree") && getFmField(fields, "branch")) {
         return reconcileMappedPlanOwner(canonicalRoot, it.id, planPath, key);
       }
-      return _createPlanAndBacklogItem(canonicalRoot, key, it, planPath, o.nowDate ?? today());
+      return _createPlanAndBacklogItem(canonicalRoot, key, it, planPath, o.nowDate ?? today(), undefined, o.transaction);
     }, o);
   }
   return withReservationLock(canonicalRoot, it.id, ({ json, stage }: { json: string; stage: string }) =>
-    withLock(canonicalRoot, "createPlanAndBacklogItem", () => _createPlanAndBacklogItem(canonicalRoot, key, it, planPath, o.nowDate ?? today(), { json, stage }), o));
+    withLock(canonicalRoot, "createPlanAndBacklogItem", () => _createPlanAndBacklogItem(canonicalRoot, key, it, planPath, o.nowDate ?? today(), { json, stage }, o.transaction), o));
 };
 
 export const createStandalonePlan = async (root: string, id: string, planPath: string, o: LockOpts = {}) => {
