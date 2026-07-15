@@ -1,11 +1,13 @@
 // Tests for ops.ts. Run: ./node_modules/.bin/tsx ops.test.ts
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as ops from "./ops.ts";
 import { taskFile, inboxPath, parseBlocks, serializeBlocks, parseFrontmatter, getField, setField, getFmField, readStamped } from "./store.ts";
 import { listTransactions } from "./transaction.ts";
+import { ensureManagedWorktree, reservationPaths, stagePlan } from "../../lib/worktree.mjs";
 
 const O = { nowMs: 1_750_000_000_000, nowDate: "2026-06-22", retries: 0 as number };
 
@@ -26,6 +28,29 @@ async function planStatus(root: string, rel: string): Promise<string | null> {
 async function makePlan(root: string, rel: string, status = "draft", id = "p", pmLoop = "true"): Promise<void> {
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
   await writeFile(join(root, rel), `---\nid: ${id}\nstatus: ${status}\npm_loop: ${pmLoop}\nfiles_affected:\n  - a.ts\n  - b.ts\n---\n# ${id}\n`);
+}
+
+function testBlock(id: string, status = "open", plan = "-") {
+  const block = { id, title: `Injected ${id}`, fields: [] as [string, string][] };
+  setField(block, "Priority", "P2");
+  setField(block, "Status", status);
+  setField(block, "Plan", plan);
+  setField(block, "Note", "injected");
+  return block;
+}
+
+async function withInjectedBlock(path: string, fallbackTitle: string, block: ReturnType<typeof testBlock>, run: () => Promise<void>): Promise<void> {
+  const before = await readStamped(path);
+  const parsed = before ? parseBlocks(before.content) : { title: fallbackTitle, blocks: [] };
+  parsed.blocks.push(block);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, serializeBlocks(parsed.title || fallbackTitle, parsed.blocks));
+  try {
+    await run();
+  } finally {
+    if (before) await writeFile(path, before.content);
+    else await rm(path, { force: true });
+  }
 }
 
 async function main() {
@@ -115,6 +140,109 @@ async function main() {
     await ops.createPlanAndBacklogItem(root, "ALPHA", { id: "a-two", title: "Two" }, ".agents/plans/2026-06-22-a-two.md", O);
     assert.equal(await field(BL("ALPHA"), "a-two", "Plan"), ".agents/plans/2026-06-22-a-two.md");
     assert.equal((await readStamped(join(root, ".agents", "state", "current.txt")))!.content.trim(), ".agents/plans/2026-06-22-a-two.md");
+
+    // Existing Plan:- items remain rejected on the legacy (reservation-free) persist path.
+    const legacyExistingPlan = ".agents/plans/2026-06-22-legacy-existing.md";
+    await ops.itemAdd(root, { task: "ALPHA" }, { id: "legacy-existing", title: "Legacy existing" }, O);
+    await makePlan(root, legacyExistingPlan, "draft", "legacy-existing");
+    const legacyBefore = (await readStamped(BL("ALPHA")))!.content;
+    await assert.rejects(
+      () => ops.createPlanAndBacklogItem(root, "ALPHA", { id: "legacy-existing", title: "Legacy existing" }, legacyExistingPlan, O),
+      /reservation|already used/,
+    );
+    assert.equal((await readStamped(BL("ALPHA")))!.content, legacyBefore, "legacy refusal leaves backlog byte-identical");
+
+    // Reservation-backed persist links one exact open/Plan:- owner, preserves its block,
+    // rejects owners in every reserved domain, and rolls back both transaction targets.
+    const mappedRoot = await mkdtemp(join(tmpdir(), "ops-mapped-persist-"));
+    try {
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: mappedRoot, encoding: "utf8" });
+      git("init", "-b", "main");
+      git("config", "user.email", "test@example.com");
+      git("config", "user.name", "Test");
+      await writeFile(join(mappedRoot, "README.md"), "x\n");
+      git("add", "README.md");
+      git("commit", "-m", "init");
+
+      await ops.taskCreate(mappedRoot, "MAP", "Mapped", O);
+      await ops.taskCreate(mappedRoot, "OTHER", "Other", O);
+      await ops.itemAdd(mappedRoot, { task: "OTHER" }, { id: "mapped-dependency", title: "Dependency" }, O);
+      await ops.itemAdd(mappedRoot, { task: "MAP" }, {
+        id: "mapped-existing",
+        title: "Original title",
+        priority: "P1",
+        order: "7",
+        note: "preserve me",
+      }, O);
+      const mappedBacklogPath = taskFile(mappedRoot, "MAP", "backlog.md");
+      const mappedBacklog = parseBlocks((await readStamped(mappedBacklogPath))!.content);
+      const mappedItem = mappedBacklog.blocks.find((block) => block.id === "mapped-existing")!;
+      setField(mappedItem, "Owner", "alice");
+      setField(mappedItem, "DependsOn", "mapped-dependency");
+      setField(mappedItem, "AuditNote", "unknown-field");
+      await writeFile(mappedBacklogPath, serializeBlocks(mappedBacklog.title, mappedBacklog.blocks));
+
+      const ensured = await ensureManagedWorktree({ root: mappedRoot, id: "mapped-existing", base: "main" });
+      const mappedPlan = ".agents/plans/2026-07-15-mapped-existing.md";
+      const staged = `---\nid: mapped-existing\nstatus: draft\npm_loop: true\nbase_branch: main\nbase_commit: ${ensured.base_commit}\nbranch: ${ensured.branch}\nworktree: ${ensured.worktree}\n---\n# Mapped existing\n`;
+      await stagePlan({ root: mappedRoot, id: "mapped-existing", content: staged });
+      const mappedBefore = (await readStamped(mappedBacklogPath))!.content;
+      const input = { id: "mapped-existing", title: "CLI title must not replace the block" };
+      const persist = (extra: Parameters<typeof ops.createPlanAndBacklogItem>[4] = O) =>
+        ops.createPlanAndBacklogItem(ensured.execution_root, "MAP", input, mappedPlan, extra);
+
+      const duplicateDomains = [
+        [taskFile(mappedRoot, "OTHER", "backlog.md"), "Other — Backlog"],
+        [taskFile(mappedRoot, "OTHER", "closed.md"), "Other — Closed"],
+        [join(mappedRoot, ".agents", "tasks", "archive", "OLD", "backlog.md"), "Old — Backlog"],
+        [inboxPath(mappedRoot), "Inbox"],
+      ] as const;
+      for (const [ownerPath, title] of duplicateDomains) {
+        await withInjectedBlock(ownerPath, title, testBlock("mapped-existing"), async () => {
+          await assert.rejects(persist(), /duplicate id owner/);
+          assert.equal(await readFile(join(mappedRoot, mappedPlan), "utf8").catch(() => ""), "", "owner conflict creates no canonical plan");
+          assert.equal((await readStamped(mappedBacklogPath))!.content, mappedBefore, "owner conflict leaves target byte-identical");
+        });
+      }
+      await withInjectedBlock(
+        taskFile(mappedRoot, "OTHER", "backlog.md"),
+        "Other — Backlog",
+        testBlock("other-plan-owner", "draft", mappedPlan),
+        async () => assert.rejects(persist(), /plan.*linked|duplicate plan owner/),
+      );
+
+      await assert.rejects(
+        persist({ ...O, transaction: { failAfter: 1 } }),
+        /injected transaction failure after 1/,
+      );
+      assert.equal(await readFile(join(mappedRoot, mappedPlan), "utf8").catch(() => ""), "", "rollback removes canonical target");
+      assert.equal((await readStamped(mappedBacklogPath))!.content, mappedBefore, "rollback restores backlog target");
+      assert.notEqual(await readFile(reservationPaths(mappedRoot, "mapped-existing").json, "utf8").catch(() => ""), "", "rollback keeps reservation for retry");
+
+      assert.equal((await persist()).outcome, "persisted_selected");
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "Status"), "draft");
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "Plan"), mappedPlan);
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "Priority"), "P1");
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "Order"), "7");
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "Note"), "preserve me");
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "Owner"), "alice");
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "DependsOn"), "mapped-dependency");
+      assert.equal(await field(mappedBacklogPath, "mapped-existing", "AuditNote"), "unknown-field");
+      assert.match((await readStamped(mappedBacklogPath))!.content, /\*\*mapped-existing\*\* — Original title/);
+
+      await withInjectedBlock(taskFile(mappedRoot, "OTHER", "backlog.md"), "Other — Backlog", testBlock("mapped-existing"), async () => {
+        await assert.rejects(persist(), /duplicate id owner/, "reservation-free exact retry still rejects another id owner");
+      });
+      await withInjectedBlock(
+        taskFile(mappedRoot, "OTHER", "backlog.md"),
+        "Other — Backlog",
+        testBlock("retry-plan-owner", "draft", mappedPlan),
+        async () => assert.rejects(persist(), /plan.*linked|duplicate plan owner/, "reservation-free exact retry still rejects another Plan owner"),
+      );
+      assert.equal((await persist()).outcome, "persisted_selected", "clean reservation-free exact retry converges");
+    } finally {
+      await rm(mappedRoot, { recursive: true, force: true });
+    }
 
     // ── harvest preflight: one colliding deferred id aborts the WHOLE harvest ──
     const before = await ids(BL("ALPHA"));
