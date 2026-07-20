@@ -1,6 +1,6 @@
 ---
 name: grill
-description: "Preemptively interrogate the user to surface tacit intent BEFORE large/irreversible/ambiguous work. AI asks one question at a time, each with a recommended answer, exploring code+context first. Read-only pre-step to design: reads the same context/memory/backlog design reads, writes nothing. TRIGGER: explicit 'grill'/'캐물어봐'/'의도 맞춰줘'/'심문해'; OR before design only when intent risk stays high after code/context discovery and at least two of these hold: large blast radius, irreversible/high-cost choice, multiple valid directions, unstated priority/constraint. SKIP: one ordinary clarifying question suffices; already inside design/debug/verify/retro/pm-* unless the latest user message explicitly asks for grill; root-cause debugging; clear single-step work; ordinary multi-file planning where /design suffices."
+description: "Read-only pre-design interview for tacit intent. TRIGGER: explicit 'grill'/'캐물어봐'/'의도 맞춰줘'/'심문해'; or before design only when intent risk remains high after code/context discovery and at least two hold: large blast radius, irreversible/high-cost choice, multiple valid directions, unstated priority/constraint. SKIP: one clarification suffices; root-cause debugging; clear single-step work; ordinary multi-file planning; already in design/debug/verify/retro/pm-* unless the latest request explicitly asks for grill."
 argument-hint: "[what to grill about]"
 allowed-tools: Bash, Read, Glob, Grep, AskUserQuestion
 model: opus
