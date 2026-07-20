@@ -7,7 +7,7 @@ model: sonnet
 disable-model-invocation: true
 ---
 
-Manage per-task document links. **Project-scoped**: stored per task at `<git-root>/.agents/tasks/<KEY>/links.md`, where the git root is `git rev-parse --show-toplevel`. Refuse outside a git repo. There is no pm-context-owned active-task pointer — the **"current task" is derived from the `focus` item** via `pm-roadmap.ts current-task` (`.current` is abolished).
+Manage per-task document links. **Project-scoped**: stored per task at `<git-root>/.agents/tasks/<KEY>/links.md`, where the git root is `git rev-parse --show-toplevel`. Refuse outside a git repo. There is no pm-context-owned active-task pointer — the **current Task** is derived from the Task linked to the selected current plan via `pm-roadmap.ts current-task`.
 
 `.agents/tasks/` is **gitignored** (task links may carry internal URLs); the gitignore line is ensured by the pm-roadmap store, not by this skill. **All writes to `links.md` go through the pm-roadmap CLI → ops (lock + CAS) — never hand-edit the markdown.** pm-context's job is the fetch + trigger/summary extraction; it then persists the result via `links <KEY> add|remove`.
 
@@ -44,7 +44,7 @@ Inject a task's links — including TRIGGERS and Summary — into the current se
 
 1. Resolve KEY:
    - If KEY argument provided, use it
-   - Else `pm current-task` (the task owning the `focus` item) — if it prints empty, report "no current task. Set focus with `/pm-roadmap focus <id>`, or pass a KEY." and stop
+   - Else `pm current-task` (the Task linked to the selected current plan) — if it prints empty, report "no Task is linked to the selected current plan. Select a linked plan or pass a KEY." and stop
 2. Read `tasks/<KEY>/links.md`. If not found, run `list` and report missing key.
 3. Output a header line followed by the file content verbatim:
 
@@ -82,7 +82,7 @@ Add a single link to a task without starting the GUI, then auto-fetch its Summar
 5. **Extract** Summary and Triggers from whichever source step 4 produced (inline content or grep+selective-read output):
    - **Summary**: one-line description (page title + brief context, ≤120 chars)
    - **Triggers**: 5-13 keywords/short phrases, comma-separated, prioritized in this order:
-     1. **Code identifiers (highest priority)** — API endpoints (snake_case route segments verbatim from the document), data field names (camelCase fields verbatim), enum values (UPPER_SNAKE constants), JIRA/issue IDs (e.g. `PROJ-1234`, `REPO-567`), experiment/feature IDs (project-specific format), component/module names verbatim from the document
+     1. **Code identifiers (highest priority)** — API endpoints (snake_case route segments verbatim from the document), data field names (camelCase fields verbatim), enum values (UPPER_SNAKE constants), JIRA/issue IDs exactly as present in the document, experiment/feature IDs (project-specific format), component/module names verbatim from the document
      2. **Domain-specific proper nouns** — project codenames verbatim from the document, domain abbreviations or category labels unique to your team (verbatim), specific feature labels that are unique to this codebase
      3. **Concept terms (last resort)** — only when the document lacks identifiers; use distinctive phrases, never generic words like "block", "slot", "page"
      
@@ -129,7 +129,7 @@ Re-fetch the Summary for one or all entries. Triggers behavior depends on curren
 
 ### current task (no `set`/`unset`)
 
-There is no pm-context active-task pointer — `.current` is abolished. The **current task is the task owning the `focus` item**, set with `/pm-roadmap focus <id>` (cleared with `/pm-roadmap focus --clear`). `get` with no KEY resolves it via `pm current-task`.
+There is no pm-context active-task pointer. The **current Task is the Task linked to the selected current plan**. `get` with no KEY resolves it via `pm current-task`; standalone, stale, terminal, or empty current-plan states require an explicit KEY.
 
 ### list
 
@@ -229,7 +229,7 @@ A task's context has **two parts**: external **Links** (`links.md`, this skill) 
 
 ## Current task (no pm-context pointer)
 
-`.current` is abolished. The current task is **derived** from the `pm-roadmap` `focus` item (`<git-root>/.agents/state/focus.txt`, owned by pm-roadmap): the task owning that item. Resolve it read-only with `pm current-task` (empty when no focus). The GUI's `PUT /api/current` is a no-op for the same reason — its current-task badge reads `focus.txt`. Set/clear the current task with `/pm-roadmap focus <id>` / `--clear`.
+The current Task is **derived** from the selected current plan when that plan is linked to an open Item. Resolve it read-only with `pm current-task`; it is empty for standalone, stale, terminal, or empty selections. The dashboard exposes the structured current-plan state through `GET /api/roadmap` and stores no separate Task or Item navigation selection.
 
 ## Rules
 

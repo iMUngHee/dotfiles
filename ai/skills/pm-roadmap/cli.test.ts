@@ -34,10 +34,9 @@ async function main() {
     assert.equal((await cli("triage", "inb-1", "BETA")).code, 0);
     assert.ok((await cli("tree")).out.includes("inb-1"), "triaged item under BETA");
 
-    // focus set/clear (+ list reflects focus)
-    assert.equal((await cli("focus", "a-1")).code, 0);
-    assert.ok((await cli("list")).out.includes("focus: a-1"));
-    assert.equal((await cli("focus", "--clear")).code, 0);
+    // Removed selector command is rejected; no-id next requires an explicit candidate choice.
+    assert.equal((await cli("focus", "a-1")).code, 1);
+    assert.ok((await cli("next")).out.includes("Choose a candidate"));
 
     // explicit next
     assert.ok((await cli("next", "a-1")).out.includes("# Next: a-1"));
@@ -126,11 +125,26 @@ async function main() {
     assert.ok(!(await readFile(join(root, ".agents/tasks/ALPHA/links.md"), "utf8")).includes("wiki"), "link removed");
     await assert.rejects(() => cli("links", "ALPHA", "remove", "wiki"), /no link/); // removing a missing link errors (ops throws)
 
-    // current-task resolver: the task owning the focus item (pm-context default-KEY source)
-    assert.equal((await cli("focus", "followup-x")).code, 0); // an open ALPHA item harvested earlier
-    assert.equal((await cli("current-task")).out.trim(), "ALPHA", "current-task = focus item's task");
-    assert.equal((await cli("focus", "--clear")).code, 0);
-    assert.equal((await cli("current-task")).out.trim(), "", "no focus → empty current-task");
+    // current-task resolves only the Task linked to the selected current plan.
+    const currentTaskPlan = ".agents/plans/2026-06-22-followup-x.md";
+    await writeFile(join(root, currentTaskPlan), `---
+id: followup-x
+title: Follow up
+status: draft
+pm_loop: true
+base_branch: main
+base_commit: 0123456789012345678901234567890123456789
+branch: agent/followup-x
+worktree: .agents/worktrees/followup-x
+---
+# followup-x
+`);
+    assert.equal((await cli("plan", "ALPHA", "followup-x", currentTaskPlan)).code, 0);
+    await mkdir(join(root, ".agents", "state"), { recursive: true });
+    await writeFile(join(root, ".agents", "state", "current.txt"), `${currentTaskPlan}\n`);
+    assert.equal((await cli("current-task")).out.trim(), "ALPHA", "current-task = linked current plan's Task");
+    await writeFile(join(root, ".agents", "state", "current.txt"), "");
+    assert.equal((await cli("current-task")).out.trim(), "", "empty current plan → empty current-task");
 
     // path-traversal guard: a malformed / path-bearing task KEY is rejected at the taskDir chokepoint
     await assert.rejects(() => cli("get", "anything", "--task", "../evil"), /invalid task key/);
@@ -228,7 +242,8 @@ async function main() {
     assert.ok(!(await readFile(join(root, ".agents/tasks/DPT/backlog.md"), "utf8")).includes("DependsOn:"), "'-' clears DependsOn");
     await assert.rejects(() => cli("depend", "DPT", "dpt-a", "ghost-x"), /not a known item id/, "CLI surfaces dangling throw");
     assert.equal((await cli("depend", "DPT", "dpt-a")).code, 1, "missing target → usage exit 1");
-    assert.equal((await cli("validate")).code, 0, "validate clean after depend");
+    const validateAfterDepend = await cli("validate");
+    assert.equal(validateAfterDepend.code, 0, `validate clean after depend\n${validateAfterDepend.out}`);
 
     // worktree adopt forwards historical base/source options and preserves the engine outcome JSON.
     const worktreeRoot = await mkdtemp(join(tmpdir(), "cli-worktree-"));

@@ -22,14 +22,12 @@ interface LClosed { id: string; status: "done" | "dropped"; plan: string | null;
 
 function taskless(t: string | null): boolean { return t == null || t === "-" || t === "_INBOX"; }
 
-function parseLegacyRoadmap(md: string): { focus: string | null; open: LItem[]; closed: LClosed[] } {
+function parseLegacyRoadmap(md: string): { open: LItem[]; closed: LClosed[] } {
   const lines = md.split("\n").map((l) => l.replace(/\r$/, ""));
-  let focus: string | null = null, i = 0;
+  let i = 0;
   if (lines[0]?.trim() === "---") {
     for (i = 1; i < lines.length; i++) {
       if (lines[i].trim() === "---") { i++; break; }
-      const m = lines[i].match(/^focus:\s*(.*)$/i);
-      if (m) { const v = m[1].trim(); focus = v && v !== "-" ? v : null; }
     }
   }
   let section: "open" | "closed" | null = null, cur: LItem | null = null;
@@ -66,7 +64,7 @@ function parseLegacyRoadmap(md: string): { focus: string | null; open: LItem[]; 
     }
   }
   flush();
-  return { focus, open, closed };
+  return { open, closed };
 }
 
 interface LLink { label: string; url: string; triggers: string; summary: string; }
@@ -166,8 +164,6 @@ async function migrateLegacyRoadmap(root: string, opts: { apply?: boolean; yes?:
     lines.push(`  task ${key} [${backlog.length ? "active" : "done"}]: ${backlog.length} open, ${closed.length} closed, ${tc.links.length} links, ${memUnion.length} memory`);
   }
   if (inboxItems.length) lines.push(`  inbox.md: ${inboxItems.length} untriaged (${inboxItems.map((i) => i.id).join(", ")})`);
-  lines.push(`  focus: ${legacy.focus ?? "(none)"}`);
-
   if (!opts.apply) { lines.push("", "DRY-RUN — nothing written. Re-run with --apply to migrate (after review)."); return { out: lines.join("\n"), applied: false, ok: true }; }
 
   // ── APPLY ──
@@ -184,9 +180,6 @@ async function migrateLegacyRoadmap(root: string, opts: { apply?: boolean; yes?:
     await writeFile(taskFile(root, b.key, "memory.md"), serializeBlocks(`${b.key} — Memory`, b.memory));
   }
   if (inboxItems.length) await writeFile(inboxPath(root), serializeBlocks("_INBOX — Inbox", inboxItems.map(inboxBlock)));
-  await mkdir(join(agents, "state"), { recursive: true });
-  await writeFile(join(agents, "state", "focus.txt"), legacy.focus ? `${legacy.focus}\n` : "");
-
   // stamp pm_loop:true on the in-flight plan (current.txt)
   const cur = (await readFile(join(agents, "state", "current.txt"), "utf-8").catch(() => "")).trim();
   if (cur && await exists(join(root, cur))) {
@@ -201,7 +194,7 @@ async function migrateLegacyRoadmap(root: string, opts: { apply?: boolean; yes?:
     // FULL rollback: restore the entire pre-migration .agents/ from the backup. A partial
     // cleanup would leave an empty .agents/tasks/ root, and the line-134 guard would then
     // treat the repo as "already migrated" and refuse to re-run. Restoring wholesale also
-    // reverts state/focus.txt and the in-place pm_loop stamp.
+    // reverts the in-place pm_loop stamp.
     await rm(agents, { recursive: true, force: true });
     await cp(backup, agents, { recursive: true });
     return { out: `${lines.join("\n")}\n\nVALIDATION FAILED — fully rolled back from backup (legacy intact, re-runnable). backup kept: ${backup}\n${formatReport(report)}`, applied: false, ok: false };

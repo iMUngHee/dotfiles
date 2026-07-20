@@ -57,11 +57,10 @@ async function main() {
     assert.ok(has(await validateRoadmap(root), "C7"), "C7 closed plan missing");
     await writeFile(taskFile(root, "A", "closed.md"), `# A — Closed\n`); // reset
 
-    // ── C8: focus names an inbox item ──
+    // A stale selector file from an older checkout is ignored by validation.
     await ops.itemAdd(root, { inbox: true }, { id: "inb-1", title: "i" }, O);
     await writeState(root, "focus.txt", "inb-1\n");
-    assert.ok(has(await validateRoadmap(root), "C8"), "C8 focus inbox");
-    await writeState(root, "focus.txt", "");
+    assert.ok(!has(await validateRoadmap(root), "C8"), "stale selector state has no validation contract");
 
     // ── C3: orphan in-flight plan (pm_loop:true) → error; pm_loop:false → exempt ──
     await makePlan(root, ".agents/plans/orphan.md", "active", true);

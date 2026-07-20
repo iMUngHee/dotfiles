@@ -1,11 +1,12 @@
 // CLI entry the pm-* skills call — the single deterministic write path (no
 // hand-edited markdown). Read subcmds (list/tree/get/next/recent/validate) +
 // write subcmds routed to ops.ts. root = $PM_ROOT or `git rev-parse --show-toplevel`.
-import { execSync, execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as ops from "./ops.ts";
-import { nextCandidates, resolveItem, buildNextPrompt, recentClosed, listActiveTasks, section, taskMode, myItems, boardByOwner, type Candidate } from "./join.ts";
+import { nextCandidates, resolveCurrentPlan, resolveItem, buildNextPrompt, recentClosed, listActiveTasks, section, taskMode, myItems, boardByOwner, type Candidate } from "./join.ts";
 import { validateRoadmap, formatReport } from "./validate.ts";
+import { requireActor, resolveActor, resolveActorSource } from "./actor.ts";
 import { parseBlocks, parseFrontmatter, getField, getFmField, taskFile, readStamped } from "./store.ts";
 import { migrate } from "./migrate.ts";
 import { stat } from "node:fs/promises";
@@ -93,26 +94,6 @@ async function isLegacy(root: string): Promise<boolean> {
 }
 const READ_CMDS = new Set(["list", "tree", "get", "next", "recent", "validate"]);
 
-// Identity resolution for collaboration mode. ops.ts stays pure (no env/git); the CLI
-// resolves a person to a plain string. Precedence (most-specific first):
-//   --actor/--by flag  >  PM_ACTOR env  >  state/actor.txt  >  git config user.email
-// Returns "" when nothing resolves; collab ops that REQUIRE identity stop (requireActor / ops).
-function resolveActorSource(root: string, opts: Record<string, string | true>): { actor: string; source: string } {
-  const flag = (typeof opts.actor === "string" && opts.actor) || (typeof opts.by === "string" && opts.by);
-  if (flag) return { actor: String(flag).trim(), source: "flag" };
-  if (process.env.PM_ACTOR && process.env.PM_ACTOR.trim()) return { actor: process.env.PM_ACTOR.trim(), source: "PM_ACTOR" };
-  try { const a = readFileSync(join(root, ".agents", "state", "actor.txt"), "utf-8").trim(); if (a) return { actor: a, source: "state/actor.txt" }; } catch { /* no actor.txt */ }
-  try { const e = execFileSync("git", ["config", "user.email"], { cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim(); if (e) return { actor: e, source: "git user.email" }; } catch { /* no git identity */ }
-  return { actor: "", source: "" };
-}
-function resolveActor(root: string, opts: Record<string, string | true>): string {
-  return resolveActorSource(root, opts).actor;
-}
-function requireActor(root: string, opts: Record<string, string | true>, ctx: string): string {
-  const a = resolveActor(root, opts);
-  if (!a) throw new Error(`${ctx} requires an actor identity — set PM_ACTOR, pass --actor <name>, run 'pm whoami <name>', or set git user.email`);
-  return a;
-}
 // By/ClosedBy attribution is stamped ONLY on collab tasks. solo → undefined (no field, no error).
 // collab + unresolvable identity → requireActor throws (stop, don't write an anonymous note).
 async function collabBy(root: string, key: string, opts: Record<string, string | true>): Promise<string | undefined> {
@@ -140,8 +121,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const out = ["## Eligible (next candidates)", fmtCandidates(elig),
         blk.length ? "\n## Blocked (dependency or earlier-Order sibling)" : "",
         blk.length ? blk.map((c) => `  [${c.priority}] ${c.key}/${c.id} — blocked by ${c.blockedBy}${ownerBadge(c)}`).join("\n") : "",
-        nc.inbox ? `\n> inbox: ${nc.inbox} awaiting triage` : "",
-        nc.focus ? `\n> focus: ${nc.focus}` : ""].filter(Boolean).join("\n");
+        nc.inbox ? `\n> inbox: ${nc.inbox} awaiting triage` : ""].filter(Boolean).join("\n");
       return { out, code: 0 };
     }
     case "tree": {
@@ -167,13 +147,13 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     }
     case "next": {
       const nc = await nextCandidates(root);
-      const id = pos[0] ?? nc.focus ?? undefined;
+      const id = pos[0];
       if (!id) {
-        // explicit id/focus bypasses the filter; only the candidate-list path is filtered.
+        // An explicit id bypasses the filter; only the candidate-list path is filtered.
         const ownerArg = str(opts.owner);
         const actor = ownerArg ?? resolveActor(root, opts);
         const elig = (opts.all || !actor) ? nc.eligible : filterForActor(nc.eligible, actor);
-        return { out: "## Choose a candidate (no focus set):\n" + fmtCandidates(elig), code: 0 };
+        return { out: "## Choose a candidate (nothing is selected automatically):\n" + fmtCandidates(elig), code: 0 };
       }
       const key = str(opts.task) ?? (await findTask(root, id));
       if (!key) return { out: `item '${id}' not found`, code: 1 };
@@ -249,10 +229,6 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     }
     case "drop": { await ops.dropItem(root, pos[0], pos[1], { reason: str(opts.reason) ?? "", closedBy: await collabBy(root, pos[0], opts) }); return { out: `dropped ${pos[1]}`, code: 0 }; }
     case "triage": { await ops.triage(root, pos[0], pos[1]); return { out: `triaged ${pos[0]} → ${pos[1]}`, code: 0 }; }
-    case "focus": {
-      if (opts.clear) { await ops.focusClear(root); return { out: "focus cleared", code: 0 }; }
-      await ops.focusSet(root, pos[0]); return { out: `focus → ${pos[0]}`, code: 0 };
-    }
     case "migrate": {
       const r = await migrate(root, { apply: !!opts.apply, yes: !!opts.yes });
       return { out: r.out, code: r.ok ? 0 : 1 };
@@ -412,14 +388,13 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const { actor, source } = resolveActorSource(root, opts);
       return { out: actor ? `${actor}  (source: ${source})` : "(no actor — set PM_ACTOR, run 'pm whoami <name>', or set git user.email)", code: 0 };
     }
-    // read-only resolver: the task owning the focus item (pm-context's default-KEY source). Empty if no focus.
+    // Read-only resolver: the Task linked to the selected current plan. Empty otherwise.
     case "current-task": {
-      const nc = await nextCandidates(root);
-      if (!nc.focus) return { out: "", code: 0 };
-      return { out: (await findTask(root, nc.focus)) ?? "", code: 0 };
+      const current = await resolveCurrentPlan(root);
+      return { out: current.state === "linked" ? current.item.key : "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|focus|memory|links|current-task|persist|complete|reclassify|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|memory|links|current-task|persist|complete|reclassify|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
   }
 }
 

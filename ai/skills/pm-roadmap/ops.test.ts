@@ -75,11 +75,6 @@ async function main() {
     const reserved = await ops.reservedIds(root, O);
     assert.ok(reserved.has("a-one") && reserved.has("untriaged-x"));
 
-    // ── focus rejects an inbox item; accepts a real backlog item ──
-    await assert.rejects(() => ops.focusSet(root, "untriaged-x", O), ops.OpError);
-    await ops.focusSet(root, "a-one", O);
-    assert.equal((await readStamped(join(root, ".agents", "state", "focus.txt")))!.content.trim(), "a-one");
-
     // ── triage: inbox → task ──
     await ops.triage(root, "untriaged-x", "ALPHA", O);
     assert.deepEqual((await ids(inboxPath(root))), []);
@@ -127,13 +122,14 @@ async function main() {
     await assert.rejects(() => ops.dropItem(root, "ALPHA", "untriaged-x", { reason: "", ...O }), ops.OpError);
 
     // ── done close moves backlog → closed; id stays reserved (no reuse) ──
+    await mkdir(join(root, ".agents", "state"), { recursive: true });
+    await writeFile(join(root, ".agents", "state", "focus.txt"), "stale-selector\n");
     await ops.itemClose(root, "ALPHA", "a-one", { status: "done", plan: ".agents/plans/2026-06-22-a-one.md", closedDate: "2026-06-22", ...O });
     assert.deepEqual((await ids(BL("ALPHA"))).sort(), ["approve-crash", "untriaged-x"]);
     assert.deepEqual(await ids(CL("ALPHA")), ["a-one"]);
     assert.equal(await field(CL("ALPHA"), "a-one", "Status"), "done");
     await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "a-one", title: "reuse" }, O), ops.OpError); // closed id reserved
-    // focus on a-one was cleared by the close
-    assert.equal((await readStamped(join(root, ".agents", "state", "focus.txt")))!.content.trim(), "");
+    assert.equal((await readStamped(join(root, ".agents", "state", "focus.txt")))!.content, "stale-selector\n", "item close ignores stale selector files");
 
     // ── createPlanAndBacklogItem transaction: item+plan+current together ──
     await makePlan(root, ".agents/plans/2026-06-22-a-two.md");
@@ -550,9 +546,18 @@ async function main() {
     await assert.rejects(() => ops.itemSetOwner(root, "COLT", "c-itm", "dave", O), ops.OpError, "double-claim guard");
     await ops.itemSetOwner(root, "COLT", "c-itm", "dave", { force: true, ...O });
     assert.equal(await field(BL("COLT"), "c-itm", "Owner"), "dave", "force reassigns");
-    await ops.itemSetOwner(root, "COLT", "c-itm", "-", O);
-    assert.equal(await field(BL("COLT"), "c-itm", "Owner"), null, "unassign drops Owner");
-    assert.equal(await field(BL("COLT"), "c-itm", "OwnerNote"), null, "unassign drops OwnerNote");
+    await assert.rejects(
+      () => ops.itemSetOwner(root, "COLT", "c-itm", "-", { expectedOwner: "carol", ...O }),
+      /owner changed.*expected 'carol'.*current 'dave'/,
+      "release refuses a stale expected owner",
+    );
+    assert.equal(await field(BL("COLT"), "c-itm", "Owner"), "dave", "owner survives a stale release");
+    await ops.itemSetOwner(root, "COLT", "c-itm", "erin", { expectedOwner: "dave", note: "handoff", ...O });
+    assert.equal(await field(BL("COLT"), "c-itm", "Owner"), "erin", "expected-owner handoff reassigns without force");
+    assert.equal(await field(BL("COLT"), "c-itm", "OwnerNote"), "handoff", "handoff note is preserved");
+    await ops.itemSetOwner(root, "COLT", "c-itm", "-", { expectedOwner: "erin", ...O });
+    assert.equal(await field(BL("COLT"), "c-itm", "Owner"), null, "expected-owner release drops Owner");
+    assert.equal(await field(BL("COLT"), "c-itm", "OwnerNote"), null, "expected-owner release drops OwnerNote");
     await ops.itemAdd(root, { task: "SOLOT" }, { id: "s-itm", title: "S" }, O);
     await assert.rejects(() => ops.itemSetOwner(root, "SOLOT", "s-itm", "x", O), ops.OpError, "owner gate refuses solo task");
 

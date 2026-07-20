@@ -49,8 +49,11 @@ export function section(md: string, heading: string): string {
   return body.join("\n").trim();
 }
 export interface PlanInfo {
+  id: string;
+  title: string;
   path: string;
   status: string;
+  pmLoop: boolean;
   goal: string;
   nextStep: string | null;
   postImplNotes: string;
@@ -60,18 +63,22 @@ export interface PlanInfo {
   worktree: string;
 }
 export function planInfo(path: string, md: string): PlanInfo {
+  const fields = parseFrontmatter(md).fields;
   const goal = section(md, "Goal").split(/\n\s*\n/)[0]?.trim() ?? "";
   const next = section(md, "Implementation Steps").split("\n").find((l) => /^-\s+\[ \]/.test(l.trim()));
   return {
+    id: getFmField(fields, "id") ?? "",
+    title: getFmField(fields, "title") ?? getFmField(fields, "id") ?? "",
     path,
-    status: frontmatterField(md, "status"),
+    status: getFmField(fields, "status") ?? "",
+    pmLoop: (getFmField(fields, "pm_loop") ?? "true").toLowerCase() !== "false",
     goal,
     nextStep: next ? next.trim().replace(/^-\s+\[ \]\s*/, "") : null,
     postImplNotes: postImplNotes(md),
-    baseBranch: frontmatterField(md, "base_branch"),
-    baseCommit: frontmatterField(md, "base_commit"),
-    branch: frontmatterField(md, "branch"),
-    worktree: frontmatterField(md, "worktree"),
+    baseBranch: getFmField(fields, "base_branch") ?? "",
+    baseCommit: getFmField(fields, "base_commit") ?? "",
+    branch: getFmField(fields, "branch") ?? "",
+    worktree: getFmField(fields, "worktree") ?? "",
   };
 }
 export function postImplNotes(md: string): string {
@@ -111,8 +118,8 @@ function candidateSort(a: Candidate, b: Candidate): number {
 // first unresolved target (in DependsOn order) is reported. Cross-task: DependsOn targets resolve
 // against every active task's backlog. A target that has left backlog (done/dropped/archived) or
 // is an inbox/unknown id does not block.
-// Returns sorted eligible + blocked (with blockedBy) + focus + inbox count. No auto-pick.
-export async function nextCandidates(root: string): Promise<{ eligible: Candidate[]; blocked: Candidate[]; focus: string | null; inbox: number }> {
+// Returns sorted eligible + blocked (with blockedBy) + inbox count. No auto-pick.
+export async function nextCandidates(root: string): Promise<{ eligible: Candidate[]; blocked: Candidate[]; inbox: number }> {
   const all: Candidate[] = [];
   for (const key of await listActiveTasks(root)) {
     const mode = await taskMode(root, key); // one read per task; attached to its candidates
@@ -127,9 +134,40 @@ export async function nextCandidates(root: string): Promise<{ eligible: Candidat
     if (blocker) { blocked.push({ ...c, blockedBy: blocker }); } else eligible.push(c);
   }
   eligible.sort(candidateSort);
-  const focusRaw = await read(pathJoin(root, ".agents", "state", "focus.txt"));
   const inbox = (await blocksOf(inboxPath(root))).length;
-  return { eligible, blocked, focus: focusRaw ? focusRaw.trim() || null : null, inbox };
+  return { eligible, blocked, inbox };
+}
+
+export type CurrentPlanView =
+  | { state: "empty" }
+  | { state: "linked"; pointer: string; plan: PlanInfo; item: Candidate }
+  | { state: "standalone"; pointer: string; plan: PlanInfo }
+  | { state: "stale"; pointer: string; reason: "invalid_pointer" | "missing_plan" | "terminal_plan" | "invalid_plan_status" | "unmapped_plan" | "unlinked_plan"; planStatus?: string };
+
+function validPlanPointer(pointer: string): boolean {
+  return pointer.startsWith(".agents/plans/") && !pointer.split(/[\\/]/).includes("..");
+}
+
+function hasExecutionMapping(info: PlanInfo): boolean {
+  return Boolean(info.baseBranch && /^[0-9a-f]{40}$/i.test(info.baseCommit) && info.branch && info.worktree);
+}
+
+// Dashboard/CLI projection of checkout-local current.txt. It deliberately reads no other selector.
+export async function resolveCurrentPlan(root: string, candidates?: { eligible: Candidate[]; blocked: Candidate[] }): Promise<CurrentPlanView> {
+  const pointer = (await read(pathJoin(root, ".agents", "state", "current.txt")))?.trim() ?? "";
+  if (!pointer) return { state: "empty" };
+  if (!validPlanPointer(pointer)) return { state: "stale", pointer, reason: "invalid_pointer" };
+  const md = await read(pathJoin(root, pointer));
+  if (!md) return { state: "stale", pointer, reason: "missing_plan" };
+  const info = planInfo(pointer, md);
+  if (info.status === "done" || info.status === "dropped") return { state: "stale", pointer, reason: "terminal_plan", planStatus: info.status };
+  if (info.status !== "draft" && info.status !== "active") return { state: "stale", pointer, reason: "invalid_plan_status", planStatus: info.status };
+  if (!hasExecutionMapping(info)) return { state: "stale", pointer, reason: "unmapped_plan", planStatus: info.status };
+  const nc = candidates ?? await nextCandidates(root);
+  const item = [...nc.eligible, ...nc.blocked].find((candidate) => candidate.plan === pointer);
+  if (item) return { state: "linked", pointer, plan: info, item };
+  if (!info.pmLoop) return { state: "standalone", pointer, plan: info };
+  return { state: "stale", pointer, reason: "unlinked_plan", planStatus: info.status };
 }
 
 // ── item join view ──

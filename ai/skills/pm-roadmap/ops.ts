@@ -151,16 +151,9 @@ function reaches(g: Map<string, string[]>, from: string, target: string): boolea
 }
 
 // ── pointers ──
-async function writeState(root: string, name: string, val: string): Promise<void> {
-  await mkdir(pathJoin(root, ".agents", "state"), { recursive: true });
-  await writeCAS(statePath(root, name), val ? `${val}\n` : "", null);
-}
 async function readState(root: string, name: string): Promise<string> {
   const s = await readStamped(statePath(root, name));
   return s ? s.content.trim() : "";
-}
-async function clearFocusIfNames(root: string, id: string): Promise<void> {
-  if ((await readState(root, "focus.txt")) === id) await writeState(root, "focus.txt", "");
 }
 async function clearCurrentIfNames(root: string, planPath: string): Promise<void> {
   let checkouts: string[];
@@ -315,13 +308,16 @@ async function _itemSetDeps(root: string, key: string, id: string, deps: string[
 }
 
 // Owner attribution (collab only). owner === "-" unassigns (drops Owner + OwnerNote).
-// Double-claim guard: refuse overwriting a different existing owner unless force.
-async function _itemSetOwner(root: string, key: string, id: string, owner: string, opts: { note?: string; force?: boolean }): Promise<void> {
+// expectedOwner provides a compare-and-set path for GUI release/handoff; force remains CLI-only.
+async function _itemSetOwner(root: string, key: string, id: string, owner: string, opts: { note?: string; force?: boolean; expectedOwner?: string }): Promise<void> {
   await assertCollab(root, key);
   const f = await loadBlocks(taskFile(root, key, "backlog.md"));
   const it = findItem(f.blocks, id);
   if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
   const cur = (getField(it, "Owner") ?? "").trim();
+  if (opts.expectedOwner !== undefined && cur !== opts.expectedOwner.trim()) {
+    throw new OpError(`owner changed for '${id}': expected '${opts.expectedOwner.trim() || "(unassigned)"}', current '${cur || "(unassigned)"}'`);
+  }
   if (owner === "-") { // unassign — drop attribution fields
     it.fields = it.fields.filter(([k]) => k.toLowerCase() !== "owner" && k.toLowerCase() !== "ownernote");
     await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
@@ -329,7 +325,7 @@ async function _itemSetOwner(root: string, key: string, id: string, owner: strin
   }
   const next = owner.trim();
   if (!next) throw new OpError("owner must be non-empty (or '-' to unassign)");
-  if (cur && cur !== next && !opts.force) throw new OpError(`item '${id}' already owned by '${cur}'; pass --force to reassign`);
+  if (cur && cur !== next && !opts.force && opts.expectedOwner === undefined) throw new OpError(`item '${id}' already owned by '${cur}'; pass --force to reassign`);
   setField(it, "Owner", next);
   if (opts.note !== undefined) setField(it, "OwnerNote", opts.note);
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
@@ -364,7 +360,6 @@ async function _itemClose(root: string, key: string, id: string, o: { status: "d
   cl.blocks.unshift(cb); // newest first
   await writeBlocks(taskFile(root, key, "backlog.md"), bl.title, bl.blocks);
   await writeBlocks(taskFile(root, key, "closed.md"), cl.title, cl.blocks);
-  await clearFocusIfNames(root, id);
 }
 
 async function _harvestApply(root: string, key: string, deferred: Deferred[], nowDate: string): Promise<void> {
@@ -394,18 +389,6 @@ async function _triage(root: string, id: string, toKey: string): Promise<void> {
   bl.blocks.push(it);
   await writeBlocks(inboxPath(root), inbox.title || "_INBOX — Inbox", inbox.blocks);
   await writeBlocks(taskFile(root, toKey, "backlog.md"), bl.title || `${toKey} — Backlog`, bl.blocks);
-}
-
-async function _focusSet(root: string, id: string): Promise<void> {
-  if ((await loadBlocks(inboxPath(root))).blocks.some((b) => b.id === id)) {
-    throw new OpError(`cannot focus inbox item '${id}' — triage it to a task first`);
-  }
-  let found = false;
-  for (const key of await listTaskKeys(root)) {
-    if (findItem((await loadBlocks(taskFile(root, key, "backlog.md"))).blocks, id)) { found = true; break; }
-  }
-  if (!found) throw new OpError(`focus target '${id}' is not an open backlog item`);
-  await writeState(root, "focus.txt", id);
 }
 
 async function _setPlanStatus(root: string, planRel: string, status: string): Promise<void> {
@@ -514,8 +497,8 @@ export const taskRestore = (root: string, key: string, o: { nowDate?: string } &
 export const itemAdd = (root: string, target: { task: string } | { inbox: true }, it: ItemInput, o: { nowDate?: string } & LockOpts = {}) =>
   withLock(root, "itemAdd", () => _itemAdd(root, target, it, o.nowDate ?? today()), o);
 
-export const itemSetOwner = (root: string, key: string, id: string, owner: string, o: { note?: string; force?: boolean } & LockOpts = {}) =>
-  withLock(root, "itemSetOwner", () => _itemSetOwner(root, key, id, owner, { note: o.note, force: o.force }), o);
+export const itemSetOwner = (root: string, key: string, id: string, owner: string, o: { note?: string; force?: boolean; expectedOwner?: string } & LockOpts = {}) =>
+  withLock(root, "itemSetOwner", () => _itemSetOwner(root, key, id, owner, { note: o.note, force: o.force, expectedOwner: o.expectedOwner }), o);
 
 export const itemApprove = (root: string, key: string, id: string, o: LockOpts = {}) =>
   withLock(root, "itemApprove", () => _approvePlanAndItem(root, key, id, o.transaction), o);
@@ -543,10 +526,6 @@ export const harvest = (root: string, key: string, deferred: Deferred[], o: { no
 
 export const triage = (root: string, id: string, toKey: string, o: LockOpts = {}) =>
   withLock(root, "triage", () => _triage(root, id, toKey), o);
-
-export const focusSet = (root: string, id: string, o: LockOpts = {}) => withLock(root, "focusSet", () => _focusSet(root, id), o);
-export const focusClear = (root: string, o: LockOpts = {}) => withLock(root, "focusClear", () => writeState(root, "focus.txt", ""), o);
-export const setFocus = focusSet;
 
 export const reservedIds = (root: string, o: LockOpts = {}) => withLock(root, "reservedIds", () => reservedIdsImpl(root), o);
 
@@ -762,7 +741,6 @@ export const completePlanFromRetro = (
     await makeTarget(root, backlogPath, regularDescriptor(serializeBlocks(backlog.title, backlog.blocks))),
     await makeTarget(root, closedPath, regularDescriptor(serializeBlocks(closed.title, closed.blocks))),
   ], opt.transaction);
-  await clearFocusIfNames(root, id);
   await clearCurrentIfNames(root, opt.planPath);
 }, opt);
 
