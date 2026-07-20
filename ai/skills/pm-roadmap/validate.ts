@@ -141,18 +141,6 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
   const cyc = findDepCycle(depEdges);
   if (cyc) err("C15", cyc[0], `dependency cycle: ${cyc.join(" → ")}`);
 
-  // C8 — focus names a backlog item (some active task), not inbox
-  const focus = await readState(root, "focus.txt");
-  if (focus) {
-    const inInbox = (await blocksOf(inboxPath(root))).some((b) => b.id === focus);
-    if (inInbox) err("C8", focus, "focus names an _INBOX item (triage first)");
-    else {
-      let ok = false;
-      for (const key of keys) if ((await blocksOf(taskFile(root, key, "backlog.md"))).some((b) => b.id === focus)) { ok = true; break; }
-      if (!ok) err("C8", focus, "focus names no open backlog item");
-    }
-  }
-
   // C3/C9 — current.txt points to a draft|active plan linked by exactly one backlog item (unless pm_loop:false)
   const current = await readState(root, "current.txt");
   if (current) {

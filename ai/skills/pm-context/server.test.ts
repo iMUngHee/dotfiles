@@ -23,6 +23,21 @@ async function main() {
     assert.equal("closed" in (r.json as any), false, "default task GET shape omits closed projection");
     assert.equal("closedTotal" in (r.json as any), false, "default task GET shape omits closedTotal");
 
+    const savedActor = process.env.PM_ACTOR;
+    process.env.PM_ACTOR = "server-actor";
+    r = await handle(root, "GET", "/api/actor", P, undefined);
+    assert.deepEqual(r.json, { actor: "server-actor", source: "PM_ACTOR" }, "actor endpoint exposes identity and source");
+    if (savedActor === undefined) delete process.env.PM_ACTOR; else process.env.PM_ACTOR = savedActor;
+    const savedGlobal = process.env.GIT_CONFIG_GLOBAL, savedSystem = process.env.GIT_CONFIG_SYSTEM;
+    delete process.env.PM_ACTOR;
+    process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+    process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+    r = await handle(root, "GET", "/api/actor", P, undefined);
+    assert.deepEqual(r.json, { actor: "", source: "" }, "actor endpoint exposes unavailable identity without inventing one");
+    if (savedActor === undefined) delete process.env.PM_ACTOR; else process.env.PM_ACTOR = savedActor;
+    if (savedGlobal === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = savedGlobal;
+    if (savedSystem === undefined) delete process.env.GIT_CONFIG_SYSTEM; else process.env.GIT_CONFIG_SYSTEM = savedSystem;
+
     // task list with counts
     r = await handle(root, "GET", "/api/tasks", P, undefined);
     assert.ok((r.json as any[]).some((t) => t.key === "ALPHA" && t.linkCount === 1 && t.memCount === 1));
@@ -35,6 +50,21 @@ async function main() {
     const soloRow = (r.json as any).open.find((i: any) => i.id === "a-1");
     assert.equal(soloRow.owner, "", "solo open[] owner empty");
     assert.equal(soloRow.mode, "solo", "solo open[] mode solo");
+
+    // GUI-safe Task/Item creation and organization routes.
+    r = await handle(root, "POST", "/api/tasks", P, { key: "BROWSER", title: "Browser Task" });
+    assert.equal(r.status, 201, "Task creation route succeeds");
+    r = await handle(root, "POST", "/api/tasks/BROWSER/items", P, { id: "browser-item", title: "Browser item", priority: "P2", order: "2", note: "created in GUI" });
+    assert.equal(r.status, 201, "Item creation route succeeds");
+    r = await handle(root, "POST", "/api/roadmap/browser-item/reprioritize", P, { priority: "P1" });
+    assert.equal(r.status, 200, "priority route succeeds");
+    r = await handle(root, "POST", "/api/roadmap/browser-item/reorder", P, { order: "3" });
+    assert.equal(r.status, 200, "order route succeeds");
+    r = await handle(root, "POST", "/api/roadmap/browser-item/depend", P, { dependsOn: ["a-1"] });
+    assert.equal(r.status, 200, "dependency route succeeds");
+    r = await handle(root, "GET", "/api/roadmap/browser-item/join", P, undefined);
+    assert.equal((r.json as any).item.priority, "P1");
+    assert.deepEqual((r.json as any).item.dependsOn, ["a-1"]);
 
     // open[] additive nextStep (pm-dashboard-rebuild): existing plan path field preserved; nextStep read from the plan.
     assert.equal(soloRow.plan, null, "open[] plan path unchanged (null when item has no plan)");
@@ -63,17 +93,21 @@ async function main() {
     assert.ok(r.text?.includes("codex -C .agents/worktrees/agent/b-step"), "copied prompt roots Codex in the worktree");
     assert.ok(r.text?.includes("cd .agents/worktrees/agent/b-step && claude"), "copied prompt roots Claude in the worktree");
 
-    // inFlight (dashboard-inflight-surface): /api/roadmap resolves current.txt → the open item whose Plan matches.
+    // Structured currentPlan: empty, linked, then stale.
     r = await handle(root, "GET", "/api/roadmap", P, undefined);
-    assert.equal((r.json as any).inFlight, null, "no current.txt → inFlight null");
+    assert.equal((r.json as any).currentPlan.state, "empty", "no current.txt → empty currentPlan");
     await mkdir(join(root, ".agents", "state"), { recursive: true });
     await writeFile(join(root, ".agents", "state", "current.txt"), stepRel + "\n");
     r = await handle(root, "GET", "/api/roadmap", P, undefined);
-    assert.equal((r.json as any).inFlight, "b-step", "current.txt → in-flight open item id (newline trimmed)");
-    // non-matching (non-canonical / stale / standalone) path degrades to null, not a throw (R1 suggestion 1)
+    assert.equal((r.json as any).currentPlan.state, "linked", "current.txt → linked current plan");
+    assert.equal((r.json as any).currentPlan.item.id, "b-step", "linked current plan exposes its item");
+    r = await handle(root, "GET", "/api/current-plan/next", P, undefined);
+    assert.equal(r.status, 200, "linked current plan exposes a resume prompt");
+    assert.ok(r.text?.includes("codex -C .agents/worktrees/agent/b-step"));
     await writeFile(join(root, ".agents", "state", "current.txt"), ".agents/plans/2026-01-01-nonexistent.md\n");
     r = await handle(root, "GET", "/api/roadmap", P, undefined);
-    assert.equal((r.json as any).inFlight, null, "non-matching current.txt path → inFlight null");
+    assert.equal((r.json as any).currentPlan.state, "stale", "missing plan → stale currentPlan");
+    assert.equal((r.json as any).currentPlan.reason, "missing_plan");
     await rm(join(root, ".agents", "state", "current.txt"), { force: true }); // pristine state for later tests
 
     // join + validate — join nests into showItem's shape (item / task / contextLinks / contextMemory)
@@ -112,30 +146,16 @@ async function main() {
     r = await handle(root, "GET", "/api/next", P, undefined);
     assert.ok(Array.isArray((r.json as any).eligible) && Array.isArray((r.json as any).blocked), "next buckets");
     assert.ok((r.json as any).eligible.some((c: any) => c.id === "a-1"), "a-1 eligible");
+    assert.equal("focus" in (r.json as any), false, "next has no legacy selector field");
 
-    // focus set + clear via ops
+    // Removed legacy routes stay absent, and stale checkout files do not affect reads.
     r = await handle(root, "POST", "/api/focus", P, { id: "a-1" });
-    assert.equal((r.json as any).focus, "a-1", "focus set");
-    r = await handle(root, "GET", "/api/next", P, undefined);
-    assert.equal((r.json as any).focus, "a-1", "next reflects focus");
-    r = await handle(root, "POST", "/api/focus", P, { id: "" });
-    assert.equal((r.json as any).focus, null, "focus cleared");
-    // focus rejects a non-open id → 409
-    r = await handle(root, "POST", "/api/focus", P, { id: "nope" });
-    assert.equal(r.status, 409, "focus on unknown id refused");
-
-    // dock-stale-focus-guard: a stale focus.txt (points to a non-open id — reachable because a
-    // per-worktree focus.txt isn't cleared when another worktree closes the item) must be nulled on
-    // /api/roadmap (so the dock falls through to next-up) while /api/next keeps it raw. a-1 is open here.
-    await writeFile(join(root, ".agents", "state", "focus.txt"), "ghost\n"); // stale: not in open[]
+    assert.equal(r.status, 404, "removed selector route stays absent");
+    r = await handle(root, "GET", "/api/current", P, undefined);
+    assert.equal(r.status, 404, "removed current-task compatibility route stays absent");
+    await writeFile(join(root, ".agents", "state", "focus.txt"), "ghost\n");
     r = await handle(root, "GET", "/api/roadmap", P, undefined);
-    assert.equal((r.json as any).focus, null, "roadmap nulls a stale focus (not in open[])");
-    r = await handle(root, "GET", "/api/next", P, undefined);
-    assert.equal((r.json as any).focus, "ghost", "next keeps raw stale focus (intentional asymmetry)");
-    await writeFile(join(root, ".agents", "state", "focus.txt"), "a-1\n"); // valid: a-1 is open
-    r = await handle(root, "GET", "/api/roadmap", P, undefined);
-    assert.equal((r.json as any).focus, "a-1", "roadmap preserves a valid (open) focus");
-    await writeFile(join(root, ".agents", "state", "focus.txt"), ""); // restore cleared state for later tests
+    assert.equal("focus" in (r.json as any), false, "stale selector file is ignored by roadmap reads");
 
     // planless drop through ops
     r = await handle(root, "POST", "/api/roadmap/a-1/drop", P, { reason: "no" });
@@ -169,6 +189,21 @@ async function main() {
     assert.deepEqual((r.json as any).item.dependsOn, ["b-step"], "join item exposes dependsOn");
     assert.equal((r.json as any).contextLinks[0].by, "alice", "join contextLinks exposes by");
     assert.equal((r.json as any).contextMemory[0].by, "bob", "join contextMemory exposes by");
+
+    const actorBeforeClaims = process.env.PM_ACTOR;
+    process.env.PM_ACTOR = "server-actor";
+    r = await handle(root, "POST", "/api/roadmap/c-1/claim", P, {});
+    assert.equal(r.status, 409, "claim never force-overwrites another owner");
+    r = await handle(root, "POST", "/api/roadmap/c-1/handoff", P, { expectedOwner: "alice", owner: "carol", note: "take over" });
+    assert.equal(r.status, 200, "matching-owner handoff succeeds");
+    assert.equal((r.json as any).owner, "carol");
+    r = await handle(root, "POST", "/api/roadmap/c-1/release", P, { expectedOwner: "alice" });
+    assert.equal(r.status, 409, "stale release conflicts");
+    r = await handle(root, "POST", "/api/roadmap/c-1/release", P, { expectedOwner: "carol" });
+    assert.equal(r.status, 200, "matching-owner release succeeds");
+    assert.equal((r.json as any).owner, null);
+    if (actorBeforeClaims === undefined) delete process.env.PM_ACTOR; else process.env.PM_ACTOR = actorBeforeClaims;
+
     r = await handle(root, "GET", "/api/tasks/COLLAB", P, undefined);
     assert.equal((r.json as any).links[0].by, "alice", "task GET exposes link by");
     assert.equal((r.json as any).memory[0].by, "bob", "task GET exposes memory by");

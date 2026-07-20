@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
-description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add/close/focus a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | triage ... | focus ... | memory ... | links ... | manage"
+description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add or close a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
+argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | triage ... | memory ... | links ... | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -39,7 +39,7 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
     archive/<KEY>/              # torn-down tasks (writes refused; ids stay reserved)
     .lock/                      # transient token-owned directory lock; absent while idle
   plans/*.md                    # design plans (frontmatter `pm_loop: true|false`)
-  state/  current.txt  focus.txt
+  state/  current.txt  actor.txt
 ```
 
 - **task.md**: `status: active | done | archived`. `done` when all items closed; auto-reopens
@@ -56,7 +56,7 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
 - **Plan**: 1:1 — at most one item (backlog or closed, any task) per plan path.
 - **pointers**: main `current.txt` selects the launcher plan; each managed worktree has a
   local execution `current.txt`. Every writer uses checkout-local lock+content-CAS.
-  `focus.txt` and `actor.txt` remain checkout-local.
+  `current.txt` and `actor.txt` remain checkout-local.
 
 ## Single write path
 
@@ -76,7 +76,7 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
 
 - **list** / **tree** — eligible next candidates (sorted `priority, taskKey, order, id`) + blocked + inbox count / per-task backlog. In collab tasks both show an `@owner` / `(unassigned)` badge (tree also marks `[collab]`); **list** default-filters collab items to *me + unassigned* (`--owner X` to filter by another, `--all` to show everything; solo items always shown).
 - **get `<id>`** — an item's join view (plan goal + next step, task links + memory, recent done-sibling notes, note).
-- **next `[id]` `[--owner X]` `[--all]`** — paste-ready kickoff prompt. Target: explicit id, else focus, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). The candidate-list path applies the same collab default filter as `list` (me + unassigned; `--owner`/`--all` override); an explicit id/focus bypasses the filter. The prompt surfaces item owner + handoff note and memory/link `By` for collab tasks. After emitting, ask whether to run it **here** (no copy — proceed into `/design <id>`, or resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
+- **next `[id]` `[--owner X]` `[--all]`** — paste-ready kickoff prompt. Target: explicit id, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). The candidate-list path applies the same collab default filter as `list` (me + unassigned; `--owner`/`--all` override); an explicit id bypasses the filter. The prompt surfaces item owner + handoff note and memory/link `By` for collab tasks. After emitting, ask whether to run it **here** (no copy — proceed into `/design <id>`, or resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
 - **recent** — derived recent-closed view (all `closed.md` merged by date, capped).
 - **validate** — full-scan invariant check (C1..C13; see below). Exit 1 on errors. `/retro` runs it after its sink.
 - **migrate `[--apply]`** — convert a legacy repo's `.agents/` to the task-first model. Default dry-run (prints the mapping). `--apply` after review. See Migration.
@@ -101,11 +101,11 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
   JSON outcomes. Terminal cleanup is
   `worktree prune --plan <done-or-dropped-plan>`; the engine derives and revalidates its
   mapping. Main is never an execution mapping.
-- **plan / reprioritize / reorder / depend / close / drop / triage / focus** — lower-level
+- **plan / reprioritize / reorder / depend / close / drop / triage** — lower-level
   item transitions and escape hatches. Design/retro use the lifecycle commands above.
 - **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
 - **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
-- **current-task** — read-only: prints the KEY of the task owning the `focus` item (empty if no focus). pm-context's default-`KEY` resolver for `get`.
+- **current-task** — read-only: prints the KEY of the Task linked to the selected current plan. Empty for no selection, standalone plans, stale plans, and terminal plans. pm-context uses it as the default-`KEY` resolver for `get`.
 - **manage** — open the dashboard GUI (see below).
 
 ## Lifecycle (automatic — implemented in /design and /retro)
@@ -184,7 +184,7 @@ attribution (no error), since retro/pm-context call them on solo tasks too.
 to *me + unassigned* (`--owner`/`--all` override); `mine` = my open items, `who` = per-owner board.
 A non-empty `collaborators` roster turns on a C13 typo-guard warning (owner ∉ roster).
 
-**Assumption.** Each person works in their own checkout/worktree, so `state/{current,focus,actor}.txt`
+**Assumption.** Each person works in their own checkout/worktree, so `state/{current,actor}.txt`
 are per-person; two people sharing one checkout would collide on those worktree-local pointers.
 
 ## Worktrees

@@ -47,7 +47,7 @@ async function main() {
     assert.equal(sibAll.length, 6, "cap=0 → all 6 siblings");
     assert.ok(sibAll.some((s) => s.id === "a-1"), "oldest present when unlimited");
 
-    // ── next candidates: Order gate + blocked focus reporting + inbox exclusion ──
+    // ── next candidates: Order gate + inbox exclusion; no persisted selector projection ──
     await ops.taskCreate(root, "C", "Task C", O);
     await ops.itemAdd(root, { task: "C" }, { id: "c-1", title: "C1", order: "1" }, O);
     await ops.itemAdd(root, { task: "C" }, { id: "c-2", title: "C2", order: "2" }, O);
@@ -59,6 +59,7 @@ async function main() {
     assert.ok(c2 && c2.blockedBy === "c-1", "c-2 blocked by c-1");
     assert.ok(!nc.eligible.some((c) => c.id === "inb-1") && !nc.blocked.some((c) => c.id === "inb-1"), "inbox excluded");
     assert.equal(nc.inbox, 1);
+    assert.equal("focus" in nc, false, "candidate projection has no legacy selector field");
 
     // deterministic sort: a-cur (P2, key A) before c-1 (P2, key C)
     const order = nc.eligible.map((c) => `${c.key}/${c.id}`);
@@ -77,7 +78,7 @@ id: a-current
 status: active
 pm_loop: true
 base_branch: main
-base_commit: abc123
+base_commit: 0123456789012345678901234567890123456789
 branch: agent/a-current
 worktree: .agents/worktrees/agent/a-current
 ---
@@ -88,6 +89,35 @@ worktree: .agents/worktrees/agent/a-current
 - [ ] wire the mapped checkout
 `);
     await ops.itemSetPlan(root, "A", "a-cur", currentPlan, O);
+    await mkdir(join(root, ".agents", "state"), { recursive: true });
+    await writeFile(join(root, ".agents", "state", "current.txt"), `${currentPlan}\n`);
+    const linkedCurrent = await j.resolveCurrentPlan(root);
+    assert.equal(linkedCurrent.state, "linked");
+    assert.equal(linkedCurrent.state === "linked" ? linkedCurrent.item.key : null, "A");
+    assert.equal(linkedCurrent.state === "linked" ? linkedCurrent.plan.nextStep : null, "wire the mapped checkout");
+
+    const standalonePlan = ".agents/plans/2026-06-22-standalone.md";
+    await writeFile(join(root, standalonePlan), `---
+id: standalone
+title: Standalone
+status: active
+pm_loop: false
+base_branch: main
+base_commit: 0123456789012345678901234567890123456789
+branch: agent/standalone
+worktree: .agents/worktrees/standalone
+---
+# standalone
+`);
+    await writeFile(join(root, ".agents", "state", "current.txt"), `${standalonePlan}\n`);
+    assert.equal((await j.resolveCurrentPlan(root)).state, "standalone");
+    await writeFile(join(root, ".agents", "state", "current.txt"), ".agents/plans/missing.md\n");
+    const staleCurrent = await j.resolveCurrentPlan(root);
+    assert.equal(staleCurrent.state, "stale");
+    assert.equal(staleCurrent.state === "stale" ? staleCurrent.reason : null, "missing_plan");
+    await writeFile(join(root, ".agents", "state", "current.txt"), "");
+    assert.equal((await j.resolveCurrentPlan(root)).state, "empty");
+
     const view = await j.resolveItem(root, "A", "a-cur");
     assert.ok(view && view.key === "A" && !view.closed);
     assert.equal(view!.siblings.length, 5);
@@ -102,7 +132,7 @@ worktree: .agents/worktrees/agent/a-current
     assert.ok(prompt.includes("branch: agent/a-current · worktree: .agents/worktrees/agent/a-current"));
     assert.ok(prompt.includes("codex -C .agents/worktrees/agent/a-current"));
     assert.ok(prompt.includes("cd .agents/worktrees/agent/a-current && claude"));
-    assert.equal(view!.plan?.baseCommit, "abc123");
+    assert.equal(view!.plan?.baseCommit, "0123456789012345678901234567890123456789");
 
     // closed item is also resolvable
     const closedView = await j.resolveItem(root, "A", "a-6");

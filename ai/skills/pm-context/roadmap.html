@@ -3,597 +3,942 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>pm · roadmap</title>
+<title>Task Desk · pm</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Ctext x='7' y='21' fill='white' font-family='monospace' font-size='13'%3Epm%3C/text%3E%3C/svg%3E">
 <style>
-  :root{
-    --bg:#f6f8fa; --surface:#ffffff; --surface-2:#f0f4f8; --border:#e4e9ef; --border-strong:#d3dbe3;
-    --text:#1a2430; --muted:#5b6b7a; --faint:#647484;
-    --accent:#0d9488; --accent-strong:#0f766e; --accent-hover:#115e59; --accent-weak:#e6f4f2; --accent-line:#a7ddd6;
-    --p0:#b42318; --p1:#b54708; --p2:#92600a; --p3:#475467;
-    --ok:#16a34a; --warn:#b54708; --err:#b42318;
-    --shadow-sm:0 1px 2px rgba(16,24,40,.05);
-    --shadow-md:0 1px 2px rgba(16,24,40,.04),0 6px 20px rgba(16,24,40,.06);
-    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  :root {
+    --page: #f4f7f9;
+    --surface: #ffffff;
+    --surface-2: #edf3f5;
+    --border: #d9e2e7;
+    --border-strong: #aebcc5;
+    --ink: #17232d;
+    --muted: #61717d;
+    --accent: #0f766e;
+    --accent-hover: #0b5f59;
+    --accent-pressed: #084b47;
+    --accent-tint: #e3f3f1;
+    --success: #166534;
+    --warning: #a16207;
+    --danger: #b42318;
+    --p0-bg: #feeceb;
+    --p1: #b54708;
+    --p1-bg: #fff1e8;
+    --p2: #8a5800;
+    --p2-bg: #fff8e4;
+    --p3: #475467;
+    --p3-bg: #eef1f5;
+    --shadow-current: 0 14px 34px rgba(23, 35, 45, .08), 0 2px 5px rgba(23, 35, 45, .05);
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   }
-  *{box-sizing:border-box}
-  html,body{margin:0}
-  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased;padding:0 0 48px}
-  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
-  a{color:inherit;text-decoration:none}
-  button{font-family:inherit;font-size:12.5px;color:var(--muted);background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;padding:7px 14px;cursor:pointer;transition:border-color .12s,color .12s,background .12s}
-  button:hover{color:var(--accent-strong);border-color:var(--accent-line)}
-  button.primary{background:var(--accent-strong);color:#fff;border-color:var(--accent-strong);font-weight:600;box-shadow:var(--shadow-sm)}
-  button.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff}
-  button.danger:hover{color:var(--err);border-color:#f4c4bf}
-  button:disabled{color:#5b6b7a;background:#eef2f6;border-color:#d3dbe3;cursor:wait;box-shadow:none}
-  button.primary:disabled{color:#345a57;background:#d9e8e7;border-color:#a7c8c5}
-  button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=link]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  input,textarea{font-family:var(--mono);font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:7px;padding:7px 9px;width:100%}
-  textarea{resize:vertical;min-height:44px;line-height:1.5}
-  .mono{font-family:var(--mono)}
-  .chip{font-family:var(--mono);font-size:10.5px;font-weight:600;padding:2px 7px;letter-spacing:.02em;border-radius:5px;white-space:nowrap}
-  .chip.p0{color:var(--p0);background:#fef3f2;border:1px solid #fecdc9}
-  .chip.p1{color:var(--p1);background:#fff6ed;border:1px solid #fdddb0}
-  .chip.p2{color:var(--p2);background:#fffaeb;border:1px solid #fee38a}
-  .chip.p3{color:var(--p3);background:#f2f4f7;border:1px solid #e2e7ee}
-  /* header */
-  header{display:flex;align-items:center;justify-content:space-between;height:60px;border-bottom:1px solid var(--border);margin-bottom:26px}
-  .brand{font-size:14px;letter-spacing:.01em;color:var(--muted);display:flex;align-items:center}
-  .brand b{color:var(--text);font-weight:700}
-  .crumb{color:var(--faint)} .crumb a:hover{color:var(--accent)}
-  .tasklink{color:var(--accent-strong);border-bottom:1px solid transparent} .tasklink:hover{border-bottom-color:var(--accent-line)}
-  .owners{display:flex;flex-wrap:wrap;gap:8px}
-  .ochip{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:5px 12px;box-shadow:var(--shadow-sm)}
-  .ochip .odot{width:7px;height:7px;border-radius:50%;background:var(--accent)} .ochip b{color:var(--text)}
-  .proj{font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--muted);border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:2px 8px;margin-left:12px}
-  .htools{display:flex;align-items:center;gap:12px}
-  .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:5px 12px;cursor:pointer;box-shadow:var(--shadow-sm)}
-  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
-  .pill.has-err{color:var(--warn);border-color:#fee38a} .pill.has-err .dot{background:var(--warn)}
-  /* conflict / error banner */
-  #banner{margin-bottom:16px}
-  .banner{border:1px solid #f4c4bf;background:#fef3f2;color:#912018;border-radius:9px;padding:11px 14px;font-size:12.5px;display:flex;gap:10px;align-items:flex-start;white-space:pre-wrap;box-shadow:var(--shadow-sm)}
-  .banner .k{color:var(--err);font-weight:700;letter-spacing:.06em;text-transform:uppercase;flex:none}
-  .banner button{margin-left:auto;flex:none;border:none;padding:2px 8px;background:none}
-  #status:not(:empty){margin:-6px 0 16px;color:var(--accent-strong);font-size:12px;font-weight:600}
-  .aux-unavailable{color:var(--warn)!important}
-  /* dock — next-up carried by an accent rail + elevation + reserved CTA (structural, not type scale) */
-  .dock{position:relative;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:18px 22px 18px;margin-bottom:26px;box-shadow:var(--shadow-md)}
-  .dock .rlabel{display:flex;align-items:center;gap:8px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-strong);font-weight:600;margin-bottom:12px}
-  .dock .rlabel .live{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
-  .dock .body{display:grid;grid-template-columns:1fr auto;gap:26px;align-items:start}
-  .dock .main{min-width:0}
-  .dock .line1{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
-  .dock .id{font-family:var(--mono);font-size:16px;color:var(--text);font-weight:600}
-  .dock .id a:hover{color:var(--accent-strong)}
-  .dock .title{font-size:14px;color:var(--muted)}
-  .dock .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:6px;letter-spacing:.02em}
-  .dock .actions{display:flex;flex-direction:column;gap:8px;min-width:160px}
-  /* secondary focus card: flat (no elevation / no live dot), tucked under the primary dock */
-  .dock.secondary{box-shadow:none;background:var(--surface-2);margin-top:-14px}
-  .dock.secondary .rlabel{color:var(--muted)}
-  .nextstep{font-family:var(--mono);font-size:12px;color:var(--accent-strong);background:var(--accent-weak);border-radius:7px;padding:7px 11px;margin:13px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .nextstep .k{color:var(--accent-strong);font-weight:600}
-  /* section labels + queue */
-  .seclabel{display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px}
-  .seclabel .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
-  .seclabel .cnt{font-size:11px;color:var(--faint);letter-spacing:.04em}
-  .rows{border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .row{display:grid;grid-template-columns:16px 44px minmax(0,220px) 1fr minmax(150px,max-content);align-items:center;gap:13px;min-height:38px;padding:0 14px;border-bottom:1px solid var(--border);font-size:12.5px;cursor:pointer}
-  .row:last-child{border-bottom:none}
-  .row:hover{background:var(--surface-2)} .row:hover .tick{color:var(--accent)}
-  .row .tick{color:var(--faint);font-size:11px}
-  .row .rid{font-family:var(--mono);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .row .rtitle{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .row .rtask{font-family:var(--mono);font-size:10.5px;color:var(--faint);text-align:right;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .subhead{font-size:10px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;font-weight:600;margin:20px 2px 8px}
-  .row.blocked{opacity:.6;cursor:default} .row.blocked:hover{background:var(--surface)}
-  /* footer chips */
-  .foot{display:flex;gap:12px;margin-top:22px}
-  .fchip{flex:1;font-size:12px;color:var(--muted);padding:12px 15px;border:1px solid var(--border);border-radius:10px;background:var(--surface);letter-spacing:.02em;text-align:left;cursor:pointer;box-shadow:var(--shadow-sm)}
-  .fchip:hover{border-color:var(--accent-line);color:var(--text)}
-  .fchip b{color:var(--text);font-weight:700;font-size:15px} .fchip .lbl{display:block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
-  .fchip .ok{color:var(--ok)} .fchip .warn{color:var(--warn)}
-  /* empty / mono cli hint */
-  .empty{padding:26px 6px;color:var(--muted);font-size:12.5px}
-  .empty .cli{display:inline-block;margin-top:8px;color:var(--accent-strong);background:var(--accent-weak);border:1px solid var(--accent-line);border-radius:7px;padding:6px 10px}
-  /* skeleton */
-  .sk{height:38px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,#eef2f6,#f7f9fb,#eef2f6);background-size:200% 100%;animation:sh 1.2s linear infinite}
-  @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
-  /* detail / task views */
-  .toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
-  .toolbar .grp{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
-  .toolbar .id{font-family:var(--mono);font-size:15px;color:var(--text);font-weight:600}
-  .tabs{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;width:fit-content;margin-bottom:18px;background:var(--surface);box-shadow:var(--shadow-sm)}
-  .tabs button{border:none;border-right:1px solid var(--border);border-radius:0;letter-spacing:.1em;text-transform:uppercase;font-size:10.5px;padding:9px 16px;background:none}
-  .tabs button:last-child{border-right:none}
-  .tabs button[aria-selected=true]{color:var(--accent-strong);background:var(--accent-weak);font-weight:600}
-  .card{border:1px solid var(--border);border-radius:11px;padding:16px 18px;margin-bottom:14px;background:var(--surface);box-shadow:var(--shadow-sm)}
-  .card h3{margin:0 0 10px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
-  .kv{display:grid;grid-template-columns:130px 1fr;gap:8px 16px;font-size:12.5px}
-  .kv dt{color:var(--faint);letter-spacing:.04em;text-transform:uppercase;font-size:10px;padding-top:2px}
-  .kv dd{margin:0;color:var(--text);word-break:break-word}
-  .kv dd.mut{color:var(--muted)}
-  .by{font-family:var(--mono);font-size:9px;color:var(--accent-strong);background:var(--accent-weak);border:1px solid var(--accent-line);border-radius:4px;padding:1px 5px;margin-left:8px;letter-spacing:.04em}
-  .edit-row{border:1px solid var(--border);border-radius:9px;padding:13px;margin-bottom:11px;display:grid;gap:9px;background:var(--surface)}
-  .edit-row .head{display:flex;align-items:center;gap:8px}
-  .edit-row .head input{font-weight:600}
-  .edit-row label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:3px}
-  .task-create{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:8px 12px;align-items:end;margin-bottom:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow-sm)}
-  .task-create label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
-  .task-create .hint{grid-column:1/-1;color:var(--muted);font-size:11px}
-  .prose{font-size:12.5px;color:var(--muted);line-height:1.55;white-space:pre-wrap;word-break:break-word;padding:8px 0;border-bottom:1px solid var(--border)}
-  .prose:last-child{border-bottom:none}
-  .datehint{color:var(--faint);font-size:10.5px}
-  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-  @media (max-width:900px){.wrap{padding:0 16px}.row{grid-template-columns:16px 40px 1fr 92px}.row .rtitle{display:none}.kv{grid-template-columns:1fr}.dock .body{grid-template-columns:1fr;gap:16px}.dock .actions{flex-direction:row;flex-wrap:wrap;min-width:0}.foot{flex-wrap:wrap}.task-create{grid-template-columns:1fr}}
+  * { box-sizing: border-box; }
+  html { background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 14px; }
+  body { margin: 0; min-width: 320px; }
+  button, input, select, textarea { color: inherit; font: inherit; }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  a { color: inherit; text-decoration: none; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .58; }
+  :focus-visible { outline: 3px solid rgba(15, 118, 110, .32); outline-offset: 2px; }
+  .skip-link { background: var(--ink); color: white; left: 12px; padding: 9px 12px; position: fixed; top: -60px; z-index: 100; }
+  .skip-link:focus { top: 8px; }
+  .mono { font-family: var(--mono); }
+  .visually-hidden { height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px; clip: rect(0 0 0 0); white-space: nowrap; }
+  .muted { color: var(--muted); }
+  .danger-text { color: var(--danger); }
+  .warning-text { color: var(--warning); }
+  .success-text { color: var(--success); }
+  .eyebrow { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .1em; margin: 0 0 8px; text-transform: uppercase; }
+  .topbar { align-items: center; background: rgba(244, 247, 249, .96); border-bottom: 1px solid var(--border); display: grid; gap: 18px; grid-template-columns: 232px minmax(260px, 720px) 1fr; height: 58px; padding: 0 20px; position: sticky; top: 0; z-index: 20; }
+  .brand { align-items: center; display: flex; font-weight: 750; gap: 9px; letter-spacing: -.01em; }
+  .brand-mark { align-items: center; background: var(--accent); border-radius: 7px; color: white; display: inline-flex; font-family: var(--mono); font-size: 12px; height: 28px; justify-content: center; width: 28px; }
+  .menu-button { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; display: none; height: 40px; width: 40px; }
+  .global-search { position: relative; }
+  .global-search input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; height: 36px; padding: 0 38px 0 36px; width: 100%; }
+  .global-search svg { color: var(--muted); height: 16px; left: 12px; pointer-events: none; position: absolute; top: 10px; width: 16px; }
+  .search-shortcut { color: var(--muted); font-family: var(--mono); font-size: 11px; position: absolute; right: 11px; top: 10px; }
+  .search-results { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-current); left: 0; max-height: 360px; overflow: auto; padding: 6px; position: absolute; right: 0; top: 42px; z-index: 30; }
+  .search-results[hidden] { display: none; }
+  .search-result { align-items: center; border-radius: 7px; display: grid; gap: 10px; grid-template-columns: 50px 1fr auto; min-height: 44px; padding: 7px 9px; }
+  .search-result:hover { background: var(--surface-2); }
+  .top-actions { align-items: center; display: flex; gap: 8px; justify-content: flex-end; min-width: 0; }
+  .actor-chip, .health-chip { align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; display: inline-flex; font-size: 12px; gap: 7px; height: 34px; max-width: 220px; padding: 0 11px; }
+  .actor-chip span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-dot { background: var(--success); border-radius: 50%; height: 7px; width: 7px; }
+  .status-dot.warning { background: var(--warning); }
+  .status-dot.danger { background: var(--danger); }
+  .app-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr) 320px; min-height: calc(100vh - 94px); }
+  .task-rail { background: var(--surface-2); border-right: 1px solid var(--border); min-width: 0; padding: 18px 14px; }
+  .rail-block + .rail-block { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
+  .rail-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .09em; margin: 0 8px 7px; text-transform: uppercase; }
+  .rail-link { align-items: center; border-radius: 7px; color: var(--muted); display: grid; gap: 8px; grid-template-columns: 18px 1fr auto; min-height: 36px; padding: 6px 8px; }
+  .rail-link:hover { background: rgba(255,255,255,.65); color: var(--ink); }
+  .rail-link[aria-current="page"] { background: var(--surface); box-shadow: inset 3px 0 var(--accent); color: var(--ink); font-weight: 650; }
+  .rail-link .count { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .task-list { display: grid; gap: 2px; }
+  .task-link { align-items: center; border-radius: 7px; display: grid; gap: 7px; grid-template-columns: 1fr auto; min-height: 40px; padding: 5px 8px; }
+  .task-link:hover { background: rgba(255,255,255,.65); }
+  .task-link[aria-current="page"] { background: var(--surface); box-shadow: inset 3px 0 var(--accent); }
+  .task-link b, .task-link small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .task-link b { font-family: var(--mono); font-size: 12px; }
+  .task-link small { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .rail-create { background: transparent; border: 1px dashed var(--border-strong); border-radius: 7px; color: var(--muted); height: 36px; margin-top: 8px; text-align: left; width: 100%; }
+  .workspace { min-width: 0; padding: 26px 28px 44px; }
+  .context-rail { background: var(--surface); border-left: 1px solid var(--border); min-width: 0; padding: 24px 20px; }
+  .page-head { align-items: flex-end; display: flex; gap: 20px; justify-content: space-between; margin-bottom: 22px; }
+  .page-head h1 { font-size: 22px; letter-spacing: -.025em; line-height: 1.2; margin: 0; }
+  .page-head p { color: var(--muted); margin: 6px 0 0; max-width: 680px; }
+  .button-row { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { align-items: center; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; display: inline-flex; font-weight: 620; gap: 7px; height: 36px; justify-content: center; padding: 0 12px; }
+  .btn:hover { border-color: var(--accent); color: var(--accent-hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: white; height: 38px; }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.primary:active { background: var(--accent-pressed); }
+  .btn.danger { color: var(--danger); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 18px; padding: 18px; }
+  .panel.current { border-color: var(--border-strong); box-shadow: var(--shadow-current); padding: 20px; position: relative; }
+  .panel.current::before { background: var(--accent); border-radius: 10px 0 0 10px; bottom: -1px; content: ""; left: -1px; position: absolute; top: -1px; width: 4px; }
+  .panel.warning { background: #fffaf0; border-color: #e6c985; }
+  .panel.danger { background: #fff7f6; border-color: #edbbb6; }
+  .panel-head { align-items: flex-start; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 14px; }
+  .panel-head h2, .panel-head h3 { font-size: 15px; margin: 0; }
+  .panel-head p { color: var(--muted); margin: 4px 0 0; }
+  .current-grid { align-items: start; display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr) auto; }
+  .current-title { align-items: baseline; display: flex; flex-wrap: wrap; gap: 9px; }
+  .current-title strong { font-family: var(--mono); font-size: 16px; }
+  .mapping { color: var(--muted); display: flex; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; gap: 8px 16px; margin-top: 10px; }
+  .next-step { background: var(--accent-tint); border-radius: 7px; color: var(--accent-hover); margin-top: 14px; padding: 10px 12px; }
+  .section-head { align-items: center; display: flex; gap: 14px; justify-content: space-between; margin: 26px 0 10px; }
+  .section-head h2 { font-size: 15px; margin: 0; }
+  .section-head span { color: var(--muted); font-size: 12px; }
+  .filters { align-items: end; display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+  .field { display: grid; gap: 5px; min-width: 0; }
+  .field label, .field-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
+  .field input, .field select, .field textarea { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; min-height: 36px; padding: 7px 9px; width: 100%; }
+  .field textarea { min-height: 76px; resize: vertical; }
+  .field input:invalid:not(:placeholder-shown) { border-color: var(--danger); }
+  .field-error { color: var(--danger); font-size: 12px; min-height: 18px; }
+  .work-list { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .work-row { align-items: center; border-bottom: 1px solid var(--border); display: grid; gap: 12px; grid-template-columns: 42px minmax(130px, .65fr) minmax(170px, 1.3fr) minmax(110px, .55fr) auto; min-height: 44px; padding: 8px 12px; }
+  .work-row:last-child { border-bottom: 0; }
+  .work-row:hover { background: #f8fafb; }
+  .work-row.blocked { background: #fffaf0; }
+  .work-title { min-width: 0; }
+  .work-title a { font-weight: 650; }
+  .work-title a:hover { color: var(--accent-hover); text-decoration: underline; }
+  .work-title small { color: var(--muted); display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .work-owner { color: var(--muted); font-size: 12px; min-width: 0; }
+  .priority { border-radius: 5px; display: inline-flex; font-family: var(--mono); font-size: 11px; font-weight: 750; justify-content: center; padding: 3px 6px; }
+  .priority.p0 { background: var(--p0-bg); color: var(--danger); }
+  .priority.p1 { background: var(--p1-bg); color: var(--p1); }
+  .priority.p2 { background: var(--p2-bg); color: var(--p2); }
+  .priority.p3 { background: var(--p3-bg); color: var(--p3); }
+  .status-mark { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .row-actions .btn { font-size: 12px; height: 30px; padding: 0 9px; }
+  .work-entry { border-bottom: 1px solid var(--border); }
+  .work-entry:last-child { border-bottom: 0; }
+  .work-entry > .work-row { border-bottom: 0; }
+  .inline-organize { background: var(--surface-2); border-top: 1px solid var(--border); padding: 0 12px; }
+  .inline-organize summary { color: var(--accent-hover); cursor: pointer; font-size: 12px; font-weight: 650; padding: 9px 0; width: fit-content; }
+  .inline-organize .organization { margin: 0 0 12px; padding: 0; }
+  .empty { border: 1px dashed var(--border-strong); border-radius: 10px; color: var(--muted); padding: 24px; text-align: center; }
+  .empty strong { color: var(--ink); display: block; margin-bottom: 5px; }
+  .cli { background: var(--surface-2); border-radius: 6px; color: var(--ink); display: inline-block; font-family: var(--mono); font-size: 12px; margin-top: 9px; padding: 7px 9px; user-select: all; }
+  .summary-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 15px; }
+  .stat b { display: block; font-size: 20px; margin-top: 4px; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .task-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .task-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; min-height: 142px; padding: 16px; }
+  .task-card:hover { border-color: var(--border-strong); }
+  .task-card h2 { font-family: var(--mono); font-size: 15px; margin: 0; }
+  .task-card .title { color: var(--muted); margin: 4px 0 18px; }
+  .task-meta { display: flex; flex-wrap: wrap; gap: 7px 14px; }
+  .task-meta span { color: var(--muted); font-size: 12px; }
+  .task-header { border-bottom: 1px solid var(--border); margin: -4px 0 20px; padding: 0 0 16px; }
+  .task-header-top { align-items: start; display: flex; gap: 16px; justify-content: space-between; }
+  .task-header h1 { font-size: 22px; margin: 0; }
+  .task-header h1 span { color: var(--muted); font-family: var(--mono); font-size: 14px; margin-left: 8px; }
+  .tabs { display: flex; gap: 22px; margin: 18px 0 -17px; overflow-x: auto; }
+  .tab { background: transparent; border: 0; border-bottom: 3px solid transparent; color: var(--muted); height: 38px; padding: 0 2px; }
+  .tab[aria-selected="true"] { border-color: var(--accent); color: var(--ink); font-weight: 700; }
+  .meta-list { display: grid; gap: 9px; grid-template-columns: 140px 1fr; margin: 0; }
+  .meta-list dt { color: var(--muted); font-size: 12px; }
+  .meta-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .create-form { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; display: grid; gap: 10px; grid-template-columns: minmax(120px, .45fr) minmax(220px, 1fr) 90px 84px auto; margin-bottom: 16px; padding: 14px; }
+  .create-form .form-error { grid-column: 1 / -1; }
+  .organization { background: var(--surface-2); border-radius: 8px; display: grid; gap: 10px; grid-template-columns: 90px 90px minmax(140px, 1fr) auto; margin-top: 13px; padding: 12px; }
+  .context-group + .context-group { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px; }
+  .context-item { border-top: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; padding: 11px 0; }
+  .context-item:first-of-type { border-top: 0; }
+  .context-item a { color: var(--accent-hover); font-weight: 650; overflow-wrap: anywhere; }
+  .context-item p { color: var(--muted); margin: 4px 0 0; white-space: pre-wrap; }
+  .context-rail .context-item p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
+  .task-wide { background: var(--surface-2); border-radius: 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 3px 5px; text-transform: uppercase; }
+  .context-editor { display: grid; gap: 12px; }
+  .context-edit-row { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; display: grid; gap: 9px; grid-template-columns: minmax(120px, .7fr) minmax(180px, 1fr) auto; padding: 12px; }
+  .context-edit-row .wide { grid-column: 1 / -1; }
+  .owner-groups { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .owner-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 15px; }
+  .owner-card h2 { font-size: 14px; margin: 0 0 12px; }
+  .health-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .health-row { align-items: start; background: var(--surface); border-bottom: 1px solid var(--border); display: grid; gap: 16px; grid-template-columns: 150px 1fr; padding: 13px 15px; }
+  .health-row:last-child { border-bottom: 0; }
+  .health-row strong { font-size: 13px; }
+  .alert-stack { left: 260px; position: fixed; right: 340px; top: 68px; z-index: 40; }
+  .alert { align-items: flex-start; background: #fff7f6; border: 1px solid #edbbb6; border-radius: 9px; box-shadow: 0 8px 24px rgba(23,35,45,.1); color: var(--danger); display: flex; gap: 10px; justify-content: space-between; padding: 11px 13px; white-space: pre-wrap; }
+  .alert .btn { background: transparent; border: 0; height: 24px; padding: 0 4px; }
+  .live-status { background: var(--ink); border-radius: 7px; bottom: 46px; color: white; font-size: 12px; left: 50%; max-width: min(90vw, 560px); opacity: 0; padding: 9px 12px; pointer-events: none; position: fixed; transform: translate(-50%, 8px); transition: opacity 120ms, transform 120ms; z-index: 60; }
+  .live-status.visible { opacity: 1; transform: translate(-50%, 0); }
+  .skeleton { animation: shimmer 1.1s linear infinite; background: linear-gradient(90deg, #e7edef 20%, #f7f9fa 45%, #e7edef 70%); background-size: 250% 100%; border-radius: 8px; height: 76px; margin-bottom: 12px; }
+  @keyframes shimmer { to { background-position: -250% 0; } }
+  .footer { align-items: center; background: var(--surface); border-top: 1px solid var(--border); color: var(--muted); display: flex; font-size: 11px; gap: 20px; height: 36px; justify-content: space-between; padding: 0 18px; }
+  .footer-group { display: flex; gap: 18px; }
+  dialog { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: var(--shadow-current); color: var(--ink); max-width: min(92vw, 480px); padding: 0; width: 100%; }
+  dialog::backdrop { background: rgba(23, 35, 45, .42); }
+  .dialog-body { padding: 20px; }
+  .dialog-body h2 { font-size: 17px; margin: 0 0 8px; }
+  .dialog-body > p { color: var(--muted); margin: 0 0 16px; }
+  .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  .prompt-text { font-family: var(--mono); min-height: 190px; width: 100%; }
+  #nav-drawer { height: 100%; margin: 0; max-height: none; max-width: min(88vw, 320px); transform: translateX(-16px); }
+  #nav-drawer[open] { transform: translateX(0); transition: transform 180ms; }
+  .drawer-head { align-items: center; border-bottom: 1px solid var(--border); display: flex; height: 58px; justify-content: space-between; padding: 0 14px; }
+  .drawer-content { background: var(--surface-2); height: calc(100% - 58px); overflow-y: auto; padding: 14px; }
+  @media (max-width: 1279px) {
+    .topbar { grid-template-columns: 200px minmax(240px, 1fr) auto; }
+    .app-shell { grid-template-columns: 200px minmax(0, 1fr); }
+    .context-rail { border-left: 0; border-top: 1px solid var(--border); grid-column: 2; }
+    .alert-stack { left: 220px; right: 20px; }
+  }
+  @media (max-width: 959px) {
+    .topbar { grid-template-columns: auto minmax(0, 1fr) auto; padding: 0 14px; }
+    .brand, .actor-chip .actor-source, .health-chip span:last-child { display: none; }
+    .menu-button { display: inline-flex; align-items: center; justify-content: center; }
+    .app-shell { display: block; }
+    .task-rail { display: none; }
+    .context-rail { border-top: 1px solid var(--border); }
+    .workspace { padding: 22px 20px 40px; }
+    .alert-stack { left: 20px; right: 20px; }
+    .work-row { grid-template-columns: 42px minmax(120px, .7fr) minmax(150px, 1fr) auto; }
+    .work-owner { display: none; }
+    .create-form { grid-template-columns: 1fr 1.4fr 80px; }
+    .create-form .order-field, .create-form .submit-field { align-self: end; }
+    .current-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 639px) {
+    .topbar { gap: 8px; grid-template-columns: 44px minmax(0, 1fr) auto; }
+    .brand { display: none; }
+    .top-actions .actor-chip { display: none; }
+    .menu-button, .health-chip { height: 44px; min-width: 44px; }
+    .health-chip { justify-content: center; padding: 0; }
+    .global-search input { height: 44px; }
+    .global-search svg { top: 14px; }
+    .search-shortcut { top: 14px; }
+    .workspace { padding: 18px 14px 36px; }
+    .context-rail { padding: 20px 14px; }
+    .page-head, .task-header-top, .panel-head { align-items: stretch; flex-direction: column; }
+    .page-head .btn, .task-header-top .btn { min-height: 44px; }
+    .summary-grid { grid-template-columns: 1fr; }
+    .work-row { align-items: start; grid-template-columns: 42px 1fr; min-height: 72px; padding: 12px; }
+    .work-title, .work-owner, .row-actions { grid-column: 2; }
+    .work-owner { display: block; }
+    .row-actions { justify-content: flex-start; }
+    .row-actions .btn { min-height: 40px; }
+    .create-form, .organization, .context-edit-row { grid-template-columns: 1fr; }
+    .create-form .form-error, .context-edit-row .wide { grid-column: auto; }
+    .field input, .field select, .btn { min-height: 44px; }
+    .tab { height: 44px; }
+    .filters { align-items: stretch; flex-direction: column; }
+    .filters .field { width: 100%; }
+    .health-row { grid-template-columns: 1fr; gap: 5px; }
+    .meta-list { grid-template-columns: 1fr; }
+    .footer { align-items: flex-start; height: auto; min-height: 38px; padding: 9px 14px; }
+    .footer-group { flex-wrap: wrap; gap: 5px 12px; }
+    .footer .footer-optional { display: none; }
+    .context-rail .panel-head { align-items: flex-start; flex-direction: row; }
+    .context-rail .task-wide { align-self: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="brand" id="brand"><b>pm</b>&nbsp;·&nbsp;roadmap</div>
-    <div class="htools"><button class="pill" id="validate" type="button" title="validation health"><span class="dot"></span><span id="validate-txt">validate</span></button></div>
-  </header>
-  <div id="banner" aria-live="assertive"></div>
-  <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
-  <main id="app"></main>
+<a class="skip-link" href="#workspace">Skip to workspace</a>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">pm</span><span>Task Desk</span></div>
+  <button class="menu-button" id="menu-button" type="button" aria-label="Open Task navigation">☰</button>
+  <div class="global-search">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+    <label class="visually-hidden" for="global-search">Search Tasks and Items</label>
+    <input id="global-search" data-testid="global-search" type="search" autocomplete="off" placeholder="Search Tasks, Items, owners…">
+    <span class="search-shortcut">/</span>
+    <div class="search-results" id="search-results" role="listbox" hidden></div>
+  </div>
+  <div class="top-actions">
+    <div class="actor-chip" id="actor-chip" title="Resolved collaboration actor"><span class="status-dot warning"></span><span>Actor unavailable</span></div>
+    <a class="health-chip" id="health-chip" data-route href="?view=health" aria-label="Open Inbox and health"><span class="status-dot warning"></span><span>Checking</span></a>
+  </div>
+</header>
+
+<div class="alert-stack" id="alert-stack" aria-live="assertive"></div>
+<div class="live-status" id="live-status" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<div class="app-shell">
+  <nav class="task-rail" data-region="task-rail" id="task-rail" aria-label="Task navigation"></nav>
+  <main class="workspace" id="workspace" tabindex="-1"></main>
+  <aside class="context-rail" data-region="context-rail" id="context-rail" aria-label="Task-wide context"></aside>
 </div>
 
+<footer class="footer" id="footer"><span>Connecting to PM store…</span></footer>
+
+<template data-view="now"></template>
+<template data-view="tasks"></template>
+<template data-view="task"></template>
+<template data-view="item"></template>
+<template data-view="people"></template>
+<template data-view="health"></template>
+
+<dialog id="confirm-dialog">
+  <form method="dialog" class="dialog-body" id="confirm-form">
+    <h2 id="confirm-title">Confirm action</h2>
+    <p id="confirm-message"></p>
+    <div class="field" id="confirm-reason-wrap" hidden>
+      <label for="confirm-reason">Reason</label>
+      <input id="confirm-reason" autocomplete="off">
+    </div>
+    <div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button class="btn danger" id="confirm-action" value="confirm">Confirm</button></div>
+  </form>
+</dialog>
+
+<dialog id="handoff-dialog">
+  <form method="dialog" class="dialog-body" id="handoff-form">
+    <h2>Hand off Item</h2>
+    <p id="handoff-message">Choose the next owner. The current owner is checked again before saving.</p>
+    <div class="field"><label for="handoff-owner">New owner</label><input id="handoff-owner" required autocomplete="off"></div>
+    <div class="field"><label for="handoff-note">Handoff note</label><textarea id="handoff-note" placeholder="What should the next owner know?"></textarea></div>
+    <div class="field-error" id="handoff-error" aria-live="polite"></div>
+    <div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="confirm">Hand off</button></div>
+  </form>
+</dialog>
+
+<dialog id="prompt-dialog">
+  <form method="dialog" class="dialog-body">
+    <h2>Copy prompt manually</h2>
+    <p>Clipboard access was unavailable. The full prompt is selected below.</p>
+    <textarea class="prompt-text" id="prompt-text" readonly></textarea>
+    <div class="dialog-actions"><button class="btn" value="cancel">Close</button><button class="btn primary" id="retry-copy" value="retry">Retry copy</button></div>
+  </form>
+</dialog>
+
+<dialog id="nav-drawer" aria-label="Task navigation">
+  <div class="drawer-head"><strong>Task Desk</strong><button class="btn ghost" id="drawer-close" type="button" aria-label="Close navigation">Close</button></div>
+  <div class="drawer-content" id="drawer-content"></div>
+</dialog>
+
 <script type="module">
-const app = document.getElementById("app");
-const bannerBox = document.getElementById("banner");
-const statusBox = document.getElementById("status");
-const brand = document.getElementById("brand");
-history.scrollRestoration = "manual";
-const scrollPositions = new Map();
-let routeVersion = 0;
-function routeHash(url = location.href) {
-  const hash = new URL(url, location.href).hash;
-  return hash && hash !== "#" ? hash : "#/";
-}
-function rememberScroll(hash = routeHash()) { scrollPositions.set(hash, window.scrollY); }
+const workspace = document.getElementById("workspace");
+const taskRail = document.getElementById("task-rail");
+const contextRail = document.getElementById("context-rail");
+const footer = document.getElementById("footer");
+const alertStack = document.getElementById("alert-stack");
+const liveStatus = document.getElementById("live-status");
+const searchInput = document.getElementById("global-search");
+const searchResults = document.getElementById("search-results");
+const actorChip = document.getElementById("actor-chip");
+const healthChip = document.getElementById("health-chip");
+const navDrawer = document.getElementById("nav-drawer");
+const drawerContent = document.getElementById("drawer-content");
+const state = { roadmap: null, next: null, tasks: [], actor: null, validation: null, inbox: null, errors: {}, routeToken: 0 };
 
-/* ---------- DOM helper (textContent-only → XSS-safe) ---------- */
-function el(tag, props = {}, ...kids) {
-  const n = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v == null || v === false) continue;
-    if (k === "class") n.className = v;
-    else if (k === "text") n.textContent = v;
-    else if (k.startsWith("on") && typeof v === "function") n.addEventListener(k.slice(2), v);
-    else if (k === "dataset") Object.assign(n.dataset, v);
-    else n.setAttribute(k, v);
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (value == null || value === false) continue;
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key === "dataset") Object.assign(node.dataset, value);
+    else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2), value);
+    else if (key === "checked" || key === "selected" || key === "disabled" || key === "hidden") node[key] = Boolean(value);
+    else node.setAttribute(key, String(value));
   }
-  for (const c of kids.flat()) { if (c == null || c === false) continue; n.append(c.nodeType ? c : document.createTextNode(String(c))); }
-  return n;
+  for (const child of children.flat()) if (child != null && child !== false) node.append(child.nodeType ? child : document.createTextNode(String(child)));
+  return node;
 }
-const pchip = (p) => el("span", { class: "chip " + (p || "p3").toLowerCase(), text: p || "P?" });
-// nextStep is a plan's first unchecked step verbatim (may carry markdown **bold**/`code` and a trailing "(PASS: …)" plan tag) — strip for display.
-const cleanStep = (s) => (s ? s.replace(/\*\*/g, "").replace(/`/g, "").replace(/\s*\((?:PASS|FAIL)[:：].*$/i, "").trim() : s);
 
-/* ---------- API (no optimistic UI; 409/errors surfaced verbatim) ---------- */
-async function api(path, opts) {
-  const res = await fetch(path, opts);
-  if (res.status === 204) return null;
-  const ct = res.headers.get("content-type") || "";
-  const body = ct.includes("application/json") ? await res.json() : await res.text();
-  if (!res.ok) {
-    const msg = (body && typeof body === "object" && body.error) ? body.error : (typeof body === "string" && body ? body : res.statusText);
-    const e = new Error(msg); e.status = res.status; throw e;
+function routeParams() { return new URLSearchParams(location.search); }
+function currentView() { return routeParams().get("view") || "now"; }
+function routeHref(view, extra = {}) {
+  const params = new URLSearchParams();
+  if (view !== "now") params.set("view", view);
+  const q = routeParams().get("q");
+  if (q) params.set("q", q);
+  for (const [key, value] of Object.entries(extra)) if (value != null && value !== "") params.set(key, String(value));
+  const query = params.toString();
+  return query ? `?${query}` : location.pathname;
+}
+function navigate(href, { replace = false } = {}) {
+  const target = new URL(href, location.href);
+  if (replace) history.replaceState({}, "", `${target.pathname}${target.search}`);
+  else history.pushState({}, "", `${target.pathname}${target.search}`);
+  renderRoute();
+}
+
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("a[data-route]");
+  if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (navDrawer.open) navDrawer.close();
+  navigate(link.href);
+});
+window.addEventListener("popstate", renderRoute);
+
+async function api(path, options = {}) {
+  const init = { ...options, headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) } };
+  const response = await fetch(path, init);
+  if (response.status === 204) return null;
+  const contentType = response.headers.get("content-type") || "";
+  const body = contentType.includes("application/json") ? await response.json() : await response.text();
+  if (!response.ok) {
+    const message = body && typeof body === "object" && body.error ? body.error : (body || response.statusText);
+    const error = new Error(String(message)); error.status = response.status; error.body = body; throw error;
   }
   return body;
 }
-function showConflict(e) {
-  const kind = e.status === 409 ? "conflict" : "error";
-  bannerBox.replaceChildren(el("div", { class: "banner", role: "alert" },
-    el("span", { class: "k", text: kind }),
-    el("span", { text: e.message || String(e) }),
-    el("button", { text: "dismiss", onclick: () => bannerBox.replaceChildren() })));
-}
-const clearBanner = () => bannerBox.replaceChildren();
+const jsonBody = (value) => JSON.stringify(value);
 
+async function fetchBase() {
+  const sources = {
+    roadmap: "/api/roadmap",
+    next: "/api/next",
+    tasks: "/api/tasks",
+    actor: "/api/actor",
+    validation: "/api/roadmap/validate",
+    inbox: "/api/inbox",
+  };
+  const entries = await Promise.all(Object.entries(sources).map(async ([key, path]) => {
+    try { return [key, await api(path), null]; } catch (error) { return [key, null, error]; }
+  }));
+  state.errors = {};
+  for (const [key, value, error] of entries) {
+    if (error) state.errors[key] = error;
+    else state[key] = value;
+  }
+  state.tasks ||= [];
+  updateShell();
+}
+
+function showAlert(error, title = error?.status === 409 ? "Conflict" : "Could not save") {
+  const message = error?.message || String(error);
+  alertStack.replaceChildren(el("div", { class: "alert", role: "alert" },
+    el("div", {}, el("strong", { text: title }), el("div", { text: message })),
+    el("button", { class: "btn ghost", type: "button", text: "Dismiss", onclick: () => alertStack.replaceChildren() })));
+}
+function clearAlert() { alertStack.replaceChildren(); }
 let statusTimer;
-function announce(msg) {
+function announce(message) {
   clearTimeout(statusTimer);
-  statusBox.textContent = "";
-  void statusBox.offsetWidth;
-  statusBox.textContent = msg;
-  statusTimer = setTimeout(() => { statusBox.textContent = ""; }, 3200);
+  liveStatus.textContent = message;
+  liveStatus.classList.add("visible");
+  statusTimer = setTimeout(() => liveStatus.classList.remove("visible"), 3200);
 }
-async function withPending(control, pendingText, fn) {
-  if (!control || control.disabled) return;
-  const previousText = control.textContent;
-  control.disabled = true;
-  control.setAttribute("aria-busy", "true");
-  control.textContent = pendingText;
-  try { return await fn(); }
+async function pending(button, label, operation, success) {
+  clearAlert();
+  const previous = button?.textContent;
+  if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); button.textContent = label; }
+  try {
+    const result = await operation();
+    if (success) announce(success);
+    await renderRoute();
+    return result;
+  } catch (error) { showAlert(error); throw error; }
   finally {
-    if (control.isConnected) {
-      control.disabled = false;
-      control.removeAttribute("aria-busy");
-      control.textContent = previousText;
-    }
+    if (button?.isConnected) { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = previous; }
   }
 }
-/* after a successful mutation: refetch by re-running the router (no optimistic patching) */
-async function mutate(control, pendingText, fn) {
-  clearBanner();
-  try { await withPending(control, pendingText, async () => { await fn(); rememberScroll(); await route(); }); }
-  catch (e) { showConflict(e); }
+
+function priorityMark(priority) {
+  const value = /^P[0-3]$/.test(priority || "") ? priority : "P3";
+  return el("span", { class: `priority ${value.toLowerCase()}`, text: value });
 }
-async function copyKickoff(id, control) {
-  clearBanner();
-  try {
-    await withPending(control, "copying…", async () => {
-      const text = await api(`/api/roadmap/${id}/next`);
-      await navigator.clipboard.writeText(text);
-      announce(`kickoff copied · /design ${id}`);
-    });
-  } catch (e) { showConflict(e); }
+function cleanStep(value) {
+  return value ? String(value).replace(/\*\*/g, "").replace(/`/g, "").replace(/\s*\((?:PASS|FAIL)[:：].*$/i, "").trim() : "No unchecked implementation step.";
+}
+function sectionHead(title, count) { return el("div", { class: "section-head" }, el("h2", { text: title }), count == null ? null : el("span", { text: String(count) })); }
+function emptyState(title, message, cli) {
+  return el("div", { class: "empty" }, el("strong", { text: title }), el("span", { text: message }), cli ? el("div", { class: "cli", text: cli }) : null);
+}
+function pageHead(title, description, ...actions) {
+  return el("div", { class: "page-head" }, el("div", {}, el("h1", { text: title }), el("p", { text: description })), actions.length ? el("div", { class: "button-row" }, actions) : null);
+}
+function routeLink(text, view, extra = {}, cls = "btn") { return el("a", { class: cls, href: routeHref(view, extra), dataset: { route: "" }, text }); }
+function safeUrl(value) {
+  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; }
 }
 
-/* ---------- shared bits ---------- */
-function setCrumb(...parts) {
-  brand.replaceChildren(el("b", { text: "pm" }), document.createTextNode(" · "),
-    parts.length ? el("a", { href: "#/", class: "crumb", text: "roadmap" }) : el("span", { text: "roadmap" }));
-  for (const p of parts) { brand.append(document.createTextNode(" · ")); brand.append(p && typeof p === "object" ? el("a", { href: p.href, class: "crumb", text: p.text }) : el("span", { class: "crumb", text: p })); }
-}
-async function loadValidate() {
-  const pill = document.getElementById("validate");
-  const text = document.getElementById("validate-txt");
-  pill.disabled = true;
-  pill.setAttribute("aria-busy", "true");
-  pill.classList.remove("has-err", "aux-unavailable");
-  text.textContent = "validating…";
-  try {
-    const v = await api("/api/roadmap/validate");
-    const errs = (v.errors || []).length, warns = (v.warnings || []).length;
-    pill.classList.toggle("has-err", errs > 0 || warns > 0);
-    text.textContent = errs ? `${errs} error${errs > 1 ? "s" : ""}` : warns ? `${warns} warn` : "0 errors";
-  } catch {
-    pill.classList.add("aux-unavailable");
-    text.textContent = "unavailable";
-  } finally {
-    pill.disabled = false;
-    pill.removeAttribute("aria-busy");
+function navMarkup(target) {
+  const view = currentView();
+  const selectedTask = routeParams().get("task");
+  const openCount = state.roadmap?.open?.length ?? "—";
+  const inboxCount = state.inbox?.length ?? state.next?.inbox ?? "—";
+  const hasCollab = state.tasks.some((task) => task.mode === "collab" || task.collaborators?.length) || state.roadmap?.open?.some((item) => item.owner || item.mode === "collab");
+  const nav = el("div", { class: "rail-block" },
+    el("p", { class: "rail-label", text: "Workspace" }),
+    railRoute("Now", "now", "◎", openCount, view === "now"),
+    railRoute("Tasks", "tasks", "▦", state.tasks.length, view === "tasks"),
+    hasCollab ? railRoute("People", "people", "◇", "", view === "people") : null,
+    railRoute("Inbox / Health", "health", "△", inboxCount, view === "health"));
+  const taskList = el("div", { class: "rail-block" }, el("p", { class: "rail-label", text: "Active Tasks" }), el("div", { class: "task-list" }));
+  const list = taskList.lastChild;
+  for (const task of state.tasks) {
+    list.append(el("a", { class: "task-link", href: routeHref("task", { task: task.key, tab: "overview" }), dataset: { route: "" }, "aria-current": selectedTask === task.key && ["task", "item"].includes(view) ? "page" : null },
+      el("span", {}, el("b", { text: task.key }), el("small", { text: task.title })), el("span", { class: "count mono", text: task.openCount })));
   }
+  if (!state.tasks.length) list.append(el("span", { class: "muted", text: state.errors.tasks ? "Tasks unavailable" : "No active Tasks" }));
+  taskList.append(el("button", { class: "rail-create", type: "button", text: "+ Create Task", onclick: () => navigate(routeHref("tasks", { create: "1" })) }));
+  target.replaceChildren(nav, taskList);
 }
-function skeletonRows(n = 3) { return el("div", { class: "rows" }, Array.from({ length: n }, () => el("div", { class: "sk" }))); }
-function fetchError(surface, e, { back = false } = {}) {
-  const actions = el("span", { class: "grp", style: "display:inline-flex;gap:8px;margin-left:8px" },
-    el("button", { text: "retry", onclick: (event) => withPending(event.currentTarget, "retrying…", route) }),
-    back ? el("button", { text: "back", onclick: () => history.back() }) : null);
-  return el("div", { class: "empty" }, `${surface} unavailable — ${e.message || String(e)}`, actions);
-}
-async function loadTaskCount(target) {
-  target.textContent = "loading…";
-  target.classList.remove("aux-unavailable");
-  try { target.textContent = String((await api("/api/tasks")).length); }
-  catch { target.textContent = "unavailable"; target.classList.add("aux-unavailable"); }
+function railRoute(label, route, icon, count, current) {
+  return el("a", { class: "rail-link", href: routeHref(route), dataset: { route: "", view: route }, "aria-current": current ? "page" : null }, el("span", { text: icon, "aria-hidden": "true" }), el("span", { text: label }), count === "" ? null : el("span", { class: "count", text: count }));
 }
 
-/* ---------- HOME (operating view) ---------- */
-async function renderHome(version = routeVersion) {
-  setCrumb();
-  app.replaceChildren(el("div", {}, el("div", { class: "seclabel" }, el("span", { class: "lbl", text: "loading" })), skeletonRows()));
-  loadValidate();
-  let roadmap, next;
-  try { [roadmap, next] = await Promise.all([api("/api/roadmap"), api("/api/next")]); }
-  catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("roadmap", e)); return; }
-  if (version !== routeVersion) return;
-
-  brand.replaceChildren(el("b", { text: "pm" }), document.createTextNode(" · roadmap"), roadmap.project ? el("span", { class: "proj", text: roadmap.project.replace(/^\./, "") }) : null);
-  const open = roadmap.open || [];
-  // dock precedence: in-flight (current.txt) > focus > top eligible (dashboard-inflight-surface).
-  // inFlight elevates current work into the dock without setting focus; the focus-toggle button is
-  // keyed on actual focus identity (not the dock state) so an in-flight ≠ focus item still shows "focus".
-  const dockId = roadmap.inFlight || roadmap.focus || (next.eligible && next.eligible[0] && next.eligible[0].id) || null;
-  const dockItem = dockId ? open.find((o) => o.id === dockId) : null;
-  const frag = document.createDocumentFragment();
-
-  /* dock — one card builder, reused for the primary dock + an optional secondary Focus card */
-  function dockCard(item, { eyebrow, secondary, ctaText, itemIsFocus }) {
-    const actions = el("div", { class: "actions" },
-      el("button", { class: "primary", text: ctaText, onclick: (event) => copyKickoff(item.id, event.currentTarget) }),
-      itemIsFocus
-        ? el("button", { text: "clear focus", onclick: (event) => mutate(event.currentTarget, "clearing…", () => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "" }) })) })
-        : el("button", { text: "focus", onclick: (event) => mutate(event.currentTarget, "focusing…", () => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: item.id }) })) }),
-      el("button", { text: "open →", onclick: () => { location.hash = `#/item/${item.id}`; } }));
-    return el("section", { class: secondary ? "dock secondary" : "dock", "aria-label": eyebrow },
-      el("div", { class: "rlabel" }, secondary ? null : el("span", { class: "live" }), eyebrow),
-      el("div", { class: "body" },
-        el("div", { class: "main" },
-          el("div", { class: "line1" }, pchip(item.priority),
-            el("span", { class: "id" }, el("a", { href: `#/item/${item.id}`, text: item.id })),
-            el("span", { class: "title", text: item.title })),
-          el("div", { class: "meta" }, "task · ", el("a", { href: `#/task/${item.task}`, class: "tasklink", text: item.task }), (item.owner && item.mode === "collab") ? ` · @${item.owner}` : ""),
-          item.worktree
-            ? el("div", { class: "meta mono", title: item.worktree, text: `branch · ${item.branch || "?"} · worktree · ${item.worktree}` })
-            : null,
-          item.nextStep
-            ? el("div", { class: "nextstep", title: cleanStep(item.nextStep) }, el("span", { class: "k", text: "→ next  " }), cleanStep(item.nextStep))
-            : el("div", { class: "nextstep" }, el("span", { class: "k", text: "→  " }), el("span", { text: item.plan ? "plan set · no open step — /verify or /retro" : `no plan · kickoff to start /design ${item.id}` }))),
-        actions));
-  }
-  if (dockItem) {
-    const inflight = !!roadmap.inFlight && dockId === roadmap.inFlight;
-    const isFocusItem = !!roadmap.focus && dockId === roadmap.focus;
-    const eyebrow = inflight ? "In progress" : (isFocusItem ? "Focus" : "Next up");
-    frag.append(dockCard(dockItem, { eyebrow, secondary: false, ctaText: dockItem.worktree ? "copy resume →" : "copy kickoff →", itemIsFocus: isFocusItem }));
-  }
-  // secondary Focus card: focus is set AND isn't already the (in-flight) dock item — so an explicit
-  // focus is never buried in the queue when the dock is showing in-flight work. Skipped if focus
-  // isn't an open item (stale/closed pointer).
-  const focusItem = (roadmap.focus && roadmap.focus !== dockId) ? open.find((o) => o.id === roadmap.focus) : null;
-  if (focusItem) frag.append(dockCard(focusItem, { eyebrow: "Focus", secondary: true, ctaText: focusItem.worktree ? "copy resume →" : "copy kickoff →", itemIsFocus: true }));
-
-  /* queue — exclude whatever is already shown in a dock card (in-flight + secondary focus) */
-  const docked = new Set([dockId, focusItem && focusItem.id].filter(Boolean));
-  const eligible = open.filter((o) => !docked.has(o.id) && !o.blockedBy);
-  const blocked = open.filter((o) => !docked.has(o.id) && o.blockedBy);
-  frag.append(el("div", { class: "seclabel" }, el("span", { class: "lbl", text: "Queue" }), el("span", { class: "cnt", text: `next candidates · ${eligible.length}` })));
-  if (eligible.length) frag.append(el("div", { class: "rows" }, eligible.map(queueRow)));
-  else frag.append(el("div", { class: "empty" }, "no eligible items · ", el("span", { class: "cli mono", text: "pm add <id> --task <KEY> -p P2 --title …" })));
-  if (blocked.length) {
-    frag.append(el("div", { class: "subhead", text: "Blocked · dependency or earlier order" }));
-    frag.append(el("div", { class: "rows" }, blocked.map((o) => el("div", { class: "row blocked" },
-      el("span", { class: "tick", text: "✕" }), pchip(o.priority), el("span", { class: "rid", text: o.id }),
-      el("span", { class: "rtitle", text: o.title }), el("span", { class: "rtask", title: "by " + (o.blockedBy || "?"), text: "by " + (o.blockedBy || "?") })))));
-  }
-
-  /* owners (collab visibility) — only when a collab item exists */
-  const collabItems = open.filter((o) => o.mode === "collab");
-  if (collabItems.length) {
-    const byOwner = new Map();
-    for (const o of collabItems) { const k = o.owner || "unassigned"; byOwner.set(k, (byOwner.get(k) || 0) + 1); }
-    frag.append(el("div", { class: "subhead", text: "Owners · collab" }));
-    frag.append(el("div", { class: "owners" }, [...byOwner.entries()].map(([owner, n]) =>
-      el("span", { class: "ochip" }, el("span", { class: "odot" }), owner, el("b", { text: " " + n })))));
-  }
-
-  /* footer chips */
-  const taskCount = el("b", { text: "loading…" });
-  frag.append(el("div", { class: "foot" },
-    el("button", { class: "fchip", onclick: () => { location.hash = "#/inbox"; } }, el("span", { class: "lbl", text: "inbox" }), el("b", { text: String(next.inbox ?? 0) })),
-    el("button", { class: "fchip", onclick: () => { location.hash = "#/tasks"; } }, el("span", { class: "lbl", text: "tasks" }), taskCount),
-    el("button", { class: "fchip", onclick: () => document.getElementById("validate").click() }, el("span", { class: "lbl", text: "validate" }), el("b", { class: "ok", text: "✓" }))));
-
-  app.replaceChildren(frag);
-  loadTaskCount(taskCount);
-}
-function queueRow(o) {
-  return el("a", { class: "row", href: `#/item/${o.id}` },
-    el("span", { class: "tick", text: "▸" }), pchip(o.priority),
-    el("span", { class: "rid", text: o.id }), el("span", { class: "rtitle", text: o.title }),
-    el("span", { class: "rtask", text: (o.owner && o.mode === "collab") ? "@" + o.owner : o.task }));
+function updateShell() {
+  navMarkup(taskRail);
+  navMarkup(drawerContent);
+  const actor = state.actor;
+  actorChip.replaceChildren(el("span", { class: `status-dot ${actor?.actor ? "" : "warning"}` }), el("span", {}, actor?.actor || "Actor unavailable", actor?.source ? el("span", { class: "actor-source", text: ` · ${actor.source}` }) : null));
+  const errors = state.validation?.errors?.length ?? null;
+  const warnings = state.validation?.warnings?.length ?? null;
+  const healthClass = state.errors.validation || errors ? "danger" : warnings ? "warning" : "";
+  healthChip.replaceChildren(el("span", { class: `status-dot ${healthClass}` }), el("span", { text: state.errors.validation ? "Health unavailable" : errors ? `${errors} errors` : warnings ? `${warnings} warnings` : "Healthy" }));
+  const project = state.roadmap?.project || "PM store";
+  const current = state.roadmap?.currentPlan?.state || "unknown";
+  footer.replaceChildren(
+    el("div", { class: "footer-group" }, el("span", { class: "mono", text: project }), el("span", { text: `Current plan: ${current}` }), el("span", { text: `Inbox: ${state.inbox?.length ?? state.next?.inbox ?? "—"}` })),
+    el("div", { class: "footer-group footer-optional" }, el("span", { text: state.errors.roadmap ? "Server: partial" : "Server: connected" }), el("span", { text: "Navigation: local query state" })));
+  renderSearchResults();
 }
 
-/* ---------- ITEM view ---------- */
-async function renderItem(id, version = routeVersion) {
-  setCrumb(id);
-  app.replaceChildren(el("div", { class: "empty", text: "loading item…" }));
-  let j;
-  try { j = await api(`/api/roadmap/${id}/join`); }
-  catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("item", e, { back: true })); return; }
-  if (version !== routeVersion) return;
-  const it = j.item, plan = j.plan;
-  setCrumb({ text: it.task, href: `#/task/${it.task}` }, it.id);
-  const frag = document.createDocumentFragment();
-  frag.append(el("div", { class: "toolbar" },
-    el("div", { class: "grp" }, el("button", { text: "← back", onclick: () => history.back() }), pchip(it.priority), el("span", { class: "id", text: it.id })),
-    (j.closed
-      ? el("span", { class: "chip p3", text: `closed · ${it.status || "done"}` })
-      : el("div", { class: "grp" },
-          el("button", { class: "primary", text: plan && plan.worktree ? "copy resume →" : "copy kickoff →", onclick: (event) => copyKickoff(it.id, event.currentTarget) }),
-          el("button", { text: "focus", onclick: (event) => mutate(event.currentTarget, "focusing…", () => api("/api/focus", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: it.id }) })) }),
-          el("button", { class: "danger", text: "drop", onclick: (event) => dropItem(it.id, event.currentTarget) })))));
-
-  const dl = el("dl", { class: "kv" });
-  const kv = (k, v, mut) => { dl.append(el("dt", { text: k }), el("dd", { class: mut ? "mut" : "", text: v })); };
-  kv("title", it.title); kv("status", it.status || "—");
-  dl.append(el("dt", { text: "task" }), el("dd", {}, el("a", { href: `#/task/${it.task}`, class: "tasklink", text: it.task })));
-  kv("mode", it.mode || "solo");
-  if (it.owner) kv("owner", it.owner + (it.ownerNote ? ` — ${it.ownerNote}` : ""));
-  if (it.dependsOn && it.dependsOn.length) kv("depends on", it.dependsOn.join(", "));
-  if (it.note) kv("note", it.note, true);
-  kv("plan", plan ? `${plan.path} (${plan.status})` : "— no plan", !plan);
-  if (plan && plan.nextStep) kv("next step", cleanStep(plan.nextStep));
-  if (plan && plan.branch) kv("branch", plan.branch);
-  if (plan && plan.worktree) kv("worktree", plan.worktree);
-  if (plan && plan.baseCommit) kv("base", `${plan.baseBranch || "?"} @ ${plan.baseCommit}`);
-  frag.append(el("div", { class: "card" }, el("h3", { text: "detail" }), dl));
-
-  frag.append(contextCard("context links", (j.contextLinks || []).map((l) =>
-    el("div", { class: "prose" }, el("span", { class: "mono", text: l.label }), l.url ? document.createTextNode("  " + l.url) : null, l.by ? el("span", { class: "by", text: "@" + l.by }) : null,
-      l.summary ? el("div", { class: "datehint", text: l.summary }) : null)), `no links · pm links add ${it.task} …`));
-  frag.append(contextCard("context memory", (j.contextMemory || []).map((m) =>
-    el("div", { class: "prose" }, el("span", { class: "mono", text: m.title }), m.date ? el("span", { class: "datehint", text: "  " + m.date }) : null, m.by ? el("span", { class: "by", text: "@" + m.by }) : null,
-      el("div", { text: m.note }))), `no memory · pm memory add ${it.task} …`));
-
-  app.replaceChildren(frag);
+function renderSearchResults() {
+  const query = searchInput.value.trim().toLowerCase();
+  if (!query || !document.activeElement || document.activeElement !== searchInput) { searchResults.hidden = true; searchResults.replaceChildren(); return; }
+  const taskMatches = state.tasks.filter((task) => `${task.key} ${task.title}`.toLowerCase().includes(query)).slice(0, 5);
+  const itemMatches = (state.roadmap?.open || []).filter((item) => `${item.id} ${item.title} ${item.note || ""} ${item.owner || ""}`.toLowerCase().includes(query)).slice(0, 7);
+  const rows = [
+    ...taskMatches.map((task) => searchResult("Task", task.key, task.title, routeHref("task", { task: task.key, tab: "overview", q: searchInput.value.trim() }))),
+    ...itemMatches.map((item) => searchResult("Item", item.id, item.title, routeHref("item", { item: item.id, q: searchInput.value.trim() }))),
+  ];
+  searchResults.replaceChildren(...(rows.length ? rows : [el("div", { class: "search-result muted", text: "No matching Tasks or Items" })]));
+  searchResults.hidden = false;
 }
-function contextCard(title, nodes, emptyHint) {
-  return el("div", { class: "card" }, el("h3", { text: title }),
-    nodes.length ? el("div", {}, nodes) : el("div", { class: "empty", style: "padding:6px 0" }, "none · ", el("span", { class: "cli mono", text: emptyHint })));
+function searchResult(kind, id, title, href) {
+  return el("a", { class: "search-result", href, dataset: { route: "" }, role: "option" }, el("span", { class: "muted", text: kind }), el("span", {}, el("b", { class: "mono", text: id }), document.createTextNode(` · ${title}`)), el("span", { text: "Open" }));
 }
-function dropItem(id, control) {
-  if (!confirm(`Drop item "${id}"? This closes it as dropped.`)) return;
-  clearBanner();
-  withPending(control, "dropping…", async () => {
-    try {
-      await api(`/api/roadmap/${id}/drop`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: "dropped via GUI" }) });
-      location.hash = "#/";
-    } catch (e) { showConflict(e); }
-  });
-}
-
-/* ---------- TASK view (drill: backlog / closed / links / memory) ---------- */
-const expandedClosedTasks = new Set();
-async function renderTask(key, tab = "backlog", version = routeVersion) {
-  setCrumb(key);
-  app.replaceChildren(el("div", { class: "empty", text: "loading task…" }));
-  let roadmap, task;
-  const closedCap = expandedClosedTasks.has(key) ? 0 : 5;
-  try { [roadmap, task] = await Promise.all([api("/api/roadmap"), api(`/api/tasks/${encodeURIComponent(key)}?closed=${closedCap}`)]); }
-  catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("task", e, { back: true })); return; }
-  if (version !== routeVersion) return;
-  const backlog = (roadmap.open || []).filter((o) => o.task === key);
-  const closed = task.closed || [];
-  const closedTotal = task.closedTotal || 0;
-  const frag = document.createDocumentFragment();
-  frag.append(el("div", { class: "toolbar" },
-    el("div", { class: "grp" }, el("button", { text: "← back", onclick: () => history.back() }), el("span", { class: "id", text: key })),
-    el("div", { class: "grp" }, el("button", { class: "danger", text: "archive task", onclick: (event) => archiveTask(key, event.currentTarget) }))));
-
-  const tabnames = [["backlog", `backlog · ${backlog.length}`], ["closed", `closed · ${closedTotal}`], ["links", `links · ${task.links.length}`], ["memory", `memory · ${task.memory.length}`]];
-  frag.append(el("div", { class: "tabs", role: "tablist" }, tabnames.map(([t, lbl]) =>
-    el("button", { role: "tab", "aria-selected": String(t === tab), text: lbl, onclick: () => { location.hash = `#/task/${key}/${t}`; } }))));
-
-  const panel = el("div", { class: "panel" });
-  if (tab === "backlog") panel.append(backlog.length ? el("div", { class: "rows" }, backlog.map(queueRow)) : emptyCli("no open items", `pm add <id> --task ${key} -p P2 --title …`));
-  else if (tab === "closed") {
-    panel.append(closed.length ? el("div", { class: "rows" }, closed.map(closedRow)) : emptyCli("no closed items", `pm close ${key} <id> --status done`));
-    if (closedTotal > closed.length) panel.append(el("div", { class: "empty", style: "padding-top:14px" },
-      el("button", { text: `show older · ${closedTotal - closed.length}`, onclick: (event) => {
-        expandedClosedTasks.add(key);
-        withPending(event.currentTarget, "loading older…", route);
-      } })));
-  }
-  else if (tab === "links") panel.append(editor(key, "links", task.links));
-  else if (tab === "memory") panel.append(editor(key, "memory", task.memory));
-  frag.append(panel);
-  app.replaceChildren(frag);
-}
-function closedRow(r) {
-  return el("a", { class: "row", href: `#/item/${r.id}` },
-    el("span", { class: "tick", text: "✓" }), el("span", { class: "chip p3", text: r.status || "done" }),
-    el("span", { class: "rid", text: r.id }), el("span", { class: "rtitle", title: r.reason || r.title || "", text: r.reason || r.title || "" }), el("span", { class: "rtask", text: r.closed || "" }));
-}
-function emptyCli(msg, cli) { return el("div", { class: "empty" }, msg + " · ", el("span", { class: "cli mono", text: cli })); }
-
-/* links/memory editor — full-state PUT; By is display-only (server merges by id). No optimistic UI. */
-function editor(key, kind, items) {
-  const box = el("div", {});
-  const list = el("div", {});
-  const model = items.map((x) => ({ ...x }));
-  function draw() {
-    list.replaceChildren();
-    model.forEach((m, i) => {
-      const head = el("div", { class: "head" },
-        el("input", kind === "links" ? { value: m.label || "", placeholder: "label", oninput: (e) => (m.label = e.target.value) } : { value: m.title || "", placeholder: "title", oninput: (e) => (m.title = e.target.value) }),
-        m.by ? el("span", { class: "by", text: "@" + m.by }) : null,
-        el("button", { text: "✕", onclick: () => { model.splice(i, 1); draw(); } }));
-      const fields = kind === "links"
-        ? [field("url", el("input", { value: m.url || "", placeholder: "https://", oninput: (e) => (m.url = e.target.value) })),
-           field("triggers (comma)", el("input", { value: (m.triggers || []).join(", "), oninput: (e) => (m.triggers = e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })),
-           field("summary", el("textarea", { oninput: (e) => (m.summary = e.target.value) }, m.summary || ""))]
-        : [field("note", el("textarea", { oninput: (e) => (m.note = e.target.value) }, m.note || "")),
-           field("date", el("input", { value: m.date || "", placeholder: "YYYY-MM-DD", oninput: (e) => (m.date = e.target.value) }))];
-      list.append(el("div", { class: "edit-row" }, head, ...fields));
-    });
-  }
-  function field(label, input) { return el("div", {}, el("label", { text: label }), input); }
-  draw();
-  box.append(list, el("div", { class: "grp", style: "display:flex;gap:9px;margin-top:8px" },
-    el("button", { text: `+ add ${kind === "links" ? "link" : "memory"}`, onclick: () => { model.push(kind === "links" ? { label: "", url: "", triggers: [], summary: "" } : { title: "", note: "", date: "" }); draw(); } }),
-    el("button", { class: "primary", text: "save", onclick: (event) => saveEditor(key, kind, model, event.currentTarget) })));
-  return box;
-}
-async function saveEditor(key, kind, model, control) {
-  await mutate(control, "saving…", async () => {
-    const cur = await api(`/api/tasks/${key}`);
-    const payload = { links: cur.links, memory: cur.memory };
-    payload[kind] = model;
-    await api(`/api/tasks/${key}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-  });
-}
-function archiveTask(key, control) {
-  if (!confirm(`Archive task "${key}"? Refused if it still has open items.`)) return;
-  clearBanner();
-  withPending(control, "archiving…", async () => {
-    try { await api(`/api/tasks/${key}`, { method: "DELETE" }); location.hash = "#/"; }
-    catch (e) { showConflict(e); }
-  });
-}
-
-/* ---------- INBOX (read-only; triage is CLI-only) ---------- */
-async function renderInbox(version = routeVersion) {
-  setCrumb("inbox");
-  app.replaceChildren(el("div", { class: "empty", text: "loading inbox…" }));
-  let items; try { items = await api("/api/inbox"); } catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("inbox", e)); return; }
-  if (version !== routeVersion) return;
-  const frag = document.createDocumentFragment();
-  frag.append(el("div", { class: "toolbar" }, el("div", { class: "grp" }, el("button", { text: "← back", onclick: () => history.back() }), el("span", { class: "id", text: "inbox" }))));
-  if (!items.length) { frag.append(emptyCli("inbox clear — nothing to triage", "pm triage <id> <KEY>")); }
-  else {
-    frag.append(el("div", { class: "rows" }, items.map((b) => el("div", { class: "row", style: "cursor:default" },
-      el("span", { class: "tick", text: "•" }), pchip(b.priority || "P3"), el("span", { class: "rid", text: b.id }),
-      el("span", { class: "rtitle", text: b.title || b.note || "" }), el("span", { class: "rtask", text: "" })))));
-    frag.append(el("div", { class: "empty", style: "padding-top:14px" }, "triage is CLI-only · ", el("span", { class: "cli mono", text: "pm triage <id> <KEY>" })));
-  }
-  app.replaceChildren(frag);
-}
-
-/* ---------- TASKS index (read; drill target) ---------- */
-function taskCreateForm() {
-  const input = el("input", { id: "task-key", name: "key", required: "", pattern: "[A-Z0-9_-]+", autocomplete: "off", placeholder: "TASK_KEY", "aria-describedby": "task-create-hint", oninput: (event) => event.currentTarget.setCustomValidity("") });
-  const submit = el("button", { class: "primary", type: "submit", text: "create task" });
-  return el("form", { class: "task-create", onsubmit: async (event) => {
-    event.preventDefault();
-    const key = input.value.trim();
-    input.setCustomValidity(/^[A-Z0-9_-]+$/.test(key) ? "" : "Use uppercase letters, digits, underscore, or hyphen.");
-    if (!input.reportValidity()) return;
-    clearBanner();
-    try {
-      await withPending(submit, "creating…", () => api(`/api/tasks/${encodeURIComponent(key)}`, {
-        method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ links: [], memory: [] })
-      }));
-      location.hash = `#/task/${encodeURIComponent(key)}`;
-    } catch (e) { showConflict(e); }
-  } },
-    el("div", {}, el("label", { for: "task-key", text: "task key" }), input),
-    submit,
-    el("div", { class: "hint", id: "task-create-hint" }, "key only · richer task setup remains CLI-only: ", el("span", { class: "mono", text: "pm task create <KEY> --title …" })));
-}
-async function renderTasks(version = routeVersion) {
-  setCrumb("tasks");
-  app.replaceChildren(el("div", { class: "empty", text: "loading tasks…" }));
-  let tasks; try { tasks = await api("/api/tasks"); } catch (e) { if (version === routeVersion) app.replaceChildren(fetchError("tasks", e)); return; }
-  if (version !== routeVersion) return;
-  const frag = document.createDocumentFragment();
-  frag.append(el("div", { class: "toolbar" }, el("div", { class: "grp" }, el("button", { text: "← back", onclick: () => history.back() }), el("span", { class: "id", text: "tasks" }))));
-  frag.append(taskCreateForm());
-  frag.append(tasks.length ? el("div", { class: "rows" }, tasks.map((t) => el("a", { class: "row", href: `#/task/${t.key}` },
-    el("span", { class: "tick", text: "▸" }), el("span", {}), el("span", { class: "rid", text: t.key }),
-    el("span", { class: "rtitle", text: `${t.linkCount} links · ${t.memCount} memory` }), el("span", { class: "rtask", text: "" }))))
-    : emptyCli("no active tasks", "pm task create <KEY> --title …"));
-  app.replaceChildren(frag);
-}
-
-/* ---------- router ---------- */
-async function route() {
-  const version = ++routeVersion;
-  const target = routeHash();
-  const h = location.hash.replace(/^#\/?/, "");
-  const seg = h.split("/").map(decodeURIComponent);
-  if (seg[0] === "item" && seg[1]) await renderItem(seg[1], version);
-  else if (seg[0] === "task" && seg[1]) await renderTask(seg[1], seg[2] || "backlog", version);
-  else if (seg[0] === "inbox") await renderInbox(version);
-  else if (seg[0] === "tasks") await renderTasks(version);
-  else await renderHome(version);
-  if (version !== routeVersion || target !== routeHash()) return;
-  requestAnimationFrame(() => {
-    if (version === routeVersion && target === routeHash()) window.scrollTo(0, scrollPositions.get(target) || 0);
-  });
-}
-document.getElementById("validate").addEventListener("click", loadValidate);
-window.addEventListener("hashchange", (event) => {
-  rememberScroll(routeHash(event.oldURL));
-  route();
+let searchTimer;
+searchInput.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const params = routeParams();
+    if (searchInput.value.trim()) params.set("q", searchInput.value.trim()); else params.delete("q");
+    history.replaceState({}, "", `${location.pathname}${params.toString() ? `?${params}` : ""}`);
+    renderSearchResults();
+  }, 90);
 });
-route();
+searchInput.addEventListener("focus", renderSearchResults);
+searchInput.addEventListener("keydown", (event) => { if (event.key === "Escape") { searchResults.hidden = true; searchInput.blur(); } });
+document.addEventListener("keydown", (event) => { if (event.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) { event.preventDefault(); searchInput.focus(); } });
+document.addEventListener("click", (event) => { if (!event.target.closest(".global-search")) searchResults.hidden = true; });
+
+function skeletonPage() {
+  workspace.replaceChildren(el("div", { class: "skeleton" }), el("div", { class: "skeleton" }), el("div", { class: "skeleton" }));
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Context" }), el("div", { class: "skeleton" }), el("div", { class: "skeleton" }));
+}
+function fullConnectionError() {
+  workspace.replaceChildren(pageHead("Task Desk is unavailable", "The dashboard could not read the PM store. Your route and filters are still preserved."),
+    el("div", { class: "panel danger" }, el("strong", { text: "Connection failed" }), el("p", { class: "muted", text: state.errors.roadmap?.message || state.errors.tasks?.message || "Unknown server error" }), el("button", { class: "btn primary", type: "button", text: "Retry connection", onclick: renderRoute })));
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Recovery" }), el("p", { class: "muted", text: "Keep this page open and retry after the PM server is available." }));
+}
+
+async function renderRoute() {
+  const token = ++state.routeToken;
+  skeletonPage();
+  searchInput.value = routeParams().get("q") || "";
+  await fetchBase();
+  if (token !== state.routeToken) return;
+  if (state.errors.roadmap && state.errors.tasks) return fullConnectionError();
+  const view = currentView();
+  try {
+    if (view === "now") await renderNow();
+    else if (view === "tasks") await renderTasks();
+    else if (view === "task") await renderTaskWorkspace();
+    else if (view === "item") await renderItemDetail();
+    else if (view === "people") await renderPeople();
+    else if (view === "health") await renderHealth();
+    else renderNotFound(view);
+  } catch (error) {
+    workspace.replaceChildren(pageHead("This view is unavailable", "Other dashboard areas may still be used."), el("div", { class: "panel danger" }, el("strong", { text: error.message || String(error) }), el("div", { class: "button-row", style: "margin-top:14px" }, el("button", { class: "btn", type: "button", text: "Retry this view", onclick: renderRoute }), routeLink("Back to Now", "now"))));
+    contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Partial read failure" }), el("p", { class: "muted", text: "The rest of the shell remains available." }));
+  }
+}
+
+async function renderNow() {
+  const roadmap = state.roadmap;
+  const next = state.next;
+  workspace.replaceChildren(pageHead("Now", "Resume the selected plan, or explicitly choose an eligible Item. Nothing here is selected automatically."));
+  workspace.append(renderCurrentPlan(roadmap?.currentPlan));
+  if (state.errors.next) workspace.append(el("div", { class: "panel danger" }, el("strong", { text: "Candidate list unavailable" }), el("p", { class: "muted", text: state.errors.next.message }), el("button", { class: "btn", type: "button", text: "Retry", onclick: renderRoute })));
+  else {
+    const eligible = filterItems(next?.eligible || []);
+    const blocked = filterItems(next?.blocked || []);
+    workspace.append(sectionHead("Eligible next", `${eligible.length} candidates`), eligible.length ? workList(eligible, { simple: true }) : emptyState("No eligible work", searchInput.value ? "No candidate matches the active search." : "Create an Item or resolve a blocker to continue.", "pm item add <TASK> <id> --title <title>"));
+    workspace.append(sectionHead("Blocked", `${blocked.length} items`), blocked.length ? workList(blocked, { simple: true, blocked: true }) : emptyState("No blocked work", "Dependency checks found no blocked Items."));
+  }
+  workspace.append(sectionHead("Desk health"), el("div", { class: "summary-grid" },
+    stat("Open Items", roadmap?.open?.length ?? "—"), stat("Inbox", state.inbox?.length ?? next?.inbox ?? "—"), stat("Validation", state.errors.validation ? "Unavailable" : `${state.validation?.errors?.length || 0} / ${state.validation?.warnings?.length || 0}`, "errors / warnings")));
+  const linkedTask = roadmap?.currentPlan?.state === "linked" ? (roadmap.currentPlan.item.task || roadmap.currentPlan.item.key) : null;
+  await renderContextFor(linkedTask);
+}
+
+function renderCurrentPlan(current) {
+  if (!current || current.state === "empty") return el("section", { class: "panel current" }, el("p", { class: "eyebrow", text: "Current plan" }), el("div", { class: "current-grid" }, el("div", {}, el("div", { class: "current-title" }, el("strong", { text: "No plan selected" })), el("p", { class: "muted", text: "Choose an Item below to inspect it and copy a kickoff prompt. The dashboard does not persist an Item selection." })), el("div", { class: "button-row" }, routeLink("Browse Tasks", "tasks", {}, "btn primary"))));
+  if (current.state === "stale") return el("section", { class: "panel current warning" }, el("p", { class: "eyebrow", text: "Current plan · needs recovery" }), el("div", { class: "current-title" }, el("strong", { text: "Stale selection" }), el("span", { class: "warning-text", text: current.reason || "inconsistent plan state" })), el("p", { class: "muted", text: "Inspect validation, select a valid plan from the CLI, then refresh." }), el("div", { class: "cli", text: "pm validate  ·  pm select --plan <plan-path>" }));
+  const plan = current.plan || {};
+  const item = current.item;
+  const title = item ? `${item.id} · ${item.title}` : (plan.title || plan.id || "Standalone plan");
+  const task = item?.task || item?.key;
+  return el("section", { class: "panel current" },
+    el("p", { class: "eyebrow", text: `Current plan · ${current.state}` }),
+    el("div", { class: "current-grid" },
+      el("div", {}, el("div", { class: "current-title" }, item ? priorityMark(item.priority) : null, el("strong", { text: title })),
+        el("div", { class: "mapping" }, task ? el("span", { text: `Task ${task}` }) : null, plan.status ? el("span", { text: plan.status }) : null, plan.branch ? el("span", { text: `branch ${plan.branch}` }) : null, plan.worktree ? el("span", { text: plan.worktree }) : null),
+        el("div", { class: "next-step" }, el("span", { class: "field-label", text: "Next step" }), el("div", { text: cleanStep(plan.nextStep) }))),
+      el("div", { class: "button-row" }, el("button", { class: "btn primary", type: "button", text: "Copy resume prompt", onclick: (event) => copyPrompt("/api/current-plan/next", event.currentTarget) }), item ? routeLink("Open Item", "item", { item: item.id }) : null, task ? routeLink("Open Task", "task", { task, tab: "overview" }) : null)));
+}
+
+function filterItems(items) {
+  const query = searchInput.value.trim().toLowerCase();
+  return query ? items.filter((item) => `${item.id} ${item.title} ${item.note || ""} ${item.owner || ""} ${item.key || item.task || ""}`.toLowerCase().includes(query)) : items;
+}
+function workList(items, options = {}) {
+  return el("div", { class: "work-list" }, items.map((item) => workRow(item, options)));
+}
+function workRow(item, options = {}) {
+  const task = item.task || item.key;
+  const blockedBy = item.blockedBy?.length ? item.blockedBy : item.dependsOn?.filter((id) => options.blocked);
+  return el("article", { class: `work-row ${blockedBy?.length ? "blocked" : ""}` },
+    priorityMark(item.priority),
+    el("span", { class: "mono muted", text: item.id }),
+    el("div", { class: "work-title" }, el("a", { href: routeHref("item", { item: item.id }), dataset: { route: "" }, text: item.title }), el("small", { text: blockedBy?.length ? `Blocked by ${blockedBy.join(", ")}` : (item.note || `Task ${task}`) })),
+    el("div", { class: "work-owner", text: item.owner ? `Owner · ${item.owner}` : "Unassigned" }),
+    el("div", { class: "row-actions" }, routeLink("Open", "item", { item: item.id }), options.simple && !item.plan ? el("button", { class: "btn", type: "button", text: "Copy kickoff", onclick: (event) => copyPrompt(`/api/roadmap/${item.id}/next`, event.currentTarget) }) : null));
+}
+function stat(label, value, suffix = "") { return el("div", { class: "stat" }, el("span", { text: label }), el("b", { text: String(value) }), suffix ? el("span", { text: suffix }) : null); }
+
+async function renderTasks() {
+  workspace.replaceChildren(pageHead("Tasks", "Each Task keeps its work, history, collaborators, links, and memory together.", el("button", { class: "btn primary", type: "button", text: "Create Task", onclick: () => document.getElementById("task-key")?.focus() })));
+  const form = el("form", { class: "create-form", id: "task-create-form" },
+    field("Task key", el("input", { id: "task-key", name: "key", required: true, pattern: "[A-Z0-9_-]+", placeholder: "DASHBOARD", autocomplete: "off" })),
+    field("Title", el("input", { name: "title", required: true, placeholder: "What this Task owns", autocomplete: "off" })),
+    el("div", { class: "submit-field" }, el("span", { class: "field-label", text: "Create" }), el("button", { class: "btn primary", type: "submit", text: "Add Task" })),
+    el("div", { class: "form-error", role: "alert" }));
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const values = Object.fromEntries(new FormData(form));
+    const button = form.querySelector("button[type=submit]");
+    try { await pending(button, "Creating…", () => api("/api/tasks", { method: "POST", body: jsonBody(values) }), `Task ${values.key} created`); navigate(routeHref("task", { task: values.key, tab: "overview" }), { replace: true }); }
+    catch (error) { form.querySelector(".form-error").textContent = error.message; }
+  });
+  workspace.append(form);
+  const tasks = filterTasks(state.tasks);
+  workspace.append(sectionHead("Active Tasks", `${tasks.length} shown`));
+  if (!tasks.length) workspace.append(emptyState(state.tasks.length ? "No matching Tasks" : "Create the first Task", state.tasks.length ? "Clear the search to see all Tasks." : "Use the form above to establish a Task workspace.", "pm task create <KEY> --title <title>"));
+  else workspace.append(el("div", { class: "task-cards" }, tasks.map((task) =>
+    el("a", { class: "task-card", href: routeHref("task", { task: task.key, tab: "overview" }), dataset: { route: "" } },
+      el("h2", { text: task.key }),
+      el("p", { class: "title", text: task.title }),
+      el("div", { class: "task-meta" },
+        el("span", { text: `${task.openCount} open` }),
+        el("span", { text: `${task.closedCount} closed` }),
+        el("span", { text: task.mode }),
+        el("span", { text: `${task.linkCount + task.memCount} context` }))))));
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Task model" }), el("h2", { text: "One durable workspace" }), el("p", { class: "muted", text: "Task navigation is local UI state. Current execution continues to come only from the selected plan." }), el("div", { class: "context-group" }, el("span", { class: "field-label", text: "CLI boundary" }), el("p", { class: "muted", text: "Restore archived Tasks and change collaboration mode from the CLI." }), el("div", { class: "cli", text: "pm task restore <KEY>" })));
+}
+function filterTasks(tasks) { const query = searchInput.value.trim().toLowerCase(); return query ? tasks.filter((task) => `${task.key} ${task.title}`.toLowerCase().includes(query)) : tasks; }
+let fieldSequence = 0;
+function field(label, control, cls = "") {
+  if (!control.id) control.id = `field-${++fieldSequence}`;
+  return el("div", { class: `field ${cls}` }, el("label", { for: control.id, text: label }), control);
+}
+
+async function loadTask(key, closed = null) {
+  const suffix = closed == null ? "" : `?closed=${closed}`;
+  return api(`/api/tasks/${encodeURIComponent(key)}${suffix}`);
+}
+function taskHeader(task, tab) {
+  const tabs = ["overview", "work", "history", "context"];
+  return el("header", { class: "task-header" }, el("div", { class: "task-header-top" },
+    el("div", {}, el("p", { class: "eyebrow", text: "Task Workspace" }), el("h1", {}, document.createTextNode(task.title), task.title === task.key ? null : el("span", { text: task.key })), el("div", { class: "task-meta" }, el("span", { text: task.status }), el("span", { text: task.mode }), task.collaborators?.length ? el("span", { text: `${task.collaborators.length} collaborators` }) : null)),
+    el("div", { class: "button-row" }, routeLink("Add Item", "task", { task: task.key, tab: "work", create: "1" }, "btn primary"), routeLink("All Tasks", "tasks"))),
+    el("div", { class: "tabs", role: "tablist", "aria-label": `${task.key} sections` }, tabs.map((name) => el("button", { class: "tab", type: "button", role: "tab", "aria-selected": tab === name ? "true" : "false", "aria-controls": "task-panel", onclick: () => navigate(routeHref("task", { task: task.key, tab: name })), text: name[0].toUpperCase() + name.slice(1) }))));
+}
+
+async function renderTaskWorkspace() {
+  const params = routeParams();
+  const key = params.get("task");
+  const tab = params.get("tab") || "overview";
+  if (!key || !["overview", "work", "history", "context"].includes(tab)) return renderNotFound("task", key ? `Unknown tab: ${tab}` : "Missing Task key");
+  const closed = tab === "history" ? (params.get("history") === "all" ? 0 : 8) : (tab === "overview" ? 3 : null);
+  const task = await loadTask(key, closed);
+  workspace.replaceChildren(taskHeader(task, tab), el("section", { id: "task-panel", role: "tabpanel", "aria-label": `${tab} panel` }));
+  if (tab === "overview") renderTaskOverview(task);
+  if (tab === "work") renderTaskWork(task);
+  if (tab === "history") renderTaskHistory(task);
+  if (tab === "context") renderTaskContext(task);
+  renderContextRail(task);
+}
+
+function renderTaskOverview(task) {
+  const target = document.getElementById("task-panel");
+  const linked = state.roadmap?.currentPlan?.state === "linked" && (state.roadmap.currentPlan.item.task || state.roadmap.currentPlan.item.key) === task.key;
+  target.append(el("div", { class: "summary-grid" }, stat("Open Items", task.open.length), stat("Closed Items", task.closedTotal ?? task.closed?.length ?? "—"), stat("Task context", task.links.length + task.memory.length)));
+  target.append(sectionHead("Execution"), linked ? renderCurrentPlan(state.roadmap.currentPlan) : el("div", { class: "panel" }, el("strong", { text: "No selected plan is linked to this Task" }), el("p", { class: "muted", text: "Opening this workspace does not change current execution." }), routeLink("Review eligible work", "now")));
+  target.append(sectionHead("Open work", `${task.open.length} items`), task.open.length ? workList(task.open.slice(0, 6)) : emptyState("No open Items", "Add work from the Work tab."));
+  target.append(sectionHead("Recent history", `${task.closed?.length || 0} shown`), task.closed?.length ? el("div", { class: "work-list" }, task.closed.map(closedRow)) : emptyState("No closed history", "Completed or dropped Items will appear here."));
+  target.append(sectionHead("Task lifecycle"), el("div", { class: "panel" }, el("div", { class: "panel-head" }, el("div", {}, el("h2", { text: "Archive Task" }), el("p", { text: "Archiving preserves all Task data and is refused while open Items remain." })), el("button", { class: "btn danger", type: "button", text: "Archive Task…", onclick: (event) => archiveTask(task, event.currentTarget) }))));
+}
+
+function renderTaskWork(task) {
+  const params = routeParams();
+  const target = document.getElementById("task-panel");
+  const form = el("form", { class: "create-form" },
+    field("Item id", el("input", { name: "id", required: true, pattern: "[a-z0-9]+(?:-[a-z0-9]+)*", placeholder: "item-id", autocomplete: "off" })),
+    field("Title", el("input", { name: "title", required: true, placeholder: "Clear outcome", autocomplete: "off" })),
+    field("Priority", selectControl("priority", ["P0", "P1", "P2", "P3"], "P2")),
+    field("Order", el("input", { name: "order", type: "number", min: "1", value: nextOrder(task.open), inputmode: "numeric" }), "order-field"),
+    el("div", { class: "submit-field" }, el("span", { class: "field-label", text: "Create" }), el("button", { class: "btn primary", type: "submit", text: "Add Item" })),
+    el("div", { class: "form-error", role: "alert" }));
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); if (!form.reportValidity()) return;
+    const values = Object.fromEntries(new FormData(form));
+    const button = form.querySelector("button[type=submit]");
+    try { await pending(button, "Adding…", () => api(`/api/tasks/${task.key}/items`, { method: "POST", body: jsonBody(values) }), `Item ${values.id} added`); }
+    catch (error) { form.querySelector(".form-error").textContent = error.message; }
+  });
+  target.append(form);
+  const priority = params.get("priority") || "all";
+  const ownership = params.get("owner") || "all";
+  const filters = el("div", { class: "filters" }, field("Priority", selectControl("work-priority", ["all", "P0", "P1", "P2", "P3"], priority)), field("Ownership", selectControl("work-owner", ["all", "unassigned", "assigned"], ownership)), el("button", { class: "btn", type: "button", text: "Clear filters", onclick: () => navigate(routeHref("task", { task: task.key, tab: "work" })) }));
+  for (const select of filters.querySelectorAll("select")) select.addEventListener("change", () => {
+    const extra = { task: task.key, tab: "work", priority: filters.querySelector("[name=work-priority]").value, owner: filters.querySelector("[name=work-owner]").value };
+    navigate(routeHref("task", extra));
+  });
+  target.append(filters);
+  const items = task.open.filter((item) => (priority === "all" || item.priority === priority) && (ownership === "all" || (ownership === "assigned" ? item.owner : !item.owner)) && filterItems([item]).length);
+  target.append(sectionHead("Open Items", `${items.length} shown`), items.length ? el("div", { class: "work-list" }, items.map((item) => editableWorkRow(task, item))) : emptyState("No matching Items", "Clear a filter or create an Item above."));
+  if (params.get("create") === "1") queueMicrotask(() => form.querySelector("input")?.focus());
+}
+function nextOrder(items) { return Math.max(0, ...items.map((item) => Number(item.order) || 0)) + 1; }
+function selectControl(name, values, selected) { return el("select", { name }, values.map((value) => el("option", { value, selected: value === selected, text: value === "all" ? "All" : value[0].toUpperCase() + value.slice(1) }))); }
+function editableWorkRow(task, item) {
+  const collab = task.mode === "collab" || item.owner || task.collaborators?.length;
+  const row = el("div", { class: `work-row ${item.dependsOn?.length ? "blocked" : ""}` }, priorityMark(item.priority), el("span", { class: "mono muted", text: item.id }),
+    el("div", { class: "work-title" }, el("a", { href: routeHref("item", { item: item.id }), dataset: { route: "" }, text: item.title }), el("small", { text: item.dependsOn?.length ? `Depends on ${item.dependsOn.join(", ")}` : (item.note || `Order ${item.order}`) })),
+    el("div", { class: "work-owner", text: item.owner ? `Owner · ${item.owner}` : "Unassigned" }),
+    el("div", { class: "row-actions" }, routeLink("Details", "item", { item: item.id }), collab ? ownershipButtons(item) : null));
+  return el("article", { class: "work-entry" }, row, el("details", { class: "inline-organize" }, el("summary", { text: "Edit priority, order, dependencies" }), buildOrganizationForm(item, item)));
+}
+function ownershipButtons(item) {
+  if (!item.owner) return el("button", { class: "btn", type: "button", disabled: !state.actor?.actor, title: state.actor?.actor ? `Claim as ${state.actor.actor}` : "Set PM_ACTOR or git user.email first", text: "Claim", onclick: async (event) => { try { await pending(event.currentTarget, "Claiming…", () => api(`/api/roadmap/${item.id}/claim`, { method: "POST", body: jsonBody({}) }), `${item.id} claimed`); } catch {} } });
+  return [el("button", { class: "btn", type: "button", text: "Release", onclick: async (event) => { try { await pending(event.currentTarget, "Releasing…", () => api(`/api/roadmap/${item.id}/release`, { method: "POST", body: jsonBody({ expectedOwner: item.owner }) }), `${item.id} released`); } catch {} } }), el("button", { class: "btn", type: "button", text: "Hand off", onclick: () => handoffItem(item) })];
+}
+
+function renderTaskHistory(task) {
+  const target = document.getElementById("task-panel");
+  target.append(sectionHead("Closed history", `${task.closedTotal ?? task.closed?.length ?? 0} total`));
+  if (!task.closed?.length) target.append(emptyState("No closed Items", "Completed and dropped work will be listed newest first."));
+  else target.append(el("div", { class: "work-list" }, task.closed.map(closedRow)));
+  if (task.closedTotal > task.closed.length) target.append(el("div", { class: "button-row", style: "margin-top:12px" }, routeLink("Show full history", "task", { task: task.key, tab: "history", history: "all" })));
+}
+function closedRow(item) { return el("article", { class: "work-row" }, el("span", { class: `status-mark ${item.status === "done" ? "success-text" : "warning-text"}`, text: item.status || "closed" }), el("span", { class: "mono muted", text: item.id }), el("div", { class: "work-title" }, el("strong", { text: item.title }), el("small", { text: item.reason || item.closed || "Closed" })), el("span", { class: "work-owner mono", text: item.closed || "" }), el("div")); }
+
+function renderTaskContext(task) {
+  const draft = { links: structuredClone(task.links), memory: structuredClone(task.memory) };
+  const root = el("div", { class: "context-editor" });
+  function paint() {
+    root.replaceChildren(sectionHead("Task links", `${draft.links.length}`), ...draft.links.map((link, index) => contextEditRow("link", link, index, draft, paint)), el("button", { class: "btn", type: "button", text: "+ Add link", onclick: () => { draft.links.push({ label: "", url: "", triggers: [], summary: "" }); paint(); } }),
+      sectionHead("Task memory", `${draft.memory.length}`), ...draft.memory.map((memory, index) => contextEditRow("memory", memory, index, draft, paint)), el("button", { class: "btn", type: "button", text: "+ Add memory", onclick: () => { draft.memory.push({ title: "", note: "", date: "" }); paint(); } }),
+      el("div", { class: "button-row" }, el("button", { class: "btn primary", type: "button", text: "Save Task context", onclick: async (event) => { try { await pending(event.currentTarget, "Saving…", () => api(`/api/tasks/${task.key}`, { method: "PUT", body: jsonBody(draft) }), `Context saved for ${task.key}`); } catch {} } })));
+  }
+  paint(); document.getElementById("task-panel").append(root);
+}
+function contextEditRow(kind, value, index, draft, repaint) {
+  const source = kind === "link" ? draft.links : draft.memory;
+  const idKey = kind === "link" ? "label" : "title";
+  const row = el("div", { class: "context-edit-row" });
+  const identity = el("input", { value: value[idKey] || "", placeholder: kind === "link" ? "Label" : "Title" }); identity.addEventListener("input", () => value[idKey] = identity.value);
+  const detail = kind === "link" ? el("input", { value: value.url || "", placeholder: "https://…", inputmode: "url" }) : el("input", { value: value.date || "", placeholder: "YYYY-MM-DD" }); detail.addEventListener("input", () => value[kind === "link" ? "url" : "date"] = detail.value);
+  const remove = el("button", { class: "btn danger", type: "button", text: "Remove", onclick: () => { source.splice(index, 1); repaint(); } });
+  const prose = el("textarea", { class: "wide", placeholder: kind === "link" ? "Summary" : "Durable note", text: kind === "link" ? value.summary || "" : value.note || "" }); prose.value = kind === "link" ? value.summary || "" : value.note || ""; prose.addEventListener("input", () => value[kind === "link" ? "summary" : "note"] = prose.value);
+  row.append(field(kind === "link" ? "Label" : "Title", identity), field(kind === "link" ? "URL" : "Date", detail), remove, field(kind === "link" ? "Summary" : "Note", prose, "wide"));
+  if (kind === "link") { const triggers = el("input", { value: (value.triggers || []).join(", "), placeholder: "design, api, release" }); triggers.addEventListener("input", () => value.triggers = triggers.value.split(",").map((part) => part.trim()).filter(Boolean)); row.append(field("Triggers", triggers, "wide")); }
+  return row;
+}
+
+async function renderItemDetail() {
+  const id = routeParams().get("item");
+  if (!id) return renderNotFound("item", "Missing Item id");
+  const joined = await api(`/api/roadmap/${encodeURIComponent(id)}/join?cap=3`);
+  const item = joined.item;
+  const task = await loadTask(item.task);
+  workspace.replaceChildren(pageHead(`${item.id}`, item.title, routeLink(`Back to ${item.task}`, "task", { task: item.task, tab: "work" }), !joined.closed ? el("button", { class: "btn primary", type: "button", text: item.plan ? "Copy resume" : "Copy kickoff", onclick: (event) => copyPrompt(`/api/roadmap/${item.id}/next`, event.currentTarget) }) : null));
+  workspace.append(el("div", { class: "panel" }, el("div", { class: "panel-head" }, el("div", {}, el("p", { class: "eyebrow", text: "Item detail" }), el("h2", {}, priorityMark(item.priority), document.createTextNode(`  ${item.title}`))), el("span", { class: "status-mark", text: item.status })),
+    el("dl", { class: "meta-list" }, el("dt", { text: "Task" }), el("dd", {}, routeLink(item.task, "task", { task: item.task, tab: "overview" }, "mono")), el("dt", { text: "Plan" }), el("dd", { class: "mono", text: item.plan || "No plan" }), el("dt", { text: "Owner" }), el("dd", { text: item.owner || "Unassigned" }), el("dt", { text: "Owner note" }), el("dd", { text: item.ownerNote || "—" }), el("dt", { text: "Depends on" }), el("dd", { class: "mono", text: item.dependsOn?.join(", ") || "None" }), el("dt", { text: "Note" }), el("dd", { text: item.note || "—" }))));
+  if (!joined.closed) workspace.append(organizationPanel(item, task));
+  if (!joined.closed && (task.mode === "collab" || item.owner || task.collaborators?.length)) workspace.append(el("div", { class: "panel" }, el("div", { class: "panel-head" }, el("div", {}, el("h2", { text: "Collaboration" }), el("p", { text: state.actor?.actor ? `Actor: ${state.actor.actor} · ${state.actor.source}` : "Actor unavailable. Set PM_ACTOR or git user.email." }))), el("div", { class: "button-row" }, ownershipButtons(item))));
+  if (joined.plan) workspace.append(el("div", { class: "panel" }, el("div", { class: "panel-head" }, el("div", {}, el("h2", { text: "Plan mapping" }), el("p", { text: cleanStep(joined.plan.nextStep) }))), el("dl", { class: "meta-list" }, el("dt", { text: "Branch" }), el("dd", { class: "mono", text: joined.plan.branch || "—" }), el("dt", { text: "Worktree" }), el("dd", { class: "mono", text: joined.plan.worktree || "—" }), el("dt", { text: "Base" }), el("dd", { class: "mono", text: `${joined.plan.baseBranch || "—"}@${joined.plan.baseCommit || "—"}` }))));
+  if (!joined.closed) workspace.append(el("div", { class: "panel danger" }, el("div", { class: "panel-head" }, el("div", {}, el("h2", { text: "Drop Item" }), el("p", { text: "Only planless Items can be dropped here. Planned lifecycle recovery stays in the CLI." })), el("button", { class: "btn danger", type: "button", text: "Drop Item…", onclick: () => dropItem(item) }))));
+  renderContextRail(task, { item: true });
+}
+function organizationPanel(item, task) {
+  const projection = state.roadmap?.open?.find((candidate) => candidate.id === item.id) || item;
+  const panel = el("div", { class: "panel" }, el("div", { class: "panel-head" }, el("div", {}, el("h2", { text: "Organization" }), el("p", { text: "Priority, order, and dependencies are saved independently and refetched." }))));
+  panel.append(buildOrganizationForm(item, projection)); return panel;
+}
+function buildOrganizationForm(item, projection) {
+  const form = el("form", { class: "organization" }, field("Priority", selectControl("priority", ["P0", "P1", "P2", "P3"], item.priority)), field("Order", el("input", { name: "order", type: "number", min: "1", value: projection.order || 1 })), field("Dependencies", el("input", { name: "dependsOn", value: (item.dependsOn || []).join(", "), placeholder: "item-a, item-b" })), el("div", { class: "submit-field" }, el("span", { class: "field-label", text: "Apply" }), el("button", { class: "btn primary", type: "submit", text: "Save fields" })), el("div", { class: "form-error" }));
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); if (!form.reportValidity()) return;
+    const values = Object.fromEntries(new FormData(form)); const button = form.querySelector("button[type=submit]");
+    const calls = [];
+    if (values.priority !== item.priority) calls.push(api(`/api/roadmap/${item.id}/reprioritize`, { method: "POST", body: jsonBody({ priority: values.priority }) }));
+    if (String(values.order) !== String(projection.order || 1)) calls.push(api(`/api/roadmap/${item.id}/reorder`, { method: "POST", body: jsonBody({ order: values.order }) }));
+    const deps = String(values.dependsOn).split(",").map((value) => value.trim()).filter(Boolean);
+    if (deps.join(",") !== (item.dependsOn || []).join(",")) calls.push(api(`/api/roadmap/${item.id}/depend`, { method: "POST", body: jsonBody({ dependsOn: deps }) }));
+    if (!calls.length) return announce("No organization changes to save");
+    try { await pending(button, "Saving…", () => Promise.all(calls), `${item.id} organization saved`); } catch (error) { form.querySelector(".form-error").textContent = error.message; }
+  });
+  return form;
+}
+
+async function renderPeople() {
+  const collabItems = (state.roadmap?.open || []).filter((item) => item.owner || item.mode === "collab");
+  const collabTasks = state.tasks.filter((task) => task.mode === "collab" || task.collaborators?.length);
+  workspace.replaceChildren(pageHead("People", "A lightweight owner board for collaborative Tasks. Forced reassignment remains CLI-only."), el("div", { class: "panel" }, el("p", { class: "eyebrow", text: "Resolved actor" }), el("h2", { text: state.actor?.actor || "Unavailable" }), el("p", { class: "muted", text: state.actor?.source ? `Source: ${state.actor.source}` : "Set PM_ACTOR, state/actor.txt, or git user.email before claiming work." })));
+  if (!collabTasks.length && !collabItems.length) workspace.append(emptyState("No collaboration data", "People appears automatically when a Task or Item has collaboration metadata.", "pm task mode <TASK> collab"));
+  else {
+    const grouped = new Map();
+    for (const item of collabItems) { const owner = item.owner || "Unassigned"; if (!grouped.has(owner)) grouped.set(owner, []); grouped.get(owner).push(item); }
+    workspace.append(sectionHead("Owner board", `${collabItems.length} items`), el("div", { class: "owner-groups" }, [...grouped.entries()].map(([owner, items]) => el("section", { class: "owner-card" }, el("h2", { text: `${owner} · ${items.length}` }), ...items.map((item) => el("div", { class: "context-item" }, el("a", { href: routeHref("item", { item: item.id }), dataset: { route: "" }, text: item.id }), el("p", { text: `${item.title} · ${item.task}` }), item.ownerNote ? el("p", { text: `Handoff: ${item.ownerNote}` }) : null))))));
+  }
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Collaboration boundary" }), el("h2", { text: "Safe, explicit ownership" }), el("p", { class: "muted", text: "Claim, release, and handoff check the rendered owner. Roster changes and forced overwrite stay in the CLI." }), el("div", { class: "cli", text: "pm item owner set <TASK> <id> <actor> --force" }));
+}
+
+async function renderHealth() {
+  workspace.replaceChildren(pageHead("Inbox / Health", "Read project intake and validation without turning the dashboard into an administration console.", el("button", { class: "btn", type: "button", text: "Refresh checks", onclick: renderRoute })));
+  const errors = state.validation?.errors || [];
+  const warnings = state.validation?.warnings || [];
+  workspace.append(el("div", { class: "health-list" },
+    healthRow("Server", state.errors.roadmap ? "Partial read" : "Connected", state.errors.roadmap?.message || "Roadmap and navigation state loaded."),
+    healthRow("Actor", state.actor?.actor || "Unavailable", state.actor?.source ? `Resolved from ${state.actor.source}.` : "Set PM_ACTOR, state/actor.txt, or git user.email."),
+    healthRow("Validation", state.errors.validation ? "Unavailable" : `${errors.length} errors · ${warnings.length} warnings`, state.errors.validation?.message || "Run the same authoritative validator from the CLI with pm validate."),
+    healthRow("Inbox", `${state.inbox?.length ?? "—"} items`, "Inbox triage is intentionally CLI-only.")));
+  workspace.append(sectionHead("Validation details", `${errors.length + warnings.length}`));
+  if (!errors.length && !warnings.length) workspace.append(emptyState("Validation is clean", "No roadmap errors or warnings were returned."));
+  else workspace.append(el("div", { class: "panel" }, ...errors.map((message) => el("p", { class: "danger-text", text: `Error · ${formatIssue(message)}` })), ...warnings.map((message) => el("p", { class: "warning-text", text: `Warning · ${formatIssue(message)}` }))));
+  workspace.append(sectionHead("Inbox", `${state.inbox?.length || 0}`));
+  if (!state.inbox?.length) workspace.append(emptyState("Inbox is empty", "New intake will appear here for read-only inspection."));
+  else workspace.append(el("div", { class: "work-list" }, state.inbox.map((item) => el("article", { class: "work-row" }, priorityMark(item.priority), el("span", { class: "mono muted", text: item.id }), el("div", { class: "work-title" }, el("strong", { text: item.title }), el("small", { text: item.note || "No note" })), el("span", { class: "work-owner", text: "Needs CLI triage" }), el("div")))));
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Recovery commands" }), el("h2", { text: "Authoritative CLI" }), contextItem("Validate", "pm validate"), contextItem("Triage inbox", "pm inbox triage <id> --task <KEY>"), contextItem("Inspect current plan", "pm current-plan"));
+}
+function formatIssue(issue) { return typeof issue === "string" ? issue : JSON.stringify(issue); }
+function healthRow(label, value, note) { return el("div", { class: "health-row" }, el("strong", { text: label }), el("div", {}, el("div", { text: value }), el("div", { class: "muted", text: note }))); }
+function contextItem(title, text) { return el("div", { class: "context-item" }, el("strong", { text: title }), el("p", { class: "mono", text })); }
+
+function renderNotFound(view, detail = "Unknown route") {
+  workspace.replaceChildren(pageHead("Route not found", `The requested ${view} view cannot be opened.`), el("div", { class: "panel warning" }, el("strong", { text: detail }), el("div", { class: "button-row", style: "margin-top:14px" }, routeLink("Back to Now", "now", {}, "btn primary"), routeLink("Browse Tasks", "tasks"))));
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Navigation" }), el("p", { class: "muted", text: "Routes use query parameters so refresh and browser history remain stable." }));
+}
+
+async function renderContextFor(taskKey) {
+  if (!taskKey) {
+    contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Context" }), el("h2", { text: "No Task in execution" }), el("p", { class: "muted", text: "Select a Task to keep its links and recent memory beside the workspace." }), routeLink("Browse Tasks", "tasks"));
+    return;
+  }
+  try { renderContextRail(await loadTask(taskKey)); }
+  catch (error) { contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Context unavailable" }), el("p", { class: "danger-text", text: error.message }), el("button", { class: "btn", type: "button", text: "Retry context", onclick: renderRoute })); }
+}
+function renderContextRail(task, options = {}) {
+  const links = task.links || [];
+  const memory = [...(task.memory || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 3);
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Task context" }), el("div", { class: "panel-head" }, el("div", {}, el("h2", { class: "mono", text: task.key }), task.title === task.key ? null : el("p", { text: task.title })), el("span", { class: "task-wide", text: "Task-wide" })),
+    el("div", { class: "context-group" }, el("div", { class: "panel-head" }, el("h3", { text: "Links" }), el("span", { class: "muted", text: links.length })), links.length ? links.slice(0, 5).map(linkView) : el("p", { class: "muted", text: "No Task links." })),
+    el("div", { class: "context-group" }, el("div", { class: "panel-head" }, el("h3", { text: "Recent memory" }), el("span", { class: "muted", text: memory.length })), memory.length ? memory.map(memoryView) : el("p", { class: "muted", text: "No Task memory." })),
+    routeLink(options.item ? "Open full Task context" : "Manage Task context", "task", { task: task.key, tab: "context" }));
+}
+function linkView(link) {
+  const href = safeUrl(link.url);
+  return el("div", { class: "context-item" }, href ? el("a", { href, target: "_blank", rel: "noreferrer", text: link.label }) : el("strong", { text: link.label }), el("p", { text: link.summary || link.url || "No summary" }), link.by ? el("span", { class: "muted", text: `By ${link.by}` }) : null);
+}
+function memoryView(memory) { return el("div", { class: "context-item" }, el("strong", { text: memory.title }), el("p", { text: memory.note || "No note" }), el("span", { class: "muted", text: [memory.date, memory.by ? `By ${memory.by}` : ""].filter(Boolean).join(" · ") })); }
+
+async function copyPrompt(endpoint, button) {
+  clearAlert(); const previous = button.textContent; button.disabled = true; button.textContent = "Preparing…";
+  try {
+    const prompt = await api(endpoint);
+    try { await navigator.clipboard.writeText(prompt); announce("Prompt copied to clipboard"); }
+    catch { showPromptFallback(prompt); }
+  } catch (error) { showAlert(error, "Prompt unavailable"); }
+  finally { if (button.isConnected) { button.disabled = false; button.textContent = previous; } }
+}
+function showPromptFallback(prompt) {
+  const dialog = document.getElementById("prompt-dialog"); const textarea = document.getElementById("prompt-text"); textarea.value = prompt; dialog.showModal(); queueMicrotask(() => textarea.select());
+}
+document.getElementById("retry-copy").addEventListener("click", async (event) => {
+  event.preventDefault(); const text = document.getElementById("prompt-text").value;
+  try { await navigator.clipboard.writeText(text); document.getElementById("prompt-dialog").close(); announce("Prompt copied to clipboard"); } catch { document.getElementById("prompt-text").select(); }
+});
+
+function askConfirm({ title, message, confirmLabel, reason = false }) {
+  const dialog = document.getElementById("confirm-dialog"); const form = document.getElementById("confirm-form"); const reasonWrap = document.getElementById("confirm-reason-wrap"); const reasonInput = document.getElementById("confirm-reason");
+  document.getElementById("confirm-title").textContent = title; document.getElementById("confirm-message").textContent = message; document.getElementById("confirm-action").textContent = confirmLabel; reasonWrap.hidden = !reason; reasonInput.required = reason; reasonInput.value = "";
+  return new Promise((resolve) => { const finish = () => { dialog.removeEventListener("close", finish); resolve(dialog.returnValue === "confirm" ? { confirmed: true, reason: reasonInput.value.trim() } : { confirmed: false }); }; dialog.addEventListener("close", finish); dialog.showModal(); queueMicrotask(() => (reason ? reasonInput : form.querySelector("[value=cancel]")).focus()); });
+}
+async function dropItem(item) {
+  const answer = await askConfirm({ title: `Drop ${item.id}?`, message: "This moves the planless Item to closed history. A linked plan must be handled from the CLI.", confirmLabel: "Drop Item", reason: true });
+  if (!answer.confirmed) return;
+  const trigger = document.querySelector("button.danger");
+  try { await pending(trigger, "Dropping…", () => api(`/api/roadmap/${item.id}/drop`, { method: "POST", body: jsonBody({ reason: answer.reason }) }), `${item.id} dropped`); navigate(routeHref("task", { task: item.task, tab: "history" }), { replace: true }); } catch {}
+}
+async function archiveTask(task, trigger) {
+  const answer = await askConfirm({ title: `Archive ${task.key}?`, message: "Archiving preserves Task data and is refused while open Items remain.", confirmLabel: "Archive Task" });
+  if (!answer.confirmed) return;
+  try { await pending(trigger, "Archiving…", () => api(`/api/tasks/${task.key}`, { method: "DELETE" }), `${task.key} archived`); navigate(routeHref("tasks"), { replace: true }); } catch {}
+}
+async function handoffItem(item) {
+  const dialog = document.getElementById("handoff-dialog"); const form = document.getElementById("handoff-form"); const owner = document.getElementById("handoff-owner"); const note = document.getElementById("handoff-note"); const errorBox = document.getElementById("handoff-error");
+  owner.value = ""; note.value = ""; errorBox.textContent = ""; document.getElementById("handoff-message").textContent = `Current owner: ${item.owner}. The server will reject a stale handoff.`; dialog.showModal(); queueMicrotask(() => owner.focus());
+  const onClose = async () => {
+    dialog.removeEventListener("close", onClose);
+    if (dialog.returnValue !== "confirm") return;
+    if (!owner.value.trim()) { errorBox.textContent = "New owner is required."; return; }
+    try { await api(`/api/roadmap/${item.id}/handoff`, { method: "POST", body: jsonBody({ expectedOwner: item.owner, owner: owner.value.trim(), note: note.value.trim() }) }); announce(`${item.id} handed off to ${owner.value.trim()}`); await renderRoute(); }
+    catch (error) { showAlert(error); }
+  };
+  dialog.addEventListener("close", onClose);
+}
+
+document.getElementById("menu-button").addEventListener("click", () => navDrawer.showModal());
+document.getElementById("drawer-close").addEventListener("click", () => navDrawer.close());
+document.getElementById("confirm-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close("cancel"); });
+document.getElementById("handoff-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close("cancel"); });
+document.getElementById("prompt-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close("cancel"); });
+
+renderRoute();
 </script>
 </body>
 </html>

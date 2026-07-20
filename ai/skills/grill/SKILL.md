@@ -29,7 +29,7 @@ fi
 - `pm current-task` returns the owning **`<KEY>` only** (not an item id) → read `.agents/tasks/<KEY>/links.md` (context) and `.agents/tasks/<KEY>/memory.md` (retro-owned prior decisions), both read-only.
 - Run `pm get <id>` only when an item id is explicitly given.
 - Always grep/read the **codebase** for anything answerable from code.
-- No task/focus, or outside a repo → skip the pm probes, inspect code only. **Never run `npm install` from grill.**
+- No Task linked to the selected current plan, or outside a repo → skip the pm probes and inspect code only. **Never run `npm install` from grill.**
 
 ## Protocol
 
@@ -46,7 +46,7 @@ Stop when ANY holds: the actionable choices are settled; the user says proceed/s
 
 ## Hard rules
 
-- **Write nothing.** Write/Edit are omitted from `allowed-tools`, and Bash is restricted to read-only commands only: `git rev-parse`, `git status/log/branch`, `pm list|tree|get|next|recent|validate|current-task`, and read-only `rg`/`grep`/`find`/`ls`/`sed -n`. Forbidden: shell redirection, heredocs, `tee`, `sed -i`, `npm install`, and every pm write subcommand (`task`/`add`/`plan`/`approve`/`close`/`drop`/`triage`/`focus`/`memory`/`links`/`persist`/`complete`/`migrate --apply`). Durable capture is delegated downstream — point there, never write it yourself.
+- **Write nothing.** Write/Edit are omitted from `allowed-tools`, and Bash is restricted to read-only commands only: `git rev-parse`, `git status/log/branch`, `pm list|tree|get|next|recent|validate|current-task`, and read-only `rg`/`grep`/`find`/`ls`/`sed -n`. Forbidden: shell redirection, heredocs, `tee`, `sed -i`, `npm install`, and every pm write subcommand (`task`/`add`/`plan`/`approve`/`close`/`drop`/`triage`/`memory`/`links`/`persist`/`complete`/`migrate --apply`). Durable capture is delegated downstream — point there, never write it yourself.
 - **Don't re-ask what code/context answers.** Exploring first is mandatory, not optional.
 - **Recursion SKIP**: if already inside another skill flow (design / debug / …), do not start grill anew unless the user's latest message explicitly asks for it.
 - Questions are decision-shaped (about intent), not a code review.

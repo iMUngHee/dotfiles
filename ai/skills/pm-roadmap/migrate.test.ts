@@ -53,7 +53,7 @@ async function main() {
       await mkdir(join(root, ".agents", "task-context"), { recursive: true });
       await mkdir(join(root, ".agents", "memory"), { recursive: true });
       await writeFile(join(root, ".agents", "ROADMAP.md"),
-        `---\nproject: t\nfocus:\nupdated: 2026-06-10\n---\n# t — Backlog\n\n## Open\n\n- **it-1** — Item one\n  - Priority: P1\n  - Status: open\n  - Task: ALPHA\n  - Plan: -\n  - Note: hi\n\n## Recently Closed\n\n- **c-1** → .agents/plans/2026-06-01-c-1.md (done) · Task: ALPHA\n`);
+        `---\nproject: t\nfocus: it-1\nupdated: 2026-06-10\n---\n# t — Backlog\n\n## Open\n\n- **it-1** — Item one\n  - Priority: P1\n  - Status: open\n  - Task: ALPHA\n  - Plan: -\n  - Note: hi\n\n## Recently Closed\n\n- **c-1** → .agents/plans/2026-06-01-c-1.md (done) · Task: ALPHA\n`);
       await writeFile(join(root, ".agents", "task-context", "ALPHA.md"), `# ALPHA\n\n- **Wiki**\n  - URL: https://x\n  - Triggers: a, b\n  - Summary: s\n`);
       await writeFile(join(root, ".agents", "memory", "ALPHA.md"), `# ALPHA\n\n- **note1**\n  - Note: remember\n  - Date: 2026-06-01\n`);
       await makePlan(root, ".agents/plans/2026-06-01-c-1.md", "done");
@@ -72,6 +72,7 @@ async function main() {
       assert.deepEqual(await ids(join(root, ".agents", "tasks", "ALPHA", "memory.md")), ["note1"]);
       assert.equal(await exists(join(root, ".agents", "ROADMAP.md")), false, "legacy ROADMAP removed");
       assert.equal(await exists(join(root, ".agents", "task-context")), false, "legacy task-context removed");
+      assert.equal(await exists(join(root, ".agents", "state", "focus.txt")), false, "legacy selector is not migrated");
       assert.equal((await validateRoadmap(root)).errors.length, 0, "migrated tree validates clean");
 
       // re-run → no-op

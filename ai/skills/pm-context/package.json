@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx server.ts",
-    "test": "tsx server.test.ts"
+    "test": "for t in *.test.ts; do tsx \"$t\" || exit 1; done"
   },
   "dependencies": {
     "tsx": "^4.0.0"
