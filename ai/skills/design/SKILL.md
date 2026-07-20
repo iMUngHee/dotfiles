@@ -33,6 +33,27 @@ dedicated worktree, stage the approved plan under that reservation, then call
 seeds the worktree execution pointer, and selects or safely parks it in main. Standalone
 plans use the same worktree and plan transaction without a backlog item.
 
+## Product-Surface Gate Integration
+
+When a request also matches `product-craft`, close the smallest applicable product-surface
+gates before drafting the technical implementation plan:
+
+1. PR/diff/review feedback remains owned by `code-review`; completed-feature confirmation
+   remains owned by `verify`. Neither enters this planning path through product-craft.
+2. New or materially changed client surfaces start with `product-craft`, which selects
+   Seed, Focused Delta, or Full and obtains the required Experience and Interface gates.
+3. After `READY FOR BUILD`, this skill owns technical planning whenever its independent
+   trigger applies at any depth — including every expected three-or-more-file change.
+4. Durable UI writes require both the applicable product-craft authorization and this
+   skill's persisted active plan. A routine no-contract change still uses this skill when
+   the normal design trigger applies.
+5. Contract gaps return to `experience-design` or `interface-design` through
+   `product-craft`; technical planning must not invent the missing design decision.
+
+`design-contract.md` remains the product-surface authority. This plan records how the
+approved contract will be implemented and verified; it does not replace or silently
+amend the contract.
+
 ## Execution Bootstrap (before Context Discovery)
 
 Determine a stable kebab-case id and base ref before reading project code. A backlog item

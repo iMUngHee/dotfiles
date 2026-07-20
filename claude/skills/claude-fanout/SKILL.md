@@ -1,6 +1,6 @@
 ---
 name: fanout
-description: "Parallel multi-agent fan-out for independent N-item work. TRIGGER when: the user explicitly asks for parallel/fan-out/multi-agent processing, OR a task splits into 3+ truly independent units (per-file/per-module/per-symbol) that NO specialized skill owns. SKIP (defer to the owner): PR/code review (code-review), feature verification (verify), planning/architecture (design), root-cause debugging (debug), web research (deep-research), UI building (frontend-design); single-file edits and one-response work (→ handle solo)."
+description: "Parallel multi-agent fan-out for independent N-item work. TRIGGER when: the user explicitly asks for parallel/fan-out/multi-agent processing, OR a task splits into 3+ truly independent units (per-file/per-module/per-symbol) that NO specialized skill owns. SKIP (defer to the owner): PR/code review (code-review), feature verification (verify), planning/architecture (design), root-cause debugging (debug), web research (deep-research), UI/product-surface work (product-craft); single-file edits and one-response work (→ handle solo)."
 argument-hint: "[task description]"
 allowed-tools: Workflow, Task, TaskOutput, Read, Glob, Grep, Bash, Agent
 model: opus
@@ -21,7 +21,8 @@ Fanout NEVER preempts at the top level. If the request matches another skill's t
 - planning / architecture / multi-file design → `design`
 - root-cause debugging ("왜 안 돼") → `debug`
 - web / multi-source research → `deep-research`
-- UI / frontend building → `frontend-design`
+- UI/product-surface owner: product-craft. `product-craft` keeps UX/UI decision ownership;
+  fanout may operate beneath it only after stage boundaries and independent units are approved.
 
 Only proceed when NO specialized skill owns the request.
 
