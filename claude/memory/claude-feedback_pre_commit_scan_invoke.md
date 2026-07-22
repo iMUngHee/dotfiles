@@ -6,7 +6,7 @@ type: feedback
 
 Claude-specific implementation for the shared pre-commit sensitive-info scan rule (`memory/private/feedback_pre_commit_sensitive_scan.md`).
 
-**Mechanism:** dispatch the `pre-commit-verifier` agent via the `Agent` tool with `subagent_type: "pre-commit-verifier"`. Pass `git diff --cached --name-only` output and a brief context summary as the prompt.
+**Mechanism:** dispatch the `pre-commit-verifier` agent via the `Agent` tool with `subagent_type: "pre-commit-verifier"`. Pass `git diff --cached --name-only` output and a brief context summary as the prompt. When the current session-routing block contains a validated active plan, also pass `validated_plan_path`, `validated_plan_status`, and `validated_plan_main_root` verbatim. If the session is unbound or the plan is not active, omit that record so Scope Creep skips. Never reconstruct plan scope from a launcher selection or checkout state.
 
 **Why this is split out:** the scan rule itself is tool-agnostic (the *what* and *why*). The *how* differs per tool — Claude has subagents, Codex CLI does not (at time of writing). Keeping the invocation mechanism in a Claude-only memory lets the shared rule stay clean while preserving the concrete instruction Claude needs.
 

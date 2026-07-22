@@ -8,11 +8,16 @@ import { fileURLToPath } from "node:url";
 
 import {
   adoptPlan,
+  bindSession,
   cancelProvisional,
   ensureManagedWorktree,
   ensureCurrent,
+  ensureSession,
   reservationPaths,
   resolveCurrent,
+  resolveSession,
+  sessionBindingPaths,
+  unbindSession,
   validateManagedWorktrees,
   wireManagedStore,
   writeCurrentCAS,
@@ -42,6 +47,14 @@ async function fixture() {
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
   await mkdir(join(root, ".agents", "state"), { recursive: true });
   return { root, baseCommit };
+}
+
+async function mappedPlan(root, id, { status = "draft" } = {}) {
+  const ensured = await ensureManagedWorktree({ root, id, base: "main" });
+  const plan = `.agents/plans/2026-07-22-${id}.md`;
+  await writeFile(join(root, plan), `---\nid: ${id}\ntitle: ${id}\nstatus: ${status}\nbase_branch: main\nbase_commit: ${ensured.base_commit}\nbranch: ${ensured.branch}\nworktree: ${ensured.worktree}\n---\n`);
+  await writeFile(join(ensured.execution_root, ".agents", "state", "current.txt"), `${plan}\n`);
+  return { ...ensured, plan };
 }
 
 test("alternate-base ensure creates one reusable managed worktree with shared/local topology", async (t) => {
@@ -138,6 +151,149 @@ test("current resolution routes main to mapped worktree and uses immutable base 
   const terminal = await ensureCurrent({ root });
   assert.equal(terminal.status, "terminal");
   assert.equal(await readFile(join(root, ".agents", "state", "current.txt"), "utf8"), "", "terminal exact-match launcher pointer is cleared");
+});
+
+test("session bindings isolate exact plans by tool, repository, and session", async (t) => {
+  const first = await fixture();
+  const second = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "session-bindings-"));
+  t.after(() => Promise.all([
+    rm(first.root, { recursive: true, force: true }),
+    rm(second.root, { recursive: true, force: true }),
+    rm(storeRoot, { recursive: true, force: true }),
+  ]));
+
+  const planA = await mappedPlan(first.root, "session-plan-a");
+  const planB = await mappedPlan(first.root, "session-plan-b");
+  const planC = await mappedPlan(second.root, "session-plan-c");
+  await writeFile(join(first.root, ".agents", "state", "current.txt"), `${planB.plan}\n`);
+  await writeFile(join(second.root, ".agents", "state", "current.txt"), `${planC.plan}\n`);
+
+  await bindSession({ root: first.root, tool: "claude", sessionId: "shared/session", plan: planA.plan, storeRoot });
+  await bindSession({ root: first.root, tool: "claude", sessionId: "session-b", plan: planB.plan, storeRoot });
+  await bindSession({ root: first.root, tool: "codex", sessionId: "shared/session", plan: planB.plan, storeRoot });
+  await bindSession({ root: second.root, tool: "claude", sessionId: "shared/session", plan: planC.plan, storeRoot });
+
+  assert.equal((await resolveSession({ root: first.root, tool: "claude", sessionId: "shared/session", storeRoot })).plan, planA.plan);
+  assert.equal((await resolveSession({ root: first.root, tool: "claude", sessionId: "session-b", storeRoot })).plan, planB.plan);
+  assert.equal((await resolveSession({ root: first.root, tool: "codex", sessionId: "shared/session", storeRoot })).plan, planB.plan);
+  assert.equal((await resolveSession({ root: second.root, tool: "claude", sessionId: "shared/session", storeRoot })).plan, planC.plan);
+
+  const firstPaths = sessionBindingPaths({ root: first.root, tool: "claude", sessionId: "shared/session", storeRoot });
+  const secondPaths = sessionBindingPaths({ root: second.root, tool: "claude", sessionId: "shared/session", storeRoot });
+  assert.notEqual(firstPaths.binding, secondPaths.binding, "repository digest partitions identical tool/session ids");
+  assert.notEqual(firstPaths.lock, secondPaths.lock, "repository digest also partitions locks");
+
+  await bindSession({ root: first.root, tool: "claude", sessionId: "shared/session", plan: planB.plan, storeRoot });
+  assert.equal((await resolveSession({ root: first.root, tool: "claude", sessionId: "shared/session", storeRoot })).plan, planB.plan);
+  assert.equal((await resolveSession({ root: second.root, tool: "claude", sessionId: "shared/session", storeRoot })).plan, planC.plan, "rebind in repo A leaves repo B untouched");
+
+  await unbindSession({ root: first.root, tool: "claude", sessionId: "shared/session", storeRoot });
+  assert.equal((await resolveSession({ root: first.root, tool: "claude", sessionId: "shared/session", storeRoot })).status, "unbound");
+  assert.equal((await resolveSession({ root: second.root, tool: "claude", sessionId: "shared/session", storeRoot })).plan, planC.plan, "unbind in repo A leaves repo B untouched");
+});
+
+test("unbound main is plan-free while an execution checkout keeps local routing", async (t) => {
+  const { root } = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "session-bindings-"));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(storeRoot, { recursive: true, force: true })]));
+  const local = await mappedPlan(root, "session-local");
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${local.plan}\n`);
+
+  const unbound = await resolveSession({ root, tool: "claude", sessionId: "fresh", storeRoot });
+  assert.deepEqual(
+    Object.keys(unbound).filter((key) => ["plan", "title", "execution_root", "branch", "base_branch", "base_commit", "recovery"].includes(key)),
+    [],
+    "unbound main must not disclose launcher plan fields",
+  );
+  assert.deepEqual({ status: unbound.status, reason: unbound.reason }, { status: "unbound", reason: "missing_binding" });
+  assert.equal((await resolveSession({ root, tool: "claude", sessionId: "", storeRoot })).reason, "missing_session_id");
+  assert.equal((await resolveSession({ root, tool: "other", sessionId: "fresh", storeRoot })).reason, "invalid_tool");
+
+  const rooted = await resolveSession({ root: local.execution_root, tool: "claude", sessionId: "fresh", storeRoot });
+  assert.equal(rooted.status, "ok");
+  assert.equal(rooted.plan, local.plan);
+  assert.equal(rooted.binding_source, "checkout");
+  assert.equal(rooted.route_required, false);
+});
+
+test("ensure-session prunes only its exact stale binding", async (t) => {
+  const { root } = await fixture();
+  const foreign = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "session-bindings-"));
+  t.after(() => Promise.all([
+    rm(root, { recursive: true, force: true }),
+    rm(foreign.root, { recursive: true, force: true }),
+    rm(storeRoot, { recursive: true, force: true }),
+  ]));
+  const stale = await mappedPlan(root, "session-stale");
+  const live = await mappedPlan(root, "session-live");
+  await bindSession({ root, tool: "codex", sessionId: "stale", plan: stale.plan, storeRoot });
+  await bindSession({ root, tool: "codex", sessionId: "live", plan: live.plan, storeRoot });
+  await writeFile(join(root, stale.plan), (await readFile(join(root, stale.plan), "utf8")).replace("status: draft", "status: done"));
+
+  const terminal = await ensureSession({ root, tool: "codex", sessionId: "stale", storeRoot });
+  assert.equal(terminal.status, "terminal");
+  assert.equal(terminal.binding_pruned, true);
+  assert.equal((await resolveSession({ root, tool: "codex", sessionId: "live", storeRoot })).plan, live.plan);
+
+  for (const [sessionId, payload, expected] of [
+    ["missing", { main_root: root, plan: ".agents/plans/missing.md" }, "missing_plan"],
+    ["wrong-root", { main_root: foreign.root, plan: stale.plan }, "binding_root_mismatch"],
+  ]) {
+    const paths = sessionBindingPaths({ root, tool: "codex", sessionId, storeRoot });
+    await mkdir(paths.root_dir, { recursive: true, mode: 0o700 });
+    await writeFile(paths.binding, `${JSON.stringify(payload)}\n`, { mode: 0o600 });
+    const result = await ensureSession({ root, tool: "codex", sessionId, storeRoot });
+    assert.equal(result.status, expected);
+    assert.equal(result.binding_pruned, true);
+    await assert.rejects(readFile(paths.binding), { code: "ENOENT" });
+  }
+});
+
+test("session binding storage is private and rejects symlink redirection", async (t) => {
+  const { root } = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "session-bindings-"));
+  const redirectedRoot = await mkdtemp(join(tmpdir(), "session-redirect-"));
+  const overrideLink = join(tmpdir(), `session-bindings-link-${process.pid}-${Date.now()}`);
+  t.after(() => Promise.all([
+    rm(root, { recursive: true, force: true }),
+    rm(storeRoot, { recursive: true, force: true }),
+    rm(redirectedRoot, { recursive: true, force: true }),
+    rm(overrideLink, { recursive: true, force: true }),
+  ]));
+  const mapped = await mappedPlan(root, "session-private");
+  const paths = sessionBindingPaths({ root, tool: "claude", sessionId: "private", storeRoot });
+  await bindSession({ root, tool: "claude", sessionId: "private", plan: mapped.plan, storeRoot });
+  assert.equal((await stat(paths.managed_root)).mode & 0o777, 0o700);
+  assert.equal((await stat(paths.binding)).mode & 0o777, 0o600);
+
+  await unbindSession({ root, tool: "claude", sessionId: "private", storeRoot });
+  const victim = join(redirectedRoot, "victim.json");
+  await writeFile(victim, "keep\n");
+  await symlink(victim, paths.binding);
+  assert.equal((await bindSession({ root, tool: "claude", sessionId: "private", plan: mapped.plan, storeRoot })).status, "binding_store_unsafe");
+  assert.equal(await readFile(victim, "utf8"), "keep\n");
+
+  await symlink(redirectedRoot, overrideLink);
+  assert.equal((await bindSession({ root, tool: "claude", sessionId: "override", plan: mapped.plan, storeRoot: overrideLink })).status, "binding_store_unsafe");
+});
+
+test("concurrent rebinds leave one complete binding", async (t) => {
+  const { root } = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "session-bindings-"));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(storeRoot, { recursive: true, force: true })]));
+  const planA = await mappedPlan(root, "session-race-a");
+  const planB = await mappedPlan(root, "session-race-b");
+  await Promise.all([
+    bindSession({ root, tool: "codex", sessionId: "race", plan: planA.plan, storeRoot }),
+    bindSession({ root, tool: "codex", sessionId: "race", plan: planB.plan, storeRoot }),
+  ]);
+  const resolved = await resolveSession({ root, tool: "codex", sessionId: "race", storeRoot });
+  assert.equal(resolved.status, "ok");
+  assert.equal([planA.plan, planB.plan].includes(resolved.plan), true);
+  const paths = sessionBindingPaths({ root, tool: "codex", sessionId: "race", storeRoot });
+  assert.equal([planA.plan, planB.plan].includes(JSON.parse(await readFile(paths.binding, "utf8")).plan), true);
 });
 
 test("pointer CAS preserves a newer selection", async (t) => {

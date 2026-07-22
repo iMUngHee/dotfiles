@@ -20,6 +20,8 @@ _BARS="||||||||||" _DOTS=".........."
 _CCS_CFG="$HOME/.ccs/config.yaml"
 _LITELLM_CFG="$HOME/.litellm/config.yaml"
 _CACHE_TTL_DEFAULT=300
+_CONFIG_ROOT="${AI_CONFIG_ROOT:-$HOME/.config}"
+_ROUTING_ENGINE="$_CONFIG_ROOT/ai/lib/worktree.mjs"
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -205,7 +207,7 @@ parse_stdin() {
       "model_id=" + (.model.id // "" | @sh),
       "used_pct=" + (.context_window.used_percentage // "" | tostring | @sh),
       "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh),
-      "session_id=" + (.session_id // "" | @sh),
+      "session_id_raw=" + (.session_id // "" | @sh),
       "cache_read=" + (.context_window.current_usage.cache_read_input_tokens // 0 | tostring),
       "cache_create=" + (.context_window.current_usage.cache_creation_input_tokens // 0 | tostring),
       "input_tk=" + (.context_window.current_usage.input_tokens // 0 | tostring)
@@ -285,10 +287,10 @@ render_context() {
     if [ -z "$used_pct" ]; then
         printf '%s[ctx:--]%s' "$DIM" "$RESET"; return
     fi
-    local used_int filled empty
+    local used_int filled empty session_id_cache
     used_int=$(printf "%.0f" "$used_pct")
-    session_id="${session_id//[^a-zA-Z0-9_-]/}"
-    local sid_dir="/tmp/claude/sessions/${session_id:-default}"
+    session_id_cache="${session_id_raw//[^a-zA-Z0-9_-]/}"
+    local sid_dir="/tmp/claude/sessions/${session_id_cache:-default}"
     mkdir -p "$sid_dir" 2>/dev/null
     echo "$used_int" > "$sid_dir/context-pct"
     filled=$(( used_int * 10 / 100 )); empty=$(( 10 - filled ))
@@ -324,18 +326,13 @@ render_fresh() {
 }
 
 render_plan() {
-    local state_file plan_path plan_full status color icon
-    state_file="$PWD/.agents/state/current.txt"
-    [ -f "$state_file" ] || return
-
-    plan_path=$(awk 'NF { print; exit }' "$state_file")
-    [ -z "$plan_path" ] && return
-
-    plan_full="$PWD/$plan_path"
-    [ -f "$plan_full" ] || return
-
-    # Strip inline `# ...` comments and trailing whitespace (defense in depth).
-    status=$(awk '/^status:/ { sub(/^status: ?/, ""); sub(/[[:space:]]*#.*$/, ""); sub(/[[:space:]]+$/, ""); print; exit }' "$plan_full")
+    local resolved status color icon
+    [ -n "$session_id_raw" ] || return
+    [ -f "$_ROUTING_ENGINE" ] || return
+    resolved=$(PM_SESSION_TOOL=claude PM_SESSION_ID="$session_id_raw" \
+        node "$_ROUTING_ENGINE" resolve-session --root "$PWD" --tool claude 2>/dev/null) || return
+    [ "$(printf '%s' "$resolved" | jq -r '.status // empty')" = "ok" ] || return
+    status=$(printf '%s' "$resolved" | jq -r '.plan_status // empty')
 
     case "$status" in
         draft)  color="$DIM";    icon="⚙️" ;;

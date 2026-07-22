@@ -4,7 +4,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { runCli } from "./pm-roadmap.ts";
+import { runCli, SESSION_BINDING_FAILURES, SESSION_BINDING_PARTIAL_EXIT } from "./pm-roadmap.ts";
 
 async function makePlan(root: string, rel: string, status = "draft", id = "p"): Promise<void> {
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
@@ -72,7 +72,15 @@ async function main() {
     // design persist hook + retro complete hook (with ## Deferred harvest)
     await mkdir(join(root, ".agents", "plans"), { recursive: true });
     await writeFile(join(root, ".agents/plans/2026-06-22-pi.md"), "---\nid: p\nstatus: draft\npm_loop: true\n---\n# p\n\n## Deferred\n\n- **followup-x** — Follow up\n  - Priority: P2\n  - Note: later\n");
-    assert.equal((await cli("persist", "ALPHA", "pi-item", ".agents/plans/2026-06-22-pi.md", "--title", "PI")).code, 0);
+    const persistedWithoutSession = await cli("persist", "ALPHA", "pi-item", ".agents/plans/2026-06-22-pi.md", "--title", "PI");
+    assert.equal(persistedWithoutSession.code, 0);
+    assert.equal(persistedWithoutSession.out.split("\n").at(-1), "session_binding: not_requested", "launcher-only callers do not invent a session binding");
+    assert.equal(SESSION_BINDING_PARTIAL_EXIT, 2, "post-commit binding failure has one frozen exit code");
+    assert.deepEqual(SESSION_BINDING_FAILURES, [
+      "invalid_tool", "missing_session_id", "missing_plan", "terminal",
+      "invalid_plan_status", "invalid_mapping", "missing_worktree", "branch_mismatch",
+      "binding_store_unsafe", "binding_store_error",
+    ], "typed unbound reasons are frozen for callers");
     assert.ok((await cli("get", "pi-item")).out.includes("pi-item"), "persist created+linked the item");
     assert.equal((await cli("complete", "ALPHA", "pi-item", "--plan", ".agents/plans/2026-06-22-pi.md", "--status", "done")).code, 0);
     assert.ok((await cli("recent")).out.includes("pi-item"), "completed item lands in recent");

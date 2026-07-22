@@ -69,6 +69,21 @@ repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit
 PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.config/ai/skills/pm-roadmap/pm-roadmap.ts <subcmd> [args]
 ```
 
+For agent-session `persist` and `select` flows, forward the exact metadata from the
+injected session-routing block on the same invocation:
+
+```bash
+PM_SESSION_TOOL="<injected session tool>" PM_SESSION_ID="<exact injected session id>" pm persist <KEY> <id> <plan> --title "<title>"
+PM_SESSION_TOOL="<injected session tool>" PM_SESSION_ID="<exact injected session id>" pm select --plan <plan>
+```
+
+Do not sanitize or invent either value. `session_binding: bound` is the only successful
+agent-session handoff. `session_binding: unbound (<typed reason>); do not retry persist`
+means the persist transaction committed but routing did not; report it and stop without
+replaying the mutation. `session_binding: unbound (<typed reason>); do not retry select`
+has the same stop rule. `session_binding: not_requested` is allowed only for explicit
+launcher/dashboard callers that do not claim ownership for an agent session.
+
 (Read subcmds on a legacy repo — `tasks/` absent but old `ROADMAP.md` present — print
 `⚠ legacy roadmap detected — run /pm-roadmap migrate`.)
 
@@ -76,7 +91,7 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
 
 - **list** / **tree** — eligible next candidates (sorted `priority, taskKey, order, id`) + blocked + inbox count / per-task backlog. In collab tasks both show an `@owner` / `(unassigned)` badge (tree also marks `[collab]`); **list** default-filters collab items to *me + unassigned* (`--owner X` to filter by another, `--all` to show everything; solo items always shown).
 - **get `<id>`** — an item's join view (plan goal + next step, task links + memory, recent done-sibling notes, note).
-- **next `[id]` `[--owner X]` `[--all]`** — paste-ready kickoff prompt. Target: explicit id, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). The candidate-list path applies the same collab default filter as `list` (me + unassigned; `--owner`/`--all` override); an explicit id bypasses the filter. The prompt surfaces item owner + handoff note and memory/link `By` for collab tasks. After emitting, ask whether to run it **here** (no copy — proceed into `/design <id>`, or resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
+- **next `[id]` `[--owner X]` `[--all]`** — paste-ready kickoff prompt. Target: explicit id, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). The candidate-list path applies the same collab default filter as `list` (me + unassigned; `--owner`/`--all` override); an explicit id bypasses the filter. The prompt surfaces item owner + handoff note and memory/link `By` for collab tasks. After emitting, ask whether to run it **here** (no copy — a linked plan first runs session-aware `pm select --plan <plan>`, while an unplanned item proceeds into `/design <id>` and binds on persist; then resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
 - **recent** — derived recent-closed view (all `closed.md` merged by date, capped).
 - **validate** — full-scan invariant check (C1..C13; see below). Exit 1 on errors. `/retro` runs it after its sink.
 - **migrate `[--apply]`** — convert a legacy repo's `.agents/` to the task-first model. Default dry-run (prints the mapping). `--apply` after review. See Migration.
@@ -105,7 +120,7 @@ PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.con
   item transitions and escape hatches. Design/retro use the lifecycle commands above.
 - **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
 - **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
-- **current-task** — read-only: prints the KEY of the Task linked to the selected current plan. Empty for no selection, standalone plans, stale plans, and terminal plans. pm-context uses it as the default-`KEY` resolver for `get`.
+- **current-task** — read-only launcher/dashboard projection: prints the KEY linked to that checkout's selected launcher plan. Empty for no selection, standalone plans, stale plans, and terminal plans. Interactive agent consumers use `resolve-session` plus `pm get <plan-id>` instead; they never use this command as a session fallback.
 - **manage** — open the dashboard GUI (see below).
 
 ## Lifecycle (automatic — implemented in /design and /retro)

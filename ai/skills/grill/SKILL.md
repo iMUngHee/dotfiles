@@ -26,10 +26,15 @@ if [ -n "$repo_root" ] && [ -x "$pm_root/node_modules/.bin/tsx" ]; then
 fi
 ```
 
-- `pm current-task` returns the owning **`<KEY>` only** (not an item id) → read `.agents/tasks/<KEY>/links.md` (context) and `.agents/tasks/<KEY>/memory.md` (retro-owned prior decisions), both read-only.
-- Run `pm get <id>` only when an item id is explicitly given.
+- Resolve the originating session first, using the exact injected metadata:
+  `PM_SESSION_TOOL="<tool>" PM_SESSION_ID="<exact id>" node "$HOME/.config/ai/lib/worktree.mjs" resolve-session --root "$repo_root" --tool "<tool>"`.
+- When it returns `ok`, run `pm get <resolved plan id>` and use its owning **`<KEY>`**
+  to read `.agents/tasks/<KEY>/links.md` and `memory.md`, both read-only. An explicitly
+  supplied item id may be passed directly to `pm get`.
 - Always grep/read the **codebase** for anything answerable from code.
-- No Task linked to the selected current plan, or outside a repo → skip the pm probes and inspect code only. **Never run `npm install` from grill.**
+- An unbound session, no Task linked to its validated plan, or outside a repo → skip the
+  PM probes and inspect code only. Never fall back to a launcher selection. **Never run
+  `npm install` from grill.**
 
 ## Protocol
 

@@ -2,6 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmod,
   cp,
   lstat,
   mkdir,
@@ -14,11 +15,13 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { OwnerLockError, withOwnerLock } from "./owner-lock.mjs";
 
 const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SESSION_TOOLS = new Set(["claude", "codex"]);
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 class AutoAdoptionError extends Error {
@@ -26,6 +29,13 @@ class AutoAdoptionError extends Error {
     super(message);
     this.code = code;
     this.details = details;
+  }
+}
+
+class SessionBindingStoreError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
   }
 }
 
@@ -55,6 +65,97 @@ async function atomicWrite(path, content) {
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmp, content);
   await rename(tmp, path);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function sessionIdentityReason(tool, sessionId) {
+  if (!SESSION_TOOLS.has(tool)) return "invalid_tool";
+  if (typeof sessionId !== "string" || !sessionId.length) return "missing_session_id";
+  return null;
+}
+
+function bindingStoreBase(storeRoot) {
+  return resolve(storeRoot || process.env.PM_SESSION_BINDINGS_ROOT || tmpdir());
+}
+
+export function sessionBindingPaths({ root = process.cwd(), tool, sessionId, storeRoot } = {}) {
+  const invalid = sessionIdentityReason(tool, sessionId);
+  if (invalid) throw new Error(invalid);
+  const main = mainCheckout(root);
+  const uid = typeof process.getuid === "function" ? String(process.getuid()) : "unknown";
+  const base = bindingStoreBase(storeRoot);
+  const managedRoot = join(base, "pm-session-bindings", `uid-${uid}`, "v1");
+  const toolDir = join(managedRoot, tool);
+  const rootDir = join(toolDir, sha256(main));
+  const sessionDigest = sha256(sessionId);
+  return {
+    base,
+    managed_root: managedRoot,
+    tool_dir: toolDir,
+    root_dir: rootDir,
+    binding: join(rootDir, `${sessionDigest}.json`),
+    lock: join(rootDir, `${sessionDigest}.lock`),
+    main_root: main,
+    root_digest: sha256(main),
+    session_digest: sessionDigest,
+  };
+}
+
+async function pathInfo(path) {
+  return lstat(path).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+}
+
+async function assertSafeStorePath(path, kind) {
+  const info = await pathInfo(path);
+  if (!info) return null;
+  if (info.isSymbolicLink()) throw new SessionBindingStoreError("binding_store_unsafe", `unsafe session binding ${kind} symlink: ${path}`);
+  return info;
+}
+
+async function assertSafeStoreLayout(paths) {
+  const base = await assertSafeStorePath(paths.base, "store root");
+  if (base && !base.isDirectory()) throw new SessionBindingStoreError("binding_store_unsafe", `session binding store root is not a directory: ${paths.base}`);
+  for (const path of [paths.managed_root, paths.tool_dir, paths.root_dir]) {
+    const info = await assertSafeStorePath(path, "directory");
+    if (info && !info.isDirectory()) throw new SessionBindingStoreError("binding_store_unsafe", `session binding path is not a directory: ${path}`);
+  }
+  const binding = await assertSafeStorePath(paths.binding, "file");
+  if (binding && !binding.isFile()) throw new SessionBindingStoreError("binding_store_unsafe", `session binding path is not a file: ${paths.binding}`);
+  const lock = await assertSafeStorePath(paths.lock, "lock");
+  if (lock && !lock.isDirectory()) throw new SessionBindingStoreError("binding_store_unsafe", `session binding lock is not a directory: ${paths.lock}`);
+}
+
+async function prepareSessionBindingStore(paths) {
+  await assertSafeStoreLayout(paths);
+  await mkdir(paths.base, { recursive: true, mode: 0o700 });
+  for (const path of [paths.managed_root, paths.tool_dir, paths.root_dir]) {
+    await mkdir(path, { recursive: true, mode: 0o700 });
+    const info = await assertSafeStorePath(path, "directory");
+    if (!info?.isDirectory()) throw new SessionBindingStoreError("binding_store_unsafe", `session binding path is not a directory: ${path}`);
+    await chmod(path, 0o700);
+  }
+  await assertSafeStoreLayout(paths);
+}
+
+async function atomicWritePrivate(path, content) {
+  const current = await assertSafeStorePath(path, "file");
+  if (current && !current.isFile()) throw new SessionBindingStoreError("binding_store_unsafe", `session binding path is not a file: ${path}`);
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  try {
+    await writeFile(tmp, content, { flag: "wx", mode: 0o600 });
+    await chmod(tmp, 0o600);
+    await rename(tmp, path);
+  } finally {
+    await unlink(tmp).catch((error) => {
+      if (error?.code !== "ENOENT") throw error;
+    });
+  }
 }
 
 async function withExclusiveFileLock(path, fn, { operation = "worktree", retries = 100, retryMs = 25 } = {}) {
@@ -362,11 +463,7 @@ async function findNonterminalPlanOwner(main, worktree, { excludePlan = null } =
   return null;
 }
 
-export async function resolveCurrent(root = process.cwd()) {
-  const checkout = runGit(root, ["rev-parse", "--show-toplevel"]);
-  const main = mainCheckout(checkout);
-  const pointer = (await readText(join(checkout, ".agents", "state", "current.txt"))).trim();
-  if (!pointer) return { status: "empty", checkout_root: checkout, main_root: main };
+async function resolvePlanReference({ checkout, main, plan: pointer }) {
   let plan;
   try {
     plan = await loadPlan(main, pointer);
@@ -426,6 +523,20 @@ export async function resolveCurrent(root = process.cwd()) {
   };
 }
 
+export async function resolvePlan({ root = process.cwd(), plan } = {}) {
+  const checkout = runGit(root, ["rev-parse", "--show-toplevel"]);
+  const main = mainCheckout(checkout);
+  return resolvePlanReference({ checkout, main, plan });
+}
+
+export async function resolveCurrent(root = process.cwd()) {
+  const checkout = runGit(root, ["rev-parse", "--show-toplevel"]);
+  const main = mainCheckout(checkout);
+  const pointer = (await readText(join(checkout, ".agents", "state", "current.txt"))).trim();
+  if (!pointer) return { status: "empty", checkout_root: checkout, main_root: main };
+  return resolvePlanReference({ checkout, main, plan: pointer });
+}
+
 export async function writeCurrentCAS(checkoutRoot, expected, next) {
   const state = join(checkoutRoot, ".agents", "state");
   const pointer = join(state, "current.txt");
@@ -478,6 +589,220 @@ export async function ensureCurrent({ root = process.cwd() } = {}) {
     await writeCurrentCAS(result.checkout_root, result.plan, "");
   }
   return result;
+}
+
+function unboundSessionResult({ checkout, main, tool, sessionId, reason }) {
+  return {
+    status: "unbound",
+    reason,
+    tool: SESSION_TOOLS.has(tool) ? tool : null,
+    session_id: typeof sessionId === "string" && sessionId.length ? sessionId : null,
+    checkout_root: checkout,
+    main_root: main,
+    binding_status: "unbound",
+  };
+}
+
+async function readSessionBinding(paths) {
+  await assertSafeStoreLayout(paths);
+  const info = await pathInfo(paths.binding);
+  if (!info) return { state: "missing", raw: null, value: null };
+  const raw = await readFile(paths.binding, "utf8");
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { state: "invalid", raw, value: null, reason: "malformed_json" };
+  }
+  const keys = value && typeof value === "object" && !Array.isArray(value) ? Object.keys(value).sort() : [];
+  if (keys.join(",") !== "main_root,plan" || typeof value.main_root !== "string" || typeof value.plan !== "string") {
+    return { state: "invalid", raw, value: null, reason: "invalid_schema" };
+  }
+  return { state: "ok", raw, value };
+}
+
+async function resolveSessionState({ root = process.cwd(), tool, sessionId, storeRoot } = {}) {
+  const checkout = runGit(root, ["rev-parse", "--show-toplevel"]);
+  const main = mainCheckout(checkout);
+  const identityError = sessionIdentityReason(tool, sessionId);
+  if (identityError) {
+    return { result: unboundSessionResult({ checkout, main, tool, sessionId, reason: identityError }), paths: null, binding: null };
+  }
+
+  const paths = sessionBindingPaths({ root: checkout, tool, sessionId, storeRoot });
+  let binding;
+  try {
+    binding = await readSessionBinding(paths);
+  } catch (error) {
+    const status = error instanceof SessionBindingStoreError ? error.code : "binding_store_error";
+    return {
+      result: {
+        status,
+        reason: error.message,
+        tool,
+        session_id: sessionId,
+        checkout_root: checkout,
+        main_root: main,
+        binding_status: "unbound",
+      },
+      paths,
+      binding: null,
+    };
+  }
+
+  if (binding.state === "invalid") {
+    return {
+      result: {
+        status: "invalid_binding",
+        reason: binding.reason,
+        tool,
+        session_id: sessionId,
+        checkout_root: checkout,
+        main_root: main,
+        binding_status: "stale",
+      },
+      paths,
+      binding,
+    };
+  }
+
+  if (binding.state === "ok") {
+    if (binding.value.main_root !== main) {
+      return {
+        result: {
+          status: "binding_root_mismatch",
+          reason: "stored_main_root_mismatch",
+          tool,
+          session_id: sessionId,
+          checkout_root: checkout,
+          main_root: main,
+          binding_status: "stale",
+        },
+        paths,
+        binding,
+      };
+    }
+    const resolved = await resolvePlan({ root: checkout, plan: binding.value.plan });
+    return {
+      result: {
+        ...resolved,
+        tool,
+        session_id: sessionId,
+        binding_status: resolved.status === "ok" ? "bound" : "stale",
+        binding_source: "session",
+      },
+      paths,
+      binding,
+    };
+  }
+
+  if (resolve(checkout) !== resolve(main)) {
+    const local = await resolveCurrent(checkout);
+    if (local.status === "ok" && local.route_required === false) {
+      return {
+        result: {
+          ...local,
+          tool,
+          session_id: sessionId,
+          binding_status: "local",
+          binding_source: "checkout",
+        },
+        paths,
+        binding,
+      };
+    }
+  }
+
+  return {
+    result: unboundSessionResult({ checkout, main, tool, sessionId, reason: "missing_binding" }),
+    paths,
+    binding,
+  };
+}
+
+export async function resolveSession(options = {}) {
+  return (await resolveSessionState(options)).result;
+}
+
+export async function bindSession({ root = process.cwd(), tool, sessionId, plan, storeRoot } = {}) {
+  const checkout = runGit(root, ["rev-parse", "--show-toplevel"]);
+  const main = mainCheckout(checkout);
+  const identityError = sessionIdentityReason(tool, sessionId);
+  if (identityError) return unboundSessionResult({ checkout, main, tool, sessionId, reason: identityError });
+  const resolved = await resolvePlan({ root: checkout, plan });
+  if (resolved.status !== "ok") {
+    return { ...resolved, tool, session_id: sessionId, binding_status: "unbound", binding_source: "session" };
+  }
+  const paths = sessionBindingPaths({ root: checkout, tool, sessionId, storeRoot });
+  try {
+    await prepareSessionBindingStore(paths);
+    await withExclusiveFileLock(paths.lock, async () => {
+      await assertSafeStoreLayout(paths);
+      await atomicWritePrivate(paths.binding, `${JSON.stringify({ main_root: main, plan })}\n`);
+    }, { operation: `session-bind:${tool}` });
+  } catch (error) {
+    const status = error instanceof SessionBindingStoreError ? error.code : "binding_store_error";
+    return {
+      status,
+      reason: error.message,
+      tool,
+      session_id: sessionId,
+      checkout_root: checkout,
+      main_root: main,
+      binding_status: "unbound",
+      binding_source: "session",
+    };
+  }
+  return { ...resolved, tool, session_id: sessionId, binding_status: "bound", binding_source: "session" };
+}
+
+async function removeExactSessionBinding(paths, expectedRaw) {
+  await prepareSessionBindingStore(paths);
+  return withExclusiveFileLock(paths.lock, async () => {
+    const current = await readSessionBinding(paths);
+    if (current.state === "missing") return false;
+    if (current.raw !== expectedRaw) return false;
+    await unlink(paths.binding);
+    return true;
+  }, { operation: "session-unbind" });
+}
+
+export async function unbindSession({ root = process.cwd(), tool, sessionId, storeRoot } = {}) {
+  const state = await resolveSessionState({ root, tool, sessionId, storeRoot });
+  if (!state.paths || !state.binding?.raw) {
+    return { status: "unbound", removed: false, reason: state.result.reason || "missing_binding" };
+  }
+  const removed = await removeExactSessionBinding(state.paths, state.binding.raw);
+  return { status: "unbound", removed, reason: removed ? "removed" : "binding_changed" };
+}
+
+export async function ensureSession({ root = process.cwd(), tool, sessionId, storeRoot } = {}) {
+  let state = await resolveSessionState({ root, tool, sessionId, storeRoot });
+  if (state.result.status === "ok") {
+    const ensured = await ensureMappedCurrent({ result: state.result });
+    return { ...ensured, tool, session_id: sessionId, binding_status: state.result.binding_status, binding_source: state.result.binding_source };
+  }
+
+  const pruneStatuses = new Set([
+    "terminal",
+    "missing_plan",
+    "invalid_plan_status",
+    "invalid_mapping",
+    "missing_worktree",
+    "branch_mismatch",
+    "binding_root_mismatch",
+    "invalid_binding",
+  ]);
+  if (state.paths && state.binding?.raw && pruneStatuses.has(state.result.status)) {
+    const removed = await removeExactSessionBinding(state.paths, state.binding.raw);
+    return { ...state.result, binding_pruned: removed, binding_status: "unbound" };
+  }
+
+  if (state.result.status === "unbound" && resolve(state.result.checkout_root) !== resolve(state.result.main_root)) {
+    await ensureCurrent({ root: state.result.checkout_root });
+    state = await resolveSessionState({ root: state.result.checkout_root, tool, sessionId, storeRoot });
+  }
+  return state.result;
 }
 
 export async function assertPlanRoot({ root = process.cwd(), plan }) {
@@ -1207,8 +1532,15 @@ export async function main(argv = process.argv.slice(2)) {
   const [command] = argv;
   const { options } = parseArgs(argv.slice(1));
   const root = options.root || process.cwd();
+  const sessionTool = options.tool || process.env.PM_SESSION_TOOL;
+  const sessionId = options.session_id === undefined ? process.env.PM_SESSION_ID : options.session_id;
   let result;
   if (command === "resolve-current") result = await resolveCurrent(root);
+  else if (command === "resolve-plan") result = await resolvePlan({ root, plan: options.plan });
+  else if (command === "bind-session") result = await bindSession({ root, tool: sessionTool, sessionId, plan: options.plan, storeRoot: options.store_root });
+  else if (command === "resolve-session") result = await resolveSession({ root, tool: sessionTool, sessionId, storeRoot: options.store_root });
+  else if (command === "ensure-session") result = await ensureSession({ root, tool: sessionTool, sessionId, storeRoot: options.store_root });
+  else if (command === "unbind-session") result = await unbindSession({ root, tool: sessionTool, sessionId, storeRoot: options.store_root });
   else if (command === "ensure") result = await ensureManagedWorktree({ root, id: options.id, base: options.base, baseCommit: options.base_commit, start: options.start, branch: options.branch, worktree: options.path });
   else if (command === "ensure-current") result = await ensureCurrent({ root });
   else if (command === "adopt") result = await adoptPlan({ root, plan: options.plan, base: options.base, baseCommit: options.base_commit, start: options.start, branch: options.branch, worktree: options.path, select: Boolean(options.select) });

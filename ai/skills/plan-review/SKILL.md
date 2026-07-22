@@ -31,16 +31,17 @@ If the user explicitly chooses not to run review, record `SKIP` instead of prete
 
 ## Resolve The Plan
 
-1. Run the shared resolver first:
+1. If the user supplied a plan path/id, resolve that exact plan with `resolve-plan`. Otherwise
+   use the strict tool and exact id from the injected session-routing block:
 
    ```bash
-   node "$HOME/.config/ai/lib/worktree.mjs" resolve-current --root "$PWD"
+   PM_SESSION_TOOL="<injected session tool>" PM_SESSION_ID="<exact injected session id>" node "$HOME/.config/ai/lib/worktree.mjs" resolve-session --root "$PWD" --tool "<injected session tool>"
    ```
 
-2. If a plan path or plan id is supplied, resolve it under the returned `main_root` and
-   verify that its worktree mapping is valid with the shared engine.
-3. Otherwise use the resolver's `plan`. Refuse empty/missing current pointers and surface
-   routing or mapping errors verbatim; never guess from old plans.
+2. For an explicit plan, verify its worktree mapping under canonical `main_root`; it is an
+   intentional override of session selection, not a launcher lookup.
+3. Otherwise use only the session resolver's `plan`. An unbound main session must receive
+   an explicit plan; never consult main `current.txt` or guess from old plans.
 4. Use `execution_root` for repository reads and `main_root` for the canonical plan path.
 5. Read the plan and identify:
    - frontmatter `id`, `title`, `status`, `files_affected`,
