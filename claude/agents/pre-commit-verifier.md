@@ -21,25 +21,22 @@ git diff --name-only 2>/dev/null
 git diff --name-only HEAD~1 2>/dev/null
 ```
 
-### Active plan auto-detection (for Scope Creep check only)
+### Validated active plan input (for Scope Creep check only)
 
-Detect the active plan for the current branch. Used solely by **Scope Creep** (Check 5). Failure to find a plan is NOT an error — Scope Creep simply skips.
+The dispatcher may provide this record from its already validated session-routing block:
 
-```bash
-# Active plan = path in `.agents/state/current.txt` whose frontmatter status is `active`.
-# `draft` plans are NOT yet committed-to (user has not promoted), so Scope Creep should skip them.
-STATE_FILE=".agents/state/current.txt"
-PLAN=""
-if [ -f "$STATE_FILE" ]; then
-  p=$(awk 'NF { print; exit }' "$STATE_FILE")
-  if [ -n "$p" ] && [ -f "$p" ]; then
-    status=$(awk '/^status:/ { sub(/^status: ?/, ""); sub(/[[:space:]]*#.*$/, ""); sub(/[[:space:]]+$/, ""); print; exit }' "$p")
-    [ "$status" = "active" ] && PLAN="$p"
-  fi
-fi
+```text
+validated_plan_path: <canonical repository-relative plan path>
+validated_plan_status: active
+validated_plan_main_root: <canonical main checkout>
 ```
 
-If `PLAN` is non-empty, extract `title` and `files_affected` from its frontmatter for use in Check 5. Otherwise mark Scope Creep as `— (no active plan, skipped)`.
+Use the record only when all three fields are present, `validated_plan_status` is exactly
+`active`, and `validated_plan_path` resolves below `validated_plan_main_root`. Read that
+plan's `title` and `files_affected` for Check 5. Never rediscover a plan from checkout
+state, the current branch, another worktree, or a launcher selection. If the dispatcher
+does not provide a valid record, Scope Creep reports `— (no validated active plan,
+skipped)`; plan absence is not an error.
 
 ## Rules (subagents do NOT inherit CLAUDE.md, DEVGUARD, or rules/ — these are explicit constraints for this agent)
 
@@ -49,7 +46,7 @@ If `PLAN` is non-empty, extract `title` and `files_affected` from its frontmatte
 - **No false confidence**: If you cannot determine pass/fail, report as WARN, not PASS.
 - **Conservative on new checks**: For Scope Creep (5), Convention Drift (6), and Correctness Sanity (7), classify only clear matches as FAIL. Ambiguous → WARN. More ambiguous → PASS. Deep reasoning belongs to the reviewer agent invoked via `/code-review`.
 - **No deep reasoning**: Do not perform data-flow analysis, concurrency/race reasoning, or algorithmic correctness proofs. Use only pattern matches on staged diff `+` lines and direct file comparison.
-- **Plan absence ≠ failure**: If no active plan is found, Scope Creep simply skips. Do not penalize the absence of a plan, and do not require one.
+- **Plan absence ≠ failure**: If no validated active plan is provided, Scope Creep simply skips. Do not penalize the absence of a plan, and do not require one.
 
 ## Checks
 
@@ -106,7 +103,7 @@ Report the exact count. A large change passes only if genuinely inseparable; oth
 
 ### 5. Scope Creep (plan-conditional)
 
-Run only when the active plan auto-detection (see Input section) found a plan. Otherwise skip and report `— (no active plan, skipped)`.
+Run only when the validated active plan input (see Input section) supplied a plan. Otherwise skip and report `— (no validated active plan, skipped)`.
 
 Compare the staged file list against the plan's `files_affected` and `title`:
 - Staged files NOT listed in `files_affected` → **WARN** (plans legitimately evolve, do not FAIL).
@@ -172,7 +169,7 @@ False-positive suppression:
 ### Scope Creep
 - ✅ PASS: 3/3 staged files match plan files_affected
 - ⚠️ WARN: src/unrelated.ts — not in plan files_affected (plan title: "TRIGGER 스키마 + 단일 파일 재설계")
-- — (no active plan, skipped)
+- — (no validated active plan, skipped)
 
 ### Convention Drift
 - ✅ PASS: matches sibling conventions

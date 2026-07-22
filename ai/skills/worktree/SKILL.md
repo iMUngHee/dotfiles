@@ -54,8 +54,12 @@ Report:
 ## Existing plan operations
 
 ```bash
-node "$engine" resolve-current --root "$root"       # read-only routing
-node "$engine" ensure-current --root "$root"        # one-time safe legacy normalization + routing
+PM_SESSION_TOOL=<claude|codex> PM_SESSION_ID="<exact id>" node "$engine" resolve-session --root "$root" --tool <claude|codex>
+PM_SESSION_TOOL=<claude|codex> PM_SESSION_ID="<exact id>" node "$engine" ensure-session --root "$root" --tool <claude|codex>
+PM_SESSION_TOOL=<claude|codex> PM_SESSION_ID="<exact id>" node "$engine" bind-session --root "$root" --tool <claude|codex> --plan <plan-path>
+PM_SESSION_TOOL=<claude|codex> PM_SESSION_ID="<exact id>" node "$engine" unbind-session --root "$root" --tool <claude|codex>
+node "$engine" resolve-current --root "$root"       # launcher/checkout projection only
+node "$engine" ensure-current --root "$root"        # explicit legacy maintenance only
 node "$engine" assert-root --root "$root" --plan <plan-path>
 node "$engine" sync-state --root "$root" --plan <plan-path>
 node "$engine" validate --root "$root"
@@ -83,13 +87,20 @@ may confirm the unique candidate but never claim a pointerless checkout, and `--
 is rejected for candidate reuse. Dirty main project files block only new creation, not
 reuse of the exact candidate.
 
-Prompt adapters call `ensure-current`. For an unambiguous legacy plan it infers the
-immutable base from committed Git state under the reservation lock, reuses the sole
-exact pointer-bearing candidate or creates the conventional managed worktree from a
-clean main HEAD, persists the mapping, and returns normal routed context. Ambiguous,
-dirty, detached, occupied, foreign-owned, malformed, or staged-residual states remain
-`legacy_unmapped` with a stable failure code and the manual `adopt` recovery command.
-Direct `resolve-current` remains physically read-only.
+Prompt adapters call `ensure-session` with a strict tool namespace and exact, unsanitized
+session id. A valid binding resolves its exact canonical plan; without a binding, only a
+non-main checkout whose local pointer resolves back to itself may supply plan context.
+An unbound main checkout is always plan-free: its `current.txt` is launcher-only and is
+never an implicit session owner. `ensure-session` may normalize an unambiguous legacy plan
+only from that non-main local checkout. Ambiguous, dirty, detached, occupied,
+foreign-owned, malformed, or staged-residual states remain typed failures. Direct
+`resolve-session` and `resolve-current` remain physically read-only.
+
+Session binding files are ephemeral and private. Their identity is the strict tool,
+canonical-main-root digest, and exact-session-id digest; bindings for the same session in
+two repositories cannot share a file or lock. Binding loss returns `unbound`, never a
+launcher fallback. `ensure-session` prunes only the exact stale binding after rechecking
+its bytes under the per-binding owner lock.
 
 Adoption serializes reservation → PM-store → target/main current through token-owned
 directory locks. Successful handoff removes its reservation last and reports topology
@@ -122,7 +133,7 @@ Never call `git worktree remove --force` by default. `--force` is explicit-user-
 
 - Do not create managed worktrees outside `.agents/worktrees/`.
 - Do not hand-edit `.agents/tasks`, plan mappings, reservations, or current pointers.
-- Hooks use `ensure-current` only. It may perform the one lock-protected lazy adoption
-  described above; hooks never invoke raw topology or lifecycle commands.
+- Hooks use `ensure-session` only. It may perform the one lock-protected checkout-local
+  lazy adoption described above; hooks never invoke raw topology or lifecycle commands.
 - **Sandbox**: Claude uses `dangerouslyDisableSandbox`; Codex uses a workspace-write
   session that includes `.agents/worktrees`.

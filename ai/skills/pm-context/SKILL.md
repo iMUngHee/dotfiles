@@ -7,7 +7,7 @@ model: sonnet
 disable-model-invocation: true
 ---
 
-Manage per-task document links. **Project-scoped**: stored per task at `<git-root>/.agents/tasks/<KEY>/links.md`, where the git root is `git rev-parse --show-toplevel`. Refuse outside a git repo. There is no pm-context-owned active-task pointer — the **current Task** is derived from the Task linked to the selected current plan via `pm-roadmap.ts current-task`.
+Manage per-task document links. **Project-scoped**: stored per task at `<git-root>/.agents/tasks/<KEY>/links.md`, where the git root is `git rev-parse --show-toplevel`. Refuse outside a git repo. There is no pm-context-owned active-task pointer — an agent's **current Task** is derived from its validated session-bound plan, while `pm-roadmap.ts current-task` remains a launcher/dashboard projection only.
 
 `.agents/tasks/` is **gitignored** (task links may carry internal URLs); the gitignore line is ensured by the pm-roadmap store, not by this skill. **All writes to `links.md` go through the pm-roadmap CLI → ops (lock + CAS) — never hand-edit the markdown.** pm-context's job is the fetch + trigger/summary extraction; it then persists the result via `links <KEY> add|remove`.
 
@@ -15,8 +15,8 @@ CLI setup (one block; capture the git root, install once):
 
 ```bash
 repo_root="$(git rev-parse --show-toplevel)" || { echo "pm-context needs a git repo"; exit 1; }
-(cd ~/.config/ai/skills/pm-roadmap && [[ -d node_modules ]] || npm install)
-pm() { PM_ROOT="$repo_root" ~/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx ~/.config/ai/skills/pm-roadmap/pm-roadmap.ts "$@"; }
+(cd $HOME/.config/ai/skills/pm-roadmap && [[ -d node_modules ]] || npm install)
+pm() { PM_ROOT="$repo_root" $HOME/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx $HOME/.config/ai/skills/pm-roadmap/pm-roadmap.ts "$@"; }
 ```
 
 Arguments: $ARGUMENTS
@@ -44,7 +44,12 @@ Inject a task's links — including TRIGGERS and Summary — into the current se
 
 1. Resolve KEY:
    - If KEY argument provided, use it
-   - Else `pm current-task` (the Task linked to the selected current plan) — if it prints empty, report "no Task is linked to the selected current plan. Select a linked plan or pass a KEY." and stop
+   - Else run `resolve-session` with the exact tool/id from the injected session-routing block, take its validated plan `id`, and call `pm get <id>` to read the owning Task `key`
+   - If the session is unbound or `pm get` finds no linked open item, report "no Task is linked to this session-bound plan. Select/bind a linked plan or pass a KEY." and stop; never consult the main launcher
+
+   ```bash
+   PM_SESSION_TOOL="<injected session tool>" PM_SESSION_ID="<exact injected session id>" node "$HOME/.config/ai/lib/worktree.mjs" resolve-session --root "$repo_root" --tool "<injected session tool>"
+   ```
 2. Read `tasks/<KEY>/links.md`. If not found, run `list` and report missing key.
 3. Output a header line followed by the file content verbatim:
 
@@ -82,7 +87,7 @@ Add a single link to a task without starting the GUI, then auto-fetch its Summar
 5. **Extract** Summary and Triggers from whichever source step 4 produced (inline content or grep+selective-read output):
    - **Summary**: one-line description (page title + brief context, ≤120 chars)
    - **Triggers**: 5-13 keywords/short phrases, comma-separated, prioritized in this order:
-     1. **Code identifiers (highest priority)** — API endpoints (snake_case route segments verbatim from the document), data field names (camelCase fields verbatim), enum values (UPPER_SNAKE constants), JIRA/issue IDs exactly as present in the document, experiment/feature IDs (project-specific format), component/module names verbatim from the document
+     1. **Code identifiers (highest priority)** — API endpoints (snake_case route segments verbatim from the document), data field names (camelCase fields verbatim), enum values (UPPER_SNAKE constants), JIRA/issue IDs (e.g. `PROJ-1234`, `REPO-567`), experiment/feature IDs (project-specific format), component/module names verbatim from the document
      2. **Domain-specific proper nouns** — project codenames verbatim from the document, domain abbreviations or category labels unique to your team (verbatim), specific feature labels that are unique to this codebase
      3. **Concept terms (last resort)** — only when the document lacks identifiers; use distinctive phrases, never generic words like "block", "slot", "page"
      
@@ -129,7 +134,7 @@ Re-fetch the Summary for one or all entries. Triggers behavior depends on curren
 
 ### current task (no `set`/`unset`)
 
-There is no pm-context active-task pointer. The **current Task is the Task linked to the selected current plan**. `get` with no KEY resolves it via `pm current-task`; standalone, stale, terminal, or empty current-plan states require an explicit KEY.
+There is no pm-context active-task pointer. The **current Task is the Task linked to the validated session-bound plan**. `get` with no KEY resolves the session plan id and then uses `pm get <id>`; standalone, stale, terminal, or unbound session states require an explicit KEY. `pm current-task` is reserved for launcher/dashboard projection and is not an agent-session fallback.
 
 ### list
 
@@ -139,21 +144,18 @@ List all task keys, marking the current one.
    ```bash
    for d in "$repo_root"/.agents/tasks/*/; do [ -f "$d/links.md" ] && basename "$d"; done
    ```
-2. `pm current-task` for the active key.
+2. Resolve the active key with the same `resolve-session` → `pm get <plan-id>` flow as
+   `get [KEY]`; an unbound session has no active marker.
 3. Output one key per line; prefix the current key with `* `.
 4. If empty, report no tasks.
 
 ### manage
 
 Open the web GUI for full link management (Label, URL, Triggers, Summary).
-The roadmap reads plan mapping fields (`base_branch`, `base_commit`, `branch`, `worktree`)
-through pm-roadmap's `PlanInfo`. A mapped plan displays its execution location and its copy
-action returns a rooted resume prompt (`codex -C <worktree>` / `cd <worktree> && claude`).
-Legacy, missing, or unreadable mapping data degrades to the normal kickoff display.
 
 1. Install dependencies if needed (subshell — do not change the working dir, the git root must stay resolvable):
    ```bash
-   (cd ~/.config/ai/skills/pm-context && [[ -d node_modules ]] || npm install)
+   (cd $HOME/.config/ai/skills/pm-context && [[ -d node_modules ]] || npm install)
    ```
 2. Check port:
    ```bash
@@ -167,7 +169,7 @@ Legacy, missing, or unreadable mapping data degrades to the normal kickoff displ
 3. Start server in background. **Capture the git root BEFORE `cd`** and pass it as `TASK_CONTEXT_ROOT` (cd-ing first would make the server resolve the skill's own repo, not the project). One block — shell vars do not persist across calls:
    ```bash
    repo_root="$(git rev-parse --show-toplevel)" || { echo "pm-context needs a git repo"; exit 1; }
-   cd ~/.config/ai/skills/pm-context && TASK_CONTEXT_ROOT="$repo_root" ./node_modules/.bin/tsx server.ts
+   cd $HOME/.config/ai/skills/pm-context && TASK_CONTEXT_ROOT="$repo_root" ./node_modules/.bin/tsx server.ts
    ```
    Use `run_in_background: true`.
 4. Wait 2 seconds for server startup, then open browser:
@@ -187,13 +189,15 @@ Legacy, missing, or unreadable mapping data degrades to the normal kickoff displ
 Pick the fetch tool by host and page type, in priority order:
 
 1. **Authenticated / internal hosts** → the matching MCP server, per the internal routing table already loaded in context.
-2. **SPA / client-rendered pages** → the `spa-fetch` skill, run headless. Applies when the page body is rendered by JS so `WebFetch` returns only title/nav chrome with no field or endpoint identifiers — typical of Swagger UI (`/docs`, `/swagger`), Notion (`notion.so`), and Figma (`figma.com`) URLs. Route here up front for these known patterns, or fall back to it whenever a `WebFetch` summary degrades to a bare page title.
-   ```bash
-   node ~/.config/ai/skills/spa-fetch/spa-fetch.js <URL>; echo "EXIT:$?"
-   ```
-   - `EXIT:0` → parse stdout through the same Path 1 / Path 2 logic as `add` step 4.
-   - `EXIT:10` (login required) / `EXIT:11` (bot wall) → the host needs an interactive browser session; do NOT drive login inside a batch add/annotate. Set Summary `(fetch 실패)`, leave Triggers empty, and tell the user to run `/spa-fetch <URL>` once to establish the session, then re-`annotate`.
-   - `EXIT:1` → treat as fetch failure.
+2. **SPA / client-rendered pages** → the `spa-fetch` skill, run headless — **bundled with pm-skills, but its Playwright browser needs a one-time setup** (`cd $HOME/.config/ai/skills/spa-fetch && npm install && npx playwright install`). Applies when the page body is rendered by JS so `WebFetch` returns only title/nav chrome with no field or endpoint identifiers — typical of Swagger UI (`/docs`, `/swagger`), Notion (`notion.so`), and Figma (`figma.com`) URLs.
+   - **If `spa-fetch`'s Playwright browser is set up** (the script below runs), route here up front for those known patterns, or whenever a `WebFetch` summary degrades to a bare page title:
+     ```bash
+     [ -f $HOME/.config/ai/skills/spa-fetch/spa-fetch.js ] && node $HOME/.config/ai/skills/spa-fetch/spa-fetch.js <URL>; echo "EXIT:$?"
+     ```
+     - `EXIT:0` → parse stdout through the same Path 1 / Path 2 logic as `add` step 4.
+     - `EXIT:10` (login required) / `EXIT:11` (bot wall) → the host needs an interactive browser session; do NOT drive login inside a batch add/annotate. Set Summary `(fetch 실패)`, leave Triggers empty, and tell the user to run `/spa-fetch <URL>` once to establish the session, then re-`annotate`.
+     - `EXIT:1` → treat as fetch failure.
+   - **If `spa-fetch`'s Playwright browser is not yet set up** → skip gracefully: fall back to `WebFetch` (#3); if that degrades to a bare title, set Summary `(fetch 실패)` and leave Triggers empty. (To enable richer SPA fetching, run the one-time setup above — see README.)
 3. **Everything else** → `WebFetch`.
 
 On fetch failure, use `(fetch 실패)` as the Summary. Never block the add/annotate flow on a single fetch failure.
@@ -229,7 +233,7 @@ A task's context has **two parts**: external **Links** (`links.md`, this skill) 
 
 ## Current task (no pm-context pointer)
 
-The current Task is **derived** from the selected current plan when that plan is linked to an open Item. Resolve it read-only with `pm current-task`; it is empty for standalone, stale, terminal, or empty selections. The dashboard exposes the structured current-plan state through `GET /api/roadmap` and stores no separate Task or Item navigation selection.
+For agent flows, the current Task is **derived** from the validated session-bound plan when that plan is linked to an open Item: resolve the session read-only, then use `pm get <plan-id>`. The launcher/dashboard may continue to project its checkout-local selection through `pm current-task` and `GET /api/roadmap`; that explicit UI exemption stores no separate Task or Item navigation selection.
 
 ## Rules
 

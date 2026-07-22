@@ -13,7 +13,7 @@ Goal: $ARGUMENTS (if empty, infer from recent commits or ask)
 
 ## System — design's read-only post-step
 
-verify is an **optional read-only step after implementation** — not a pm-* loop node (it owns no per-task artifact, so the canonical loop is unchanged). It consumes the **plan** that `design` writes and `retro` later reads: via the `{{STATE_DIR}}/current.txt` pointer it loads the active plan and uses its `## Verifiable Success Criteria` as truth conditions (Step 1). It **persists nothing** and changes no status — confirming the goal is met is verify's job; closing the loop (plan→terminal, item→`closed.md`) stays `retro`'s. With `grill` (design's read-only pre-step) it forms the two read-only satellites bracketing `design`. Outside the loop (no plan) it just verifies a goal.
+verify is an **optional read-only step after implementation** — not a pm-* loop node (it owns no per-task artifact, so the canonical loop is unchanged). It consumes the **session-bound plan** that `design` writes and `retro` later reads, using its `## Verifiable Success Criteria` as truth conditions (Step 1). It **persists nothing** and changes no status — confirming the goal is met is verify's job; closing the loop (plan→terminal, item→`closed.md`) stays `retro`'s. With `grill` (design's read-only pre-step) it forms the two read-only satellites bracketing `design`. Outside the loop (no explicit or session-bound plan) it just verifies a goal.
 
 ## Current Context
 - Recent commits: !`git log --oneline -5 2>/dev/null || echo "N/A"`
@@ -21,54 +21,35 @@ verify is an **optional read-only step after implementation** — not a pm-* loo
 
 ## Plan delta (optional)
 
-Resolve the active plan and execution root through the shared read-only engine:
+Resolve an explicitly supplied plan with `resolve-plan`; otherwise resolve the originating
+session through the shared read-only engine using exact injected metadata:
 
 ```bash
 root="$(git rev-parse --show-toplevel)" || exit 1
-node "$HOME/.config/ai/lib/worktree.mjs" resolve-current --root "$root"
+PM_SESSION_TOOL="<injected session tool>" PM_SESSION_ID="<exact injected session id>" node "$HOME/.config/ai/lib/worktree.mjs" resolve-session --root "$root" --tool "<injected session tool>"
 ```
 
 `status: ok` supplies `plan`, immutable `base_commit`, `branch`, and `execution_root`.
-Re-root every file/Git/test command there. Any routing/mapping error blocks verification
-with the engine output as evidence; never fall back to the caller checkout.
+Re-root every file, Git, and test command there. Any routing or mapping error blocks
+verification with the engine output as evidence; never fall back to the caller checkout.
 
 If found, compare planned vs actual:
 - **Planned files**: `files_affected` from plan frontmatter
 - **Actual files**: `git -C <execution_root> diff --name-only <base_commit>...HEAD`
 - Report delta as informational (files added/removed vs plan). Do NOT block on delta — plans evolve during implementation.
 
-If no plan found (empty or missing pointer), skip this section entirely.
+If the session is unbound, do not inspect main launcher state. Use an explicit plan/goal
+when supplied; otherwise skip this section entirely.
 
-## When to dispatch to `verifier` agent
+## Optional acceleration — `verifier` subagent
 
-For broad verification that would bloat the main context with many file reads or test runs, spawn the `verifier` subagent via the Agent tool. Run the steps below inline only when the goal is narrow.
+**All verification runs inline by default** — including 5+ truth conditions and Level 3/4 depth. The steps below are self-contained; you never *need* a subagent, and there is no loss of coverage when running inline.
 
-Use **inline** when:
-- Goal is scoped to a single function or file
-- 2–3 truth conditions expected
-- Level 1–2 depth is sufficient
+As an **optional** speed-up, if a `verifier` subagent is installed in your environment you may offload broad verification to it purely to keep the main context clean — useful when verification would otherwise read many files or run a long test suite (goal spans multiple modules, Level 3/4 grep across 10+ files, etc.):
+- **Claude Code**: `Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")` — **only if that agent is present** (pm-skills does not bundle it).
+- **Codex CLI**: spawn a `codex exec` subprocess with the same focused prompt (Goal / Depth / Plan path / Changed files).
 
-Dispatch to **`verifier`** when:
-- Goal spans multiple modules
-- 5+ truth conditions expected
-- Level 3/4 requires grep across 10+ files or running a test suite
-
-Dispatch to a separate context to isolate heavy reading:
-- **Claude Code**: `Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")`
-- **Codex CLI**: `codex exec` with the same focused prompt (Goal / Depth / Plan path / Changed files). Codex's `multi_agent_v1.spawn_agent` is explicit-request-only (not for auto-dispatch), so spawn a `codex exec` subprocess instead.
-
-If the Plan delta step found a plan, pass its path as **Plan path** so the verifier seeds its truth conditions from the plan's `## Verifiable Success Criteria` (same as inline Step 1).
-The dispatch prompt MUST also include the fixed planned truth conditions, the `Verification Coverage` field names, terminal-classification precedence, both arithmetic invariants, and the verdict rules below.
-
-Do NOT re-run delegated proof inline. Treat the returned checklist as a condition-evidence packet, discard any delegated legacy verdict, and mechanically map each planned condition:
-
-- `[x]` plus required fenced evidence → `Passed`.
-- Explicit failure plus required fenced evidence → `Failed`.
-- Unavailable prerequisite → `Blocked` only with attempted-prerequisite output, or `Evidence: none — no safe/authorized command`, plus a reason and exact unblock condition.
-- Deliberate omission → `Skipped` only with a reason and decision authority (`user`, approved plan/scope, or another explicit authority).
-- Missing condition/evidence, ambiguous state, or unclassifiable reason → `Blocked` with reason `delegated_evidence_incomplete`. Emit a fenced contract-validator result naming the condition and missing/ambiguous field. The exact unblock condition is: a new verification run must return that condition's terminal state and state-appropriate evidence.
-
-The contract-validator fence proves the delegation blockage; it is not feature-proof output. Validate both arithmetic invariants, then append the authoritative ledger and verdict below. Never retry deficient delegated evidence into a pass.
+If no such agent is available, run every step inline — that is the default path. When you do dispatch, pass the plan path so the agent seeds truth conditions from the plan's `## Verifiable Success Criteria` (same as inline Step 1), and return its report directly — do NOT re-run checks inline after dispatch.
 
 ## Approach: Goal-backward
 
@@ -133,21 +114,7 @@ If unsure about scope, default to all 4 levels.
 
 ### 4. Report
 
-Freeze the planned-condition list before executing proof. The counting unit is one planned truth condition, regardless of its number of levels, commands, or observables. Classify every condition into exactly one terminal state, in this precedence order:
-
-1. `Failed`: any required proof conclusively disproves the condition; remaining proofs need not run.
-2. `Blocked`: no proof failed, but a required proof could not run because access, environment, data, a dependency, or another prerequisite was unavailable.
-3. `Skipped`: no proof failed or blocked, but a required proof was deliberately not run.
-4. `Passed`: every required proof ran and satisfied the condition.
-
-Evidence is state-specific:
-
-- `Passed` and `Failed`: include the fenced proof command or observable output.
-- Attempted `Blocked`: include fenced prerequisite failure/unavailability output, the reason, and the exact unblock condition.
-- No-safe/authorized-check `Blocked`: write `Evidence: none — no safe/authorized command`, the reason, and the exact unblock condition; do not fabricate a fence.
-- `Skipped`: include the reason and decision authority; do not fabricate proof output.
-
-Update the checklist and append exactly this summary contract:
+Update the checklist from Step 1 with results:
 
 ```
 Truth conditions for: [goal]
@@ -155,27 +122,11 @@ Truth conditions for: [goal]
 - [ ] [condition 2] — FAILED at Level 2: stub found at file:line
 ...
 
-Verification Coverage
-- Planned: N
-- Executed: N
-- Passed: N
-- Failed: N
-- Blocked: N
-- Skipped: N
-- Coverage: Executed / Planned (percentage)
-
-Verdict: PASS | FAIL | INCOMPLETE
-Summary: X/Y conditions passed
+Verdict: X/Y conditions verified
 ```
 
-`Executed` is `Passed + Failed`; partially attempted blocked/skipped conditions are not executed. Enforce both invariants:
-
-- `Planned = Executed + Blocked + Skipped`
-- `Executed = Passed + Failed`
-
-Format `Coverage` as `Executed / Planned`, rounded half-up to one decimal place (for example, `2 / 3 (66.7%)`). With zero planned conditions, report `Coverage: N/A` and `INCOMPLETE`.
-
-Verdict precedence is deterministic: `FAIL` when `Failed > 0`; otherwise `INCOMPLETE` when `Blocked > 0`, `Skipped > 0`, or `Planned = 0`; otherwise `PASS` only when every planned condition passed. The status-bearing verdict replaces the former numeric-only verdict line; numeric progress appears only in `Summary` and the ledger.
+Each condition MUST have a fenced code block showing the verification output.
+Failed conditions — report to the user with specific failure point.
 
 ## Rules
 

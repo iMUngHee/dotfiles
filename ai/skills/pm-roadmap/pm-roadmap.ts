@@ -16,6 +16,7 @@ import {
   adoptPlan,
   assertPlanRoot,
   assertReservationRoot,
+  bindSession,
   ensureManagedWorktree,
   mainCheckout,
   pruneManagedWorktree,
@@ -93,6 +94,41 @@ async function isLegacy(root: string): Promise<boolean> {
   return !(await has(join(root, ".agents", "tasks"))) && (await has(join(root, ".agents", "ROADMAP.md")));
 }
 const READ_CMDS = new Set(["list", "tree", "get", "next", "recent", "validate"]);
+
+export const SESSION_BINDING_PARTIAL_EXIT = 2;
+export const SESSION_BINDING_FAILURES = [
+  "invalid_tool",
+  "missing_session_id",
+  "missing_plan",
+  "terminal",
+  "invalid_plan_status",
+  "invalid_mapping",
+  "missing_worktree",
+  "branch_mismatch",
+  "binding_store_unsafe",
+  "binding_store_error",
+] as const;
+const SESSION_BINDING_FAILURE_SET = new Set<string>(SESSION_BINDING_FAILURES);
+
+async function bindLifecyclePlan(root: string, plan: string, operation: "persist" | "select"): Promise<{ line: string; code: number }> {
+  const tool = process.env.PM_SESSION_TOOL;
+  const sessionId = process.env.PM_SESSION_ID;
+  if (!tool && !sessionId) return { line: "session_binding: not_requested", code: 0 };
+  const result = await bindSession({ root, tool, sessionId, plan });
+  if (result.status === "ok" && result.binding_status === "bound") {
+    return { line: "session_binding: bound", code: 0 };
+  }
+  const reason = SESSION_BINDING_FAILURE_SET.has(result.status) ? result.status : "binding_internal_error";
+  return {
+    line: `session_binding: unbound (${reason}); do not retry ${operation}`,
+    code: SESSION_BINDING_PARTIAL_EXIT,
+  };
+}
+
+async function lifecycleResult(out: string, root: string, plan: string, operation: "persist" | "select") {
+  const binding = await bindLifecyclePlan(root, plan, operation);
+  return { out: `${out}\n${binding.line}`, code: binding.code };
+}
 
 // By/ClosedBy attribution is stamped ONLY on collab tasks. solo → undefined (no field, no error).
 // collab + unresolvable identity → requireActor throws (stop, don't write an anonymous note).
@@ -242,12 +278,12 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
         if (!id) return { out: "persist --standalone needs --id <id>", code: 1 };
         await assertPersistRoot(root, id, plan);
         const persisted = await ops.createStandalonePlan(root, id, plan);
-        return { out: `${persisted.outcome} standalone ${id} → ${plan}`, code: 0 };
+        return lifecycleResult(`${persisted.outcome} standalone ${id} → ${plan}`, root, plan, "persist");
       }
       const [key, id] = pos;
       await assertPersistRoot(root, id, plan);
       const persisted = await ops.createPlanAndBacklogItem(root, key, { id, title: str(opts.title) ?? id }, plan);
-      return { out: `${persisted.outcome} ${id} → ${plan}`, code: 0 };
+      return lifecycleResult(`${persisted.outcome} ${id} → ${plan}`, root, plan, "persist");
     }
     // retro close hook: plan→terminal + item→closed + structured ## Deferred harvest, atomic.
     case "complete": {
@@ -309,7 +345,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       catch (error: any) { if (error?.code !== "ENOENT") throw error; }
       const result = await writeCurrentCAS(main, observed, plan);
       if (!result.updated && result.current !== plan) return { out: `selection conflict: ${result.current}`, code: 1 };
-      return { out: `selected ${plan}`, code: 0 };
+      return lifecycleResult(`selected ${plan}`, root, plan, "select");
     }
     case "worktree": {
       const [sub] = pos;
@@ -388,7 +424,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const { actor, source } = resolveActorSource(root, opts);
       return { out: actor ? `${actor}  (source: ${source})` : "(no actor — set PM_ACTOR, run 'pm whoami <name>', or set git user.email)", code: 0 };
     }
-    // Read-only resolver: the Task linked to the selected current plan. Empty otherwise.
+    // Read-only launcher/dashboard projection for the checkout-local selected plan.
     case "current-task": {
       const current = await resolveCurrentPlan(root);
       return { out: current.state === "linked" ? current.item.key : "", code: 0 };

@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { ensureManagedWorktree, resolveCurrent } from "./worktree.mjs";
+import { bindSession, ensureManagedWorktree, resolveCurrent } from "./worktree.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = dirname(dirname(here));
@@ -27,11 +27,12 @@ async function fixture() {
   await mkdir(join(root, ".agents", "tasks"), { recursive: true });
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
   await mkdir(join(root, ".agents", "state"), { recursive: true });
-  const ensured = await ensureManagedWorktree({ root, id: "hook-plan", base: "main" });
-  const plan = ".agents/plans/2026-07-13-hook-plan.md";
-  await writeFile(join(root, plan), `---
-id: hook-plan
-title: Hook plan
+  const createPlan = async (id, title) => {
+    const ensured = await ensureManagedWorktree({ root, id, base: "main" });
+    const plan = `.agents/plans/2026-07-22-${id}.md`;
+    await writeFile(join(root, plan), `---
+id: ${id}
+title: ${title}
 status: active
 base_branch: main
 base_commit: ${ensured.base_commit}
@@ -39,14 +40,37 @@ branch: ${ensured.branch}
 worktree: ${ensured.worktree}
 ---
 `);
-  await writeFile(join(root, ".agents", "state", "current.txt"), `${plan}\n`);
-  await writeFile(join(ensured.execution_root, ".agents", "state", "current.txt"), `${plan}\n`);
-  return { root, ensured, plan };
+    await writeFile(join(ensured.execution_root, ".agents", "state", "current.txt"), `${plan}\n`);
+    return { ensured, plan, title };
+  };
+  const planA = await createPlan("hook-plan-a", "Hook plan A");
+  const planB = await createPlan("hook-plan-b", "Hook plan B");
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${planA.plan}\n`);
+  return { root, planA, planB };
 }
 
-function runHook(kind, projectDir, configRoot = repo) {
-  const input = kind === "codex" ? JSON.stringify({ project_dir: projectDir }) : "{}";
-  const env = { ...process.env, AI_CONFIG_ROOT: configRoot, CLAUDE_PROJECT_DIR: projectDir };
+async function legacyFixture() {
+  const { root, planA, planB } = await fixture();
+  const ensured = await ensureManagedWorktree({ root, id: "legacy-candidate", base: "main" });
+  const plan = ".agents/plans/2026-07-22-legacy.md";
+  await writeFile(join(root, plan), `---
+id: legacy
+title: Legacy
+status: draft
+---
+`);
+  await writeFile(join(ensured.execution_root, ".agents", "state", "current.txt"), `${plan}\n`);
+  return { root, planA, planB, ensured, plan };
+}
+
+function runHook(kind, projectDir, { configRoot = repo, sessionId = "session-a", storeRoot } = {}) {
+  const input = JSON.stringify({ project_dir: projectDir, cwd: projectDir, session_id: sessionId });
+  const env = {
+    ...process.env,
+    AI_CONFIG_ROOT: configRoot,
+    CLAUDE_PROJECT_DIR: projectDir,
+    ...(storeRoot ? { PM_SESSION_BINDINGS_ROOT: storeRoot } : {}),
+  };
   const result = spawnSync("bash", [hooks[kind]], { cwd: projectDir, env, input, encoding: "utf8" });
   assert.equal(result.status, 0, `${kind} hook failed: ${result.stderr}`);
   return result.stdout.trim() ? JSON.parse(result.stdout).hookSpecificOutput.additionalContext : "";
@@ -60,47 +84,61 @@ for (const kind of ["claude", "codex"]) {
     await mkdir(join(configRoot, "ai", "lib"), { recursive: true });
     await writeFile(join(configRoot, "ai", "lib", "worktree.mjs"), "process.exit(1);\n");
 
-    const context = runHook(kind, root, configRoot);
-    assert.match(context, /plan routing error: ensure-current failed/);
-    assert.match(context, /resolve-current --root/);
+    const context = runHook(kind, root, { configRoot });
+    assert.match(context, /session plan routing error: ensure-session failed/);
+    assert.match(context, /resolve-session --root/);
   });
 }
 
 for (const kind of ["claude", "codex"]) {
-  test(`${kind} adapter injects one shared rooted context from main and execution worktree`, async (t) => {
-    const { root, ensured } = await fixture();
-    t.after(() => rm(root, { recursive: true, force: true }));
+  test(`${kind} adapter keeps S1 on A and S2 on B when the launcher changes`, async (t) => {
+    const { root, planA, planB } = await fixture();
+    const storeRoot = await mkdtemp(join(tmpdir(), "inject-context-bindings-"));
+    t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(storeRoot, { recursive: true, force: true })]));
+    await bindSession({ root, tool: kind, sessionId: "session/one", plan: planA.plan, storeRoot });
+    await bindSession({ root, tool: kind, sessionId: "session/two", plan: planB.plan, storeRoot });
 
-    const fromMain = runHook(kind, root);
-    assert.match(fromMain, /active: Hook plan/);
-    assert.match(fromMain, new RegExp(`execution root: ${ensured.execution_root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
-    assert.match(fromMain, new RegExp(`branch: ${ensured.branch.replace("/", "\\/")}`));
-    assert.match(fromMain, /route: switch to the execution root/);
+    const s1Before = runHook(kind, root, { sessionId: "session/one", storeRoot });
+    const s2Before = runHook(kind, root, { sessionId: "session/two", storeRoot });
+    assert.match(s1Before, /active: Hook plan A/);
+    assert.doesNotMatch(s1Before, /Hook plan B/);
+    assert.match(s2Before, /active: Hook plan B/);
+    assert.doesNotMatch(s2Before, /Hook plan A/);
 
-    const fromWorktree = runHook(kind, ensured.execution_root);
-    assert.match(fromWorktree, /route: already at the execution root/);
+    await writeFile(join(root, ".agents", "state", "current.txt"), `${planB.plan}\n`);
+    const s1After = runHook(kind, root, { sessionId: "session/one", storeRoot });
+    const s2After = runHook(kind, root, { sessionId: "session/two", storeRoot });
+    assert.match(s1After, /active: Hook plan A/);
+    assert.doesNotMatch(s1After, /Hook plan B/);
+    assert.match(s2After, /active: Hook plan B/);
+    assert.match(s1After, new RegExp(`execution root: ${planA.ensured.execution_root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(s1After, /session tool: (?:claude|codex)/);
+    assert.match(s1After, /session id: session\/one/);
+
+    const rooted = runHook(kind, planA.ensured.execution_root, { sessionId: "session/one", storeRoot });
+    assert.match(rooted, /route: already at the execution root/);
   });
 
-  test(`${kind} adapter transparently maps a safe legacy plan and skips an empty pointer`, async (t) => {
-    const { root } = await fixture();
-    t.after(() => rm(root, { recursive: true, force: true }));
-    const legacy = ".agents/plans/2026-07-13-legacy.md";
-    await writeFile(join(root, legacy), "---\nid: legacy\ntitle: Legacy\nstatus: draft\n---\n");
-    await writeFile(join(root, ".agents", "state", "current.txt"), `${legacy}\n`);
-    const resolved = await resolveCurrent(root);
+  test(`${kind} adapter keeps unbound main plan-free and preserves local legacy normalization`, async (t) => {
+    const { root, planA, ensured, plan } = await legacyFixture();
+    const storeRoot = await mkdtemp(join(tmpdir(), "inject-context-bindings-"));
+    t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(storeRoot, { recursive: true, force: true })]));
+
+    const unbound = runHook(kind, root, { sessionId: "fresh", storeRoot });
+    assert.match(unbound, /session plan: unbound/);
+    assert.match(unbound, /main current: launcher-only/);
+    assert.doesNotMatch(unbound, /Hook plan A|execution root:|branch:|base:|recovery:/);
+    assert.equal((await readFile(join(root, ".agents", "state", "current.txt"), "utf8")).trim(), planA.plan, "unbound main launcher is not normalized or consumed");
+
+    const resolved = await resolveCurrent(ensured.execution_root);
     assert.equal(resolved.status, "legacy_unmapped");
-    assert.equal(resolved.recovery.action, "worktree_adopt");
-    assert.equal(resolved.recovery.plan, legacy);
-    assert.equal(resolved.recovery.candidate_count, 0);
-    const context = runHook(kind, root);
+    const context = runHook(kind, ensured.execution_root, { sessionId: "local", storeRoot });
     assert.match(context, /draft: Legacy/);
     assert.doesNotMatch(context, /legacy_unmapped|recovery: pm worktree adopt/);
-    const mapped = await resolveCurrent(root);
+    const mapped = await resolveCurrent(ensured.execution_root);
     assert.equal(mapped.status, "ok");
     assert.equal(mapped.id, "legacy");
-
-    await writeFile(join(root, ".agents", "state", "current.txt"), "");
-    assert.equal(runHook(kind, root), "");
+    assert.equal(mapped.plan, plan);
   });
 }
 
@@ -110,8 +148,9 @@ test("hook adapters contain no topology or lifecycle mutation commands", async (
     assert.doesNotMatch(source, /\b(?:git\s+worktree\s+(?:add|remove|move)|ln\s+-s|mkdir|rm|mv|cp)\b/);
     assert.doesNotMatch(source, /pm-roadmap\.ts\s+(?:persist|approve|complete|plan-step|select)/);
     assert.doesNotMatch(source, /^\s*(?:node\s+[^\n]*\s+adopt|[^#\n]*pm-roadmap\.ts\s+worktree\s+adopt)(?:\s|$)/m);
-    assert.match(source, /ensure-current --root/);
-    assert.doesNotMatch(source, /(?:RESOLVED|resolved)=\$?\([^\n]*resolve-current --root/);
+    assert.match(source, /ensure-session --root/);
+    assert.doesNotMatch(source, /ensure-current --root/);
+    assert.doesNotMatch(source, /(?:\bdefault\b|\$PPID)/);
   }
 });
 

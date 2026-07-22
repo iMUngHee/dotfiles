@@ -17,7 +17,7 @@ Task: $ARGUMENTS (if empty, ask the user)
 `$ARGUMENTS` selects the mode. When the **sole** argument is exactly one of these reserved tokens, run that mode instead of the normal plan flow:
 
 - **`handoff`** → package the in-flight plan's mid-execution state into a paste-ready kickoff prompt for a fresh session/agent, then copy it to the clipboard. Read-only — writes nothing. See **Handoff mode** below.
-- **`continue`** → resume the in-flight plan in THIS session: read `{{STATE_DIR}}/current.txt`, find the first unchecked step, and pick up implementation from there. See **Continue mode** below.
+- **`continue`** → resume the plan bound to THIS session, find the first unchecked step, and pick up implementation from there. See **Continue mode** below.
 - **anything else (or empty)** → a task description; run the normal plan flow (Steps 1-7). A task whose description merely *contains* `handoff`/`continue` among other words is NOT a mode — only the bare single token dispatches.
 
 ## System — role in the pm-* loop
@@ -180,8 +180,15 @@ PLAN
 
    ```bash
    pm task create <KEY> --title "<task title>"   # only when the task does not exist
-   pm persist <KEY> <id> "<plan-repo-rel-path>" --title "<plan title>"
+   PM_SESSION_TOOL="<injected session tool>" PM_SESSION_ID="<exact injected session id>" pm persist <KEY> <id> "<plan-repo-rel-path>" --title "<plan title>"
    ```
+
+   Copy the tool and exact, unsanitized session id from the current prompt's session-routing
+   block. Never substitute a default, PPID, normalized id, or main `current.txt`. The CLI
+   commits the persist transaction first and then binds that exact session to the persisted
+   plan. Its final output line is `session_binding: bound` on success. If it reports
+   `session_binding: unbound (<typed reason>); do not retry persist`, the persist already
+   committed: report the explicit unbound recovery and stop without replaying the command.
 
    Persist acquires reservation lock then task-store lock, journal-creates the canonical
    plan from the staged bytes, creates/links the draft item, seeds the target execution
@@ -237,7 +244,7 @@ Report the archiver's output (moved / skipped). Add `--dry-run` to preview witho
 - Do NOT implement until user approves the design
 - **Implement only against an `active` plan.** An explicit build instruction (`승인`/"구현해"/"최대한 작업해"/"ㄱㄱ") IS the `승인` trigger: promote `status: draft → active` (+ `pm approve <KEY> <id>`) first, then implement. A terse go-ahead is no excuse to skip section-by-section approval or a warranted `/grill`.
 - Plan artifact is saved ONLY after explicit design approval (Step 3)
-- **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they read the in-flight plan via `current.txt`; the plan id is used for backlog linkage) and loses the pre-drift intent snapshot
+- **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they read the session-bound in-flight plan; the plan id is used for backlog linkage) and loses the pre-drift intent snapshot
 - **ALWAYS check off implementation steps as you go.** The instant a step meets its
   PASS output, call `pm plan-step check <plan> <number>`; never batch at the end and never
   hand-edit checkbox lines.
@@ -252,11 +259,11 @@ Report the archiver's output (moved / skipped). Add `--dry-run` to preview witho
 
 ## Handoff mode (`/design handoff`)
 
-Package the current in-flight plan so a fresh session or another agent can resume it with full context. **Writes nothing** — the plan file (checkbox state) + `{{STATE_DIR}}/current.txt` stay the single source of truth. This is the mid-execution counterpart to `pm next` (which kicks off a *backlog item* before implementation); handoff kicks off an *in-flight plan* mid-implementation, and Continue mode is its consumer.
+Package the current session-bound plan so a fresh session or another agent can resume it with full context. **Writes nothing** — the canonical plan and its execution mapping remain the durable source of truth; the ephemeral binding is intentionally recreated by explicit select in the receiving session. This is the mid-execution counterpart to `pm next` (which kicks off a *backlog item* before implementation); handoff kicks off an *in-flight plan* mid-implementation, and Continue mode is its consumer.
 
-1. Run read-only `resolve-current`. Empty/missing/terminal → report no in-flight plan and
-   stop. A routing error is reported verbatim. Use the returned `execution_root` for all
-   subsequent reads.
+1. Run read-only `resolve-session` with the exact injected tool/id. Unbound,
+   missing, or terminal → report no in-flight plan and stop. A routing error is reported
+   verbatim. Use the returned `execution_root` for all subsequent reads.
 2. Branch on the plan's frontmatter `status`:
    - **`done` / `dropped`** (stale pointer) → report "not an in-flight plan (already terminal)" and stop; do not hand off.
    - **`draft`** (unapproved) → hand off, but put "⚠ this plan is still `draft` (unapproved) — reply `승인` in the fresh session before implementing" at the top of the prompt.
@@ -272,8 +279,9 @@ Package the current in-flight plan so a fresh session or another agent can resum
 
 Resume the in-flight plan in THIS session.
 
-1. Run `resolve-current`; re-anchor the session to its `execution_root`. Empty/missing or
-   a routing error stops with the exact remediation. Never continue from main.
+1. Run `resolve-session` with the exact injected tool/id; re-anchor the session to its
+   `execution_root`. Unbound/missing or a routing error stops with the exact remediation.
+   Never consult main launcher state or continue from main.
 2. Branch on frontmatter `status`: `draft` → unapproved, so request `승인` (a draft plan is not implementable per the Rules) and stop / `done` · `dropped` (stale pointer) → report and stop / any other · unknown → report "invalid plan status" and stop.
 3. `active`:
    - **Unchecked `- [ ]` steps remain** → summarize the done steps, locate the first unchecked step, and resume implementation from there (honor the existing Rules: flip `- [ ]` → `- [x]` as each lands; implement only against the active plan).
@@ -281,7 +289,7 @@ Resume the in-flight plan in THIS session.
 
 ## Status Update Triggers (post-creation)
 
-After `current.txt` points to a `draft` plan, watch for explicit user replies that promote or conclude it:
+After this session is bound to a `draft` plan, watch for explicit user replies that promote or conclude it:
 
 | User trigger       | Action                                         |
 | ------------------ | ---------------------------------------------- |
@@ -299,7 +307,7 @@ Standalone plans use `pm approve --standalone --plan <path>` and
 
 **Hard rules:**
 
-- Trigger fires ONLY when `state/current.txt` points to a plan with status `draft` or `active`. If `current.txt` is empty or missing, treat user reply as normal conversation — do NOT modify any plan file.
+- Trigger fires ONLY when `resolve-session` returns this session's validated plan with status `draft` or `active`. If the session is unbound, treat the reply as normal conversation unless the user supplies an explicit plan — do NOT consume main launcher state.
 - NEVER infer status changes from context (e.g., "looks done", "I think we finished"). Status changes ONLY on the explicit trigger words above (or `/retro` for the `done` path).
 - NEVER change status silently. Always confirm in the response: "✅ status: draft → active".
 - Terminal commands clear only pointers whose exact content equals the terminal plan;
