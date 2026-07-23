@@ -130,8 +130,31 @@ test("every interactive current-plan consumer declares session-aware routing or 
     assert.match(source, /launcher-only/, `${path} must document main launcher semantics`);
   }
 
+  const guardrails = await readFile(join(repo, "ai/guardrails.md"), "utf8");
+  assert.match(guardrails, /restored or compacted summaries are context only/i);
+  assert.match(guardrails, /Explicit non-plan task wording/);
+  assert.match(guardrails, /plan execution or lifecycle action requires a validated session binding/i);
+
+  const selfReview = await readFile(join(repo, "ai/skills/self-review/SKILL.md"), "utf8");
+  assert.match(selfReview, /Restored Context Authority/, "self-review must mirror the shared guardrail");
+
+  for (const path of ["claude/DEVGUARD.md", "codex/DEVGUARD.md"]) {
+    assert.doesNotMatch(
+      await readFile(join(repo, path), "utf8"),
+      /restored or compacted summaries are context only/,
+      `${path} must not duplicate shared continuation policy`,
+    );
+  }
+
+  for (const path of ["claude/README.md", "codex/README.md"]) {
+    const source = await readFile(join(repo, path), "utf8");
+    assert.match(source, /restored|compacted|summary-only/i, `${path} must document continuation-guard delivery`);
+  }
+
   const audit = await readFile(join(repo, "ai/skills/config-audit/SKILL.md"), "utf8");
   assert.match(audit, /ensure-session/);
   assert.match(audit, /unbound main/);
   assert.match(audit, /session_id/);
+  assert.match(audit, /continuation guard/);
+  assert.match(audit, /every\s+branch without a validated/);
 });

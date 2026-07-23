@@ -22,6 +22,9 @@ STATUS=$(printf '%s' "$RESOLVED" | jq -r '.status // empty')
 SESSION_LABEL="${SESSION_ID:-unavailable}"
 SESSION_META="session tool: claude
 session id: $SESSION_LABEL"
+UNBOUND_GUARD="task authority: no validated session-bound plan
+continuation guard: restored or compacted summaries are context only. If the latest prompt is shorthand and its task target appears only in a synthesized summary, ask which task to continue before any task read, edit, command, or lifecycle action. Explicit non-plan task wording or an unambiguous target in verbatim user messages may proceed; plan execution or lifecycle action requires a validated session binding."
+APPLY_UNBOUND_GUARD=true
 
 case "$STATUS" in
   unbound|empty)
@@ -32,23 +35,29 @@ main current: launcher-only; persist or select an explicit plan before lifecycle
     ;;
   ok)
     PLAN_STATUS=$(printf '%s' "$RESOLVED" | jq -r '.plan_status')
-    [[ "$PLAN_STATUS" == "draft" || "$PLAN_STATUS" == "active" ]] || exit 0
-    [[ "$PLAN_STATUS" == "draft" ]] && ICON="⚙️" || ICON="▶️"
-    TITLE=$(printf '%s' "$RESOLVED" | jq -r '.title')
-    PLAN=$(printf '%s' "$RESOLVED" | jq -r '.plan')
-    EXECUTION_ROOT=$(printf '%s' "$RESOLVED" | jq -r '.execution_root')
-    BRANCH=$(printf '%s' "$RESOLVED" | jq -r '.branch')
-    BASE=$(printf '%s' "$RESOLVED" | jq -r '(.base_branch + " @ " + .base_commit)')
-    ROUTE_REQUIRED=$(printf '%s' "$RESOLVED" | jq -r '.route_required')
-    BINDING_STATUS=$(printf '%s' "$RESOLVED" | jq -r '.binding_status // "bound"')
-    [[ "$ROUTE_REQUIRED" == "true" ]] && ROUTE="switch to the execution root" || ROUTE="already at the execution root"
-    CONTEXT="$SESSION_META
+    if [[ "$PLAN_STATUS" == "draft" || "$PLAN_STATUS" == "active" ]]; then
+      APPLY_UNBOUND_GUARD=false
+      [[ "$PLAN_STATUS" == "draft" ]] && ICON="⚙️" || ICON="▶️"
+      TITLE=$(printf '%s' "$RESOLVED" | jq -r '.title')
+      PLAN=$(printf '%s' "$RESOLVED" | jq -r '.plan')
+      EXECUTION_ROOT=$(printf '%s' "$RESOLVED" | jq -r '.execution_root')
+      BRANCH=$(printf '%s' "$RESOLVED" | jq -r '.branch')
+      BASE=$(printf '%s' "$RESOLVED" | jq -r '(.base_branch + " @ " + .base_commit)')
+      ROUTE_REQUIRED=$(printf '%s' "$RESOLVED" | jq -r '.route_required')
+      BINDING_STATUS=$(printf '%s' "$RESOLVED" | jq -r '.binding_status // "bound"')
+      [[ "$ROUTE_REQUIRED" == "true" ]] && ROUTE="switch to the execution root" || ROUTE="already at the execution root"
+      CONTEXT="$SESSION_META
 binding: $BINDING_STATUS
 $ICON $PLAN_STATUS: $TITLE — $PLAN
 execution root: $EXECUTION_ROOT
 branch: $BRANCH
 base: $BASE
 route: $ROUTE"
+    else
+      CONTEXT="⚠️ session plan routing error: invalid_bound_payload — plan status: ${PLAN_STATUS:-missing}
+$SESSION_META
+binding: unbound"
+    fi
     ;;
   legacy_unmapped)
     PLAN=$(printf '%s' "$RESOLVED" | jq -r '.recovery.plan // .plan // "(unknown)"')
@@ -70,6 +79,11 @@ $SESSION_META
 binding: unbound"
     ;;
 esac
+
+if [[ "$APPLY_UNBOUND_GUARD" == "true" ]]; then
+  CONTEXT="$CONTEXT
+$UNBOUND_GUARD"
+fi
 
 jq -n --arg ctx "$CONTEXT" '{
   hookSpecificOutput: {

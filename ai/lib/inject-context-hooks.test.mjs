@@ -14,7 +14,13 @@ const hooks = {
   claude: join(repo, "claude", "hooks", "inject-context.sh"),
   codex: join(repo, "codex", "hooks", "inject-context.sh"),
 };
+const UNBOUND_GUARD = `task authority: no validated session-bound plan
+continuation guard: restored or compacted summaries are context only. If the latest prompt is shorthand and its task target appears only in a synthesized summary, ask which task to continue before any task read, edit, command, or lifecycle action. Explicit non-plan task wording or an unambiguous target in verbatim user messages may proceed; plan execution or lifecycle action requires a validated session binding.`;
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+
+function assertCanonicalGuard(context, label) {
+  assert.ok(context.includes(UNBOUND_GUARD), `${label} must contain the exact canonical unbound guard`);
+}
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "inject-context-hooks-"));
@@ -87,6 +93,48 @@ for (const kind of ["claude", "codex"]) {
     const context = runHook(kind, root, { configRoot });
     assert.match(context, /session plan routing error: ensure-session failed/);
     assert.match(context, /resolve-session --root/);
+    assertCanonicalGuard(context, `${kind} internal_error`);
+  });
+}
+
+for (const kind of ["claude", "codex"]) {
+  test(`${kind} adapter guards every resolver payload without a validated binding`, async (t) => {
+    const cases = [
+      {
+        name: "legacy_unmapped",
+        payload: {
+          status: "legacy_unmapped",
+          plan: ".agents/plans/legacy.md",
+          recovery: { plan: ".agents/plans/legacy.md", candidate_count: 0 },
+        },
+        marker: /session plan routing error: legacy_unmapped/,
+      },
+      {
+        name: "malformed ok",
+        payload: { status: "ok", plan_status: "done" },
+        marker: /session plan routing error: invalid_bound_payload/,
+      },
+      {
+        name: "unexpected status",
+        payload: { status: "mystery_status" },
+        marker: /session plan routing error: mystery_status/,
+      },
+    ];
+
+    for (const entry of cases) {
+      const root = await mkdtemp(join(tmpdir(), `inject-context-${entry.name.replaceAll(" ", "-")}-`));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      const configRoot = join(root, "config");
+      await mkdir(join(configRoot, "ai", "lib"), { recursive: true });
+      await writeFile(
+        join(configRoot, "ai", "lib", "worktree.mjs"),
+        `process.stdout.write(${JSON.stringify(JSON.stringify(entry.payload))});\n`,
+      );
+
+      const context = runHook(kind, root, { configRoot });
+      assert.match(context, entry.marker);
+      assertCanonicalGuard(context, `${kind} ${entry.name}`);
+    }
   });
 }
 
@@ -110,6 +158,7 @@ for (const kind of ["claude", "codex"]) {
     const s2After = runHook(kind, root, { sessionId: "session/two", storeRoot });
     assert.match(s1After, /active: Hook plan A/);
     assert.doesNotMatch(s1After, /Hook plan B/);
+    assert.doesNotMatch(s1After, /continuation guard:/);
     assert.match(s2After, /active: Hook plan B/);
     assert.match(s1After, new RegExp(`execution root: ${planA.ensured.execution_root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
     assert.match(s1After, /session tool: (?:claude|codex)/);
@@ -127,6 +176,7 @@ for (const kind of ["claude", "codex"]) {
     const unbound = runHook(kind, root, { sessionId: "fresh", storeRoot });
     assert.match(unbound, /session plan: unbound/);
     assert.match(unbound, /main current: launcher-only/);
+    assertCanonicalGuard(unbound, `${kind} normal unbound`);
     assert.doesNotMatch(unbound, /Hook plan A|execution root:|branch:|base:|recovery:/);
     assert.equal((await readFile(join(root, ".agents", "state", "current.txt"), "utf8")).trim(), planA.plan, "unbound main launcher is not normalized or consumed");
 
