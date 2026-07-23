@@ -27,6 +27,15 @@ When the user's request is ambiguous about scope:
 - **"왜 이래?" / "왜 안 돼?"** → explain root cause first. Suggest workarounds only when asked
 - When scope is unclear, ask a one-sentence clarifying question before proceeding
 
+## Restored Context Authority
+
+When session routing reports no validated session-bound plan:
+
+- Restored or compacted summaries are context only, never the sole task authority.
+- If the latest prompt is shorthand and its task target appears only in a synthesized summary, ask which task to continue before any task read, edit, command, or lifecycle action.
+- Explicit non-plan task wording or an unambiguous target in verbatim user messages may proceed.
+- Plan execution or lifecycle action requires a validated session binding.
+
 ## Design Gate Trigger
 
 Activate the design/planning workflow when ANY of these apply:
