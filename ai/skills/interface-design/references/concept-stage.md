@@ -44,9 +44,23 @@ Art direction: <concept> — <why it fits the product, audience, and job>
 
 - Use one representative screen per candidate, realistic content, and the same information/state scope.
 - Vary tokens, type voice, density, composition, and component expression; do not build different products.
-- Include desktop and the relevant narrow/fixed canvas only when it affects the decision.
+- For Full work, render and inspect one representative wide and narrow specimen for every
+  affected macrostructure. Apply the same requirement to a delta that changes
+  macrostructure or responsive behavior. Reuse one screen to cover multiple rows when its
+  inspected states make each transformation explicit; do not multiply screens merely to
+  create one artifact per row.
+- A fixed canvas or genuinely unaffected presentation may replace one specimen with
+  `N/A:<concrete reason>`. A missing or generated-but-uninspected required specimen is a
+  gap, not an approval candidate.
 - Label every artifact `non-production interface specimen`.
 - Do not wire APIs, persistence, production routing, or durable application state.
+
+Record selected-direction proof in exact Interface Coverage from the shared output
+formats. Each `INT-NNN` row maps its source EXP IDs and uses specimen evidence shaped as
+`<artifact-or-render>#<state>@<viewport>:<inspected observation>`. One specimen may support
+several INT rows, but every row names the specific observation that proves its contracted
+transformation. Interface-only rows use `N/A:interface-only` as their source only when the
+contract requirement is concretely interface-owned.
 
 ## Redesign Method
 

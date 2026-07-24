@@ -54,6 +54,43 @@ gates before drafting the technical implementation plan:
 approved contract will be implemented and verified; it does not replace or silently
 amend the contract.
 
+### Durable Product Proof Handoff
+
+When product-craft supplies an approved Surface Proof Packet:
+
+1. Require its repo-relative Durable contract path, exact approved Experience Coverage
+   and Interface Coverage, all stage buckets, and typed approval fields. Resolve the path
+   inside the execution root and verify the same packet is persisted under that
+   contract's `## Decision Log & Open Questions`.
+2. Reject a missing/escaping path, absent durable packet, duplicate/unknown/unmapped row,
+   GAP, or incomplete required approval. A generic criterion such as “mobile tests pass”
+   cannot replace a material row or its specimen evidence.
+3. In the technical plan, create this exact section and copy the approved rows and packet
+   verbatim:
+
+   ```markdown
+   ## Product Surface Proof Obligations
+
+   Durable contract: <repo-relative design-contract.md path>
+
+   <exact Experience Coverage>
+
+   <exact Interface Coverage>
+
+   <exact Surface Proof Packet>
+   ```
+
+4. Always copy Required approvals and Recorded approvals verbatim inside that packet,
+   together with User approval evidence. Technical planning cannot infer, add, or remove
+   approval tokens.
+5. Turn every applicable EXP and INT row into a goal-level Verifiable Success Criterion
+   with a concrete code/assertion/inspected-render observable. Preserve row IDs and source
+   correspondence so `verify` can reconcile the eventual Implementation Proof.
+
+`design` never writes Implementation Proof or Implementation Bridge. If a required active
+plan has a missing Durable contract path or cannot preserve the rows exactly, the product
+surface portion of planning is `BLOCKED`.
+
 ## Execution Bootstrap (before Context Discovery)
 
 Determine a stable kebab-case id and base ref before reading project code. A backlog item
@@ -159,8 +196,10 @@ files_affected:
 the execution mapping and dedicated worktree.
 
 Follow with Goal, Approach, Decisions, Verifiable Success Criteria, Risks, Implementation
-Steps, and the empty Post-Implementation Notes section. Pipe the complete bytes to the
-stage without a second persistent input file:
+Steps, and the empty Post-Implementation Notes section. For product-surface work, insert
+`## Product Surface Proof Obligations` before Verifiable Success Criteria and retain its
+exact rows/path/packet. Pipe the complete bytes to the stage without a second persistent
+input file:
 
 ```bash
 node "$engine" stage-plan --root "$repo_root" --id <id> --input /dev/stdin <<'PLAN'

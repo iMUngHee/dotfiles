@@ -50,10 +50,13 @@ Do not inflate Seed into a design system. Do not use Focused Delta to smuggle ch
 1. Locate the nearest applicable `design-contract.md`; a repository-root contract is a base and a nearer app contract overrides only its declared sections.
 2. Read `references/contract-schema.md`, `references/quality-floor.md`, and `references/output-formats.md`.
 3. Record scope, contract depth, inherited evidence, proposed sections, and owner for each proposal.
-4. Run `experience-design` when experience-owned decisions are missing or changing. Pass only Product Context, UX Model, Data & State Model, Interaction Model, and Microcopy plus relevant evidence.
-5. Continue to `interface-design` only after `READY FOR INTERFACE`. Pass the approved experience sections, surface scope, and shared quality floor.
-6. Continue toward implementation only after `READY FOR BUILD`. If `design` independently triggers, persist and activate its technical plan before `ui-engineering` writes.
-7. Run `ui-engineering` with the approved contract and build authorization. Route any gap back to its sole owner; never let implementation invent the answer.
+4. Run `experience-design` when experience-owned decisions are missing or changing. Pass only Product Context, UX Model, Data & State Model, Interaction Model, and Microcopy plus relevant evidence. Require its exact Experience Coverage before considering `READY FOR INTERFACE`.
+5. Validate unique EXP rows, material obligation coverage, evidence, depth scope, and typed Experience approval. Produce the Surface Proof Packet with every stage bucket present.
+6. Continue to `interface-design` only after `READY FOR INTERFACE`. Pass the approved experience sections, exact EXP rows, surface scope, and shared quality floor.
+7. Validate Interface Coverage correspondence and required inspected specimens before considering `READY FOR BUILD`. Update the packet without changing leaf-owned rows.
+8. On the applicable user approval, persist exact EXP/INT rows, Required approvals, Recorded approvals, approval evidence, and the Surface Proof Packet under the durable contract's `## Decision Log & Open Questions`.
+9. Continue toward implementation only after `READY FOR BUILD`. If `design` independently triggers, pass the exact durable packet and contract path so its technical plan can preserve them; persist and activate that plan before `ui-engineering` writes.
+10. Run `ui-engineering` with the approved contract and build authorization. It adds Implementation Proof only under Implementation Bridge. Route any gap back to its sole owner; never let implementation invent the answer.
 
 For Seed, an explicit build request may auto-chain disclosed compact experience and interface inferences when none is materially ambiguous. For Focused Delta, every changed section requires approval. Full requires separate Experience and Interface approvals plus explicit implementation authorization.
 
@@ -70,11 +73,58 @@ For Seed, an explicit build request may auto-chain disclosed compact experience 
 
 Use the exact records in `references/output-formats.md`.
 
-- `READY FOR INTERFACE` — produced by experience-design; consumed by interface-design. Continue only when jobs, IA/flow, visible states, recovery, and material questions are resolved for the selected depth.
-- `READY FOR BUILD` — produced by interface-design; consumed by design or ui-engineering. Continue only when composition, art direction, component presentation, responsive behavior, and accessibility values are concrete for the selected depth.
+- `READY FOR INTERFACE` — produced by experience-design; consumed by interface-design. Continue only when jobs, IA/flow, visible states, recovery, and material questions are resolved for the selected depth, every applicable EXP obligation has one valid PASS row, and Required approvals are present in Recorded approvals.
+- `READY FOR BUILD` — produced by interface-design; consumed by design or ui-engineering. Continue only when composition, art direction, component presentation, responsive behavior, and accessibility values are concrete for the selected depth, every EXP row is mapped, required specimens were inspected, every INT row is valid, and Required approvals are present in Recorded approvals.
 - `EXPERIENCE DELTA REQUIRED` — produced by interface-design or ui-engineering when an experience-owned section must change. Stop the affected path and return to experience-design.
 - `INTERFACE DELTA REQUIRED` — produced by ui-engineering when an interface-owned section must change. Stop the affected path and return to interface-design.
 - `CONTRACT GAP` — produced by a leaf when required intent is absent or conflicting and ownership cannot safely be bypassed. Product-craft routes it; the affected path stays stopped.
+
+## Surface Proof Lifecycle
+
+Use the exact Experience Coverage, Interface Coverage, Implementation Proof, and Surface
+Proof Packet formats from `references/output-formats.md`; never restate a competing table
+shape in a leaf skill.
+
+1. Allocate immutable local row IDs only within one packet. Reject duplicates, unknown
+   links, omitted applicable obligations, and rows appearing in multiple buckets.
+2. Keep all Experience, Interface, and Implementation buckets present throughout the
+   lifecycle. Use PENDING before a downstream stage has produced rows; never collapse
+   mixed PASS, FAIL, GAP, NOT VERIFIED, or N/A evidence into one prose summary.
+   Experience-only evaluation keeps untouched downstream stages N/A. Once Interface rows
+   exist for an implementation-bound surface, keep Implementation PENDING until its rows
+   are produced, including while Interface is blocked.
+3. Compute Required approvals from depth and stage. Record a token only from explicit
+   user evidence. Coverage PASS never implies approval, and approval never repairs GAP or
+   missing evidence.
+   Always produce and persist Required approvals and Recorded approvals as separate typed
+   fields.
+4. Before a ready gate, ensure every required token is also in Recorded approvals. Preserve
+   the exact tokens and concise user evidence in the packet.
+5. On approval, persist the leaf rows and packet verbatim under the one repo-relative
+   Durable contract's `## Decision Log & Open Questions`. Verify the path is contained in
+   the execution root and preserve all unrelated contract bytes.
+6. If `design` triggers, require its active plan to copy the durable rows, packet, contract
+   path, Required approvals, and Recorded approvals verbatim. Generic technical criteria
+   cannot replace them.
+7. After implementation, consume the exact Implementation Proof from Implementation
+   Bridge. Aggregate with the precedence in output formats. Route contract gaps to
+   `experience-design`, `interface-design`, or `product-craft`; route defects/drift back to
+   implementation and keep Design-Fit NOT VERIFIED.
+
+For structured evaluation, use the shared Evaluation Normalization literally. Report
+applicable/covered source obligations, not IMP IDs; keep pre-implementation blocking rows
+separate from implementation failures; preserve normalized substitute identifiers; and
+keep `owner` as the skill responsible for the current decision. Do not substitute the
+packet's `Next owner` for that field.
+
+For a bounded Seed auto-chain, `product-craft` remains the structured evaluation owner
+through READY FOR BUILD. For a Full READY FOR BUILD handoff whose technical trigger
+applies, ownership becomes `design`.
+
+For no-plan Seed or Focused work below the independent design trigger, the persisted
+Decision Log packet is the durable carrier. The approved in-session handoff must be an
+explicit no-plan handoff naming that contained contract path. It does not invent or imply
+an active plan.
 
 ## Handoff Boundaries
 

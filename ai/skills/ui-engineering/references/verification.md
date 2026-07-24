@@ -33,6 +33,51 @@ One correction cycle is one authorized source change followed by a fresh render 
 
 `NOT VERIFIED` is not an early exit when an authorized correction remains available.
 
+## Material-Row Proof
+
+Use exact Implementation Proof from the shared output formats. For every applicable
+EXP/INT obligation, verify transitive coverage by at least one applicable IMP row and
+compare the same material requirement across:
+
+1. Concrete code evidence.
+2. An affirmative test or browser assertion.
+3. A directly inspected render or measurement.
+
+Page-level substitutes do not prove a more specific contracted transformation. For
+example, document-level no-overflow does not prove a required mobile navigation drawer,
+and inner table scroll does not prove a contracted non-scrolling mobile evidence list.
+Reject a generic test summary, screenshot path without inspection, unrelated selector,
+or technical-plan prose as substitute evidence.
+
+Use the shared classification truth table with this precedence:
+
+1. `contract gap` when approved intent is missing, contradictory, or owner-unclear.
+   `missing intent` and `contradictory intent` route to the established contract-section
+   owner; `owner unclear` routes to `product-craft`. Status is FAIL and aggregate is
+   BLOCKED, regardless of missing implementation evidence.
+2. `contract drift` when code or a test intentionally encodes behavior contrary to clear
+   approved intent. A passing contradictory assertion is still FAIL.
+3. `implementation defect` when approved intent is clear but behavior or its assertion
+   fails.
+4. `unverified` when required code, affirmative test, or inspected render/measurement is
+   missing.
+5. `aligned` only when all required evidence agrees.
+
+`not applicable` is outside precedence. It requires one repeated concrete reason in
+Applicability and Status, N/A code/test/render evidence, `Gap reason: N/A`, and covers no
+applicable source. Interface specimen N/A remains an Interface PASS observation rather
+than an Implementation N/A row.
+
+Duplicate IDs, unknown or absent sources, uncovered applicable rows, inconsistent
+classification/status, incomplete PASS evidence, unjustified N/A, or a row in two packet
+buckets yields `Design-Fit Outcome: NOT VERIFIED`.
+
+For structured closure reports, `applicable_rows` and `covered_rows` contain EXP/INT
+source obligations only, sorted EXP before INT; IMP IDs belong in proof and implementation
+buckets. Once proof rows exist, `failed_rows` contains only failed or unverified IMP IDs.
+Copy only explicitly named substitute identifiers into `rejected_substitutes`; do not
+invent one for invalid N/A or missing evidence.
+
 ## Checks
 
 - User-job closure: requested action, success, failure/retry, and preserved invariants agree across request, contract, code, and render.
@@ -65,6 +110,12 @@ Do not convert a finding into a source edit without a separate build request and
 
 ## Final Result
 
-Use the exact Design-Fit Result in `../../product-craft/references/output-formats.md`. `Outcome: READY` is valid only when every applicable row passes and every `N/A` has a concrete reason.
+Use the exact Surface Proof Packet, Implementation Proof, and Design-Fit Result in
+`../../product-craft/references/output-formats.md`. Always retain PASS, FAIL, CONTRACT
+GAP, NOT VERIFIED, PENDING, and N/A buckets even when empty. Aggregate BLOCKED before
+NOT VERIFIED, then READY. `Outcome: READY` is valid only when every applicable row is
+transitively covered by aligned PASS proof, every `N/A` has a concrete repeated reason,
+no pending or malformed row remains, and Required approvals are present in Recorded
+approvals.
 
 Completed-feature readiness belongs to `verify`; provide this result as evidence rather than claiming goal completion here.
