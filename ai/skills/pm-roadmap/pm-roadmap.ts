@@ -10,7 +10,7 @@ import { requireActor, resolveActor, resolveActorSource } from "./actor.ts";
 import { parseBlocks, parseFrontmatter, getField, getFmField, taskFile, readStamped } from "./store.ts";
 import { migrate } from "./migrate.ts";
 import { stat } from "node:fs/promises";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   adoptPlan,
@@ -18,13 +18,10 @@ import {
   assertReservationRoot,
   bindSession,
   ensureManagedWorktree,
-  mainCheckout,
   pruneManagedWorktree,
   resolveCurrent,
   readReservation,
-  syncPlanState,
   validateManagedWorktrees,
-  writeCurrentCAS,
 } from "../../lib/worktree.mjs";
 
 interface Parsed { pos: string[]; opts: Record<string, string | true>; }
@@ -338,13 +335,8 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     case "select": {
       const plan = str(opts.plan) ?? pos[0];
       if (!plan) return { out: "select needs --plan <path>", code: 1 };
-      await syncPlanState({ root, plan });
-      const main = mainCheckout(root);
-      let observed = "";
-      try { observed = readFileSync(join(main, ".agents", "state", "current.txt"), "utf8").trim(); }
-      catch (error: any) { if (error?.code !== "ENOENT") throw error; }
-      const result = await writeCurrentCAS(main, observed, plan);
-      if (!result.updated && result.current !== plan) return { out: `selection conflict: ${result.current}`, code: 1 };
+      const result = await ops.selectPlan(root, plan);
+      if (!result.selected) return { out: result.reason, code: 1 };
       return lifecycleResult(`selected ${plan}`, root, plan, "select");
     }
     case "worktree": {

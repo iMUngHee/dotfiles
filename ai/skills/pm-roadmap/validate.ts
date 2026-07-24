@@ -1,10 +1,11 @@
 // Read-only invariant validator for the task-first model. Full-task scan over
 // tasks/<KEY>/{task,backlog,closed}.md + inbox.md + archive + state pointers.
 // Never mutates — fix via ops. CLI: tsx validate.ts [root]  (exit 1 on errors).
-import { readdir, stat } from "node:fs/promises";
-import { join as pathJoin } from "node:path";
+import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join as pathJoin, relative, resolve, sep } from "node:path";
 import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, coerceMode, parseIdList, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
 import { listActiveTasks } from "./join.ts";
+import { mainCheckout } from "../../lib/worktree.mjs";
 
 // DFS 3-colour cycle detection over a DependsOn graph (id → targets). Returns the cycle path
 // (…→ x → … → x) or null. Targets that are not graph nodes are leaves (no outgoing edges).
@@ -33,6 +34,48 @@ const BACKLOG_STATUS = new Set(["open", "draft", "active"]);
 const CLOSED_STATUS = new Set(["done", "dropped"]);
 const TASK_STATUS = new Set(["active", "done", "archived"]);
 const TASK_MODE = new Set(["solo", "collab"]);
+
+async function canonicalExistingPath(path: string): Promise<string | null> {
+  let existing = resolve(path);
+  const missing: string[] = [];
+  for (;;) {
+    try {
+      return resolve(await realpath(existing), ...missing.reverse());
+    } catch (error: any) {
+      if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") return null;
+    }
+    const parent = dirname(existing);
+    if (parent === existing) return null;
+    missing.push(basename(existing));
+    existing = parent;
+  }
+}
+
+function isStrictDescendant(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return !!rel && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+async function canonicalManagedRootIdentity(ownershipRoot: string, mainRoot: string, managedRoot: string): Promise<string | null> {
+  const lexicalMain = resolve(ownershipRoot);
+  const lexicalManaged = resolve(managedRoot);
+  const managedRel = relative(lexicalMain, lexicalManaged);
+  if (!managedRel || managedRel === ".." || managedRel.startsWith(`..${sep}`) || isAbsolute(managedRel)) return null;
+  let cursor = lexicalMain;
+  for (const component of managedRel.split(sep).filter(Boolean)) {
+    cursor = pathJoin(cursor, component);
+    const info = await lstat(cursor).catch((error: any) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!info) break;
+    if (info.isSymbolicLink()) return null;
+    const canonical = await realpath(cursor).catch(() => null);
+    if (!canonical || !isStrictDescendant(mainRoot, canonical)) return null;
+  }
+  const canonical = await canonicalExistingPath(lexicalManaged);
+  return canonical && isStrictDescendant(mainRoot, canonical) ? canonical : null;
+}
 
 async function exists(p: string): Promise<boolean> { return stat(p).then(() => true).catch(() => false); }
 async function blocksOf(path: string): Promise<Block[]> { const s = await readStamped(path); return s ? parseBlocks(s.content).blocks : []; }
@@ -158,20 +201,35 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
 
   // C16 — a non-terminal mapped plan owns one dedicated (never-main) worktree.
   const worktreeOwners = new Map<string, string>();
-  const planEntries = await readdir(pathJoin(root, ".agents", "plans"), { withFileTypes: true }).catch(() => []);
+  let ownershipRoot = root;
+  try { ownershipRoot = mainCheckout(root); } catch { /* Non-Git validation fixtures are already canonical. */ }
+  const mainRoot = await realpath(resolve(ownershipRoot)).catch(() => resolve(ownershipRoot));
+  const managedRoot = resolve(ownershipRoot, ".agents", "worktrees");
+  const canonicalManagedRoot = await canonicalManagedRootIdentity(ownershipRoot, mainRoot, managedRoot);
+  const planEntries = await readdir(pathJoin(ownershipRoot, ".agents", "plans"), { withFileTypes: true }).catch(() => []);
   for (const entry of planEntries) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    const stamped = await readStamped(pathJoin(root, ".agents", "plans", entry.name));
+    const stamped = await readStamped(pathJoin(ownershipRoot, ".agents", "plans", entry.name));
     if (!stamped) continue;
     const fm = parseFrontmatter(stamped.content).fields;
     const status = getFmField(fm, "status") ?? "";
     if (status !== "draft" && status !== "active") continue;
     const worktree = getFmField(fm, "worktree");
     if (!worktree) continue; // legacy unmapped plans remain adoptable
-    if (worktree === "." || worktree === "./" || worktree === "") err("C16", entry.name, "main checkout cannot be a plan execution mapping");
-    const prior = worktreeOwners.get(worktree);
+    const normalized = resolve(ownershipRoot, worktree);
+    const canonical = await canonicalExistingPath(normalized);
+    if (!canonicalManagedRoot || !canonical) {
+      err("C16", entry.name, `worktree '${worktree}' has an unresolvable filesystem identity`);
+      continue;
+    }
+    const managedRel = relative(canonicalManagedRoot, canonical);
+    if (canonical === mainRoot || !managedRel || managedRel === ".." || managedRel.startsWith(`..${sep}`)) {
+      err("C16", entry.name, `worktree '${worktree}' must resolve below .agents/worktrees and never to main`);
+      continue;
+    }
+    const prior = worktreeOwners.get(canonical);
     if (prior) err("C16", entry.name, `worktree '${worktree}' already owned by ${prior}`);
-    else worktreeOwners.set(worktree, entry.name);
+    else worktreeOwners.set(canonical, entry.name);
   }
 
   return { errors, warns };

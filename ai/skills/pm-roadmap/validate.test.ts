@@ -1,6 +1,7 @@
 // Tests for validate.ts. Run: ./node_modules/.bin/tsx validate.test.ts
 import assert from "node:assert/strict";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as ops from "./ops.ts";
@@ -120,13 +121,69 @@ async function main() {
 
     // ── C16: duplicate non-terminal worktree ownership is rejected ──
     await writeFile(join(root, ".agents", "plans", "owner-a.md"), `---\nid: owner-a\nstatus: draft\npm_loop: false\nworktree: .agents/worktrees/shared\n---\n`);
-    await writeFile(join(root, ".agents", "plans", "owner-b.md"), `---\nid: owner-b\nstatus: active\npm_loop: false\nworktree: .agents/worktrees/shared\n---\n`);
-    assert.ok(has(await validateRoadmap(root), "C16"), "C16 duplicate worktree owner");
+    await writeFile(join(root, ".agents", "plans", "owner-b.md"), `---\nid: owner-b\nstatus: active\npm_loop: false\nworktree: ./.agents/worktrees/shared\n---\n`);
+    assert.ok(has(await validateRoadmap(root), "C16"), "C16 duplicate normalized worktree owner");
     const duplicateCli = await runCli(root, ["validate"]);
     assert.equal(duplicateCli.code, 1);
     assert.match(duplicateCli.out, /C16.*already owned/);
     await rm(join(root, ".agents", "plans", "owner-a.md"));
     await rm(join(root, ".agents", "plans", "owner-b.md"));
+    await writeFile(join(root, ".agents", "plans", "owner-main.md"), `---\nid: owner-main\nstatus: draft\npm_loop: false\nworktree: .agents/worktrees/../..\n---\n`);
+    assert.ok(has(await validateRoadmap(root), "C16"), "C16 normalized mapping cannot resolve to main");
+    await rm(join(root, ".agents", "plans", "owner-main.md"));
+
+    const managedWorktrees = join(root, ".agents", "worktrees");
+    await mkdir(join(managedWorktrees, "shared"), { recursive: true });
+    await symlink("shared", join(managedWorktrees, "alias"));
+    await writeFile(join(root, ".agents", "plans", "owner-a.md"), `---\nid: owner-a\nstatus: draft\npm_loop: false\nworktree: .agents/worktrees/shared\n---\n`);
+    await writeFile(join(root, ".agents", "plans", "owner-b.md"), `---\nid: owner-b\nstatus: active\npm_loop: false\nworktree: .agents/worktrees/alias\n---\n`);
+    assert.ok(has(await validateRoadmap(root), "C16"), "C16 resolves symlink aliases to one filesystem owner");
+    await rm(join(root, ".agents", "plans", "owner-a.md"));
+    await rm(join(root, ".agents", "plans", "owner-b.md"));
+    await rm(join(managedWorktrees, "alias"));
+
+    const outsideWorktree = join(root, "outside-worktree");
+    await mkdir(outsideWorktree);
+    await symlink(outsideWorktree, join(managedWorktrees, "escape"));
+    await writeFile(join(root, ".agents", "plans", "owner-escape.md"), `---\nid: owner-escape\nstatus: draft\npm_loop: false\nworktree: .agents/worktrees/escape\n---\n`);
+    assert.ok(has(await validateRoadmap(root), "C16"), "C16 rejects a managed-root symlink that resolves outside");
+    await rm(join(root, ".agents", "plans", "owner-escape.md"));
+    await rm(join(managedWorktrees, "escape"));
+
+    // C16 worktree identities are main-relative even when validation runs in a mapped checkout.
+    const gitRoot = await mkdtemp(join(tmpdir(), "validate-worktree-test-"));
+    try {
+      const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" });
+      git(gitRoot, "init", "-b", "main");
+      git(gitRoot, "config", "user.email", "test@example.com");
+      git(gitRoot, "config", "user.name", "Test");
+      await writeFile(join(gitRoot, "README.md"), "fixture\n");
+      git(gitRoot, "add", "README.md");
+      git(gitRoot, "commit", "-m", "init");
+      const gitManaged = join(gitRoot, ".agents", "worktrees");
+      const executionRoot = join(gitManaged, "execution");
+      git(gitRoot, "worktree", "add", "-b", "feature/validate", executionRoot);
+      await mkdir(join(gitRoot, ".agents", "plans"), { recursive: true });
+      await mkdir(join(gitManaged, "shared"));
+      await symlink("shared", join(gitManaged, "alias"));
+      await mkdir(join(executionRoot, ".agents"), { recursive: true });
+      await symlink(join(gitRoot, ".agents", "plans"), join(executionRoot, ".agents", "plans"));
+      await writeFile(join(gitRoot, ".agents", "plans", "owner-a.md"), `---\nid: owner-a\nstatus: draft\npm_loop: false\nworktree: .agents/worktrees/shared\n---\n`);
+      await writeFile(join(gitRoot, ".agents", "plans", "owner-b.md"), `---\nid: owner-b\nstatus: active\npm_loop: false\nworktree: .agents/worktrees/alias\n---\n`);
+      assert.ok(has(await validateRoadmap(gitRoot), "C16"), "main detects canonical alias ownership");
+      assert.ok(has(await validateRoadmap(executionRoot), "C16"), "mapped execution checkout detects the same canonical alias ownership");
+
+      await rm(join(gitRoot, ".agents", "plans", "owner-a.md"));
+      await rm(join(gitRoot, ".agents", "plans", "owner-b.md"));
+      const gitOutside = join(gitRoot, "outside-worktree");
+      await mkdir(gitOutside);
+      await symlink(gitOutside, join(gitManaged, "escape"));
+      await writeFile(join(gitRoot, ".agents", "plans", "owner-escape-child.md"), `---\nid: owner-escape-child\nstatus: draft\npm_loop: false\nworktree: .agents/worktrees/escape/child\n---\n`);
+      assert.ok(has(await validateRoadmap(gitRoot), "C16"), "main detects a non-existing leaf below a symlink escape");
+      assert.ok(has(await validateRoadmap(executionRoot), "C16"), "mapped execution checkout detects the same non-existing escape leaf");
+    } finally {
+      await rm(gitRoot, { recursive: true, force: true });
+    }
 
     // ── dep on an archived (still-reserved) id is valid — no C14 ──
     await ops.taskCreate(root, "ARCH", "Arch", O);

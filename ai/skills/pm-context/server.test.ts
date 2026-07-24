@@ -23,6 +23,16 @@ async function main() {
     assert.equal("closed" in (r.json as any), false, "default task GET shape omits closed projection");
     assert.equal("closedTotal" in (r.json as any), false, "default task GET shape omits closedTotal");
 
+    // POST creation rejects duplicates without rewriting any existing Task content.
+    const protectedPaths = ["task.md", "links.md", "memory.md"].map((name) => join(root, ".agents", "tasks", "ALPHA", name));
+    const protectedBefore = await Promise.all(protectedPaths.map((path) => readFile(path)));
+    r = await handle(root, "POST", "/api/tasks", P, { key: "ALPHA", title: "Replacement must not land" });
+    assert.equal(r.status, 409, "duplicate Task creation is rejected");
+    const protectedAfter = await Promise.all(protectedPaths.map((path) => readFile(path)));
+    assert.deepEqual(protectedAfter, protectedBefore, "duplicate Task creation preserves task, links, and memory bytes");
+    r = await handle(root, "POST", "/api/tasks", P, { key: "POSTED", title: "Created through POST" });
+    assert.equal(r.status, 201, "Task creation POST still creates an absent Task");
+
     const savedActor = process.env.PM_ACTOR;
     process.env.PM_ACTOR = "server-actor";
     r = await handle(root, "GET", "/api/actor", P, undefined);

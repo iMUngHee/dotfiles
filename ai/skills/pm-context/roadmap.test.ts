@@ -76,6 +76,31 @@ assert.match(dashboard, /data-region=["']context-rail["']/, "desktop Task-wide c
 assert.match(dashboard, /data-testid=["']global-search["']/, "global search must remain visible and addressable");
 assert.match(dashboard, /expectedOwner/, "release and handoff must carry the rendered owner guard");
 assert.doesNotMatch(dashboard, /location\.hash|hashchange|href=["']#\//, "dashboard routing must not use hash state");
+assert.match(
+  dashboard,
+  /copyPrompt\("\/api\/current-plan\/next", event\.currentTarget, "Resume prompt copied to clipboard"\)/,
+  "current-plan resume must provide distinct clipboard success feedback",
+);
+assert.match(
+  dashboard,
+  /copyPrompt\(`\/api\/roadmap\/\$\{item\.id\}\/next`, event\.currentTarget, item\.plan \? "Resume prompt copied to clipboard" : "Kickoff prompt copied to clipboard"\)/,
+  "Item detail must provide resume or kickoff clipboard feedback without changing prompt bytes",
+);
+assert.match(
+  dashboard,
+  /copyPrompt\(`\/api\/roadmap\/\$\{item\.id\}\/next`, event\.currentTarget, "Kickoff prompt copied to clipboard"\)/,
+  "planless work-row kickoff must provide kickoff clipboard feedback",
+);
+assert.match(
+  dashboard,
+  /async function copyPrompt\(endpoint, button, successMessage\)/,
+  "copyPrompt must accept presentation-only success feedback separately from the prompt payload",
+);
+assert.match(
+  dashboard,
+  /const prompt = await api\(endpoint\);[\s\S]*navigator\.clipboard\.writeText\(prompt\); announce\(successMessage\);/,
+  "copyPrompt must preserve the fetched prompt bytes and vary only its success feedback",
+);
 for (const [name, source] of [["dashboard", dashboard], ["server", server], ["CLI", roadmapCli], ["ops", roadmapOps]] as const) {
   assert.doesNotMatch(source, /focus\.txt|\/api\/focus|focusSet|focusClear|\binFlight\b/, `${name} retains legacy runtime behavior`);
 }

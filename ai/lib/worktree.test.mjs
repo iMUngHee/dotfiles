@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +19,7 @@ import {
   sessionBindingPaths,
   unbindSession,
   validateManagedWorktrees,
+  withCurrentLocks,
   wireManagedStore,
   writeCurrentCAS,
   pruneManagedWorktree,
@@ -108,6 +109,33 @@ test("managed topology repairs wrong links and refuses non-empty real shared pat
   assert.equal(await readFile(join(conflictPath, ".agents", "tasks", "local.md"), "utf8"), "do not delete\n");
 });
 
+test("managed worktree creation rejects a symlinked physical escape before reservation or checkout writes", async (t) => {
+  const { root } = await fixture();
+  const outside = await realpath(await mkdtemp(join(tmpdir(), "managed-escape-outside-")));
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+  const managedRoot = join(root, ".agents", "worktrees");
+  await mkdir(managedRoot, { recursive: true });
+  await symlink(outside, join(managedRoot, "escape"), "dir");
+  const reservationDir = reservationPaths(root, "symlink-escape").dir;
+  assert.equal(await stat(reservationDir).then(() => true).catch(() => false), false, "preflight begins without reservation scaffolding");
+
+  await assert.rejects(
+    ensureManagedWorktree({
+      root,
+      id: "symlink-escape",
+      base: "main",
+      worktree: ".agents/worktrees/escape/child",
+    }),
+    /managed worktree.*physical boundary|symlinked managed worktree ancestor/,
+  );
+  assert.equal(await stat(join(outside, "child")).then(() => true).catch(() => false), false, "outside checkout was never created");
+  assert.equal(await stat(reservationDir).then(() => true).catch(() => false), false, "rejected preflight creates no reservation directory");
+  assert.equal(await stat(reservationPaths(root, "symlink-escape").json).then(() => true).catch(() => false), false, "reservation was never written");
+});
+
 test("current resolution routes main to mapped worktree and uses immutable base commit", async (t) => {
   const { root, baseCommit } = await fixture();
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -151,6 +179,108 @@ test("current resolution routes main to mapped worktree and uses immutable base 
   const terminal = await ensureCurrent({ root });
   assert.equal(terminal.status, "terminal");
   assert.equal(await readFile(join(root, ".agents", "state", "current.txt"), "utf8"), "", "terminal exact-match launcher pointer is cleared");
+});
+
+test("ensure-current reports a typed target conflict when mapped target seeding loses its CAS", async (t) => {
+  const { root, baseCommit } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const ensured = await ensureManagedWorktree({ root, id: "ensure-current-race", base: "main" });
+  const planRel = ".agents/plans/2026-07-24-ensure-current-race.md";
+  await writeFile(join(root, planRel), `---\nid: ensure-current-race\nstatus: draft\npm_loop: false\nbase_branch: main\nbase_commit: ${baseCommit}\nbranch: ${ensured.branch}\nworktree: ${ensured.worktree}\n---\n`);
+  await unlink(reservationPaths(root, "ensure-current-race").json);
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${planRel}\n`);
+  await writeFile(join(ensured.execution_root, ".agents", "state", "current.txt"), "");
+  const newerRel = ".agents/plans/2026-07-24-newer-plan.md";
+  await writeFile(join(root, newerRel), "---\nid: newer-plan\nstatus: active\npm_loop: false\n---\n");
+
+  const barrier = await acquireOwnerLock(join(ensured.execution_root, ".agents", "state", "current.lock"), {
+    operation: "test-ensure-current-race",
+    retries: 0,
+  });
+  const pending = ensureCurrent({ root });
+  const observed = pending.then(
+    (result) => result,
+    (error) => { throw error; },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await writeFile(join(ensured.execution_root, ".agents", "state", "current.txt"), `${newerRel}\n`);
+  await releaseOwnerLock(barrier);
+
+  const result = await observed;
+  assert.equal(result.status, "pointer_conflict");
+  assert.equal(result.failure_code, "target_current_changed");
+  assert.equal(result.current, newerRel);
+  assert.equal((await readFile(join(root, ".agents", "state", "current.txt"), "utf8")).trim(), planRel);
+  assert.equal((await readFile(join(ensured.execution_root, ".agents", "state", "current.txt"), "utf8")).trim(), newerRel);
+});
+
+test("ensure-current reports a typed caller conflict when wrong-checkout cleanup loses its CAS", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const owner = await ensureManagedWorktree({ root, id: "caller-race-owner", base: "main" });
+  const caller = await ensureManagedWorktree({ root, id: "caller-race-source", base: "main" });
+  const planRel = ".agents/plans/2026-07-24-caller-race-owner.md";
+  await writeFile(join(root, planRel), `---\nid: caller-race-owner\nstatus: draft\npm_loop: false\nbase_branch: main\nbase_commit: ${owner.base_commit}\nbranch: ${owner.branch}\nworktree: ${owner.worktree}\n---\n`);
+  await unlink(reservationPaths(root, "caller-race-owner").json);
+  await unlink(reservationPaths(root, "caller-race-source").json);
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${planRel}\n`);
+  await writeFile(join(owner.execution_root, ".agents", "state", "current.txt"), `${planRel}\n`);
+  await writeFile(join(caller.execution_root, ".agents", "state", "current.txt"), `${planRel}\n`);
+
+  const barrier = await acquireOwnerLock(join(caller.execution_root, ".agents", "state", "current.lock"), {
+    operation: "test-caller-cleanup-race",
+    retries: 0,
+  });
+  const pending = ensureCurrent({ root: caller.execution_root });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await writeFile(join(caller.execution_root, ".agents", "state", "current.txt"), "foreign.md\n");
+  await releaseOwnerLock(barrier);
+
+  const result = await pending;
+  assert.equal(result.status, "pointer_conflict");
+  assert.equal(result.failure_code, "caller_current_changed");
+  assert.equal(result.current, "foreign.md");
+  assert.equal((await readFile(join(caller.execution_root, ".agents", "state", "current.txt"), "utf8")).trim(), "foreign.md");
+});
+
+test("ensure-current reports a typed caller conflict when terminal cleanup loses its CAS", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const planRel = ".agents/plans/2026-07-24-terminal-race.md";
+  await writeFile(join(root, planRel), "---\nid: terminal-race\nstatus: done\npm_loop: false\n---\n");
+  await writeFile(join(root, ".agents", "state", "current.txt"), `${planRel}\n`);
+
+  const barrier = await acquireOwnerLock(join(root, ".agents", "state", "current.lock"), {
+    operation: "test-terminal-cleanup-race",
+    retries: 0,
+  });
+  const pending = ensureCurrent({ root });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await writeFile(join(root, ".agents", "state", "current.txt"), "foreign.md\n");
+  await releaseOwnerLock(barrier);
+
+  const result = await pending;
+  assert.equal(result.status, "pointer_conflict");
+  assert.equal(result.failure_code, "caller_current_changed");
+  assert.equal(result.current, "foreign.md");
+  assert.equal((await readFile(join(root, ".agents", "state", "current.txt"), "utf8")).trim(), "foreign.md");
+});
+
+test("raw CLI executes through a symlinked runtime parent exactly once", async (t) => {
+  const { root } = await fixture();
+  const aliasRoot = await mkdtemp(join(tmpdir(), "worktree-cli-alias-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rm(aliasRoot, { recursive: true, force: true }));
+  const runtimePath = fileURLToPath(new URL("./worktree.mjs", import.meta.url));
+  const aliasDir = join(aliasRoot, "runtime");
+  await symlink(dirname(runtimePath), aliasDir, "dir");
+  const output = execFileSync(process.execPath, [
+    join(aliasDir, "worktree.mjs"),
+    "resolve-current",
+    "--root", root,
+  ], { encoding: "utf8" });
+  assert.equal(output.trim().split("\n").filter((line) => line === "{").length, 1, "CLI emits one result");
+  assert.equal(JSON.parse(output).status, "empty");
 });
 
 test("session bindings isolate exact plans by tool, repository, and session", async (t) => {
@@ -328,6 +458,33 @@ test("pointer CAS is a physical no-op when the value is unchanged", async (t) =>
 
   assert.deepEqual(result, { updated: false, current: "same.md", reason: "unchanged" });
   assert.equal((await stat(pointer)).mtimeMs, before.mtimeMs);
+});
+
+test("ordered current locks serialize callers that request the same checkouts in inverse order", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const ensured = await ensureManagedWorktree({ root, id: "inverse-current-locks", base: "main" });
+  const events = [];
+  let enterFirst;
+  const firstEntered = new Promise((resolve) => { enterFirst = resolve; });
+  let releaseFirst;
+  const firstMayExit = new Promise((resolve) => { releaseFirst = resolve; });
+
+  const first = withCurrentLocks([root, ensured.execution_root], async () => {
+    events.push("first-enter");
+    enterFirst();
+    await firstMayExit;
+    events.push("first-exit");
+  });
+  await firstEntered;
+  const second = withCurrentLocks([ensured.execution_root, root], async () => {
+    events.push("second-enter");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.deepEqual(events, ["first-enter"], "inverse-order contender waits instead of acquiring a partial lock set");
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(events, ["first-enter", "first-exit", "second-enter"]);
 });
 
 test("ensure-current transparently reuses one legacy candidate with inferred base", async (t) => {

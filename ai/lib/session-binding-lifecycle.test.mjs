@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { ensureManagedWorktree, resolveSession, stagePlan } from "./worktree.mjs";
+import { ensureManagedWorktree, ensureSession, resolveSession, stagePlan } from "./worktree.mjs";
 import { runCli } from "../skills/pm-roadmap/pm-roadmap.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -99,6 +99,17 @@ test("persisted selected, parked, and explicit select bind before the next promp
     runCli(planA.execution_root, ["select", "--plan", planA.plan]));
   assert.equal(selectedAgain.out.split("\n").at(-1), "session_binding: bound");
   assert.equal((await resolveSession({ root, tool: "codex", sessionId: "session-select", storeRoot })).plan, planA.plan);
+
+  assert.equal((await runCli(planA.execution_root, ["approve", "SESSION", "lifecycle-a"])).code, 0);
+  assert.equal((await runCli(planA.execution_root, ["complete", "SESSION", "lifecycle-a", "--plan", planA.plan, "--status", "done"])).code, 0);
+  assert.equal((await readFile(join(root, ".agents", "state", "current.txt"), "utf8")).trim(), "", "terminal completion clears matching launcher");
+  assert.equal((await readFile(join(planA.execution_root, ".agents", "state", "current.txt"), "utf8")).trim(), "", "terminal completion clears matching execution pointer");
+  assert.equal((await readFile(join(planB.execution_root, ".agents", "state", "current.txt"), "utf8")).trim(), planB.plan, "other plan execution pointer survives");
+  assert.equal((await resolveSession({ root, tool: "codex", sessionId: "session-b", storeRoot })).plan, planB.plan, "other session binding survives completion");
+  const terminalA = await ensureSession({ root, tool: "codex", sessionId: "session-a", storeRoot });
+  assert.equal(terminalA.status, "terminal");
+  assert.equal(terminalA.binding_pruned, true, "terminal plan binding is pruned only when that exact session resolves");
+  assert.equal((await resolveSession({ root, tool: "codex", sessionId: "session-b", storeRoot })).plan, planB.plan, "pruning terminal A leaves session B bound");
 });
 
 test("post-persist binding failure is typed, non-retriable, and never falls back to main", async (t) => {

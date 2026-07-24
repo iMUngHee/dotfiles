@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, readlink, readdir, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { chmod, lstat, mkdir, readFile, readlink, readdir, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { tasksDir } from "./store.ts";
+import { listGitWorktrees, withCurrentLocks } from "../../lib/worktree.mjs";
 
 export type NodeDescriptor =
   | { type: "absent" }
@@ -9,6 +10,7 @@ export type NodeDescriptor =
   | { type: "symlink"; target: string };
 
 export interface TransactionTarget {
+  root?: string;
   path: string;
   before: NodeDescriptor;
   after: NodeDescriptor;
@@ -19,15 +21,23 @@ export interface TransactionOptions {
   failAfter?: number;
   crashAfter?: number;
   crashAt?: "prepared" | "applying" | "committed";
+  beforeApply?: (target: TransactionTarget, index: number) => void | Promise<void>;
 }
 
 interface Journal {
   version: 1;
+  root?: string;
   id: string;
   operation: string;
   phase: "prepared" | "applying" | "committed";
   applied: number;
   targets: TransactionTarget[];
+}
+
+interface AllowedRoots {
+  all: Set<string>;
+  checkouts: Set<string>;
+  taskStore: string;
 }
 
 const ABSENT: NodeDescriptor = { type: "absent" };
@@ -67,16 +77,125 @@ export function sameDescriptor(a: NodeDescriptor, b: NodeDescriptor): boolean {
     && a.sha256 === b.sha256 && a.content === b.content && a.mode === b.mode;
 }
 
-function transactionDir(root: string): string {
-  return join(tasksDir(root), ".transactions");
+function isWithin(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel === "" || (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`));
 }
 
-function safeTarget(root: string, relativePath: string): string {
-  if (!relativePath || relativePath.split(/[\\/]/).includes("..")) throw new Error(`unsafe transaction path: ${relativePath}`);
-  const absolute = resolve(root, relativePath);
-  const rel = relative(root, absolute);
-  if (rel === ".." || rel.startsWith(`..${sep}`)) throw new Error(`transaction path escapes root: ${relativePath}`);
-  return absolute;
+function canonicalRelative(root: string, path: string): string {
+  const rel = relative(root, path).split(sep).join("/");
+  if (!rel || rel === ".." || rel.startsWith("../") || isAbsolute(rel)) {
+    throw new Error(`transaction path escapes allowed root: ${path}`);
+  }
+  return rel;
+}
+
+async function canonicalRoot(root: string, label: string): Promise<string> {
+  const absolute = resolve(root);
+  const canonical = await realpath(absolute).catch(() => null);
+  if (!canonical || !isAbsolute(canonical)) throw new Error(`invalid transaction ${label}: ${root}`);
+  return canonical;
+}
+
+async function physicalNodePath(path: string): Promise<string> {
+  const absolute = resolve(path);
+  let parent = dirname(absolute);
+  const missing: string[] = [];
+  for (;;) {
+    const info = await lstat(parent).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (info) break;
+    const next = dirname(parent);
+    if (next === parent) throw new Error(`transaction target has no existing ancestor: ${path}`);
+    missing.unshift(basename(parent));
+    parent = next;
+  }
+  const canonicalParent = await realpath(parent);
+  return join(canonicalParent, ...missing, basename(absolute));
+}
+
+async function canonicalTaskStore(root: string): Promise<string> {
+  return canonicalRoot(tasksDir(root), "task store");
+}
+
+async function transactionDir(root: string): Promise<string> {
+  return join(await canonicalTaskStore(root), ".transactions");
+}
+
+async function allowedTargetRoots(originRoot: string): Promise<AllowedRoots> {
+  const origin = await canonicalRoot(originRoot, "origin root");
+  const checkouts = new Set<string>([origin]);
+  try {
+    for (const entry of listGitWorktrees(origin)) {
+      checkouts.add(await canonicalRoot(entry.path, "Git worktree"));
+    }
+  } catch {
+    // Non-Git fixtures have one checkout root.
+  }
+  const taskStore = await canonicalTaskStore(origin);
+  return { all: new Set([...checkouts, taskStore]), checkouts, taskStore };
+}
+
+async function safeTarget(root: string, relativePath: string): Promise<string> {
+  if (!relativePath || isAbsolute(relativePath) || relativePath.split(/[\\/]/).includes("..")) {
+    throw new Error(`unsafe transaction path: ${relativePath}`);
+  }
+  const lexical = resolve(root, relativePath);
+  const lexicalRelative = relative(root, lexical).split(sep).join("/");
+  if (relativePath !== lexicalRelative) throw new Error(`non-canonical transaction path: ${relativePath}`);
+  const physical = await physicalNodePath(lexical);
+  if (!isWithin(root, physical)) throw new Error(`transaction target escapes physical allowed root: ${relativePath}`);
+  const physicalRelative = relative(root, physical).split(sep).join("/");
+  if (physicalRelative !== relativePath) throw new Error(`non-canonical physical transaction path: ${relativePath}`);
+  return physical;
+}
+
+function owningRoot(path: string, allowed: AllowedRoots): string | null {
+  return [...allowed.all]
+    .filter((root) => isWithin(root, path) && root !== path)
+    .sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
+async function targetPath(
+  originRoot: string,
+  target: TransactionTarget,
+  allowed: AllowedRoots,
+  legacy: boolean,
+): Promise<string> {
+  if (!target.root) {
+    if (!legacy) throw new Error("invalid transaction target root: missing");
+    try {
+      return await safeTarget(originRoot, target.path);
+    } catch (error: any) {
+      throw new Error(`manual_recovery_required: ${error.message}`);
+    }
+  }
+  if (legacy) throw new Error("manual_recovery_required: origin-less journal contains a rooted target");
+  if (!isAbsolute(target.root)) throw new Error(`invalid transaction target root: ${target.root}`);
+  const canonical = await canonicalRoot(target.root, "target root");
+  if (canonical !== target.root) throw new Error(`invalid transaction target root alias: ${target.root}`);
+  if (!allowed.all.has(canonical)) throw new Error(`target root is not an allowed transaction root: ${canonical}`);
+  return safeTarget(canonical, target.path);
+}
+
+async function journalOrigin(callerRoot: string, journal: Journal, name: string): Promise<{ origin: string; allowed: AllowedRoots; legacy: boolean }> {
+  const callerStore = await canonicalTaskStore(callerRoot);
+  const inferredRoot = dirname(dirname(callerStore));
+  if (!journal.root) {
+    const inferredStore = await canonicalTaskStore(inferredRoot).catch(() => null);
+    if (!inferredStore || inferredStore !== callerStore) {
+      throw new Error(`manual_recovery_required: legacy journal is not in the canonical task store: ${name}`);
+    }
+    return { origin: inferredRoot, allowed: await allowedTargetRoots(inferredRoot), legacy: true };
+  }
+  if (!isAbsolute(journal.root)) throw new Error(`invalid transaction journal root: ${name}`);
+  const origin = await canonicalRoot(journal.root, "journal root");
+  if (origin !== journal.root) throw new Error(`invalid transaction journal root alias: ${name}`);
+  const originStore = await canonicalTaskStore(origin).catch(() => null);
+  if (!originStore || originStore !== callerStore) throw new Error(`invalid transaction journal root: ${name}`);
+  return { origin, allowed: await allowedTargetRoots(origin), legacy: false };
 }
 
 async function atomicJson(path: string, value: Journal): Promise<void> {
@@ -103,16 +222,27 @@ async function applyDescriptor(path: string, descriptor: NodeDescriptor): Promis
 }
 
 export async function makeTarget(root: string, path: string, after: NodeDescriptor): Promise<TransactionTarget> {
-  const absolute = isAbsolute(path) ? path : resolve(root, path);
-  const rel = relative(root, absolute).split(sep).join("/");
-  safeTarget(root, rel);
-  return { path: rel, before: await describeNode(absolute), after };
+  const origin = await canonicalRoot(root, "origin root");
+  const allowed = await allowedTargetRoots(origin);
+  const lexical = isAbsolute(path) ? resolve(path) : resolve(origin, path);
+  const physical = await physicalNodePath(lexical);
+  const targetRoot = owningRoot(physical, allowed);
+  if (!targetRoot) throw new Error(`transaction target is outside every allowed root: ${path}`);
+  const targetPath = canonicalRelative(targetRoot, physical);
+  await safeTarget(targetRoot, targetPath);
+  return { root: targetRoot, path: targetPath, before: await describeNode(physical), after };
 }
 
-async function rollback(root: string, journal: Journal): Promise<void> {
-  for (let index = journal.targets.length - 1; index >= 0; index--) {
+async function rollback(
+  origin: string,
+  journal: Journal,
+  allowed: AllowedRoots,
+  legacy: boolean,
+  appliedCount: number,
+): Promise<void> {
+  for (let index = Math.min(appliedCount, journal.targets.length) - 1; index >= 0; index--) {
     const target = journal.targets[index];
-    const path = safeTarget(root, target.path);
+    const path = await targetPath(origin, target, allowed, legacy);
     const current = await describeNode(path);
     if (sameDescriptor(current, target.before)) continue;
     if (!sameDescriptor(current, target.after)) throw new Error(`manual_recovery_required: unknown node state at ${target.path}`);
@@ -121,32 +251,63 @@ async function rollback(root: string, journal: Journal): Promise<void> {
 }
 
 export async function listTransactions(root: string): Promise<string[]> {
-  return (await readdir(transactionDir(root)).catch(() => []))
+  const dir = await transactionDir(root).catch(() => null);
+  if (!dir) return [];
+  return (await readdir(dir).catch(() => []))
     .filter((name) => name.endsWith(".json"))
     .sort();
 }
 
 export async function recoverTransactions(root: string): Promise<{ recovered: string[] }> {
   const recovered: string[] = [];
+  const dir = await transactionDir(root);
   for (const name of await listTransactions(root)) {
-    const path = join(transactionDir(root), name);
+    const path = join(dir, name);
     const journal = JSON.parse(await readFile(path, "utf8")) as Journal;
-    if (journal.version !== 1 || !Array.isArray(journal.targets)) throw new Error(`invalid transaction journal: ${name}`);
-    const states = await Promise.all(journal.targets.map(async (target) => {
-      const current = await describeNode(safeTarget(root, target.path));
-      if (sameDescriptor(current, target.before)) return "before";
-      if (sameDescriptor(current, target.after)) return "after";
-      return "unknown";
-    }));
-    if (states.includes("unknown")) throw new Error(`manual_recovery_required: ${name} has an unknown target state`);
-    if (states.every((state) => state === "after")) {
-      await unlink(path);
-      recovered.push(`${name}:finalized`);
-      continue;
+    if (
+      journal.version !== 1
+      || !Array.isArray(journal.targets)
+      || !Number.isInteger(journal.applied)
+      || journal.applied < 0
+      || journal.applied > journal.targets.length
+      || !["prepared", "applying", "committed"].includes(journal.phase)
+    ) {
+      throw new Error(`invalid transaction journal: ${name}`);
     }
-    if (!states.every((state) => state === "before")) await rollback(root, journal);
-    await unlink(path);
-    recovered.push(`${name}:rolled-back`);
+    const { origin, allowed, legacy } = await journalOrigin(root, journal, name);
+    const resolvedTargets = await Promise.all(journal.targets.map((target) => targetPath(origin, target, allowed, legacy)));
+    const currentRoots = [...allowed.checkouts].filter((checkout) =>
+      resolvedTargets.includes(join(checkout, ".agents", "state", "current.txt")));
+    await withCurrentLocks(currentRoots, async () => {
+      const states = await Promise.all(journal.targets.map(async (target, index) => {
+        const current = await describeNode(resolvedTargets[index]);
+        if (sameDescriptor(current, target.before)) return "before";
+        if (sameDescriptor(current, target.after)) return "after";
+        return "unknown";
+      }));
+      if (states.includes("unknown")) throw new Error(`manual_recovery_required: ${name} has an unknown target state`);
+      if (journal.phase === "committed") {
+        if (!states.every((state) => state === "after")) {
+          throw new Error(`manual_recovery_required: committed journal ${name} is not wholly applied`);
+        }
+        await unlink(path);
+        recovered.push(`${name}:finalized`);
+        return;
+      }
+      if (states.every((state) => state === "after")) {
+        await unlink(path);
+        recovered.push(`${name}:finalized`);
+        return;
+      }
+      if (states.some((state, index) => index >= journal.applied && state === "after")) {
+        throw new Error(`manual_recovery_required: ${name} applied beyond its journal boundary`);
+      }
+      if (!states.every((state) => state === "before")) {
+        await rollback(origin, journal, allowed, legacy, journal.applied);
+      }
+      await unlink(path);
+      recovered.push(`${name}:rolled-back`);
+    }, { operation: "transaction-recovery" });
   }
   return { recovered };
 }
@@ -157,14 +318,17 @@ export async function runTransaction(
   targets: TransactionTarget[],
   opts: TransactionOptions = {},
 ): Promise<{ id: string; applied: number }> {
+  const origin = await canonicalRoot(root, "origin root");
+  const allowed = await allowedTargetRoots(origin);
   const id = opts.id ?? `${Date.now()}-${randomUUID()}`;
-  const path = join(transactionDir(root), `${id}.json`);
+  const dir = await transactionDir(origin);
+  const path = join(dir, `${id}.json`);
   if (await describeNode(path).then((node) => node.type !== "absent")) throw new Error(`transaction already exists: ${id}`);
   for (const target of targets) {
-    const current = await describeNode(safeTarget(root, target.path));
+    const current = await describeNode(await targetPath(origin, target, allowed, false));
     if (!sameDescriptor(current, target.before)) throw new Error(`transaction precondition failed: ${target.path}`);
   }
-  const journal: Journal = { version: 1, id, operation, phase: "prepared", applied: 0, targets };
+  const journal: Journal = { version: 1, root: origin, id, operation, phase: "prepared", applied: 0, targets };
   const simulatedCrash = (where: string) => {
     const crash = new Error(`simulated process crash at ${where}`) as Error & { simulatedCrash: boolean };
     crash.simulatedCrash = true;
@@ -177,16 +341,19 @@ export async function runTransaction(
     await atomicJson(path, journal);
     if (opts.crashAt === "applying") throw simulatedCrash("applying");
     for (let index = 0; index < targets.length; index++) {
-      await applyDescriptor(safeTarget(root, targets[index].path), targets[index].after);
+      const target = targets[index];
+      await opts.beforeApply?.(target, index);
+      const resolved = await targetPath(origin, target, allowed, false);
+      const current = await describeNode(resolved);
+      if (!sameDescriptor(current, target.before)) throw new Error(`transaction precondition failed during apply: ${target.path}`);
+      await applyDescriptor(resolved, target.after);
       journal.applied = index + 1;
       await atomicJson(path, journal);
-      if (opts.crashAfter === index + 1) {
-        throw simulatedCrash(`target ${index + 1}`);
-      }
+      if (opts.crashAfter === index + 1) throw simulatedCrash(`target ${index + 1}`);
       if (opts.failAfter === index + 1) throw new Error(`injected transaction failure after ${index + 1}`);
     }
     for (const target of targets) {
-      const current = await describeNode(safeTarget(root, target.path));
+      const current = await describeNode(await targetPath(origin, target, allowed, false));
       if (!sameDescriptor(current, target.after)) throw new Error(`transaction verification failed: ${target.path}`);
     }
     journal.phase = "committed";
@@ -197,10 +364,10 @@ export async function runTransaction(
   } catch (error) {
     if ((error as Error & { simulatedCrash?: boolean }).simulatedCrash) throw error;
     try {
-      await rollback(root, journal);
+      await rollback(origin, journal, allowed, false, journal.applied);
       await unlink(path);
     } catch {
-      // Retain the journal so the next mutating command blocks or recovers safely.
+      // Keep the journal so the next task-locked mutator recovers or fails closed.
     }
     throw error;
   }

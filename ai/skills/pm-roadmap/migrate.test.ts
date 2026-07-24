@@ -1,7 +1,7 @@
 // Tests for migrate.ts. Run: ./node_modules/.bin/tsx migrate.test.ts
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmod, lstat, mkdtemp, rm, mkdir, readlink, writeFile, readFile, stat, symlink } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, rm, mkdir, readdir, readlink, writeFile, readFile, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate } from "./migrate.ts";
@@ -116,6 +116,79 @@ async function main() {
     } finally { await rm(root, { recursive: true, force: true }); }
   }
 
+  // ── task-first authoritative data fails closed before any legacy write ──
+  {
+    const root = await tmp();
+    try {
+      await mkdir(join(root, ".agents", "tasks"), { recursive: true });
+      const currentInbox = `# _INBOX — Inbox\n\n- **current-only** — Current task-first item\n  - Priority: P1\n  - Status: open\n  - Note: preserve\n`;
+      await writeFile(join(root, ".agents", "tasks", "_inbox.md"), currentInbox);
+      await writeFile(join(root, ".agents", "ROADMAP.md"),
+        `---\nproject: t\n---\n# t — Backlog\n\n## Open\n\n- **legacy-only** — Legacy item\n  - Status: open\n  - Task: _INBOX\n  - Plan: -\n\n## Recently Closed\n`);
+
+      const result = await migrate(root, { ...APPLY, runid: "inbox-conflict" });
+      assert.equal(result.ok, false, "inbox-only task-first data fails closed");
+      assert.equal(result.applied, false);
+      assert.equal(result.noop, "reconciliation-conflict");
+      assert.equal(await readFile(join(root, ".agents", "tasks", "_inbox.md"), "utf8"), currentInbox, "existing task-first inbox is authoritative");
+      assert.equal(await exists(join(root, ".agents", "ROADMAP.md")), true, "legacy source remains for manual reconciliation");
+      assert.equal(await exists(join(root, ".agents.backup-inbox-conflict")), false, "conflict is detected before backup or writes");
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }
+
+  // ── unsafe task-first nodes fail closed before any legacy write ──
+  {
+    const root = await tmp();
+    const outside = await tmp();
+    try {
+      await mkdir(join(root, ".agents", "tasks", "ALPHA"), { recursive: true });
+      const victim = join(outside, "backlog-victim.md");
+      const victimBytes = "external backlog bytes\n";
+      await writeFile(victim, victimBytes);
+      await symlink(victim, join(root, ".agents", "tasks", "ALPHA", "backlog.md"));
+      await writeFile(join(root, ".agents", "ROADMAP.md"),
+        `---\nproject: t\n---\n# t — Backlog\n\n## Open\n\n- **legacy-alpha** — Legacy item\n  - Status: open\n  - Task: ALPHA\n  - Plan: -\n\n## Recently Closed\n`);
+
+      const result = await migrate(root, { ...APPLY, runid: "backlog-symlink-conflict" });
+      assert.equal(result.ok, false, "authoritative nested symlink fails closed");
+      assert.equal(result.noop, "reconciliation-conflict");
+      assert.equal(await readFile(victim, "utf8"), victimBytes, "external backlog target is untouched");
+      assert.equal((await lstat(join(root, ".agents", "tasks", "ALPHA", "backlog.md"))).isSymbolicLink(), true);
+      assert.equal(await exists(join(root, ".agents", "ROADMAP.md")), true);
+      assert.equal(await exists(join(root, ".agents.backup-backlog-symlink-conflict")), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  }
+
+  {
+    const root = await tmp();
+    const outside = await tmp();
+    try {
+      await mkdir(join(root, ".agents"), { recursive: true });
+      const sentinel = join(outside, "sentinel.txt");
+      const sentinelBytes = "external root bytes\n";
+      const roadmapBytes = `---\nproject: t\n---\n# t — Backlog\n\n## Open\n\n- **legacy-root-link** — Legacy item\n  - Status: open\n  - Task: ALPHA\n  - Plan: -\n\n## Recently Closed\n`;
+      await writeFile(sentinel, sentinelBytes);
+      await symlink(outside, join(root, ".agents", "tasks"));
+      await writeFile(join(root, ".agents", "ROADMAP.md"), roadmapBytes);
+      const outsideBefore = await readdir(outside);
+
+      const result = await migrate(root, { ...APPLY, runid: "root-link-conflict" });
+      assert.equal(result.ok, false, "symlinked task-store root fails closed");
+      assert.equal(result.noop, "reconciliation-conflict");
+      assert.deepEqual(await readdir(outside), outsideBefore, "external task-store root is unchanged");
+      assert.equal(await readFile(sentinel, "utf8"), sentinelBytes);
+      assert.equal((await lstat(join(root, ".agents", "tasks"))).isSymbolicLink(), true);
+      assert.equal(await readFile(join(root, ".agents", "ROADMAP.md"), "utf8"), roadmapBytes);
+      assert.equal(await exists(join(root, ".agents.backup-root-link-conflict")), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  }
+
   // ── (e) inbox relocation runs even when tasks/ already exists ──
   {
     const root = await tmp();
@@ -193,6 +266,35 @@ async function main() {
       assert.equal(await exists(join(root, ".agents", "inbox.md")), false);
       assert.equal(await exists(join(linked, ".agents", "inbox.md")), false);
     } finally { await rm(root, { recursive: true, force: true }); }
+  }
+
+  // ── external sibling worktrees are valid inbox-link transaction targets ──
+  {
+    const root = await tmp();
+    const linked = `${root}-linked`;
+    try {
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
+      git("init", "-b", "main");
+      git("config", "user.email", "test@example.com");
+      git("config", "user.name", "Test");
+      await writeFile(join(root, "README.md"), "x\n");
+      git("add", "README.md");
+      git("commit", "-m", "init");
+      git("worktree", "add", "-b", "external-linked", linked, "main");
+      await mkdir(join(root, ".agents", "tasks"), { recursive: true });
+      await mkdir(join(linked, ".agents"), { recursive: true });
+      await symlink(join(root, ".agents", "tasks"), join(linked, ".agents", "tasks"));
+      await writeFile(join(root, ".agents", "inbox.md"), `# _INBOX — Inbox\n\n- **external-1** — External\n`);
+      await symlink(join(root, ".agents", "inbox.md"), join(linked, ".agents", "inbox.md"));
+
+      const applied = await migrate(linked, { ...APPLY, runid: "external" });
+      assert.ok(applied.applied && applied.ok, applied.out);
+      assert.deepEqual(await ids(join(root, ".agents", "tasks", "_inbox.md")), ["external-1"]);
+      assert.equal(await exists(join(linked, ".agents", "inbox.md")), false);
+    } finally {
+      await rm(linked, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
   }
 
   // ── (c) legacy `## Memory` section inside a task-context file → memory.md ──

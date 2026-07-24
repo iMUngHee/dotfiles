@@ -11,8 +11,16 @@ import {
   parseFrontmatter, serializeFrontmatter, getFmField, coerceMode, parseIdList,
   taskDir, taskFile, tasksDir, inboxPath, withLock, readStamped, writeCAS,
 } from "./store.ts";
-import { makeTarget, regularDescriptor, runTransaction, type TransactionOptions } from "./transaction.ts";
-import { listGitWorktrees, mainCheckout, readReservation, withReservationLock, writeCurrentCAS } from "../../lib/worktree.mjs";
+import { makeTarget, regularDescriptor, runTransaction, type TransactionOptions, type TransactionTarget } from "./transaction.ts";
+import {
+  listGitWorktrees,
+  mainCheckout,
+  readCurrentLocked,
+  readReservation,
+  withCurrentLocks,
+  withReservationLock,
+  writeCurrentCAS,
+} from "../../lib/worktree.mjs";
 
 export class OpError extends Error {}
 
@@ -155,14 +163,28 @@ async function readState(root: string, name: string): Promise<string> {
   const s = await readStamped(statePath(root, name));
   return s ? s.content.trim() : "";
 }
-async function clearCurrentIfNames(root: string, planPath: string): Promise<void> {
+
+function canonicalOperationRoot(root: string): string {
+  try { return mainCheckout(root); }
+  catch { return root; }
+}
+
+function completionCheckouts(root: string): string[] {
   let checkouts: string[];
   try { checkouts = listGitWorktrees(root).map((entry: { path: string }) => entry.path); }
   catch { checkouts = [root]; }
+  return checkouts;
+}
+
+async function completionCurrentTargets(transactionRoot: string, checkouts: string[], planPath: string): Promise<TransactionTarget[]> {
+  const targets: TransactionTarget[] = [];
   for (const checkout of checkouts) {
     const current = await readState(checkout, "current.txt");
-    if (current === planPath) await writeCurrentCAS(checkout, planPath, "");
+    if (current === planPath) {
+      targets.push(await makeTarget(transactionRoot, statePath(checkout, "current.txt"), regularDescriptor("")));
+    }
   }
+  return targets;
 }
 
 // ── task meta ──
@@ -435,7 +457,13 @@ async function _approvePlanAndItem(root: string, key: string, id: string, transa
   await runTransaction(root, "approve-plan", targets, transaction);
 }
 
-async function _setStandalonePlanStatus(root: string, planRel: string, status: "active" | "done" | "dropped", transaction: TransactionOptions = {}): Promise<void> {
+async function _setStandalonePlanStatus(
+  root: string,
+  planRel: string,
+  status: "active" | "done" | "dropped",
+  transaction: TransactionOptions = {},
+  pointerTargets: TransactionTarget[] = [],
+): Promise<void> {
   const path = pathJoin(root, planRel);
   const stamped = await readStamped(path);
   if (!stamped) throw new OpError(`plan not found: ${planRel}`);
@@ -443,11 +471,57 @@ async function _setStandalonePlanStatus(root: string, planRel: string, status: "
   if ((getFmField(fm, "pm_loop") ?? "false") !== "false") throw new OpError(`plan ${planRel} is not standalone`);
   await runTransaction(root, `standalone-${status}`, [
     await makeTarget(root, path, regularDescriptor(planContentWithStatus(stamped.content, status))),
+    ...pointerTargets,
   ], transaction);
 }
 
 // ── public ops (each takes the lock; composites reuse one lock) ──
 type LockOpts = { nowMs?: number; staleMs?: number; retries?: number; retryMs?: number; transaction?: TransactionOptions };
+
+export const selectPlan = (root: string, planPath: string, o: LockOpts = {}) => {
+  const main = mainCheckout(root);
+  return withLock(main, "selectPlan", async () => {
+    const stamped = await readStamped(pathJoin(main, planPath));
+    if (!stamped) throw new OpError(`plan not found: ${planPath}`);
+    const fields = parseFrontmatter(stamped.content).fields;
+    const status = getFmField(fields, "status") ?? "";
+    if (status !== "draft" && status !== "active") {
+      return { selected: false as const, reason: `plan is not selectable: ${status || "missing"}` };
+    }
+    const worktree = getFmField(fields, "worktree");
+    const branch = getFmField(fields, "branch");
+    if (!worktree || !branch) throw new OpError(`plan has no worktree mapping: ${planPath}`);
+    const targetRoot = pathJoin(main, worktree);
+    const targetEntry = listGitWorktrees(main).find((entry: { path: string; branch: string }) => pathJoin(entry.path) === pathJoin(targetRoot));
+    if (!targetEntry || targetEntry.branch !== branch) throw new OpError(`mapped worktree/branch is unavailable: ${worktree} (${branch})`);
+
+    return withCurrentLocks([main, targetRoot], async () => {
+      const targetObserved = await readCurrentLocked(targetRoot);
+      if (targetObserved && targetObserved !== planPath) {
+        const other = await readStamped(pathJoin(main, targetObserved));
+        const otherStatus = other ? getFmField(parseFrontmatter(other.content).fields, "status") : "";
+        if (otherStatus === "draft" || otherStatus === "active") {
+          return { selected: false as const, reason: `selection conflict: ${targetObserved}` };
+        }
+      }
+      const mainObserved = await readCurrentLocked(main);
+      const targets = [
+        await makeTarget(main, statePath(targetRoot, "current.txt"), regularDescriptor(`${planPath}\n`)),
+        await makeTarget(main, statePath(main, "current.txt"), regularDescriptor(`${planPath}\n`)),
+      ];
+      try {
+        await runTransaction(main, "select-plan", targets, o.transaction);
+      } catch (error: any) {
+        if (!String(error?.message || "").startsWith("transaction precondition failed")) throw error;
+        const targetCurrent = await readCurrentLocked(targetRoot);
+        const mainCurrent = await readCurrentLocked(main);
+        const current = targetCurrent !== targetObserved ? targetCurrent : mainCurrent !== mainObserved ? mainCurrent : "";
+        return { selected: false as const, reason: `selection conflict: ${current || "pointer changed"}` };
+      }
+      return { selected: true as const };
+    });
+  }, o);
+};
 
 export const taskCreate = (root: string, key: string, title: string, o: { nowDate?: string; mode?: string } & LockOpts = {}) =>
   withLock(root, "taskCreate", () => _taskCreate(root, key, title, o.nowDate ?? today(), o.mode ?? "solo"), o);
@@ -527,7 +601,10 @@ export const harvest = (root: string, key: string, deferred: Deferred[], o: { no
 export const triage = (root: string, id: string, toKey: string, o: LockOpts = {}) =>
   withLock(root, "triage", () => _triage(root, id, toKey), o);
 
-export const reservedIds = (root: string, o: LockOpts = {}) => withLock(root, "reservedIds", () => reservedIdsImpl(root), o);
+export const reservedIds = (root: string, o: LockOpts = {}) => {
+  const canonicalRoot = canonicalOperationRoot(root);
+  return withLock(canonicalRoot, "reservedIds", () => reservedIdsImpl(canonicalRoot), o);
+};
 
 async function reconcileMappedPlanOwner(root: string, id: string, planPath: string, key?: string): Promise<{ outcome: "persisted_selected" | "persisted_parked" }> {
   const canonical = await readStamped(pathJoin(root, planPath));
@@ -555,7 +632,10 @@ async function reconcileMappedPlanOwner(root: string, id: string, planPath: stri
   if (!targetEntry || targetEntry.branch !== branch) throw new OpError(`mapped worktree/branch is unavailable: ${worktree} (${branch})`);
   const targetObserved = await readState(targetRoot, "current.txt");
   if (targetObserved && targetObserved !== planPath) throw new OpError(`target current conflict: ${targetObserved}`);
-  await writeCurrentCAS(targetRoot, targetObserved, planPath);
+  const targetResult = await writeCurrentCAS(targetRoot, targetObserved, planPath);
+  if (!targetResult.updated && targetResult.current !== planPath) {
+    throw new OpError(`target pointer reconciliation failed: ${targetResult.current}`);
+  }
   const mainCurrent = await readState(root, "current.txt");
   return { outcome: mainCurrent === planPath ? "persisted_selected" : "persisted_parked" };
 }
@@ -639,8 +719,8 @@ async function _createPlanAndBacklogItem(
       return { outcome };
     }
     const observed = await readState(root, "current.txt");
-    await writeCurrentCAS(root, observed, planPath);
-    return { outcome: "persisted_legacy" };
+    const mainResult = await writeCurrentCAS(root, observed, planPath);
+    return { outcome: mainResult.updated || mainResult.current === planPath ? "persisted_legacy" : "persisted_parked" };
 }
 
 export const createPlanAndBacklogItem = async (root: string, key: string, it: ItemInput, planPath: string, o: { nowDate?: string } & LockOpts = {}) => {
@@ -691,7 +771,10 @@ export const createStandalonePlan = async (root: string, id: string, planPath: s
       if (!canonical) await runTransaction(main, "persist-standalone", [
         await makeTarget(main, pathJoin(main, planPath), regularDescriptor(ownerContent)),
       ]);
-      await writeCurrentCAS(targetRoot, targetObserved, planPath);
+      const targetResult = await writeCurrentCAS(targetRoot, targetObserved, planPath);
+      if (!targetResult.updated && targetResult.current !== planPath) {
+        throw new OpError(`target pointer reconciliation failed: ${targetResult.current}`);
+      }
       const mainResult = await writeCurrentCAS(main, data.expected_main_current ?? "", planPath);
       const outcome = mainResult.updated || mainResult.current === planPath ? "persisted_selected" : "persisted_parked";
       await unlink(stage).catch(() => {});
@@ -706,22 +789,24 @@ export const completePlanFromRetro = (
   key: string,
   id: string,
   opt: { planPath: string; terminalStatus: "done" | "dropped"; reason?: string; deferred?: Deferred[]; closedDate?: string; nowDate?: string; closedBy?: string } & LockOpts,
-) => withLock(root, "completePlanFromRetro", async () => {
+) => {
+  const canonicalRoot = canonicalOperationRoot(root);
+  return withLock(canonicalRoot, "completePlanFromRetro", async () => {
   const deferred = opt.deferred ?? [];
   // preconditions — EVERY check BEFORE any write, so the transaction is all-or-nothing.
   if (opt.terminalStatus !== "done" && opt.terminalStatus !== "dropped") throw new OpError(`complete status must be 'done' or 'dropped' (got '${opt.terminalStatus}')`); // before _setPlanStatus, else the plan goes terminal then _itemClose throws (partial write)
   if (opt.terminalStatus === "dropped" && !opt.reason) throw new OpError("drop requires a Reason"); // same: before any write
-  await _harvestPreflight(root, deferred);
-  const item = findItem((await loadBlocks(taskFile(root, key, "backlog.md"))).blocks, id);
+  await _harvestPreflight(canonicalRoot, deferred);
+  const item = findItem((await loadBlocks(taskFile(canonicalRoot, key, "backlog.md"))).blocks, id);
   if (!item) throw new OpError(`item '${id}' not in ${key} backlog`);
   const itemPlan = getField(item, "Plan") ?? "-";
   if (itemPlan !== opt.planPath) throw new OpError(`item '${id}' is linked to plan '${itemPlan}', not '${opt.planPath}' — refusing to complete the wrong plan`);
-  if (!(await exists(pathJoin(root, opt.planPath)))) throw new OpError(`plan not found: ${opt.planPath}`);
-  const planPath = pathJoin(root, opt.planPath);
+  if (!(await exists(pathJoin(canonicalRoot, opt.planPath)))) throw new OpError(`plan not found: ${opt.planPath}`);
+  const planPath = pathJoin(canonicalRoot, opt.planPath);
   const planStamped = await readStamped(planPath);
   if (!planStamped) throw new OpError(`plan not found: ${opt.planPath}`);
-  const backlogPath = taskFile(root, key, "backlog.md");
-  const closedPath = taskFile(root, key, "closed.md");
+  const backlogPath = taskFile(canonicalRoot, key, "backlog.md");
+  const closedPath = taskFile(canonicalRoot, key, "closed.md");
   const backlog = await loadBlocks(backlogPath);
   const index = backlog.blocks.findIndex((block) => block.id === id);
   if (index < 0) throw new OpError(`item '${id}' not in ${key} backlog`);
@@ -736,13 +821,18 @@ export const completePlanFromRetro = (
   setField(closedBlock, "ClosedSource", "op");
   if (opt.closedBy) setField(closedBlock, "ClosedBy", opt.closedBy);
   closed.blocks.unshift(closedBlock);
-  await runTransaction(root, "complete-plan", [
-    await makeTarget(root, planPath, regularDescriptor(planContentWithStatus(planStamped.content, opt.terminalStatus))),
-    await makeTarget(root, backlogPath, regularDescriptor(serializeBlocks(backlog.title, backlog.blocks))),
-    await makeTarget(root, closedPath, regularDescriptor(serializeBlocks(closed.title, closed.blocks))),
-  ], opt.transaction);
-  await clearCurrentIfNames(root, opt.planPath);
-}, opt);
+  const checkouts = completionCheckouts(canonicalRoot);
+  await withCurrentLocks(checkouts, async () => {
+    const pointerTargets = await completionCurrentTargets(canonicalRoot, checkouts, opt.planPath);
+    await runTransaction(canonicalRoot, "complete-plan", [
+      await makeTarget(canonicalRoot, planPath, regularDescriptor(planContentWithStatus(planStamped.content, opt.terminalStatus))),
+      await makeTarget(canonicalRoot, backlogPath, regularDescriptor(serializeBlocks(backlog.title, backlog.blocks))),
+      await makeTarget(canonicalRoot, closedPath, regularDescriptor(serializeBlocks(closed.title, closed.blocks))),
+      ...pointerTargets,
+    ], opt.transaction);
+  });
+  }, opt);
+};
 
 export const reclassifyClosedPlan = (
   root: string,
@@ -799,14 +889,21 @@ export const reclassifyClosedPlan = (
   return result;
 }, opt);
 
-export const standaloneApprove = (root: string, planPath: string, o: LockOpts = {}) =>
-  withLock(root, "standaloneApprove", () => _setStandalonePlanStatus(root, planPath, "active", o.transaction), o);
+export const standaloneApprove = (root: string, planPath: string, o: LockOpts = {}) => {
+  const canonicalRoot = canonicalOperationRoot(root);
+  return withLock(canonicalRoot, "standaloneApprove", () => _setStandalonePlanStatus(canonicalRoot, planPath, "active", o.transaction), o);
+};
 
-export const standaloneComplete = (root: string, planPath: string, status: "done" | "dropped", o: LockOpts = {}) =>
-  withLock(root, "standaloneComplete", async () => {
-    await _setStandalonePlanStatus(root, planPath, status, o.transaction);
-    await clearCurrentIfNames(root, planPath);
+export const standaloneComplete = (root: string, planPath: string, status: "done" | "dropped", o: LockOpts = {}) => {
+  const canonicalRoot = canonicalOperationRoot(root);
+  return withLock(canonicalRoot, "standaloneComplete", async () => {
+    const checkouts = completionCheckouts(canonicalRoot);
+    await withCurrentLocks(checkouts, async () => {
+      const pointerTargets = await completionCurrentTargets(canonicalRoot, checkouts, planPath);
+      await _setStandalonePlanStatus(canonicalRoot, planPath, status, o.transaction, pointerTargets);
+    });
   }, o);
+};
 
 export const planStep = (root: string, planPath: string, step: number, checked: boolean, o: LockOpts = {}) =>
   withLock(root, "planStep", async () => {
