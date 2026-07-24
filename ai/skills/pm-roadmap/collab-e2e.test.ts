@@ -71,7 +71,7 @@ async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createNetServer();
     srv.on("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
+    srv.listen(0, () => {
       const addr = srv.address();
       if (typeof addr !== "object" || !addr) return reject(new Error("no port"));
       srv.close(() => resolve(addr.port));
@@ -79,21 +79,67 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function startDashboard(root: string): Promise<{ port: number; child: ChildProcessWithoutNullStreams; stop: () => Promise<void> }> {
-  const port = await freePort();
+async function reservePort(): Promise<{ port: number; release: () => Promise<void> }> {
+  const srv = createNetServer();
+  srv.on("connection", (socket) => socket.destroy());
+  await new Promise<void>((resolve, reject) => {
+    srv.once("error", reject);
+    srv.listen(0, () => resolve());
+  });
+  const addr = srv.address();
+  assert.ok(typeof addr === "object" && addr, "reserved port has an address");
+  return {
+    port: addr.port,
+    release: () => new Promise((resolve, reject) => srv.close((err) => err ? reject(err) : resolve())),
+  };
+}
+
+type Dashboard = {
+  port: number;
+  child: ChildProcessWithoutNullStreams;
+  attempts: number;
+  stop: () => Promise<void>;
+};
+
+class DashboardStartError extends Error {
+  constructor(message: string, readonly portBusy: boolean) {
+    super(message);
+  }
+}
+
+async function isPortBusy(port: number): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const srv = createNetServer();
+    srv.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") resolve(true);
+      else reject(error);
+    });
+    srv.listen(port, () => srv.close(() => resolve(false)));
+  });
+}
+
+async function startDashboardAttempt(root: string, port: number): Promise<Omit<Dashboard, "attempts">> {
   const child = spawn(TSX, [SERVER], {
     cwd: PM_CONTEXT,
     env: cleanEnv(root, { TASK_CONTEXT_ROOT: root, TASK_CONTEXT_PORT: String(port) }),
   });
   let log = "";
+  let closed = false;
   child.stdout.on("data", (b) => { log += b.toString(); });
   child.stderr.on("data", (b) => { log += b.toString(); });
+  child.on("error", (error) => { log += `${error.stack ?? error.message}\n`; });
+  const waitForClose = new Promise<void>((resolve) => {
+    child.once("close", () => {
+      closed = true;
+      resolve();
+    });
+  });
 
   const url = `http://127.0.0.1:${port}/api/tasks`;
   for (let i = 0; i < 60; i++) {
-    if (child.exitCode !== null) throw new Error(`server exited early:\n${log}`);
+    if (closed) throw new DashboardStartError(`server exited early:\n${log}`, await isPortBusy(port));
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(250) });
       if (r.ok) {
         return {
           port,
@@ -111,7 +157,22 @@ async function startDashboard(root: string): Promise<{ port: number; child: Chil
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   child.kill("SIGTERM");
+  await waitForClose;
   throw new Error(`server did not start:\n${log}`);
+}
+
+async function startDashboard(root: string, firstPort?: number): Promise<Dashboard> {
+  for (let attempts = 1; attempts <= 3; attempts++) {
+    const port = attempts === 1 && firstPort !== undefined ? firstPort : await freePort();
+    try {
+      return { ...await startDashboardAttempt(root, port), attempts };
+    } catch (error) {
+      const retryable = error instanceof DashboardStartError
+        && (error.portBusy || error.message.includes("EADDRINUSE"));
+      if (attempts === 3 || !retryable) throw error;
+    }
+  }
+  throw new Error("dashboard startup exhausted retries");
 }
 
 async function main() {
@@ -313,8 +374,15 @@ async function main() {
     pm(root, ["task", "create", "LIVE", "--title", "Live", "--mode", "collab"]);
     pm(root, ["links", "LIVE", "add", "live-spec", "--url", "https://example.com/live", "--actor", "alice"]);
     pm(root, ["memory", "LIVE", "add", "live-decision", "--note", "n", "--actor", "bob"]);
-    const dash = await startDashboard(root);
+    const reserved = await reservePort();
+    let dash: Awaited<ReturnType<typeof startDashboard>>;
     try {
+      dash = await startDashboard(root, reserved.port);
+    } finally {
+      await reserved.release();
+    }
+    try {
+      assert.ok(dash.attempts >= 2, "dashboard startup retries after an occupied-port collision");
       const base = `http://127.0.0.1:${dash.port}`;
       const got = await fetch(`${base}/api/tasks/LIVE`);
       assert.equal(got.status, 200);

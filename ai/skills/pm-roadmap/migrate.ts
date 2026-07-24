@@ -213,16 +213,29 @@ async function canonicalRoot(root: string): Promise<string> {
   catch { return resolve(root); }
 }
 
+async function hasUnsafeTaskRoot(root: string): Promise<boolean> {
+  const info = await lstat(tasksDir(root)).catch(() => null);
+  return Boolean(info && !info.isDirectory());
+}
+
 async function hasTaskFirstData(root: string): Promise<boolean> {
+  const authoritativeFiles = new Set(["task.md", "backlog.md", "closed.md", "links.md", "memory.md", "_inbox.md"]);
+  const taskRoot = tasksDir(root);
+  const rootInfo = await lstat(taskRoot).catch(() => null);
+  if (!rootInfo) return false;
+  if (!rootInfo.isDirectory()) return true;
   const visit = async (dir: string): Promise<boolean> => {
     for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+      const entryPath = join(dir, entry.name);
+      if (entry.isSymbolicLink()) return true;
+      if (authoritativeFiles.has(entry.name) && await lstat(entryPath).catch(() => null)) return true;
+      if (entry.isDirectory()) {
         if (await visit(join(dir, entry.name))) return true;
-      } else if (entry.isFile() && entry.name === "task.md") return true;
+      } else if (!entry.isFile()) return true;
     }
     return false;
   };
-  return visit(tasksDir(root));
+  return visit(taskRoot);
 }
 
 async function managedCheckouts(root: string): Promise<string[]> {
@@ -238,7 +251,7 @@ async function relocateInbox(root: string, runid: string, transaction: Transacti
   const oldInfo = await lstat(oldPath).catch(() => null);
   if (oldInfo && !oldInfo.isFile()) throw new Error("legacy main inbox must be a regular file");
 
-  const legacyLinks: string[] = [];
+  const legacyLinks: { checkout: string; path: string }[] = [];
   for (const checkout of await managedCheckouts(root)) {
     if (checkout === resolve(root)) continue;
     const candidate = join(checkout, ".agents", "inbox.md");
@@ -249,7 +262,7 @@ async function relocateInbox(root: string, runid: string, transaction: Transacti
     const normalizedTarget = await realpath(resolve(dirname(candidate), raw)).catch(() => resolve(dirname(candidate), raw));
     const normalizedSource = await realpath(oldPath).catch(() => oldPath);
     if (normalizedTarget !== normalizedSource) throw new Error(`inbox migration conflict: ${candidate} targets ${raw}`);
-    legacyLinks.push(candidate);
+    legacyLinks.push({ checkout, path: candidate });
   }
   if (!oldInfo && !legacyLinks.length) return { applied: false, out: "inbox relocation: already migrated" };
 
@@ -269,7 +282,7 @@ async function relocateInbox(root: string, runid: string, transaction: Transacti
     targets.push(await makeTarget(root, backup, regularDescriptor(oldRaw, oldInfo.mode)));
     targets.push(await makeTarget(root, oldPath, absentDescriptor()));
   }
-  for (const link of legacyLinks) targets.push(await makeTarget(root, link, absentDescriptor()));
+  for (const link of legacyLinks) targets.push(await makeTarget(link.checkout, link.path, absentDescriptor()));
   await runTransaction(root, "migrate-inbox", targets, { id: `migrate-inbox-${runid}`, ...transaction });
   return { applied: true, out: `inbox relocation: ${oldInfo ? "moved to tasks/_inbox.md" : "source already absent"}; removed ${legacyLinks.length} legacy worktree link(s)` };
 }
@@ -283,8 +296,12 @@ export async function migrate(root: string, opts: { apply?: boolean; yes?: boole
 
   const roadmapPath = join(main, ".agents", "ROADMAP.md");
   const hasRoadmap = await exists(roadmapPath);
+  const unsafeTaskRoot = await hasUnsafeTaskRoot(main);
   const taskData = await hasTaskFirstData(main);
   const oldInbox = await exists(join(main, ".agents", "inbox.md"));
+  if (unsafeTaskRoot) {
+    return { out: "migration conflict: canonical .agents/tasks root must be a real directory", applied: false, ok: false, noop: "reconciliation-conflict" };
+  }
   if (hasRoadmap && taskData) {
     return { out: "migration conflict: legacy ROADMAP.md and task-first task.md data both exist", applied: false, ok: false, noop: "reconciliation-conflict" };
   }
@@ -307,6 +324,9 @@ export async function migrate(root: string, opts: { apply?: boolean; yes?: boole
   }
 
   return withLock(main, "migrate", async () => {
+    if (await hasUnsafeTaskRoot(main)) {
+      return { out: "migration conflict after lock: canonical .agents/tasks root must be a real directory", applied: false, ok: false, noop: "reconciliation-conflict" };
+    }
     await recoverTransactions(main);
     const parts: string[] = [];
     let applied = false;

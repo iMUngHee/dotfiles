@@ -7,6 +7,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  realpath,
   readdir,
   readlink,
   rename,
@@ -36,6 +37,13 @@ class SessionBindingStoreError extends Error {
   constructor(code, message) {
     super(message);
     this.code = code;
+  }
+}
+
+class TargetCurrentConflictError extends Error {
+  constructor(current) {
+    super(`target current conflict: ${current}`);
+    this.current = current;
   }
 }
 
@@ -226,6 +234,29 @@ function assertManagedTarget(main, absolutePath) {
   return target;
 }
 
+async function assertManagedTargetPhysical(main, absolutePath) {
+  const target = assertManagedTarget(main, absolutePath);
+  const lexicalMain = resolve(main);
+  const canonicalMain = await realpath(lexicalMain);
+  const components = relative(lexicalMain, target).split(sep).filter(Boolean);
+  let cursor = lexicalMain;
+  for (const component of components) {
+    cursor = join(cursor, component);
+    const info = await lstat(cursor).catch((error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!info) break;
+    if (info.isSymbolicLink()) throw new Error(`symlinked managed worktree ancestor: ${cursor}`);
+    const canonical = await realpath(cursor);
+    const physicalRel = relative(canonicalMain, canonical);
+    if (physicalRel === ".." || physicalRel.startsWith(`..${sep}`) || isAbsolute(physicalRel)) {
+      throw new Error(`managed worktree crosses physical boundary: ${cursor}`);
+    }
+  }
+  return target;
+}
+
 async function isEmptyDirectory(path) {
   try {
     return (await readdir(path)).length === 0;
@@ -366,7 +397,7 @@ async function ensureManagedWorktreeLocked({ main, root, id, base, baseCommit, s
     ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
     : join(main, ".agents", "worktrees", id);
   if (targetAbs === main) throw new Error("main checkout cannot be a plan execution worktree");
-  assertManagedTarget(main, targetAbs);
+  await assertManagedTargetPhysical(main, targetAbs);
   const managedRel = relativeManagedPath(main, targetAbs);
   const worktrees = listGitWorktrees(main);
   const byPath = worktrees.find((entry) => resolve(entry.path) === resolve(targetAbs));
@@ -400,6 +431,7 @@ async function ensureManagedWorktreeLocked({ main, root, id, base, baseCommit, s
 
   if (!byPath) {
     await mkdir(dirname(targetAbs), { recursive: true });
+    await assertManagedTargetPhysical(main, targetAbs);
     if (branchCommit) runGit(main, ["worktree", "add", targetAbs, targetBranch]);
     else runGit(main, ["worktree", "add", "-b", targetBranch, targetAbs, expectedStart]);
   }
@@ -420,6 +452,11 @@ async function ensureManagedWorktreeLocked({ main, root, id, base, baseCommit, s
 export async function ensureManagedWorktree({ root = process.cwd(), id, base, baseCommit, start, branch, worktree } = {}) {
   if (!ID_RE.test(id || "")) throw new Error(`invalid worktree id '${id ?? ""}'`);
   const main = mainCheckout(root);
+  const targetAbs = worktree
+    ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
+    : join(main, ".agents", "worktrees", id);
+  if (targetAbs === main) throw new Error("main checkout cannot be a plan execution worktree");
+  await assertManagedTargetPhysical(main, targetAbs);
   return withReservationLock(main, id, ({ json, stage, lock, dir }) => ensureManagedWorktreeLocked({
     main,
     root,
@@ -551,6 +588,29 @@ export async function writeCurrentCAS(checkoutRoot, expected, next) {
   }, { operation: "current-cas" });
 }
 
+export async function withCurrentLocks(checkoutRoots, fn, options = {}) {
+  const roots = [];
+  for (const checkoutRoot of checkoutRoots) {
+    const absolute = resolve(checkoutRoot);
+    const canonical = await realpath(absolute).catch(() => absolute);
+    if (!roots.includes(canonical)) roots.push(canonical);
+  }
+  roots.sort();
+  const acquire = async (index) => {
+    if (index === roots.length) return fn();
+    const lock = join(roots[index], ".agents", "state", "current.lock");
+    return withExclusiveFileLock(lock, () => acquire(index + 1), {
+      operation: "current-set",
+      ...options,
+    });
+  };
+  return acquire(0);
+}
+
+export async function readCurrentLocked(checkoutRoot) {
+  return (await readText(join(checkoutRoot, ".agents", "state", "current.txt"))).trim();
+}
+
 async function withCurrentLock(checkoutRoot, fn, options = {}) {
   const state = join(checkoutRoot, ".agents", "state");
   return withExclusiveFileLock(join(state, "current.lock"), async () => {
@@ -567,9 +627,20 @@ export async function syncPlanState({ root = process.cwd(), plan }) {
   const current = (await readText(join(target, ".agents", "state", "current.txt"))).trim();
   if (current && current !== plan) {
     const other = await loadPlan(main, current).catch(() => null);
-    if (other && ["draft", "active"].includes(other.fields.status)) throw new Error(`target current conflict: ${current}`);
+    if (other && ["draft", "active"].includes(other.fields.status)) throw new TargetCurrentConflictError(current);
   }
   return writeCurrentCAS(target, current, plan);
+}
+
+function currentPointerConflict(result, failureCode, current, scope) {
+  return {
+    ...result,
+    status: "pointer_conflict",
+    failure_code: failureCode,
+    current,
+    expected_current: result.plan,
+    message: `${scope} current changed while reconciling ${result.plan}: ${current}`,
+  };
 }
 
 export async function ensureCurrent({ root = process.cwd() } = {}) {
@@ -586,7 +657,10 @@ export async function ensureCurrent({ root = process.cwd() } = {}) {
     if (adoption.auto_adoption) ensured.auto_adoption = adoption.auto_adoption;
     return ensured;
   } else if (result.status === "terminal") {
-    await writeCurrentCAS(result.checkout_root, result.plan, "");
+    const cleared = await writeCurrentCAS(result.checkout_root, result.plan, "");
+    if (!cleared.updated && cleared.current) {
+      return currentPointerConflict(result, "caller_current_changed", cleared.current, "caller");
+    }
   }
   return result;
 }
@@ -1339,9 +1413,25 @@ async function ensureMappedCurrent({ result }) {
   const reconciled = await reconcileMappedReservation(result);
   if (reconciled.status !== "ok") return reconciled;
   const targetPointer = (await readText(join(reconciled.execution_root, ".agents", "state", "current.txt"))).trim();
-  if (targetPointer !== reconciled.plan) await syncPlanState({ root: reconciled.main_root, plan: reconciled.plan });
+  if (targetPointer !== reconciled.plan) {
+    let targetResult;
+    try {
+      targetResult = await syncPlanState({ root: reconciled.main_root, plan: reconciled.plan });
+    } catch (error) {
+      if (error instanceof TargetCurrentConflictError) {
+        return currentPointerConflict(reconciled, "target_current_changed", error.current, "target");
+      }
+      throw error;
+    }
+    if (!targetResult.updated && targetResult.current !== reconciled.plan) {
+      return currentPointerConflict(reconciled, "target_current_changed", targetResult.current, "target");
+    }
+  }
   if (reconciled.route_required && resolve(reconciled.checkout_root) !== resolve(reconciled.main_root)) {
-    await writeCurrentCAS(reconciled.checkout_root, reconciled.plan, "");
+    const cleared = await writeCurrentCAS(reconciled.checkout_root, reconciled.plan, "");
+    if (!cleared.updated && cleared.current) {
+      return currentPointerConflict(reconciled, "caller_current_changed", cleared.current, "caller");
+    }
   }
   return reconciled;
 }
@@ -1561,7 +1651,10 @@ export async function main(argv = process.argv.slice(2)) {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+const canonicalEntrypoint = async (path) => realpath(path).catch(() => resolve(path));
+
+if (process.argv[1]
+  && await canonicalEntrypoint(fileURLToPath(import.meta.url)) === await canonicalEntrypoint(resolve(process.argv[1]))) {
   main().catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

@@ -616,7 +616,7 @@ function renderCurrentPlan(current) {
       el("div", {}, el("div", { class: "current-title" }, item ? priorityMark(item.priority) : null, el("strong", { text: title })),
         el("div", { class: "mapping" }, task ? el("span", { text: `Task ${task}` }) : null, plan.status ? el("span", { text: plan.status }) : null, plan.branch ? el("span", { text: `branch ${plan.branch}` }) : null, plan.worktree ? el("span", { text: plan.worktree }) : null),
         el("div", { class: "next-step" }, el("span", { class: "field-label", text: "Next step" }), el("div", { text: cleanStep(plan.nextStep) }))),
-      el("div", { class: "button-row" }, el("button", { class: "btn primary", type: "button", text: "Copy resume prompt", onclick: (event) => copyPrompt("/api/current-plan/next", event.currentTarget) }), item ? routeLink("Open Item", "item", { item: item.id }) : null, task ? routeLink("Open Task", "task", { task, tab: "overview" }) : null)));
+      el("div", { class: "button-row" }, el("button", { class: "btn primary", type: "button", text: "Copy resume prompt", onclick: (event) => copyPrompt("/api/current-plan/next", event.currentTarget, "Resume prompt copied to clipboard") }), item ? routeLink("Open Item", "item", { item: item.id }) : null, task ? routeLink("Open Task", "task", { task, tab: "overview" }) : null)));
 }
 
 function filterItems(items) {
@@ -634,7 +634,7 @@ function workRow(item, options = {}) {
     el("span", { class: "mono muted", text: item.id }),
     el("div", { class: "work-title" }, el("a", { href: routeHref("item", { item: item.id }), dataset: { route: "" }, text: item.title }), el("small", { text: blockedBy?.length ? `Blocked by ${blockedBy.join(", ")}` : (item.note || `Task ${task}`) })),
     el("div", { class: "work-owner", text: item.owner ? `Owner · ${item.owner}` : "Unassigned" }),
-    el("div", { class: "row-actions" }, routeLink("Open", "item", { item: item.id }), options.simple && !item.plan ? el("button", { class: "btn", type: "button", text: "Copy kickoff", onclick: (event) => copyPrompt(`/api/roadmap/${item.id}/next`, event.currentTarget) }) : null));
+    el("div", { class: "row-actions" }, routeLink("Open", "item", { item: item.id }), options.simple && !item.plan ? el("button", { class: "btn", type: "button", text: "Copy kickoff", onclick: (event) => copyPrompt(`/api/roadmap/${item.id}/next`, event.currentTarget, "Kickoff prompt copied to clipboard") }) : null));
 }
 function stat(label, value, suffix = "") { return el("div", { class: "stat" }, el("span", { text: label }), el("b", { text: String(value) }), suffix ? el("span", { text: suffix }) : null); }
 
@@ -795,7 +795,7 @@ async function renderItemDetail() {
   const joined = await api(`/api/roadmap/${encodeURIComponent(id)}/join?cap=3`);
   const item = joined.item;
   const task = await loadTask(item.task);
-  workspace.replaceChildren(pageHead(`${item.id}`, item.title, routeLink(`Back to ${item.task}`, "task", { task: item.task, tab: "work" }), !joined.closed ? el("button", { class: "btn primary", type: "button", text: item.plan ? "Copy resume" : "Copy kickoff", onclick: (event) => copyPrompt(`/api/roadmap/${item.id}/next`, event.currentTarget) }) : null));
+  workspace.replaceChildren(pageHead(`${item.id}`, item.title, routeLink(`Back to ${item.task}`, "task", { task: item.task, tab: "work" }), !joined.closed ? el("button", { class: "btn primary", type: "button", text: item.plan ? "Copy resume" : "Copy kickoff", onclick: (event) => copyPrompt(`/api/roadmap/${item.id}/next`, event.currentTarget, item.plan ? "Resume prompt copied to clipboard" : "Kickoff prompt copied to clipboard") }) : null));
   workspace.append(el("div", { class: "panel" }, el("div", { class: "panel-head" }, el("div", {}, el("p", { class: "eyebrow", text: "Item detail" }), el("h2", {}, priorityMark(item.priority), document.createTextNode(`  ${item.title}`))), el("span", { class: "status-mark", text: item.status })),
     el("dl", { class: "meta-list" }, el("dt", { text: "Task" }), el("dd", {}, routeLink(item.task, "task", { task: item.task, tab: "overview" }, "mono")), el("dt", { text: "Plan" }), el("dd", { class: "mono", text: item.plan || "No plan" }), el("dt", { text: "Owner" }), el("dd", { text: item.owner || "Unassigned" }), el("dt", { text: "Owner note" }), el("dd", { text: item.ownerNote || "—" }), el("dt", { text: "Depends on" }), el("dd", { class: "mono", text: item.dependsOn?.join(", ") || "None" }), el("dt", { text: "Note" }), el("dd", { text: item.note || "—" }))));
   if (!joined.closed) workspace.append(organizationPanel(item, task));
@@ -886,11 +886,11 @@ function linkView(link) {
 }
 function memoryView(memory) { return el("div", { class: "context-item" }, el("strong", { text: memory.title }), el("p", { text: memory.note || "No note" }), el("span", { class: "muted", text: [memory.date, memory.by ? `By ${memory.by}` : ""].filter(Boolean).join(" · ") })); }
 
-async function copyPrompt(endpoint, button) {
+async function copyPrompt(endpoint, button, successMessage) {
   clearAlert(); const previous = button.textContent; button.disabled = true; button.textContent = "Preparing…";
   try {
     const prompt = await api(endpoint);
-    try { await navigator.clipboard.writeText(prompt); announce("Prompt copied to clipboard"); }
+    try { await navigator.clipboard.writeText(prompt); announce(successMessage); }
     catch { showPromptFallback(prompt); }
   } catch (error) { showAlert(error, "Prompt unavailable"); }
   finally { if (button.isConnected) { button.disabled = false; button.textContent = previous; } }

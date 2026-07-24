@@ -3,12 +3,13 @@
 // leave the validator clean. Run: ./node_modules/.bin/tsx lifecycle.test.ts
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "./pm-roadmap.ts";
 import * as ops from "./ops.ts";
 import { ensureManagedWorktree, reservationPaths, stagePlan } from "../../lib/worktree.mjs";
+import { acquireOwnerLock, releaseOwnerLock } from "../../lib/owner-lock.mjs";
 
 async function writePlan(root: string, rel: string, opts: { status?: string; deferred?: string; pmLoop?: boolean } = {}): Promise<void> {
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
@@ -29,7 +30,9 @@ async function main() {
       deferred: "\n## Deferred\n\n- **feat-a-followup** — A follow-up\n  - Priority: P2\n  - Note: harvested by retro\n",
     });
     // persist: create+link the item AND point current.txt, one transaction
-    assert.equal((await cli("persist", "TKA", "feat-a", planA, "--title", "Feature A")).code, 0);
+    const persistedLegacy = await cli("persist", "TKA", "feat-a", planA, "--title", "Feature A");
+    assert.equal(persistedLegacy.code, 0);
+    assert.match(persistedLegacy.out, /^persisted_legacy /, "uncontended legacy persist keeps its existing outcome");
     assert.equal((await read(root, ".agents/state/current.txt")).trim(), planA, "persist pointed current.txt");
     assert.ok((await read(root, ".agents/tasks/TKA/backlog.md")).includes("Status: draft"), "persisted item mirrors plan = draft");
     assert.equal((await cli("validate")).code, 0, "validate clean after persist");
@@ -63,6 +66,32 @@ async function main() {
     assert.ok(closed.includes("feat-b") && closed.includes("Status: dropped") && closed.includes("Reason: abandoned"), "feat-b closed dropped with reason");
     assert.ok((await read(root, planB)).includes("status: dropped"), "drop mirrors plan status");
     assert.equal((await cli("validate")).code, 0, "validate clean after 취소/drop");
+
+    // A launcher race after the legacy plan/item transaction parks the result instead
+    // of falsely claiming that it selected the plan.
+    const legacyRacePlan = ".agents/plans/2026-07-24-legacy-race.md";
+    await writePlan(root, legacyRacePlan);
+    const legacyBarrier = await acquireOwnerLock(join(root, ".agents/state/current.lock"), {
+      operation: "test-legacy-persist-current-race",
+      retries: 0,
+    });
+    const legacyRace = ops.createPlanAndBacklogItem(
+      root,
+      "TKA",
+      { id: "legacy-race", title: "Legacy race" },
+      legacyRacePlan,
+      { retries: 0 },
+    );
+    for (let attempt = 0; attempt < 400 && !(await read(root, ".agents/tasks/TKA/backlog.md")).includes("legacy-race"); attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await writeFile(join(root, ".agents/state/current.txt"), "newer-legacy.md\n");
+    await releaseOwnerLock(legacyBarrier);
+    const legacyRaceResult = await legacyRace;
+    assert.equal(legacyRaceResult.outcome, "persisted_parked");
+    assert.equal((await read(root, ".agents/state/current.txt")).trim(), "newer-legacy.md");
+    await writeFile(join(root, ".agents/state/current.txt"), "");
 
     // ── Path C: standalone plans journal only their plan and use the same pointer cleanup ──
     const standalone = ".agents/plans/2026-06-22-standalone.md";
@@ -178,6 +207,25 @@ async function main() {
       await assert.rejects(gitCli("persist", "TKA", "reserved-a", planReservedA, "--title", "Reserved A"), /execution root mismatch/, "reservation-free retry still rejects main");
       assert.match((await targetCliA("persist", "TKA", "reserved-a", planReservedA, "--title", "Reserved A")).out, /^persisted_selected /, "reservation-free target retry converges");
 
+      await writeFile(join(ensureA.execution_root, ".agents/state/current.txt"), "");
+      const mappedRetryBarrier = await acquireOwnerLock(join(ensureA.execution_root, ".agents/state/current.lock"), {
+        operation: "test-mapped-owner-current-race",
+        retries: 0,
+      });
+      const racedMappedRetry = ops.createPlanAndBacklogItem(
+        ensureA.execution_root,
+        "TKA",
+        { id: "reserved-a", title: "Reserved A" },
+        planReservedA,
+        { retries: 0 },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await writeFile(join(ensureA.execution_root, ".agents/state/current.txt"), "newer-mapped-owner.md\n");
+      await releaseOwnerLock(mappedRetryBarrier);
+      await assert.rejects(racedMappedRetry, /target pointer reconciliation failed: newer-mapped-owner\.md/);
+      assert.equal((await read(ensureA.execution_root, ".agents/state/current.txt")).trim(), "newer-mapped-owner.md");
+      await writeFile(join(ensureA.execution_root, ".agents/state/current.txt"), `${planReservedA}\n`);
+
       await assert.rejects(gitCli("approve", "TKA", "reserved-a"), /execution root mismatch/);
       await assert.rejects(gitCli("worktree", "prune", "--plan", planReservedA), /non-terminal plan/, "PM CLI cannot prune an active owner");
       assert.equal((await targetCliA("approve", "TKA", "reserved-a")).code, 0);
@@ -206,8 +254,125 @@ async function main() {
       const retriedB = await targetCliB("persist", "TKA", "reserved-b", planReservedB, "--title", "Reserved B");
       assert.match(retriedB.out, /^persisted_parked /, "retry converges without inventing a new main expectation");
       assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), "newer.md", "retry preserves the newer selection");
+
+      const targetRacePlan = ".agents/plans/2026-07-24-target-race-winner.md";
+      await writeFile(join(gitRoot, targetRacePlan), "---\nid: target-race-winner\nstatus: active\npm_loop: false\n---\n");
+      await writeFile(join(gitRoot, ".agents/state/current.txt"), "main-before-target-race.md\n");
+      await writeFile(join(ensureB.execution_root, ".agents/state/current.txt"), "");
+      const targetRaceSelection = await ops.selectPlan(gitRoot, planReservedB, {
+        retries: 0,
+        transaction: {
+          id: "select-target-race",
+          beforeApply: async (target: { path: string }) => {
+            if ((target as { root?: string }).root !== await realpath(ensureB.execution_root) || target.path !== ".agents/state/current.txt") return;
+            await writeFile(join(ensureB.execution_root, ".agents/state/current.txt"), `${targetRacePlan}\n`);
+          },
+        } as any,
+      });
+      assert.equal(targetRaceSelection.selected, false, "target apply race rejects selection");
+      assert.match(targetRaceSelection.reason, /selection conflict/);
+      assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), "main-before-target-race.md", "target race leaves main unchanged");
+      assert.equal((await read(ensureB.execution_root, ".agents/state/current.txt")).trim(), targetRacePlan, "target race preserves the newer target pointer");
+
+      await writeFile(join(gitRoot, ".agents/state/current.txt"), "main-before-main-race.md\n");
+      await writeFile(join(ensureB.execution_root, ".agents/state/current.txt"), "target-before-main-race.md\n");
+      const mainRaceSelection = await ops.selectPlan(gitRoot, planReservedB, {
+        retries: 0,
+        transaction: {
+          id: "select-main-race",
+          beforeApply: async (target: { path: string }) => {
+            if ((target as { root?: string }).root !== await realpath(gitRoot) || target.path !== ".agents/state/current.txt") return;
+            await writeFile(join(gitRoot, ".agents/state/current.txt"), "newer-main-race.md\n");
+          },
+        } as any,
+      });
+      assert.equal(mainRaceSelection.selected, false, "main apply race rejects selection");
+      assert.match(mainRaceSelection.reason, /selection conflict/);
+      assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), "newer-main-race.md", "main race preserves the newer launcher");
+      assert.equal((await read(ensureB.execution_root, ".agents/state/current.txt")).trim(), "target-before-main-race.md", "main race rolls target back");
+
+      const terminalSelectPlan = ".agents/plans/2026-07-24-terminal-select.md";
+      await writeFile(join(gitRoot, terminalSelectPlan), `---\nid: terminal-select\nstatus: done\npm_loop: false\nbase_branch: main\nbase_commit: ${ensureB.base_commit}\nbranch: ${ensureB.branch}\nworktree: ${ensureB.worktree}\n---\n`);
+      await writeFile(join(gitRoot, ".agents/state/current.txt"), "main-before-terminal.md\n");
+      await writeFile(join(ensureB.execution_root, ".agents/state/current.txt"), "target-before-terminal.md\n");
+      const terminalSelection = await ops.selectPlan(gitRoot, terminalSelectPlan, { retries: 0 });
+      assert.equal(terminalSelection.selected, false);
+      assert.equal(terminalSelection.reason, "plan is not selectable: done");
+      assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), "main-before-terminal.md");
+      assert.equal((await read(ensureB.execution_root, ".agents/state/current.txt")).trim(), "target-before-terminal.md");
+
       assert.equal((await gitCli("select", "--plan", planReservedB)).code, 0, "explicit selection may replace it later");
       assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), planReservedB);
+      assert.equal((await read(ensureB.execution_root, ".agents/state/current.txt")).trim(), planReservedB);
+
+      const ensureLinkedCrash = await ensureManagedWorktree({ root: gitRoot, id: "reserved-linked-crash", base: "main" });
+      const targetLinkedCrash = (...a: string[]) => runCli(ensureLinkedCrash.execution_root, a);
+      const planLinkedCrash = ".agents/plans/2026-07-24-reserved-linked-crash.md";
+      const stagedLinkedCrash = `---\nid: reserved-linked-crash\nstatus: draft\npm_loop: true\nbase_branch: main\nbase_commit: ${ensureLinkedCrash.base_commit}\nbranch: ${ensureLinkedCrash.branch}\nworktree: ${ensureLinkedCrash.worktree}\n---\n# Linked crash\n`;
+      await stagePlan({ root: gitRoot, id: "reserved-linked-crash", content: stagedLinkedCrash });
+      assert.match((await targetLinkedCrash("persist", "TKA", "reserved-linked-crash", planLinkedCrash, "--title", "Linked crash")).out, /^persisted_selected /);
+      assert.equal((await targetLinkedCrash("approve", "TKA", "reserved-linked-crash")).code, 0);
+      await assert.rejects(
+        ops.completePlanFromRetro(ensureLinkedCrash.execution_root, "TKA", "reserved-linked-crash", {
+          planPath: planLinkedCrash,
+          terminalStatus: "done",
+          closedDate: "2026-07-24",
+          retries: 0,
+          transaction: { id: "linked-committed-crash", crashAt: "committed" },
+        }),
+        /simulated process crash at committed/,
+      );
+      await ops.reservedIds(ensureLinkedCrash.execution_root, { retries: 0 });
+      assert.match(await read(gitRoot, planLinkedCrash), /status: done/);
+      assert.match(await read(gitRoot, ".agents/tasks/TKA/closed.md"), /reserved-linked-crash/);
+      assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), "", "linked committed recovery clears matching launcher");
+      assert.equal((await read(ensureLinkedCrash.execution_root, ".agents/state/current.txt")).trim(), "", "linked committed recovery clears matching execution pointer");
+      assert.equal((await read(pointerOther.execution_root, ".agents/state/current.txt")).trim(), "unrelated.md", "linked recovery preserves unrelated pointer");
+      await writeFile(join(gitRoot, ".agents/state/current.txt"), `${planReservedB}\n`);
+
+      const ensureStandaloneRace = await ensureManagedWorktree({ root: gitRoot, id: "reserved-standalone-race", base: "main" });
+      const planStandaloneRace = ".agents/plans/2026-07-24-reserved-standalone-race.md";
+      const stagedStandaloneRace = `---\nid: reserved-standalone-race\nstatus: draft\npm_loop: false\nbase_branch: main\nbase_commit: ${ensureStandaloneRace.base_commit}\nbranch: ${ensureStandaloneRace.branch}\nworktree: ${ensureStandaloneRace.worktree}\n---\n# Standalone race\n`;
+      await stagePlan({ root: gitRoot, id: "reserved-standalone-race", content: stagedStandaloneRace });
+      const standaloneBarrier = await acquireOwnerLock(join(ensureStandaloneRace.execution_root, ".agents/state/current.lock"), {
+        operation: "test-standalone-current-race",
+        retries: 0,
+      });
+      const racedStandalone = ops.createStandalonePlan(
+        ensureStandaloneRace.execution_root,
+        "reserved-standalone-race",
+        planStandaloneRace,
+        { retries: 0 },
+      );
+      for (let attempt = 0; attempt < 400 && !(await read(gitRoot, planStandaloneRace)); attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await writeFile(join(ensureStandaloneRace.execution_root, ".agents/state/current.txt"), "newer-standalone.md\n");
+      await releaseOwnerLock(standaloneBarrier);
+      await assert.rejects(racedStandalone, /target pointer reconciliation failed: newer-standalone\.md/);
+      assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), planReservedB, "standalone target conflict does not select main");
+      assert.notEqual(await read(gitRoot, ".agents/worktree-reservations/reserved-standalone-race.json"), "", "standalone target conflict retains reservation");
+      assert.notEqual(await read(gitRoot, ".agents/worktree-reservations/reserved-standalone-race.plan.md"), "", "standalone target conflict retains staged bytes");
+
+      const ensureStandaloneCrash = await ensureManagedWorktree({ root: gitRoot, id: "reserved-standalone-crash", base: "main" });
+      const targetStandaloneCrash = (...a: string[]) => runCli(ensureStandaloneCrash.execution_root, a);
+      const planStandaloneCrash = ".agents/plans/2026-07-24-reserved-standalone-crash.md";
+      const stagedStandaloneCrash = `---\nid: reserved-standalone-crash\nstatus: draft\npm_loop: false\nbase_branch: main\nbase_commit: ${ensureStandaloneCrash.base_commit}\nbranch: ${ensureStandaloneCrash.branch}\nworktree: ${ensureStandaloneCrash.worktree}\n---\n# Standalone crash\n`;
+      await stagePlan({ root: gitRoot, id: "reserved-standalone-crash", content: stagedStandaloneCrash });
+      assert.match((await targetStandaloneCrash("persist", "--standalone", "--id", "reserved-standalone-crash", "--plan", planStandaloneCrash)).out, /^persisted_selected standalone /);
+      assert.equal((await targetStandaloneCrash("approve", "--standalone", "--plan", planStandaloneCrash)).code, 0);
+      await assert.rejects(
+        ops.standaloneComplete(ensureStandaloneCrash.execution_root, planStandaloneCrash, "done", {
+          retries: 0,
+          transaction: { id: "standalone-committed-crash", crashAt: "committed" },
+        }),
+        /simulated process crash at committed/,
+      );
+      await ops.reservedIds(ensureStandaloneCrash.execution_root, { retries: 0 });
+      assert.match(await read(gitRoot, planStandaloneCrash), /status: done/);
+      assert.equal((await read(gitRoot, ".agents/state/current.txt")).trim(), "", "committed recovery clears matching main pointer");
+      assert.equal((await read(ensureStandaloneCrash.execution_root, ".agents/state/current.txt")).trim(), "", "committed recovery clears matching execution pointer");
 
       const ensureStandalone = await ensureManagedWorktree({ root: gitRoot, id: "reserved-standalone", base: "main" });
       const targetStandalone = (...a: string[]) => runCli(ensureStandalone.execution_root, a);
