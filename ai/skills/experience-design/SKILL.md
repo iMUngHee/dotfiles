@@ -79,7 +79,23 @@ If an interface or implementation constraint implies an experience change, evalu
 
 ### 4. Hand Off
 
-Emit the exact Experience gate record. `READY FOR INTERFACE` requires resolved jobs and success, sufficient IA/flow, applicable states and recovery, microcopy intent, and no open material question for the affected scope.
+Before the gate, emit exact Experience Coverage using
+`../product-craft/references/output-formats.md`.
+
+- Full maps every material job, route, state/recovery outcome, and navigation/URL intent.
+  Seed and Focused Delta map touched obligations only and name unaffected authority in the
+  Surface Proof Packet.
+- Use one immutable `EXP-NNN` per material obligation bundle. Evidence is a concrete
+  captured/approved/inferred source or `missing`; inference stays disclosed.
+- Mark a row GAP when intent or evidence is missing, contradictory, or materially
+  unresolved. Reject duplicate IDs and unrepresented applicable obligations.
+- Produce the Experience stage buckets with PASS, GAP, and PENDING always present. Pass
+  exact rows to `product-craft`; do not aggregate them away.
+- Declare the typed approval requirement: Full uses `full_experience`, Focused Delta uses
+  `focused_experience`, and Seed chaining uses `seed_build_request`. A token enters
+  Recorded approvals only from explicit user evidence.
+
+Emit the exact Experience gate record. `READY FOR INTERFACE` requires resolved jobs and success, sufficient IA/flow, applicable states and recovery, microcopy intent, no open material question for the affected scope, all applicable EXP rows PASS, and every Required approval present in Recorded approvals. A PASS row with unrecorded Full or changed Focused approval keeps Experience status PASS but the gate remains `BLOCKED`; list those EXP IDs as the pre-implementation failed rows. It never self-approves. A ready Experience gate hands ownership to `interface-design`.
 
 Do not edit the canonical contract unless the user authorized the file change and the applicable Experience gate is approved. Product-craft coordinates the canonical update and Decision Log.
 
@@ -95,4 +111,9 @@ An audit is read-only.
 
 ## Routed Stops
 
-When required experience intent is missing or contradictory, emit `CONTRACT GAP` and stop the affected path. When another stage requests an experience-owned change, answer through a Focused Delta and return a fresh Experience gate; never let the requester mutate the section itself.
+When required experience intent is missing or contradictory, mark the affected EXP row
+GAP, emit `CONTRACT GAP`, and stop the affected path. Missing intent routes to the
+established experience section owner; contradictory intent reopens the affected
+Experience gate even when prior approval exists. When another stage requests an
+experience-owned change, answer through a Focused Delta and return fresh Experience
+Coverage plus a fresh gate; never let the requester mutate the section itself.

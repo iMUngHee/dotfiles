@@ -39,8 +39,40 @@ Before any durable product write, require all applicable items:
 - Approved changed sections for Focused Delta.
 - A persisted active general `design` plan whenever its independent trigger applies.
 - The applicable `design-contract.md`, or an explicitly approved in-session Seed contract with the missing durable artifact disclosed.
+- Exact approved Experience Coverage, Interface Coverage, and Surface Proof Packet from the
+  contained durable contract.
+- Required approvals and Recorded approvals, with every required token recorded from
+  explicit user evidence. Always consume Required approvals and Recorded approvals before durable writes; approval prose is not a substitute.
 
 If any material item is missing, stop. Authorization is scoped; it does not permit unrelated cleanup or a broader design change.
+
+## Proof Carrier Resolution
+
+Resolve exactly one carrier before reading or writing product source:
+
+1. If `design` independently triggered, resolve the originating session with exact
+   injected metadata:
+
+   ```bash
+   root="$(git rev-parse --show-toplevel)" || exit 1
+   PM_SESSION_TOOL="<injected session tool>" PM_SESSION_ID="<exact injected session id>" \
+     node "$HOME/.config/ai/lib/worktree.mjs" resolve-session \
+     --root "$root" --tool "<injected session tool>"
+   ```
+
+   Require `status: ok`, `plan_status: active`, matching execution root/branch/base, and
+   `## Product Surface Proof Obligations` containing the packet, exact EXP/INT rows,
+   approval fields, and one Durable contract path.
+2. If the independent design trigger did not apply, require an explicit no-plan handoff
+   with `plan_requirement: not required`, no invented plan, an explicit build request, a
+   git execution root, and the same packet already persisted under the named contract's
+   Decision Log.
+3. Resolve the repo-relative Durable contract path inside the execution root. Reject a
+   missing or escaping path, unexpected plan, unbound required route, absent packet, or
+   malformed proof obligations without writing.
+
+Both routes require typed approvals and build authorization. The no-plan route relaxes
+only the plan requirement.
 
 ## Owned Contract Section
 
@@ -60,6 +92,11 @@ Read only the contract sections and implementation evidence needed for the selec
 ### 1. Reconcile Contract and Code
 
 Map each affected contract rule to an existing primitive, token, component, style convention, or explicit new implementation need. Prefer the project's current platform feature, dependency, and shared component before custom code.
+
+Start from the exact EXP/INT graph. Allocate one immutable `IMP-NNN` row for each material
+implementation obligation and ensure every applicable EXP/INT row is transitively
+reachable. An experience-only obligation is sourced directly; an interface-only
+obligation uses its INT row. Reject duplicate/unknown/sourceless rows and unjustified N/A.
 
 If code evidence conflicts with or cannot express approved intent:
 
@@ -85,7 +122,32 @@ Follow `references/verification.md`. Inspect the render against user-job closure
 
 While implementation remains authorized, correct an applicable measured failure and re-render, up to two source-change/render cycles. Then report exact coverage and remaining failures with the shared Design-Fit Result.
 
-### 4. Hand Off to Goal Verification
+Produce exact Implementation Proof from the shared output formats. Each applicable row
+must align the same contract requirement across concrete code, an affirmative assertion,
+and an inspected render or measurement. A passing test that positively requires behavior
+contrary to the contract is `contract drift` + `FAIL`; never treat it as proof. Missing
+required evidence is `unverified` + `NOT VERIFIED`. Apply classification precedence
+before packet aggregation and preserve all stage buckets.
+
+### 4. Persist Bounded Proof
+
+Implementation Proof is the only product-contract mutation this stage owns:
+
+1. Read the contained durable contract, record SHA-256, and require exactly one
+   `## Implementation Bridge` with zero or one `### Implementation Proof` child.
+2. Validate the entire proposed table in memory: exact header, unique/known IDs,
+   transitive coverage, typed approvals, truth-table-valid classification/status,
+   complete evidence, and justified N/A.
+3. Immediately re-read and require the same hash. Insert the child at the end of
+   Implementation Bridge or replace only its prior body with one exact-context patch.
+4. Read back one valid child, byte-identical non-Bridge sections, and a diff limited to
+   Implementation Bridge. Any stale hash, duplicate section, malformed table, context
+   mismatch, or wider diff stops with Design-Fit NOT VERIFIED.
+
+Never mutate canonical plan content. Return the exact contract path, Decision Log packet,
+and Bridge proof section in the handoff.
+
+### 5. Hand Off to Goal Verification
 
 Design-fit evidence does not replace `verify`. When implementation is complete, provide the evidence and route completed-feature confirmation to `verify` against the active plan's success criteria.
 

@@ -41,6 +41,56 @@ If found, compare planned vs actual:
 If the session is unbound, do not inspect main launcher state. Use an explicit plan/goal
 when supplied; otherwise skip this section entirely.
 
+## Product-surface proof (when applicable)
+
+Before deriving a READY truth condition for product-surface work, resolve exactly one
+durable carrier:
+
+- Plan-required work uses the validated active plan's
+  `## Product Surface Proof Obligations`. Require matching execution root/branch/base,
+  exact approved EXP/INT rows, Surface Proof Packet, and one repo-relative Durable
+  contract path.
+- Work below the independent design trigger uses the explicit no-plan handoff. Require
+  `plan_requirement: not required`, no invented plan, a git execution root, the exact
+  contained contract path, and the same packet already persisted under Decision Log.
+
+Reject a missing/escaping contract path, unbound required route, unexpected plan
+substitution, absent durable packet, or generic technical summary replacing rows. Read
+the exact contract and require:
+
+1. The approved Experience Coverage, Interface Coverage, and Surface Proof Packet under
+   `## Decision Log & Open Questions`.
+2. Exactly one `## Implementation Bridge` and one complete
+   `### Implementation Proof` child.
+3. Unique known row IDs, complete transitive coverage, truth-table-valid
+   classification/status pairs, affirmative code/test/render evidence for every PASS,
+   and a repeated concrete reason for every N/A.
+
+Always recheck Required approvals and Recorded approvals before READY. Every required token must
+be recorded, unique, and supported by explicit user evidence. Approval prose cannot
+replace a missing token, and coverage PASS cannot authorize a stage.
+
+Recompute the Surface Proof Packet without mutating it:
+
+- Any Experience/Interface GAP or Implementation contract gap -> `BLOCKED` and the exact
+  design owner.
+- Otherwise any implementation FAIL, NOT VERIFIED, remaining PENDING, duplicate,
+  unknown, sourceless, unmapped row, incomplete evidence, or unjustified N/A ->
+  `Design-Fit Outcome: NOT VERIFIED`.
+- Only complete aligned applicable PASS proof plus justified non-applicable rows ->
+  `Design-Fit Outcome: READY`.
+
+A completed proof explicitly presented to this skill keeps structured `owner: verify`
+while it classifies missing render evidence, invalid N/A, or final readiness. Only a
+contract gap changes owner to the exact design owner; do not rewrite owner to
+`ui-engineering` merely because correction may follow.
+
+A passing test that asserts behavior contrary to approved intent is contract drift +
+FAIL. Document-level or page-level substitutes do not prove a more specific contracted
+component transformation. Product-surface goal verification cannot pass unless this
+durable aggregation is READY. This skill remains read-only and persists no record or
+lifecycle change.
+
 ## Optional acceleration — `verifier` subagent
 
 **All verification runs inline by default** — including 5+ truth conditions and Level 3/4 depth. The steps below are self-contained; you never *need* a subagent, and there is no loss of coverage when running inline.

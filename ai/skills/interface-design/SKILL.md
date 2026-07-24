@@ -58,7 +58,12 @@ Composition, macrostructure, and hierarchy are expressed through these sections 
 
 ### 1. Confirm Experience Authority
 
-For new/material work, require `Experience gate: READY FOR INTERFACE`. Treat jobs, IA, screen inventory, content priority, flows, states, recovery, and microcopy intent as constraints. If interface exploration exposes a needed change, emit `EXPERIENCE DELTA REQUIRED` and stop that path.
+For new/material work, require `Experience gate: READY FOR INTERFACE`, exact approved
+Experience Coverage, and the Surface Proof Packet whose Required approvals are present in
+Recorded approvals. Validate unique EXP IDs and preserve every row verbatim. Treat jobs,
+IA, screen inventory, content priority, flows, states, recovery, navigation/URL intent,
+and microcopy intent as constraints. If interface exploration exposes a needed change,
+mark its affected INT path GAP, emit `EXPERIENCE DELTA REQUIRED`, and stop that path.
 
 Audits may inspect an existing surface without a gate because they are read-only. Findings do not authorize edits.
 
@@ -82,7 +87,29 @@ Seed covers touched presentation decisions. Focused Delta covers approved change
 
 ### 5. Hand Off
 
-Emit the exact Interface gate record. `READY FOR BUILD` requires concrete composition, direction, component presentation, responsive behavior, accessibility values, and no open material interface question for the affected scope.
+Before the gate, emit exact Interface Coverage using
+`../product-craft/references/output-formats.md`.
+
+- Map every applicable EXP row to one or more immutable `INT-NNN` rows. Use
+  `N/A:interface-only` only for a concrete interface-owned obligation; reject unknown EXP
+  IDs and meaning-changing duplicate mappings.
+- Each row names one implementable contract requirement and inspected Wide specimen and
+  Narrow specimen evidence. Full work, changed macrostructure, and changed responsive
+  behavior require representative evidence at both presentations. A fixed canvas or
+  genuinely unaffected presentation may use `N/A:<concrete reason>`.
+- Evidence must name artifact or render, state, viewport, and inspected observation.
+  Generating a specimen without inspecting it is `missing`.
+- Use one representative wide/narrow screen per affected macrostructure rather than every
+  route/state combination. A missing required specimen, duplicate INT ID, unmapped EXP
+  row, or uninspected transformation is GAP.
+- Produce Interface PASS, GAP, and PENDING buckets without collapsing mixed results, then
+  return exact EXP/INT rows to `product-craft`.
+- Full uses required approval `full_interface`; Focused Delta uses
+  `focused_interface`. Record either only from explicit user approval. Seed may rely on
+  the already-recorded `seed_build_request` for auto-chaining when its compact inferences
+  remain unambiguous.
+
+Emit the exact Interface gate record. `READY FOR BUILD` requires concrete composition, direction, component presentation, responsive behavior, accessibility values, no open material interface question, all applicable EXP rows mapped, all INT rows PASS, required specimens inspected, and every Required approval present in Recorded approvals. Keep Implementation status PENDING once these Interface rows exist, including while a missing specimen blocks this gate. For structured evaluation, an unresolved or Focused Interface delta remains owned by `interface-design`; a Full READY FOR BUILD handoff moves to `design` when its independent trigger applies. Do not report `ui-engineering` merely because it could implement next.
 
 If `design` independently triggers, pass `READY FOR BUILD` to the general design workflow. UI engineering may start durable implementation only after the technical plan is persisted/active and the user has authorized build.
 
@@ -100,4 +127,4 @@ An audit is read-only and identity-preserving.
 
 ## Routed Stops
 
-Emit `EXPERIENCE DELTA REQUIRED` for changes to Product Context, UX Model, Data & State Model, Interaction Model, or Microcopy. Emit `CONTRACT GAP` when required interface intent is missing or contradictory. Stop only the affected path and return ownership through product-craft.
+Emit `EXPERIENCE DELTA REQUIRED` for changes to Product Context, UX Model, Data & State Model, Interaction Model, or Microcopy. Emit `CONTRACT GAP` and mark the affected INT row GAP when required interface intent is missing or contradictory. An ownership-unclear gap routes to `product-craft`. Stop only the affected path and return ownership through product-craft.
