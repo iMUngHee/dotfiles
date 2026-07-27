@@ -35,7 +35,7 @@ One correction cycle is one authorized source change followed by a fresh render 
 
 ## Material-Row Proof
 
-Use exact Implementation Proof from the shared output formats. For every applicable
+Use the implementation-stage obligation rows from the shared output formats. For every applicable
 EXP/INT obligation, verify transitive coverage by at least one applicable IMP row and
 compare the same material requirement across:
 
@@ -72,12 +72,6 @@ Duplicate IDs, unknown or absent sources, uncovered applicable rows, inconsisten
 classification/status, incomplete PASS evidence, unjustified N/A, or a row in two packet
 buckets yields `Design-Fit Outcome: NOT VERIFIED`.
 
-For structured closure reports, `applicable_rows` and `covered_rows` contain EXP/INT
-source obligations only, sorted EXP before INT; IMP IDs belong in proof and implementation
-buckets. Once proof rows exist, `failed_rows` contains only failed or unverified IMP IDs.
-Copy only explicitly named substitute identifiers into `rejected_substitutes`; do not
-invent one for invalid N/A or missing evidence.
-
 ## Checks
 
 - User-job closure: requested action, success, failure/retry, and preserved invariants agree across request, contract, code, and render.
@@ -91,7 +85,27 @@ invent one for invalid N/A or missing evidence.
 - Contract integrity: no naked adjectives, silent substitutions, missing Implementation Bridge mapping, or implementation-authored product decision.
 - Product specificity: the rendered hierarchy and component voice express the selected direction rather than interchangeable defaults.
 
-Inspect screenshots or live renders directly; generating an artifact without looking at it is not evidence.
+Inspect screenshots or live renders directly; generating an artifact without looking at it is
+not evidence.
+
+## Two Passes, Not One
+
+The checks above compare the render against what was approved. They cannot catch a defect the
+contract never mentioned — and that is where craft usually fails. A render with Korean text
+breaking mid-어절 and a clipped code block once passed every contract row it was checked
+against, because no row mentioned either.
+
+So run a second, separate pass on the same renders using
+`../../product-craft/references/craft-review.md`, and ask the different question: looking at
+this, what is wrong? A finding there does not need a contract row to justify it.
+
+Record the result as `Craft Findings` from the shared output formats, kept apart from the
+contract comparison so that defects not in the contract stay visible instead of dissolving
+into the coverage table.
+
+A craft finding of `unusable` or `degrades the task` blocks readiness on its own, exactly as a
+failed contract row does. Route it back to implementation when the fix is in code, or to the
+owning design skill when the contract should have said something and did not.
 
 ## Audit Findings
 
@@ -110,12 +124,13 @@ Do not convert a finding into a source edit without a separate build request and
 
 ## Final Result
 
-Use the exact Surface Proof Packet, Implementation Proof, and Design-Fit Result in
+Use the exact Surface Obligations, Craft Findings, and Design-Fit Result in
 `../../product-craft/references/output-formats.md`. Always retain PASS, FAIL, CONTRACT
 GAP, NOT VERIFIED, PENDING, and N/A buckets even when empty. Aggregate BLOCKED before
 NOT VERIFIED, then READY. `Outcome: READY` is valid only when every applicable row is
 transitively covered by aligned PASS proof, every `N/A` has a concrete repeated reason,
-no pending or malformed row remains, and Required approvals are present in Recorded
-approvals.
+no pending or malformed row remains, Required approvals are present in Recorded
+approvals, **and no material craft finding is outstanding**. Contract-row closure alone does
+not make a surface ready; a defect that is not in the contract is still a defect.
 
 Completed-feature readiness belongs to `verify`; provide this result as evidence rather than claiming goal completion here.

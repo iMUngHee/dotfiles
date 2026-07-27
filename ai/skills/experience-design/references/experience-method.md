@@ -41,6 +41,35 @@ Use this compact screen inventory when multiple surfaces are involved:
 
 Do not choose framework routers, directory layouts, or data-fetch architecture here.
 
+### Structural alternatives
+
+The first arrangement that seems reasonable is usually the most conventional one, and
+conventional is not the same as right for this content. Before committing, work out at least
+one genuinely different organization and compare them.
+
+Different means the grouping logic differs, or the entry points differ, or what the user
+encounters first differs — not that the sections were renamed. If you can convert one
+alternative into the other by editing labels, you produced one alternative.
+
+Useful axes to vary: what the primary object is, whether browsing is by category or by
+recency or by relationship, how much the surface decides for the reader versus lets them
+choose, and whether depth lives in navigation or in the page.
+
+For each alternative, say what it makes easy, what it makes harder, and which reader it
+suits. Recommend one and explain why. The user chooses.
+
+### Making alternatives reactable
+
+Prose comparison of information architecture is hard to react to; people recognize structure
+faster than they parse a description of it. A single self-contained HTML page showing the
+alternatives with realistic content length lets the user see the difference and respond.
+
+Keep it structural: labeled regions, real ordering, real navigation, real text lengths.
+No palette, type choice, radius, shadow, imagery, or decorative motif — those belong to
+interface design and will hijack the reaction if introduced here.
+
+Label it `experience structure — not interface direction`.
+
 ## Flow Model
 
 For each primary job, describe:

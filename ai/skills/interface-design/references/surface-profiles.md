@@ -1,6 +1,14 @@
 # Surface Profiles
 
-Read the shared quality floor plus only the primary profile that matches the approved experience. Profiles supply defaults where the contract is silent; they never override an approved contract or accessibility minimum.
+Read the shared quality floor plus only the primary profile matching the approved experience.
+
+These are starting points, not specifications. The numbers describe what usually works for
+that kind of surface; the content in front of you decides whether they hold. A profile never
+overrides an approved contract, a selected artifact, or an accessibility minimum — and a
+deliberate departure with a stated reason beats a compliant default.
+
+Read a profile to know what the surface is optimizing for and what it must not become. If a
+value here conflicts with what the job actually needs, the job wins; say so and move on.
 
 ## Dashboard / Admin / Operations
 

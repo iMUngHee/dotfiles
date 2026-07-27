@@ -69,33 +69,59 @@ Use the method reference to define only what the depth requires:
 - Empty, loading, error, partial, overflow, validation, destructive, conflict, and success states when applicable.
 - Keyboard intent, feedback, recovery semantics, and task-specific microcopy.
 
-An optional low-fidelity wireframe may clarify adjacency, order, or navigation. Keep it visually neutral: labeled regions, hierarchy, content order, and state placement only. Do not encode palette, typography, radius, decoration, or art direction.
+**Do not settle on the first plausible structure.** At Full depth, work out more than one way
+to organize this surface and put them side by side before choosing. Alternatives that differ
+only in section naming are one alternative wearing two labels — they must differ in how
+content is grouped, where the entry points are, or what the user does first.
 
-### 3. Challenge Material Ambiguity
+Make the alternatives reactable. A single self-contained HTML page showing each structure with
+real content length — labeled regions, actual navigation, actual ordering — tells the user more
+in ten seconds than a paragraph does, and lets them recognize a preference they could not have
+stated in advance. Keep it visually neutral: no palette, typography, radius, decoration, or art
+direction. Structure is the subject.
+
+### 3. Blind-Spot Pass
+
+Before asking for approval, look for what the request did not mention and the obvious reading
+would not surface. This is a deliberate pass, not a form to fill in.
+
+The usual hiding places: real content length and distribution, how often each path is actually
+used, whether the reader arrives cold from search or a shared link, what failure and recovery
+look like, what shows with no data or partial data, the narrowest device in real use, Korean
+typography and line breaking, and anything off-screen the surface still owes — sharing, SEO,
+print.
+
+Report what you found as material questions or disclosed assumptions. Say what you looked for
+and did not find; silence is not coverage.
+
+### 4. Challenge Material Ambiguity
 
 Gate only questions that would materially change jobs, IA, flow, state, recovery, or scope. For Seed, disclose non-blocking compact inferences and auto-chain when the user's explicit build request authorizes it. Full requires explicit Experience approval. Focused Delta requires approval for every changed section.
 
 If an interface or implementation constraint implies an experience change, evaluate it as a proposal rather than silently adapting the contract.
 
-### 4. Hand Off
+### 5. Hand Off
 
-Before the gate, emit exact Experience Coverage using
-`../product-craft/references/output-formats.md`.
+Emit `Surface Obligations` rows for this stage using
+`../product-craft/references/output-formats.md`: `Stage: experience`, one `OBL-NNN` per
+material obligation, `Derives from: —` for obligations originating here, concrete evidence or
+`missing`, and `GAP` where intent stays unresolved. At Full depth a missing material job,
+route, state, or recovery is itself a `GAP`.
 
-- Full maps every material job, route, state/recovery outcome, and navigation/URL intent.
-  Seed and Focused Delta map touched obligations only and name unaffected authority in the
-  Surface Proof Packet.
-- Use one immutable `EXP-NNN` per material obligation bundle. Evidence is a concrete
-  captured/approved/inferred source or `missing`; inference stays disclosed.
-- Mark a row GAP when intent or evidence is missing, contradictory, or materially
-  unresolved. Reject duplicate IDs and unrepresented applicable obligations.
-- Produce the Experience stage buckets with PASS, GAP, and PENDING always present. Pass
-  exact rows to `product-craft`; do not aggregate them away.
-- Declare the typed approval requirement: Full uses `full_experience`, Focused Delta uses
-  `focused_experience`, and Seed chaining uses `seed_build_request`. A token enters
-  Recorded approvals only from explicit user evidence.
+This stage's approval token is `experience_approved`, recorded only from explicit user
+evidence.
 
-Emit the exact Experience gate record. `READY FOR INTERFACE` requires resolved jobs and success, sufficient IA/flow, applicable states and recovery, microcopy intent, no open material question for the affected scope, all applicable EXP rows PASS, and every Required approval present in Recorded approvals. A PASS row with unrecorded Full or changed Focused approval keeps Experience status PASS but the gate remains `BLOCKED`; list those EXP IDs as the pre-implementation failed rows. It never self-approves. A ready Experience gate hands ownership to `interface-design`.
+Full covers every material job, route, state/recovery outcome, and navigation intent. Seed and
+Focused Delta cover touched obligations only and name the unaffected authority they preserve.
+Inference stays disclosed; never present it as user-confirmed fact.
+
+Emit the exact Experience gate record. `READY FOR INTERFACE` requires resolved jobs and
+success, sufficient IA/flow, applicable states and recovery, microcopy intent, no open
+material question for the affected scope, every applicable experience obligation at `PASS`,
+and `experience_approved` recorded from explicit user evidence. Rows that pass while approval
+is still unrecorded keep their `PASS` status, but the gate stays `BLOCKED` and those ids are
+what blocks it. The gate never self-approves. A ready gate hands ownership to
+`interface-design`.
 
 Do not edit the canonical contract unless the user authorized the file change and the applicable Experience gate is approved. Product-craft coordinates the canonical update and Decision Log.
 

@@ -56,11 +56,12 @@ amend the contract.
 
 ### Durable Product Proof Handoff
 
-When product-craft supplies an approved Surface Proof Packet:
+When product-craft supplies approved surface records:
 
-1. Require its repo-relative Durable contract path, exact approved Experience Coverage
-   and Interface Coverage, all stage buckets, and typed approval fields. Resolve the path
-   inside the execution root and verify the same packet is persisted under that
+1. Require its repo-relative Durable contract path, the approved `Surface Obligations` rows,
+   the `## Artifact Ledger` entry for any selected artifact, and the approval tokens
+   (`experience_approved`, `direction_selected`, `build_authorized` as applicable). Resolve
+   the path inside the execution root and verify the same records are persisted under that
    contract's `## Decision Log & Open Questions`.
 2. Reject a missing/escaping path, absent durable packet, duplicate/unknown/unmapped row,
    GAP, or incomplete required approval. A generic criterion such as “mobile tests pass”
@@ -73,21 +74,22 @@ When product-craft supplies an approved Surface Proof Packet:
 
    Durable contract: <repo-relative design-contract.md path>
 
-   <exact Experience Coverage>
+   <exact Surface Obligations rows>
 
-   <exact Interface Coverage>
+   <exact Artifact Ledger rows, when an artifact was selected>
 
-   <exact Surface Proof Packet>
+   <approval tokens with the user evidence recorded for each>
    ```
 
-4. Always copy Required approvals and Recorded approvals verbatim inside that packet,
-   together with User approval evidence. Technical planning cannot infer, add, or remove
-   approval tokens.
-5. Turn every applicable EXP and INT row into a goal-level Verifiable Success Criterion
-   with a concrete code/assertion/inspected-render observable. Preserve row IDs and source
-   correspondence so `verify` can reconcile the eventual Implementation Proof.
+4. Copy the approval tokens and their user evidence verbatim. Technical planning cannot
+   infer, add, or remove a token — least of all `direction_selected`, which only the user
+   can produce.
+5. Turn every applicable experience and interface obligation into a goal-level Verifiable
+   Success Criterion with a concrete code, assertion, or inspected-render observable.
+   Preserve `OBL-NNN` ids and their `Derives from` links so `verify` can walk the chain
+   later.
 
-`design` never writes Implementation Proof or Implementation Bridge. If a required active
+`design` never writes implementation evidence or the Implementation Bridge section. If a required active
 plan has a missing Durable contract path or cannot preserve the rows exactly, the product
 surface portion of planning is `BLOCKED`.
 

@@ -12,6 +12,19 @@ Apply these minimums to every product surface. Existing contracts and captured p
 - Semantics: use semantic HTML or appropriate ARIA for buttons, links, tabs, dialogs, tables, labels, errors, and status messages.
 - State meaning: color is never the only signal; pair it with text, icon, shape, position, or pattern.
 
+## Text Setting Floor
+
+Language-aware, and judged by the rendered outcome rather than by the presence of a CSS
+property.
+
+- Korean: lines break at 어절 (word-unit) boundaries. A line ending mid-어절 is a defect.
+- 중국어/일본어 (Chinese/Japanese): follow their own line-breaking conventions. Do not apply
+  the Korean rule to them.
+- Long unspaced strings — URLs, identifiers, code — wrap, scroll, or truncate with a route to
+  the full value. They never overflow their container.
+- Verify by looking at the render at the narrowest supported viewport. A source grep for a
+  CSS property is supporting evidence, never proof.
+
 ## Neutral Mechanics
 
 - Use the existing product tokens and primitives before introducing new ones.
