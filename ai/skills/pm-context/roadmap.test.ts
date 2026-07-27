@@ -27,9 +27,22 @@ const canonicalSections = [
   "Decision Log & Open Questions",
 ];
 
+// Artifact Ledger is optional: a surface carries it only when a design artifact holds the
+// visual decision. A contract decided entirely in prose omits the section rather than
+// filling it with N/A. When present it sits between Do / Don't and Implementation Bridge.
+const actualSections = [...contract.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+const bridgeIndex = canonicalSections.indexOf("Implementation Bridge");
+const expectedSections = actualSections.includes("Artifact Ledger")
+  ? [
+      ...canonicalSections.slice(0, bridgeIndex),
+      "Artifact Ledger",
+      ...canonicalSections.slice(bridgeIndex),
+    ]
+  : canonicalSections;
+
 assert.deepEqual(
-  [...contract.matchAll(/^## (.+)$/gm)].map((match) => match[1]),
-  canonicalSections,
+  actualSections,
+  expectedSections,
   "design-contract.md must use the canonical Full Product Craft section order",
 );
 assert.match(contract, /Task Desk/, "the approved interface concept must be durable");

@@ -51,19 +51,23 @@ Composition, macrostructure, and hierarchy are expressed through these sections 
 2. Nearest applicable `design-contract.md`, captured product system, representative screens, theme/tokens, and used component primitives.
 3. `../product-craft/references/contract-schema.md`, `../product-craft/references/quality-floor.md`, and `../product-craft/references/output-formats.md`.
 4. The one applicable profile in `references/surface-profiles.md`.
-5. `references/concept-stage.md` when no reference exists, visual direction materially changes, or `redesign`/`study` runs.
-6. `references/interface-contract.md` for Full work or a contract delta that changes system/component rules.
+5. `references/reference-study.md` before drawing candidates for any new direction. Study how
+   this job has already been solved well; candidates drawn without it converge on defaults.
+6. `references/concept-stage.md` when direction is being chosen or materially changed, or when
+   `redesign`/`study` runs.
+7. `references/interface-contract.md` for Full work or a contract delta that changes
+   system/component rules.
 
 ## Workflow
 
 ### 1. Confirm Experience Authority
 
-For new/material work, require `Experience gate: READY FOR INTERFACE`, exact approved
-Experience Coverage, and the Surface Proof Packet whose Required approvals are present in
-Recorded approvals. Validate unique EXP IDs and preserve every row verbatim. Treat jobs,
-IA, screen inventory, content priority, flows, states, recovery, navigation/URL intent,
-and microcopy intent as constraints. If interface exploration exposes a needed change,
-mark its affected INT path GAP, emit `EXPERIENCE DELTA REQUIRED`, and stop that path.
+For new/material work, require `Experience gate: READY FOR INTERFACE`, the approved
+experience-stage obligations, and `experience_approved` recorded from explicit user evidence.
+Preserve every row verbatim. Treat jobs, IA, screen inventory, content priority, flows,
+states, recovery, navigation intent, and microcopy intent as constraints. If interface
+exploration exposes a needed change, mark the affected interface obligation `GAP`, emit
+`EXPERIENCE DELTA REQUIRED`, and stop that path.
 
 Audits may inspect an existing surface without a gate because they are read-only. Findings do not authorize edits.
 
@@ -73,11 +77,24 @@ Select the primary surface profile before choosing craft rules. Mixed surfaces m
 
 ### 3. Commit Composition and Direction
 
-Macrostructure follows the approved information and flow model. Use the concept method to explore genuinely divergent safe, sharp, and borrowed reads when the concept gate fires. Choose structural relationships, hierarchy, density, and component voice together rather than assembling independent fashionable defaults.
+Macrostructure follows the approved information and flow model. Study references first, then
+use the concept method to draw candidates that differ in structure rather than in coat. Choose
+structural relationships, hierarchy, density, and component voice together instead of
+assembling independently fashionable defaults.
 
-For an owner-taste surface, render the candidates as variants of one representative screen with realistic content and let the owner pick. For an external product surface, commit the sharpest direction that best serves the job and survives every floor. Mixed or unclear audience requires a gate.
+Candidates are single self-contained HTML files with realistic content, compared on the same
+screen and the same data. Render and inspect each at wide and narrow before showing it.
 
-Disposable HTML, images, or component specimens are allowed only to make a design decision. Keep them outside durable product paths, label them non-production, and remove or archive them only with authorization. Interface design never turns a specimen into product implementation.
+**The user picks.** Present the candidates with a recommendation and stop; taste is theirs to
+supply. Where there is no owner to ask — an external product surface — commit the sharpest
+direction that serves the job and survives every floor, and say that you did. A mixed or
+unclear audience is a gate.
+
+The selected artifact becomes durable reference, not a discarded specimen. Record it in the
+contract's `## Artifact Ledger` with its revision, coverage, and the states and viewports
+actually reviewed; implementation reads it directly. Keep artifacts under `.agents/`, never in
+product source paths, and never wire APIs, persistence, production routing, or durable
+application state into them. Unselected candidates stay in the ledger as `exploratory`.
 
 ### 4. Make the Interface Contract Concrete
 
@@ -87,29 +104,34 @@ Seed covers touched presentation decisions. Focused Delta covers approved change
 
 ### 5. Hand Off
 
-Before the gate, emit exact Interface Coverage using
-`../product-craft/references/output-formats.md`.
+Emit `Surface Obligations` rows for this stage using
+`../product-craft/references/output-formats.md`: `Stage: interface`, each row deriving from
+the experience obligations it serves, evidence shaped as
+`artifact:<ART-NNN>#<state>@<viewport>`, and `GAP` where a required interface decision is
+missing or contradictory.
 
-- Map every applicable EXP row to one or more immutable `INT-NNN` rows. Use
-  `N/A:interface-only` only for a concrete interface-owned obligation; reject unknown EXP
-  IDs and meaning-changing duplicate mappings.
-- Each row names one implementable contract requirement and inspected Wide specimen and
-  Narrow specimen evidence. Full work, changed macrostructure, and changed responsive
-  behavior require representative evidence at both presentations. A fixed canvas or
-  genuinely unaffected presentation may use `N/A:<concrete reason>`.
-- Evidence must name artifact or render, state, viewport, and inspected observation.
-  Generating a specimen without inspecting it is `missing`.
-- Use one representative wide/narrow screen per affected macrostructure rather than every
-  route/state combination. A missing required specimen, duplicate INT ID, unmapped EXP
-  row, or uninspected transformation is GAP.
-- Produce Interface PASS, GAP, and PENDING buckets without collapsing mixed results, then
-  return exact EXP/INT rows to `product-craft`.
-- Full uses required approval `full_interface`; Focused Delta uses
-  `focused_interface`. Record either only from explicit user approval. Seed may rely on
-  the already-recorded `seed_build_request` for auto-chaining when its compact inferences
-  remain unambiguous.
+Record the selected artifact in `## Artifact Ledger`. This stage's approval token is
+`direction_selected`, recorded only from the user's own words together with the chosen
+`ART-NNN` — never on their behalf.
 
-Emit the exact Interface gate record. `READY FOR BUILD` requires concrete composition, direction, component presentation, responsive behavior, accessibility values, no open material interface question, all applicable EXP rows mapped, all INT rows PASS, required specimens inspected, and every Required approval present in Recorded approvals. Keep Implementation status PENDING once these Interface rows exist, including while a missing specimen blocks this gate. For structured evaluation, an unresolved or Focused Interface delta remains owned by `interface-design`; a Full READY FOR BUILD handoff moves to `design` when its independent trigger applies. Do not report `ui-engineering` merely because it could implement next.
+Every applicable experience obligation needs at least one interface obligation deriving from
+it. Each interface row names one implementable requirement and cites inspected artifact
+evidence — artifact or render, state, viewport, and what was actually observed. Generating an
+artifact without looking at it is `missing`, not evidence.
+
+Full work, changed macrostructure, and changed responsive behavior need inspected evidence at
+both wide and narrow. One representative screen per affected macrostructure is enough; do not
+multiply screens per row. A fixed canvas or genuinely unaffected presentation may use
+`N/A:<concrete reason>`.
+
+Emit the exact Interface gate record. `READY FOR BUILD` requires concrete composition,
+direction, component presentation, responsive behavior, and accessibility values, no open
+material interface question, every applicable experience obligation covered, every interface
+obligation at `PASS` with its evidence inspected, and `direction_selected` recorded from the
+user's own words. Implementation obligations stay `PENDING` until ui-engineering produces
+them. An unresolved or Focused interface delta stays owned by `interface-design`; a Full
+`READY FOR BUILD` handoff moves to `design` when its independent trigger applies. Do not name
+`ui-engineering` merely because it could implement next.
 
 If `design` independently triggers, pass `READY FOR BUILD` to the general design workflow. UI engineering may start durable implementation only after the technical plan is persisted/active and the user has authorized build.
 

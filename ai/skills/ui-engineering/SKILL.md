@@ -39,8 +39,8 @@ Before any durable product write, require all applicable items:
 - Approved changed sections for Focused Delta.
 - A persisted active general `design` plan whenever its independent trigger applies.
 - The applicable `design-contract.md`, or an explicitly approved in-session Seed contract with the missing durable artifact disclosed.
-- Exact approved Experience Coverage, Interface Coverage, and Surface Proof Packet from the
-  contained durable contract.
+- The approved `Surface Obligations` rows and `## Artifact Ledger` entries from the contained
+  durable contract.
 - Required approvals and Recorded approvals, with every required token recorded from
   explicit user evidence. Always consume Required approvals and Recorded approvals before durable writes; approval prose is not a substitute.
 
@@ -84,6 +84,11 @@ UI engineering is the sole writer for `Implementation Bridge` after build author
 2. Affected routes/screens/components and their realistic data/states.
 3. Existing component primitives, design tokens, theme/style entry points, layout conventions, accessibility helpers, and tests.
 4. `../product-craft/references/quality-floor.md`, `../product-craft/references/output-formats.md`, `references/implementation-baseline.md`, and `references/verification.md`.
+5. The selected artifact named in the contract's `## Artifact Ledger`, read as source. Within
+   the states and viewports it was reviewed at, the artifact is the authority for what the
+   screen looks like — read its markup and CSS rather than reconstructing the look from prose.
+   Recompute its revision before trusting it; a mismatch is `ARTIFACT DRIFT`, not a detail to
+   reconcile by eye.
 
 Read only the contract sections and implementation evidence needed for the selected scope.
 
@@ -93,10 +98,16 @@ Read only the contract sections and implementation evidence needed for the selec
 
 Map each affected contract rule to an existing primitive, token, component, style convention, or explicit new implementation need. Prefer the project's current platform feature, dependency, and shared component before custom code.
 
-Start from the exact EXP/INT graph. Allocate one immutable `IMP-NNN` row for each material
-implementation obligation and ensure every applicable EXP/INT row is transitively
-reachable. An experience-only obligation is sourced directly; an interface-only
-obligation uses its INT row. Reject duplicate/unknown/sourceless rows and unjustified N/A.
+Emit `Surface Obligations` rows with `Stage: implementation`, each deriving from the
+experience or interface obligations it satisfies. Coverage follows the ancestor chain, so an
+implementation row reaching an interface row also covers what that row derives from. Any
+applicable upstream obligation with no implementation row above it is uncovered.
+
+Where the contract and the selected artifact both speak, the artifact governs inside its
+reviewed scope. Port from it; do not re-derive its spacing, rhythm, or type setting from
+description.
+
+Reject duplicate, unknown, or sourceless rows and unjustified N/A.
 
 If code evidence conflicts with or cannot express approved intent:
 
@@ -118,34 +129,40 @@ Stop the affected path. Do not resolve a gap with an arbitrary implementation ch
 
 ### 3. Verify by Rendering
 
-Follow `references/verification.md`. Inspect the render against user-job closure, approved contract, selected surface profile, and shared floor. Source inspection alone cannot prove craft readiness.
+Follow `references/verification.md`. It runs two passes: the render compared against what was
+approved, and a separate open critique using `../product-craft/references/craft-review.md` that
+asks what is wrong regardless of whether the contract mentioned it. Source inspection alone
+cannot prove craft readiness, and contract-row closure alone cannot either — a material craft
+finding blocks readiness on its own.
 
 While implementation remains authorized, correct an applicable measured failure and re-render, up to two source-change/render cycles. Then report exact coverage and remaining failures with the shared Design-Fit Result.
 
-Produce exact Implementation Proof from the shared output formats. Each applicable row
-must align the same contract requirement across concrete code, an affirmative assertion,
-and an inspected render or measurement. A passing test that positively requires behavior
-contrary to the contract is `contract drift` + `FAIL`; never treat it as proof. Missing
-required evidence is `unverified` + `NOT VERIFIED`. Apply classification precedence
-before packet aggregation and preserve all stage buckets.
+Each applicable implementation obligation must align the same requirement across concrete
+code, an affirmative assertion, and an inspected render or measurement. A passing test that
+positively requires behavior contrary to the contract is `contract drift` + `FAIL`; never
+treat it as proof. Missing required evidence is `unverified` + `NOT VERIFIED`.
 
-### 4. Persist Bounded Proof
+Record `Craft Findings` alongside, from the open critique pass. They are not optional
+commentary — a material finding blocks readiness.
 
-Implementation Proof is the only product-contract mutation this stage owns:
+### 4. Persist Bounded Evidence
 
-1. Read the contained durable contract, record SHA-256, and require exactly one
-   `## Implementation Bridge` with zero or one `### Implementation Proof` child.
-2. Validate the entire proposed table in memory: exact header, unique/known IDs,
-   transitive coverage, typed approvals, truth-table-valid classification/status,
-   complete evidence, and justified N/A.
-3. Immediately re-read and require the same hash. Insert the child at the end of
-   Implementation Bridge or replace only its prior body with one exact-context patch.
-4. Read back one valid child, byte-identical non-Bridge sections, and a diff limited to
-   Implementation Bridge. Any stale hash, duplicate section, malformed table, context
+The implementation evidence under `## Implementation Bridge` is the only product-contract
+mutation this stage owns:
+
+1. Read the contained durable contract and record its SHA-256. Require exactly one
+   `## Implementation Bridge`.
+2. Validate the whole proposed record in memory: unique and known ids, coverage along the
+   ancestor chain, recorded approvals, consistent classification and status, complete
+   evidence, and justified N/A.
+3. Re-read immediately and require the same hash. Write only within Implementation Bridge,
+   as one exact-context patch.
+4. Read back and require byte-identical sections elsewhere and a diff limited to
+   Implementation Bridge. A stale hash, duplicate section, malformed record, context
    mismatch, or wider diff stops with Design-Fit NOT VERIFIED.
 
-Never mutate canonical plan content. Return the exact contract path, Decision Log packet,
-and Bridge proof section in the handoff.
+Never mutate canonical plan content. Return the exact contract path, the persisted Decision
+Log records, and the Bridge evidence in the handoff.
 
 ### 5. Hand Off to Goal Verification
 

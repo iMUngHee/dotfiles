@@ -365,11 +365,7 @@
       "Read(~/.npmrc)",
       "Read(~/.pypirc)",
       "Read(~/.ssh/**)",
-      "Read(~/.zsh_history)",
-      "Write(**/.env)",
-      "Write(**/.env.*)",
-      "Write(**/credentials/**)",
-      "Write(**/secrets/**)"
+      "Read(~/.zsh_history)"
     ],
     "disableBypassPermissionsMode": "disable"
   },

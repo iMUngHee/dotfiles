@@ -33,6 +33,10 @@ Record verified choices in Implementation Bridge: source primitive/token, target
 
 - Implement the contract's actual reflow/collapse/scroll/fixed rules rather than generic breakpoints.
 - Test realistic long labels, translated copy, large numbers, dense rows, empty data, and maximum expected volume.
+- Set text for the language it is in. Korean must break at 어절 boundaries, not mid-word;
+  Chinese and Japanese follow their own conventions and must not inherit the Korean rule.
+  Verify by looking at the narrow render — the property being present in CSS is not the same
+  as the text breaking correctly.
 - Use min-size, wrapping, clamping, scrolling, or explicit truncation with a recovery path; never size only for short fixtures.
 - Keep grouped controls aligned and preserve primary actions at narrow widths.
 

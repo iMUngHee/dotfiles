@@ -47,9 +47,9 @@ Before deriving a READY truth condition for product-surface work, resolve exactl
 durable carrier:
 
 - Plan-required work uses the validated active plan's
-  `## Product Surface Proof Obligations`. Require matching execution root/branch/base,
-  exact approved EXP/INT rows, Surface Proof Packet, and one repo-relative Durable
-  contract path.
+  `## Product Surface Proof Obligations`. Require matching execution root/branch/base, the
+  approved `Surface Obligations` rows, any `## Artifact Ledger` entry, the approval tokens,
+  and one repo-relative Durable contract path.
 - Work below the independent design trigger uses the explicit no-plan handoff. Require
   `plan_requirement: not required`, no invented plan, a git execution root, the exact
   contained contract path, and the same packet already persisted under Decision Log.
@@ -58,19 +58,31 @@ Reject a missing/escaping contract path, unbound required route, unexpected plan
 substitution, absent durable packet, or generic technical summary replacing rows. Read
 the exact contract and require:
 
-1. The approved Experience Coverage, Interface Coverage, and Surface Proof Packet under
-   `## Decision Log & Open Questions`.
-2. Exactly one `## Implementation Bridge` and one complete
-   `### Implementation Proof` child.
-3. Unique known row IDs, complete transitive coverage, truth-table-valid
-   classification/status pairs, affirmative code/test/render evidence for every PASS,
-   and a repeated concrete reason for every N/A.
+1. The approved `Surface Obligations` rows, the `## Artifact Ledger` entries, and the
+   approval tokens under `## Decision Log & Open Questions`.
+2. Exactly one `## Implementation Bridge`, carrying the implementation-stage obligations and
+   their evidence.
+3. Unique known row IDs, complete coverage, truth-table-valid classification/status pairs,
+   affirmative code/test/render evidence for every PASS, and a repeated concrete reason for
+   every N/A.
+
+**Coverage walks the ancestor chain.** An implementation obligation covers every obligation
+it derives from, and theirs in turn — follow `Derives from` upward rather than expecting a
+direct link. An applicable experience or interface obligation with no implementation
+obligation among its descendants is uncovered, and uncovered is not READY.
+
+Where an artifact carries the visual decision, recompute its revision. A mismatch, an
+external reference, or an artifact contradicting an approved decision is `ARTIFACT DRIFT` and
+blocks READY.
+
+A material `Craft Findings` entry — `unusable` or `degrades the task` — blocks READY even
+when every obligation row passes. Contract-row closure is not the same as a sound surface.
 
 Always recheck Required approvals and Recorded approvals before READY. Every required token must
 be recorded, unique, and supported by explicit user evidence. Approval prose cannot
 replace a missing token, and coverage PASS cannot authorize a stage.
 
-Recompute the Surface Proof Packet without mutating it:
+Recompute the outcome from the obligation rows without mutating them:
 
 - Any Experience/Interface GAP or Implementation contract gap -> `BLOCKED` and the exact
   design owner.

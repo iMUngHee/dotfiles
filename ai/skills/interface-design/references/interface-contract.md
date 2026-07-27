@@ -16,17 +16,22 @@ Mark existing values `[captured]` and new values `[proposed]` while proposing. A
 
 ## Concreteness Bar
 
-For every used dimension, name the token, value, rule, or example another agent can implement without aesthetic invention:
+The test is a question, not a list: **can the next agent build this screen without inventing
+anything aesthetic?** Anything they would otherwise have to guess needs a token, value, rule,
+example, or rationale here.
 
-- Palette roles and values.
-- Typography tokens, values, and usage.
-- Spacing tokens, values, and usage.
-- Radius, border, elevation, divider, and layering rules.
-- Motion duration/easing, frequency budget, affected properties, and reduced-motion behavior.
-- Density rules for repeated surfaces.
-- Breakpoint/container behavior and what reflows, collapses, scrolls, clips, or stays fixed.
-- Formatting for numbers, dates, timezones, units, truncation, and long content.
-- Design tension and one signature moment or justified `N/A`.
+Where a selected artifact exists, it already answers most of this — the artifact is the
+authority for what the screen looks like, and the contract records the decisions, the reasons,
+and what the artifact did not cover. Do not transcribe an artifact into prose; that is how
+detail leaks out.
+
+Palette, type, spacing, radius, elevation, motion, density, breakpoint behavior, and display
+formatting are the dimensions that usually need pinning down. Treat that as where to look
+first, not as the full extent of the question — this surface may turn on something not on any
+such list. Korean line breaking, optical alignment in a specific component, or how one long
+label behaves can matter more than a radius value, and a checklist will never name them.
+
+Ask what would make a competent implementer stop and guess, and answer that.
 
 Do not create speculative systems for components the surface does not use.
 
