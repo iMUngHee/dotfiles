@@ -93,7 +93,7 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `rtk-rewrite.sh` | PreToolUse (Bash) | Rewrite commands through RTK for token savings |
-| `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files) |
+| `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files); block writes to generated files (`AUTO-GENERATED`/`@generated`/`DO NOT EDIT` header) |
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
 | `inject-context.sh` | UserPromptSubmit | Resolve the exact Claude session binding, allow only checkout-local legacy normalization, and inject bound plan/worktree routing (30s bound); unbound main is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered |
 | `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |
