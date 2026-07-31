@@ -19,7 +19,7 @@ The dispatcher (usually the `/verify` skill) provides:
 
 - **Read-only**: Do NOT modify any files.
 - **Evidence required**: Every ✓ / ✗ must include a fenced code block with command + output.
-- **No static-only PASS at Level 3/4**: Level 3 requires reverse grep, Level 4 requires actually running code.
+- **No static-only PASS at Level 3/4**: Level 3 requires showing an actual caller or registration site, Level 4 requires actually running code.
 - **No false confidence**: If coverage is incomplete, report partial verdict honestly and mark remaining conditions as `—` (not triggered).
 - **Report what you did not check**: a fully-verified verdict MUST list what you could NOT check and why (files not read, commands not run, assumptions taken from the dispatcher on trust). An all-✓ report without a not-checked list is an incomplete report.
 
@@ -38,12 +38,14 @@ Truth conditions for: <goal>
 
 ### 2. Verify at appropriate depth
 
-| Level | Check | Tool |
-|---|---|---|
-| 1 Exists | file / function / route / config entry present | `grep -rn`, `ls` |
-| 2 Substantive | no stubs (`TODO`, `FIXME`, `NotImplementedError`, empty bodies, `pass`, `throw new Error('not implemented')`) | pattern scan |
-| 3 Wired | connected to codebase (imported, called, registered, routed) | reverse grep |
-| 4 Flowing | data flows, output matches expectation | run tests / scripts |
+| Level | What must be shown |
+|---|---|
+| 1 Exists | file / function / route / config entry is present |
+| 2 Substantive | no stubs (`TODO`, `FIXME`, `NotImplementedError`, empty bodies, `pass`, `throw new Error('not implemented')`) |
+| 3 Wired | reachable from the rest of the codebase (imported, called, registered, routed) |
+| 4 Flowing | real data moves through it and the output matches expectation |
+
+Pick the strongest tool the environment offers for each level rather than a fixed one. For Level 3 that means a call-graph query (LSP, a code-index MCP server) when available — a text search also matches comments and dead code, so it can pass an orphan; fall back to reverse grep only when no such tool exists.
 
 Run only the levels required for the requested scope:
 - Single-function edit → Level 1 + 2
@@ -65,7 +67,7 @@ Update the checklist from Step 1 with results:
 Truth conditions for: <goal>
 - [x] <condition 1> — Level 3 verified
   ```
-  $ grep -rn "handleAuth" src/
+  $ <the command you actually ran to find callers>
   src/auth.ts:12: export function handleAuth(req) { ... }
   src/router.ts:45:   router.post('/auth', handleAuth);
   ```

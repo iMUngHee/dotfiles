@@ -136,33 +136,18 @@ Truth conditions for: [goal]
 
 For each condition, apply verification levels based on scope:
 
-**Level 1 — Exists**: file, function, route, config entry is present.
-```bash
-# Example: check function exists
-grep -rn "function handleAuth" src/
-```
+**Level 1 — Exists**: the file, function, route, or config entry is present.
 
-**Level 2 — Substantive**: not a stub or placeholder.
-Scan for stub patterns: `TODO`, `FIXME`, `NotImplementedError`,
-`throw new Error('not implemented')`, empty function bodies, `pass`.
-```bash
-# Example: check for stubs in new files
-grep -n "TODO\|FIXME\|NotImplementedError" <file>
-```
+**Level 2 — Substantive**: not a stub — no `TODO`, `FIXME`, `NotImplementedError`,
+`throw new Error('not implemented')`, empty body, or bare `pass`.
 
-**Level 3 — Wired**: connected to the rest of the codebase.
-Imported, called, routed, registered — not orphaned code.
-```bash
-# Example: check if new module is imported anywhere
-grep -rn "import.*handleAuth\|require.*handleAuth" src/
-```
+**Level 3 — Wired**: reachable from the rest of the codebase — imported, called,
+routed, or registered. Prefer a call-graph query over text search when the toolchain
+offers one; a grep also matches comments and dead code, so it can pass an orphan.
 
-**Level 4 — Flowing**: actual data flows through it.
-Run the code and show real output. For a user-facing surface, drive the running app rather than settling for green tests — Claude Code bundles a `run` skill that launches and drives the app; invoke it and observe the change there. Tests and type checks corroborate Level 4, they do not satisfy it.
-```bash
-# Example: exercise the path directly, show output
-npm test -- --grep "auth"
-```
+**Level 4 — Flowing**: real data moves through it. Run it and show the output. For a
+user-facing surface, drive the running app — Claude Code bundles a `run` skill that
+launches and drives it. Tests and type checks corroborate Level 4; they do not satisfy it.
 
 ### 3. Determine depth per condition
 
