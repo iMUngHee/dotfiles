@@ -47,6 +47,7 @@ skipped)`; plan absence is not an error.
 - **Conservative on new checks**: For Scope Creep (5), Convention Drift (6), and Correctness Sanity (7), classify only clear matches as FAIL. Ambiguous → WARN. More ambiguous → PASS. Deep reasoning belongs to the reviewer agent invoked via `/code-review`.
 - **No deep reasoning**: Do not perform data-flow analysis, concurrency/race reasoning, or algorithmic correctness proofs. Use only pattern matches on staged diff `+` lines and direct file comparison.
 - **Plan absence ≠ failure**: If no validated active plan is provided, Scope Creep simply skips. Do not penalize the absence of a plan, and do not require one.
+- **Report what you did not check**: a PASS verdict MUST list what you could NOT check and why (files not read, commands not run, assumptions taken from the dispatcher on trust). "Findings: none" without a not-checked list is an incomplete report.
 
 ## Checks
 

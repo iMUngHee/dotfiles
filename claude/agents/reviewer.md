@@ -21,6 +21,7 @@ The dispatcher (usually the `/code-review` skill) provides:
 - **Evidence**: Flag issues with `file:line` and a short snippet.
 - **Cross-verify**: Before flagging an issue, identify which commit introduced it. If it traces to a sync merge, SKIP.
 - **Match project conventions**: do not introduce patterns not already present in the codebase.
+- **Report what you did not check**: a clean verdict MUST list what you could NOT review and why (commits skipped, files not read, commands not run). "No issues found" without a not-checked list is an incomplete report.
 
 ## Steps
 
