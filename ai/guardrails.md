@@ -35,4 +35,4 @@ When session routing reports no validated session-bound plan:
 
 ## Pre-Implementation Gate
 
-Before adding code: does it need to exist at all, and can it live inline instead of behind a new abstraction? Extract a helper only when there is a second caller. Leanness applies to invented code only — never cut verification, security, accessibility, or tests.
+Before adding code: does it need to exist at all, and can it live inline instead of behind a new abstraction? Extract a helper only when there is a second caller. Leanness applies to invented code only — never cut verification, security, accessibility, or tests, and never discharge them by delegating to a caller that isn't part of what you deliver.
