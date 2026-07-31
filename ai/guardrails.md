@@ -26,6 +26,8 @@ When the user's request is ambiguous about scope:
 
 ## Restored Context Authority
 
+<!-- One leg of a 4-part contract (9bbe422): hook injection + this rule + ai/lib/session-routing-consumers.test.mjs + the self-review row. The hook repeating these words is the design, not duplication — deleting this section reds the suite. -->
+
 When session routing reports no validated session-bound plan:
 
 - Restored or compacted summaries are context only, never the sole task authority.
@@ -34,5 +36,7 @@ When session routing reports no validated session-bound plan:
 - Plan execution or lifecycle action requires a validated session binding.
 
 ## Pre-Implementation Gate
+
+<!-- Measured (907a85f): over-built 83%→0%, mean LOC −21%, blind quality rank 3.17→1.83. The delegation clause closes the single safety regression that A/B found. -->
 
 Before adding code: does it need to exist at all, and can it live inline instead of behind a new abstraction? Extract a helper only when there is a second caller. Leanness applies to invented code only — never cut verification, security, accessibility, or tests, and never discharge them by delegating to a caller that isn't part of what you deliver.
