@@ -17,6 +17,7 @@ memory/feedback_ai_config_structure.md
 memory/feedback_no_guessing.md
 memory/feedback_prompt_format.md
 memory/feedback_reverse_grep.md
+memory/feedback_rule_removal_backtrace.md
 memory/feedback_code_review_per_commit.md
 memory/feedback_raw_urls.md
 memory/feedback_memory_english.md
