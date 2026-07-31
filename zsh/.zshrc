@@ -101,7 +101,7 @@ export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"
 [ -d /opt/homebrew/opt/rustup/bin ] && export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 
 # Alias
-alias buu="brew update;brew upgrade"
+alias buu="brew update;brew upgrade -y"
 alias l="eza -alH --icons --git --color=always"
 alias vim="nvim"
 alias vi="nvim"
