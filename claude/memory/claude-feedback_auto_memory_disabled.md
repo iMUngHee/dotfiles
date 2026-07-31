@@ -6,7 +6,7 @@ type: feedback
 
 Auto memory (`autoMemoryEnabled` / project-level `~/.claude/projects/<project>/memory/MEMORY.md`) is intentionally disabled. Do not suggest turning it on during audits or recommendations.
 
-**Why:** 대협 explicitly opted out to prevent context bloat. Automatic project memory grows unboundedly and conflicts with the existing aggressive context discipline: 70% autocompact override, context-monitor hook at 50/65%, RTK token reduction, and the ongoing tool-response-size measurement (project_context_compression_eval).
+**Why:** 대협 explicitly opted out to prevent context bloat. Automatic project memory grows unboundedly and conflicts with the existing aggressive context discipline: 70% autocompact override, context-monitor hook at 50/65%, RTK token reduction, and crux keeping large tool output in a sandbox instead of the context window.
 
 **How to apply:**
 - Treat auto memory as a deliberate opt-out, not a gap.
