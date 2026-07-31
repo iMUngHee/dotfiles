@@ -2,7 +2,7 @@
 name: verify
 description: "Goal-backward verification for completed features. TRIGGER when: a feature is finished and needs confirmation; before creating a PR; asked to verify work; user says '확인해' / 'verify'. SKIP: intermediate progress checks (use /debug if stuck); code review comments (use /code-review); pre-code planning (use /design)."
 argument-hint: "[feature or goal description]"
-allowed-tools: Bash, Read, Glob, Grep, Agent
+allowed-tools: Bash, Read, Glob, Grep, Agent, Skill
 model: opus
 disable-model-invocation: false
 ---
@@ -158,9 +158,9 @@ grep -rn "import.*handleAuth\|require.*handleAuth" src/
 ```
 
 **Level 4 — Flowing**: actual data flows through it.
-Run the code, show real output.
+Run the code and show real output. For a user-facing surface, drive the running app rather than settling for green tests — Claude Code bundles a `run` skill that launches and drives the app; invoke it and observe the change there. Tests and type checks corroborate Level 4, they do not satisfy it.
 ```bash
-# Example: run the feature, show output
+# Example: exercise the path directly, show output
 npm test -- --grep "auth"
 ```
 
