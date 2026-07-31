@@ -19,6 +19,7 @@ claude/
 ├── hooks/                      # PreToolUse, PostToolUse, UserPromptSubmit, Stop, etc. — see Hooks section
 │   └── lib/                    # Shared helpers
 ├── agents/                     # Subagent definitions (pre-commit-verifier, reviewer, verifier)
+├── workflows/                   # Reusable dynamic-workflow scripts — see Measuring a rule
 ├── commands/                   # Slash command definitions
 ├── extensions/
 │   └── statusline.sh           # Status line (model, context, cost, quota/proxy status, plan widget)
@@ -97,13 +98,43 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
 | `inject-context.sh` | UserPromptSubmit | Resolve the exact Claude session binding, allow only checkout-local legacy normalization, and inject bound plan/worktree routing (30s bound); unbound main is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered |
 | `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |
-| `stop-handler.sh` | Stop | Final gate — auto-format then type check before completion |
+| `stop-handler.sh` | Stop | Final gate — auto-format, then this repo's own test suites selected by changed path, then type check |
 | `on-rate-limit.sh` | StopFailure | Auto-switch CCS quota account on rate limit |
 | `check-quota-switch.sh` | SessionStart (startup, clear) | Quota reset check, account swap if elapsed |
 | `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format + type check (30s debounce) |
 | `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage (autocompact at 70%) |
 | `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files |
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
+
+### Gate stages (stop-handler.sh / codex stop-gate.sh)
+
+Both gates run the same stages, and both are scoped to `$HOME/.config` so other projects are untouched. Triggers are per-path, so an untouched area costs nothing:
+
+| Changed path | Suite | Approx |
+|---|---|---|
+| `{ai,claude,codex}/**/*.{md,sh}` | contract tests (`session-routing-consumers`, `inject-context-hooks`) | 15s |
+| `ai/lib/**` | every `ai/lib/*.test.mjs` | 50s |
+| `ai/skills/pm-roadmap/**` | `npm test` (tsx) | 50s |
+| `ai/skills/pm-context/**` | `npm test` (tsx) | 1s |
+| `ai/skills/config-audit/**` | `go test ./...` | 2s |
+
+Instruction files are asserted by exact string match in `ai/lib/*.test.mjs`, and a doc-only change reaches no type checker — so without the first stage a rule can be edited out while its suite goes red unnoticed. That happened once (`6f9b845`).
+
+## Measuring a rule
+
+`workflows/rule-ab.js` A/B-tests one instruction against real tickets: each ticket runs with and without the rule text, n times per arm, and a blind judge that never sees which arm produced what scores size, requirement fit, safety, and over-building.
+
+```
+Workflow({ scriptPath: "~/.config/claude/workflows/rule-ab.js", args: {
+  rule: "<the exact instruction text under test>",
+  tickets: [{ key: "colorpick", brief: "<request as a user would phrase it>" }],
+  runs: 2
+}})
+```
+
+Pick tickets that contain a genuine over-build trap (a native feature already covers the need) and whose deliverable is code the agent can write from the brief alone. It found the Pre-Implementation Gate's delegation loophole (`907a85f`).
+
+**It does not fit every question.** An instruction that depends on repo state, git, or worktrees cannot be isolated this way — attempting it on `design/SKILL.md` module splitting produced 0% completion on both arms and no signal.
 | `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
 | `context-mode-go hook *` | PreToolUse, PostToolUse, UserPromptSubmit, PreCompact, SessionStart | context-mode MCP integration (sandboxed output indexing/search) |
 

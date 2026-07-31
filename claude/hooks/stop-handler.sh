@@ -11,6 +11,7 @@
 
 MAX_RETRIES=2
 CHECKER_TIMEOUT=30
+SUITE_TIMEOUT=300
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 source "$HOOK_DIR/lib/detect-project.sh"
@@ -87,18 +88,36 @@ done <<< "$CHANGED_FILES"
 
 TMPOUT="/tmp/claude-final-gate-output-${SESSION_ID}"
 
-# --- Stage 1: Contract tests for this config repo ---
-# Instruction files here are asserted by string match in ai/lib/*.test.mjs, and a
-# doc-only change reaches no type checker — so without this stage, editing a rule
-# out of guardrails.md or a DEVGUARD passes the gate untouched. That happened.
-if [[ "$PROJECT_ROOT" == "$HOME/.config" ]] &&
-   grep -qE '^(ai|claude|codex)/.*\.(md|sh)$' <<< "$CHANGED_FILES"; then
-  CONTRACT_TESTS=()
-  for t in ai/lib/session-routing-consumers.test.mjs ai/lib/inject-context-hooks.test.mjs; do
-    [[ -f "$t" ]] && CONTRACT_TESTS+=("$t")
-  done
-  if (( ${#CONTRACT_TESTS[@]} > 0 )) && command -v node &>/dev/null; then
-    portable_timeout 120 node --test "${CONTRACT_TESTS[@]}" > "$TMPOUT" 2>&1 || fail_gate "contract tests"
+# --- Helper: run one suite from a subdirectory, failing the gate on nonzero ---
+run_suite() {
+  local label="$1" dir="$2"; shift 2
+  ( cd "$PROJECT_ROOT/$dir" 2>/dev/null && portable_timeout "$SUITE_TIMEOUT" "$@" ) > "$TMPOUT" 2>&1 \
+    || fail_gate "$label"
+}
+
+# --- Stage 1: This repo's own test suites, selected by changed path ---
+# The suites exist but were wired to nothing, so a change could ship them red —
+# that is how a rule asserted verbatim by ai/lib/*.test.mjs got deleted. Each
+# trigger is scoped so untouched areas cost nothing (pm-roadmap alone is ~50s).
+if [[ "$PROJECT_ROOT" == "$HOME/.config" ]] && command -v node &>/dev/null; then
+  # Instruction files are asserted by string match, and a doc-only change
+  # reaches no type checker at all.
+  if grep -qE '^(ai|claude|codex)/.*\.(md|sh)$' <<< "$CHANGED_FILES"; then
+    run_suite "contract tests" . \
+      node --test ai/lib/session-routing-consumers.test.mjs ai/lib/inject-context-hooks.test.mjs
+  fi
+  # Shared engine: every .mjs consumer, not just the contract pair.
+  if grep -qE '^ai/lib/' <<< "$CHANGED_FILES"; then
+    run_suite "ai/lib suite" . bash -c 'node --test ai/lib/*.test.mjs'
+  fi
+  if grep -qE '^ai/skills/pm-roadmap/' <<< "$CHANGED_FILES"; then
+    run_suite "pm-roadmap tests" ai/skills/pm-roadmap npm test --silent
+  fi
+  if grep -qE '^ai/skills/pm-context/' <<< "$CHANGED_FILES"; then
+    run_suite "pm-context tests" ai/skills/pm-context npm test --silent
+  fi
+  if grep -qE '^ai/skills/config-audit/' <<< "$CHANGED_FILES" && command -v go &>/dev/null; then
+    run_suite "config-audit go tests" ai/skills/config-audit/scripts go test ./...
   fi
 fi
 

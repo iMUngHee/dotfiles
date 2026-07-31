@@ -4,6 +4,7 @@ set -euo pipefail
 
 MAX_RETRIES=2
 CHECKER_TIMEOUT=30
+SUITE_TIMEOUT=300
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 source "$HOOK_DIR/lib/detect-project.sh"
@@ -71,22 +72,37 @@ done <<< "$changed_files"
 
 (( formatted > 0 )) && echo "[codex final-gate] auto-formatted ${formatted} file(s)"
 
-# Stage 1: contract tests for this config repo. Mirrors the same stage in
-# claude/hooks/stop-handler.sh. A doc-only change reaches no type checker, so
-# without this a rule can be edited out of guardrails.md while ai/lib/*.test.mjs
-# asserts it verbatim and the gate stays silent — which is how it broke once.
-if [[ "$project_root" == "$HOME/.config" ]] &&
-   grep -qE '^(ai|claude|codex)/.*\.(md|sh)$' <<< "$changed_files"; then
-  contract_tests=()
-  for t in ai/lib/session-routing-consumers.test.mjs ai/lib/inject-context-hooks.test.mjs; do
-    [[ -f "$t" ]] && contract_tests+=("$t")
-  done
-  if (( ${#contract_tests[@]} > 0 )) && command -v node &>/dev/null; then
-    set +e
-    portable_timeout 120 node --test "${contract_tests[@]}" > "$tmp_out" 2>&1
-    contract_exit=$?
-    set -e
-    (( contract_exit == 0 )) || fail_gate "contract tests"
+# Run one suite from a subdirectory, failing the gate on nonzero.
+run_suite() {
+  local label="$1" dir="$2"; shift 2
+  set +e
+  ( cd "$project_root/$dir" 2>/dev/null && portable_timeout "$SUITE_TIMEOUT" "$@" ) > "$tmp_out" 2>&1
+  local rc=$?
+  set -e
+  (( rc == 0 )) || fail_gate "$label"
+}
+
+# Stage 1: this repo's own suites, selected by changed path. Mirrors the same
+# stage in claude/hooks/stop-handler.sh. The suites existed but were wired to
+# nothing, so a change could ship them red — that is how a rule asserted
+# verbatim by ai/lib/*.test.mjs got deleted. Triggers are scoped so untouched
+# areas cost nothing (pm-roadmap alone is ~50s).
+if [[ "$project_root" == "$HOME/.config" ]] && command -v node &>/dev/null; then
+  if grep -qE '^(ai|claude|codex)/.*\.(md|sh)$' <<< "$changed_files"; then
+    run_suite "contract tests" . \
+      node --test ai/lib/session-routing-consumers.test.mjs ai/lib/inject-context-hooks.test.mjs
+  fi
+  if grep -qE '^ai/lib/' <<< "$changed_files"; then
+    run_suite "ai/lib suite" . bash -c 'node --test ai/lib/*.test.mjs'
+  fi
+  if grep -qE '^ai/skills/pm-roadmap/' <<< "$changed_files"; then
+    run_suite "pm-roadmap tests" ai/skills/pm-roadmap npm test --silent
+  fi
+  if grep -qE '^ai/skills/pm-context/' <<< "$changed_files"; then
+    run_suite "pm-context tests" ai/skills/pm-context npm test --silent
+  fi
+  if grep -qE '^ai/skills/config-audit/' <<< "$changed_files" && command -v go &>/dev/null; then
+    run_suite "config-audit go tests" ai/skills/config-audit/scripts go test ./...
   fi
 fi
 
