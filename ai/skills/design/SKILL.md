@@ -151,6 +151,10 @@ Present design section by section with confirmation. Do NOT dump all sections at
 
 After design approval, present the implementation plan as response text. **Do NOT begin executing edits in this step.**
 
+Order the plan by revisability: lead with what 대협 is most likely to overturn — data model, type interfaces, anything user-facing — and put mechanical refactoring last. Reading top-down should hit the riskiest decision first, not the safest.
+
+When a decision is visual or structural enough that prose under-specifies it — a layout, a state machine, a data shape with many relations — attach one self-contained HTML artifact beside the plan and link it from the row it belongs to. A mockup gets reacted to faster and more precisely than a paragraph describing the same thing. The plan artifact itself stays markdown; the pm loop parses it.
+
 1. **File Structure**: Map Create/Modify/Test files with responsibilities. For each non-trivial modification, show a before/after sketch of the shape that changes — the current code and what it becomes. Prose describing an edit is not reviewable; the sketch is what the user approves, and it lands in the plan artifact so the reviewer sees the same thing at approval time
 2. **Verifiable Success Criteria**: List the goal-level conditions that must hold for the work to count as done. Use a checkable table with these fields:
 
