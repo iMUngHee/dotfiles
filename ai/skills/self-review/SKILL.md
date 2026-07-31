@@ -57,6 +57,7 @@ Review whether rules were followed in this session.
 | Forbidden completion words (without evidence) | ✓/✗ | ... |
 | Absence Proofs (scope match + fenced evidence) | ✓/✗/— | ... |
 | Scope Resolution | ✓/✗/— | ... |
+| Restored Context Authority (summary-only shorthand) | ✓/✗/— | ... |
 | Pre-Implementation Gate (leanness) | ✓/✗/— | ... |
 
 ### {{TOOL_NAME_LC}}/DEVGUARD.md (tool-only — skip if absent)

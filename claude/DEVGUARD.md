@@ -10,4 +10,4 @@ When the `design` skill's trigger conditions fire, invoke it for the design/plan
 
 ## Active Plan Context
 
-Obey the injected session-routing block. In an unbound session, never infer plan, branch, or approval scope from main `current.txt` or from another session's selection.
+Obey the injected session-routing block — it carries the validated session binding. In an unbound session main `current.txt` is launcher-only; never infer plan, branch, or approval scope from it or from another session's selection.
