@@ -3,6 +3,137 @@
 local _ignore_case = false
 local _no_ignore = false
 
+-- rg syntax cheat sheet shown as an overlay over the live_grep picker.
+local cheat_sections = {
+  {
+    "PATTERN",
+    {
+      { '"foo bar"', "공백 포함 리터럴 — <C-k>가 감싸줌" },
+      { "foo|bar", "OR" },
+      { "^foo   foo$", "행 시작 / 행 끝" },
+      { "\\bfoo\\b", "단어 경계 (= -w)" },
+      { "(?i)foo", "이 패턴만 대소문자 무시" },
+      { "foo.*bar", "같은 행에서 순서대로" },
+      { "\\d+  \\s+  [^a-z]", "숫자 / 공백 / 부정 클래스" },
+      { "foo\\(x\\)", "( ) [ ] { } . * + ? | ^ $ 는 이스케이프" },
+    },
+  },
+  {
+    "FILTER — 패턴 뒤에 그대로 입력",
+    {
+      { "-t ts", "타입 포함 (rg --type-list)" },
+      { "-T test", "타입 제외" },
+      { "--iglob **/*.tsx", "glob 포함 (대소문자 무시)" },
+      { "--iglob !**/dist/**", "glob 제외" },
+      { "-F", "정규식 끄고 고정 문자열" },
+      { "-U --multiline", "여러 행 매칭" },
+      { "-e -foo", "-로 시작하는 패턴" },
+    },
+  },
+  {
+    "KEYS",
+    {
+      { "<C-k>", '프롬프트를 " " 로 감싸기' },
+      { "<C-g>", '" " + --iglob' },
+      { "<C-t>", '" " + -t' },
+      { "<C-a>", "smart_case <-> ignore_case (재실행)" },
+      { "<C-o>", ".gitignore 존중 <-> 무시 (재실행)" },
+      { "<C-h>", "telescope 전체 키맵" },
+      { "<C-y>", "이 창 닫기" },
+    },
+  },
+}
+
+local _cheat_win = nil
+local _cheat_buf = nil
+local _cheat_ns = vim.api.nvim_create_namespace("telescope_grep_cheat")
+
+-- Returns rendered lines plus the 0-indexed rows holding a section header.
+local function render_cheat()
+  local key_width = 0
+  for _, section in ipairs(cheat_sections) do
+    for _, row in ipairs(section[2]) do
+      key_width = math.max(key_width, vim.fn.strdisplaywidth(row[1]))
+    end
+  end
+
+  local lines = {}
+  local headers = {}
+  for i, section in ipairs(cheat_sections) do
+    if i > 1 then
+      table.insert(lines, "")
+    end
+    table.insert(headers, #lines)
+    table.insert(lines, section[1])
+    for _, row in ipairs(section[2]) do
+      local pad = string.rep(" ", key_width - vim.fn.strdisplaywidth(row[1]))
+      table.insert(lines, "  " .. row[1] .. pad .. "   " .. row[2])
+    end
+  end
+
+  return lines, headers
+end
+
+local function close_cheat()
+  if _cheat_win and vim.api.nvim_win_is_valid(_cheat_win) then
+    vim.api.nvim_win_close(_cheat_win, true)
+  end
+  _cheat_win = nil
+end
+
+-- Opened with enter=false and focusable=false: the prompt buffer must never
+-- fire BufLeave, since Telescope closes the picker on that event.
+local function toggle_cheat(prompt_bufnr)
+  if _cheat_win and vim.api.nvim_win_is_valid(_cheat_win) then
+    close_cheat()
+    return
+  end
+
+  local lines, headers = render_cheat()
+
+  if not (_cheat_buf and vim.api.nvim_buf_is_valid(_cheat_buf)) then
+    _cheat_buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[_cheat_buf].bufhidden = "hide"
+    vim.api.nvim_buf_set_lines(_cheat_buf, 0, -1, false, lines)
+    vim.bo[_cheat_buf].modifiable = false
+    for _, row in ipairs(headers) do
+      vim.api.nvim_buf_set_extmark(_cheat_buf, _cheat_ns, row, 0, {
+        end_col = #lines[row + 1],
+        hl_group = "Title",
+      })
+    end
+  end
+
+  local width = 0
+  for _, line in ipairs(lines) do
+    width = math.max(width, vim.fn.strdisplaywidth(line))
+  end
+  width = math.min(width + 2, vim.o.columns - 4)
+  local height = math.min(#lines, vim.o.lines - 6)
+
+  _cheat_win = vim.api.nvim_open_win(_cheat_buf, false, {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
+    col = math.max(0, math.floor((vim.o.columns - width) / 2)),
+    style = "minimal",
+    border = "rounded",
+    title = " rg cheat sheet ",
+    title_pos = "center",
+    focusable = false,
+    noautocmd = true,
+    zindex = 200,
+  })
+  vim.wo[_cheat_win].wrap = false
+
+  vim.api.nvim_create_autocmd({ "BufLeave", "BufWipeout" }, {
+    buffer = prompt_bufnr,
+    once = true,
+    callback = close_cheat,
+  })
+end
+
 local function find_files_with_case(prompt)
   local opts = { cwd = require("utils.root").get(), hidden = true }
 
@@ -33,6 +164,7 @@ local function live_grep_with_case(prompt)
         ["<C-k>"] = lga_actions.quote_prompt(),
         ["<C-g>"] = lga_actions.quote_prompt({ postfix = " --iglob " }),
         ["<C-t>"] = lga_actions.quote_prompt({ postfix = " -t " }),
+        ["<C-y>"] = toggle_cheat,
       },
     },
   }
