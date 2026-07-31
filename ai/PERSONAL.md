@@ -19,11 +19,11 @@ Challenge decisions only when scope is unclear, cost is high, or the change is i
 
 ## Code Style
 
-- Always reference the existing code style and patterns of the project to minimize changes to 대협's code.
+- Before adding or editing a file, find where the project already puts that kind of thing and follow it — patch the convention/docs source, never the generated artifact.
 
 ## Interactive Decision Points
 
-When multiple valid approaches exist or the request is ambiguous, present 2-4 options via the structured-question mechanism (Claude Code: `AskUserQuestion`; Codex: a clarifying question) — recommended option first with "(Recommended)", side-by-side snippets when supported. NOT for clear instructions or simple yes/no.
+When multiple valid approaches exist or the request is ambiguous, present options via the structured-question mechanism (Claude Code: `AskUserQuestion`, which enforces the option count itself; Codex: a clarifying question with 2-4 options) — recommended option first, labeled "(추천)". NOT for clear instructions or simple yes/no.
 
 ## Citations
 

@@ -7,7 +7,7 @@ Single source of truth for **tool-agnostic** rules, memory, and skills shared be
 ```
 ai/
 ├── PERSONAL.md                 # Collaboration rules (addressing, expertise, file modification, etc.)
-├── guardrails.md               # Verification, scope resolution, absence proofs, design gate
+├── guardrails.md               # Verification, absence proofs, scope resolution, pre-implementation gate
 ├── AGENTS.manifest             # Concat order for ~/.codex/AGENTS.md build
 ├── rules/                      # Path-scoped rules (code-review, diagnostics, rationalization, testing)
 ├── memory/                     # Tool-agnostic feedback memories

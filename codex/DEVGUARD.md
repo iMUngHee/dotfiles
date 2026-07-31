@@ -1,7 +1,5 @@
 # Development Guardrails (Codex-only addendum)
 
-Shared guardrails (Verification, Scope Resolution, Absence Proofs, Design Gate Trigger) are generated into `~/.codex/AGENTS.md` from `ai/`. This file holds Codex CLI-specific invocation paths only.
-
 ## Skill Compliance
 
 If a user request matches a registered skill's trigger condition, use that skill instead of reimplementing its behavior with raw tool calls.

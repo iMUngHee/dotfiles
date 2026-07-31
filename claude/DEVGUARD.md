@@ -1,22 +1,13 @@
 # Development Guardrails (Claude-only addendum)
 
-Shared guardrails (Verification, Scope Resolution, Absence Proofs, Design Gate Trigger) live in `~/.claude/guardrails.md` (deployed from `ai/guardrails.md`). This file holds the Claude Code-specific rules only.
-
 ## Skill Compliance
 
 If a user request matches a registered skill's trigger condition, invoke the skill instead of performing the action manually. Do not bypass skills by reimplementing their behavior with raw tool calls.
 
-**Plan Mode routing**: "설계해", "design this", or any design/planning request → invoke `/design` skill. Do NOT enter Plan Mode unless 대협 explicitly types `/plan` or asks for plan mode. Plan Mode is an operational mode, not a substitute for the `/design` skill workflow.
-
 ## Design Gate Invocation (Claude)
 
-When the shared Design Gate Trigger (in `~/.claude/guardrails.md`) fires, invoke the `/design` skill for the design/planning process. Do not improvise the planning workflow — the skill manages plan artifacts under `.agents/plans/` and the state pointer at `.agents/state/current.txt`.
+When the `design` skill's trigger conditions fire, invoke it for the design/planning process.
 
 ## Active Plan Context
 
-The Claude `UserPromptSubmit` hook resolves the exact Claude session binding through the
-shared worktree engine. A bound `draft` or `active` plan supplies its immutable base,
-branch, execution root, and route requirement. Treat that session-bound block as the
-current task pointer. An unbound main session is plan-free and main `current.txt` is
-launcher-only; never infer approval, implementation, verification, or review scope from
-another session's launcher selection.
+Obey the injected session-routing block. In an unbound session, never infer plan, branch, or approval scope from main `current.txt` or from another session's selection.

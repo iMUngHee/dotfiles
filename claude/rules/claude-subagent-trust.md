@@ -4,7 +4,7 @@ Subagents do NOT inherit CLAUDE.md/PERSONAL.md/DEVGUARD.md — they have only th
 
 ## When to Dispatch
 
-Not for work doable in one response. Only when: fanning out 3+ independent items (parallel searches, per-file reviews); isolating heavy context (large-file reads for summary); or using a specialized agent (pre-commit-verifier, Explore).
+Only for a specialized agent — `pre-commit-verifier` (pre-commit scan), `Explore` (read-only codebase mapping) — or to fan out 3+ genuinely independent items.
 
 **Read-only investigation** → use the **Explore** agent (no Edit/Write tools). `general-purpose` and Codex (even with `--sandbox read-only`) have edited files despite explicit read-only instructions — if you must use them for research, run `git status` after and revert unrequested changes before trusting the result.
 
@@ -20,5 +20,4 @@ Define exact scope (files, lines, change-vs-flag); state what NOT to modify; for
 
 ## After
 
-1. Review `git diff` — inspect every removed (`-`) line for silent behavioral changes (optional→undefined, spread→empty, reordering); grep alone is insufficient; show a fenced block.
-2. Cross-verify research-only claims (separate tool/web). Subagent reports may be incomplete — especially "no issues found."
+Cross-verify research-only claims (separate tool/web). Subagent reports may be incomplete — especially "no issues found."

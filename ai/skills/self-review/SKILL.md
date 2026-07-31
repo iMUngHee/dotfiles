@@ -57,15 +57,15 @@ Review whether rules were followed in this session.
 | Forbidden completion words (without evidence) | ✓/✗ | ... |
 | Absence Proofs (scope match + fenced evidence) | ✓/✗/— | ... |
 | Scope Resolution | ✓/✗/— | ... |
-| Restored Context Authority (summary-only shorthand) | ✓/✗/— | ... |
-| Design Gate trigger (3+ files / arch / ambiguous) | ✓/✗/— | ... |
+| Pre-Implementation Gate (leanness) | ✓/✗/— | ... |
 
 ### {{TOOL_NAME_LC}}/DEVGUARD.md (tool-only — skip if absent)
 
 | Rule | Result | Evidence |
 |------|--------|----------|
 | Skill Compliance (slash invocation vs raw tool) | ✓/✗/— | ... |
-| Design Gate Invocation (Claude: /design vs Plan Mode) | ✓/✗/— | ... |
+| Design Gate Invocation (Claude: /design) | ✓/✗/— | ... |
+| Active Plan Context (obey injected routing block) | ✓/✗/— | ... |
 
 ### ai/rules/rationalization.md
 
@@ -97,7 +97,6 @@ For each `claude-*.md` / `codex-*.md` rule file present, add one row per top-lev
 | Rule | Result | Evidence |
 |------|--------|----------|
 | Code Review Honesty (verify before accepting) | ✓/✗/— | ... |
-| Parallel Dispatch Criteria | ✓/✗/— | ... |
 
 ### Memory Feedback (ai/memory + {{TOOL_NAME_LC}}/memory + ai/memory/private)
 

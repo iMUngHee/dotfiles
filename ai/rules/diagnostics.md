@@ -10,5 +10,3 @@ When investigating any issue (bug, config problem, unexpected behavior):
 ## Debugging Escalation (3-Strike Rule)
 
 If 3 consecutive fix attempts fail for the same issue: (1) Stop patching (2) Question whether the approach itself is wrong (3) Consider architecture-level problems (4) Report to 대협 before continuing.
-
-For structured debugging, use the `/debug` skill.

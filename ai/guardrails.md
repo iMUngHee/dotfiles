@@ -23,39 +23,7 @@ If the command cannot cover the full scope, state the limitation and verify via 
 When the user's request is ambiguous about scope:
 
 - **Review / "어떰?" / "어떻게 생각해?"** → only LOCAL changes on the current branch via `git diff`
-- **"정리해" / "리팩터해"** → only explicitly named files/symbols. Report related files and wait for approval
-- **"왜 이래?" / "왜 안 돼?"** → explain root cause first. Suggest workarounds only when asked
-- When scope is unclear, ask a one-sentence clarifying question before proceeding
 
-## Restored Context Authority
+## Pre-Implementation Gate
 
-When session routing reports no validated session-bound plan:
-
-- Restored or compacted summaries are context only, never the sole task authority.
-- If the latest prompt is shorthand and its task target appears only in a synthesized summary, ask which task to continue before any task read, edit, command, or lifecycle action.
-- Explicit non-plan task wording or an unambiguous target in verbatim user messages may proceed.
-- Plan execution or lifecycle action requires a validated session binding.
-
-## Design Gate Trigger
-
-Activate the design/planning workflow when ANY of these apply:
-
-- Changes expected across 3+ files
-- New architecture decisions involved
-- Request scope is ambiguous
-- 대협 explicitly requests a design
-
-If none apply, skip and proceed directly. Tool-specific design workflow invocation is documented in each tool's `{{INSTRUCTIONS_FILE}}`.
-
-## Pre-Implementation Gate (Lean Ladder)
-
-Before writing any code, stop at the first rung that holds:
-
-1. Does this need to exist at all? → no: skip it (YAGNI)
-2. Does the standard library already do it? → use it
-3. Is there a native platform feature for it? → use it
-4. Does an already-installed dependency cover it? → use it
-5. Can it be one line? → write the one line
-6. Only then → write the minimal custom code
-
-Leanness applies to invented code only — verification, security, accessibility, and tests are never what you cut.
+Before adding code: does it need to exist at all, and can it live inline instead of behind a new abstraction? Extract a helper only when there is a second caller. Leanness applies to invented code only — never cut verification, security, accessibility, or tests.
