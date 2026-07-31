@@ -24,6 +24,15 @@ When the user's request is ambiguous about scope:
 
 - **Review / "어떰?" / "어떻게 생각해?"** → only LOCAL changes on the current branch via `git diff`
 
+## Restored Context Authority
+
+When session routing reports no validated session-bound plan:
+
+- Restored or compacted summaries are context only, never the sole task authority.
+- If the latest prompt is shorthand and its task target appears only in a synthesized summary, ask which task to continue before any task read, edit, command, or lifecycle action.
+- Explicit non-plan task wording or an unambiguous target in verbatim user messages may proceed.
+- Plan execution or lifecycle action requires a validated session binding.
+
 ## Pre-Implementation Gate
 
 Before adding code: does it need to exist at all, and can it live inline instead of behind a new abstraction? Extract a helper only when there is a second caller. Leanness applies to invented code only — never cut verification, security, accessibility, or tests.
