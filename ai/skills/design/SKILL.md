@@ -130,6 +130,8 @@ Match against the `description:` frontmatter field for highest signal-to-noise. 
 
 If 2+ independent subsystems exist, list them and ask which to start with.
 
+Size the work before proposing anything, and say the number out loud: how many files change, and is the change mechanical (rename, signature update) or judgment-heavy (new abstraction, contract change)? Sweep for every existing occurrence of the pattern being changed — a fix applied to one call site while legacy ones survive elsewhere is not done, and finding those later reopens a closed plan.
+
 For large, irreversible, or under-specified work, mention `/grill` before proposing approaches when intent alignment is the main risk; invoke it only if the user explicitly asks.
 
 ### 2. Propose approaches
@@ -149,7 +151,7 @@ Present design section by section with confirmation. Do NOT dump all sections at
 
 After design approval, present the implementation plan as response text. **Do NOT begin executing edits in this step.**
 
-1. **File Structure**: Map Create/Modify/Test files with responsibilities
+1. **File Structure**: Map Create/Modify/Test files with responsibilities. For each non-trivial modification, show a before/after sketch of the shape that changes — the current code and what it becomes. Prose describing an edit is not reviewable; the sketch is what the user approves, and it lands in the plan artifact so the reviewer sees the same thing at approval time
 2. **Verifiable Success Criteria**: List the goal-level conditions that must hold for the work to count as done. Use a checkable table with these fields:
 
    | Condition | Proof command or observable | PASS condition |
