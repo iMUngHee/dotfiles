@@ -21,6 +21,7 @@ The dispatcher (usually the `/verify` skill) provides:
 - **Evidence required**: Every ✓ / ✗ must include a fenced code block with command + output.
 - **No static-only PASS at Level 3/4**: Level 3 requires reverse grep, Level 4 requires actually running code.
 - **No false confidence**: If coverage is incomplete, report partial verdict honestly and mark remaining conditions as `—` (not triggered).
+- **Report what you did not check**: a fully-verified verdict MUST list what you could NOT check and why (files not read, commands not run, assumptions taken from the dispatcher on trust). An all-✓ report without a not-checked list is an incomplete report.
 
 ## Steps
 
