@@ -30,6 +30,29 @@ run_notify_and_exit() {
   exit 0
 }
 
+# --- Helper: a gate stage failed — block with retry budget, then let through ---
+# Reads $TMPOUT for the failure output. $1 is the label shown to Claude.
+fail_gate() {
+  local label="$1" count=0
+  if [[ -f "$COUNTER_FILE" ]]; then
+    count=$(cat "$COUNTER_FILE" 2>/dev/null)
+    [[ -z "$count" ]] && count=0
+  fi
+
+  if (( count >= MAX_RETRIES )); then
+    echo "[final-gate] ${label} failed after ${MAX_RETRIES} retries. Allowing stop."
+    head -10 "$TMPOUT" 2>/dev/null
+    rm -f "$COUNTER_FILE"
+    run_notify_and_exit
+  fi
+
+  echo $(( count + 1 )) > "$COUNTER_FILE"
+  echo "[final-gate] ${label} failed (attempt $(( count + 1 ))/${MAX_RETRIES}). Fix and retry."
+  head -20 "$TMPOUT" 2>/dev/null
+  rm -f "$TMPOUT" 2>/dev/null
+  exit 2
+}
+
 # --- Check for modified files ---
 PROJECT_ROOT=$(detect_project_root)
 if [[ -z "$PROJECT_ROOT" ]]; then
@@ -62,6 +85,23 @@ while IFS= read -r file; do
 done <<< "$CHANGED_FILES"
 (( FORMATTED > 0 )) && echo "[final-gate] auto-formatted ${FORMATTED} file(s)"
 
+TMPOUT="/tmp/claude-final-gate-output-${SESSION_ID}"
+
+# --- Stage 1: Contract tests for this config repo ---
+# Instruction files here are asserted by string match in ai/lib/*.test.mjs, and a
+# doc-only change reaches no type checker — so without this stage, editing a rule
+# out of guardrails.md or a DEVGUARD passes the gate untouched. That happened.
+if [[ "$PROJECT_ROOT" == "$HOME/.config" ]] &&
+   grep -qE '^(ai|claude|codex)/.*\.(md|sh)$' <<< "$CHANGED_FILES"; then
+  CONTRACT_TESTS=()
+  for t in ai/lib/session-routing-consumers.test.mjs ai/lib/inject-context-hooks.test.mjs; do
+    [[ -f "$t" ]] && CONTRACT_TESTS+=("$t")
+  done
+  if (( ${#CONTRACT_TESTS[@]} > 0 )) && command -v node &>/dev/null; then
+    portable_timeout 120 node --test "${CONTRACT_TESTS[@]}" > "$TMPOUT" 2>&1 || fail_gate "contract tests"
+  fi
+fi
+
 # --- Detect project type from changed files ---
 CHECK_CMD=""
 for file in $CHANGED_FILES; do
@@ -75,37 +115,9 @@ if [[ -z "$CHECK_CMD" ]]; then
   run_notify_and_exit
 fi
 
-# --- Run checker ---
-TMPOUT="/tmp/claude-final-gate-output-${SESSION_ID}"
-portable_timeout "$CHECKER_TIMEOUT" bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1
-EXIT_CODE=$?
+# --- Stage 2: Run type checker ---
+portable_timeout "$CHECKER_TIMEOUT" bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1 || fail_gate "${LANG_LABEL} check"
 
-if [[ $EXIT_CODE -eq 0 ]]; then
-  # Check passed — clean up counter, notify, allow stop
-  rm -f "$COUNTER_FILE"
-  run_notify_and_exit
-fi
-
-# --- Check failed: manage retry counter ---
-CURRENT_COUNT=0
-if [[ -f "$COUNTER_FILE" ]]; then
-  CURRENT_COUNT=$(cat "$COUNTER_FILE" 2>/dev/null)
-  [[ -z "$CURRENT_COUNT" ]] && CURRENT_COUNT=0
-fi
-
-if (( CURRENT_COUNT >= MAX_RETRIES )); then
-  # Retries exhausted — warn and let through
-  OUTPUT=$(head -10 "$TMPOUT")
-  echo "[final-gate] ${LANG_LABEL} check failed after ${MAX_RETRIES} retries. Allowing stop."
-  [[ -n "$OUTPUT" ]] && echo "$OUTPUT"
-  rm -f "$COUNTER_FILE"
-  run_notify_and_exit
-fi
-
-# Increment counter and block stop
-echo $(( CURRENT_COUNT + 1 )) > "$COUNTER_FILE"
-OUTPUT=$(head -20 "$TMPOUT")
-echo "[final-gate] ${LANG_LABEL} check failed (attempt $(( CURRENT_COUNT + 1 ))/${MAX_RETRIES}). Fix and retry."
-[[ -n "$OUTPUT" ]] && echo "$OUTPUT"
-rm -f "$TMPOUT" 2>/dev/null
-exit 2
+# All stages passed — clean up counter, notify, allow stop
+rm -f "$COUNTER_FILE"
+run_notify_and_exit
