@@ -1,8 +1,9 @@
 #!/bin/bash
 # ai/scripts/bootstrap.sh — orchestrator for the 3-tier deploy.
 # Calls each tool's bootstrap if the tool is installed.
-# Performs auto-backup of ~/.claude and ~/.codex on first/each run, with
-# 7-day retention cleanup. Final sanity checks after both tools deploy.
+# Performs auto-backup of ~/.claude and ~/.codex on first/each run, retaining
+# at most KEEP_BACKUPS copies and dropping anything older than 7 days.
+# Final sanity checks after both tools deploy.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -12,6 +13,7 @@ CODEX_DIR="$ROOT_DIR/codex"
 
 NO_BACKUP=0
 NO_CLEANUP=0
+KEEP_BACKUPS=3
 for arg in "$@"; do
     case "$arg" in
         --no-backup) NO_BACKUP=1 ;;
@@ -35,10 +37,15 @@ if [ "$NO_BACKUP" -eq 0 ]; then
     fi
 fi
 
-# ── 2. Cleanup old backups (>7d) ──
+# ── 2. Cleanup old backups (keep newest KEEP_BACKUPS, drop anything >7d) ──
+# Age alone cannot bound repeated deploys: 8 runs in one afternoon left 7GB
+# behind, every copy younger than the 7-day cutoff. The count sweep is the
+# real guard; the age sweep only trims what outlives it.
 if [ "$NO_CLEANUP" -eq 0 ]; then
-    find "$HOME" -maxdepth 1 -type d -name '.claude.bak.*' -mtime +7 -exec rm -rf {} + 2>/dev/null || true
-    find "$HOME" -maxdepth 1 -type d -name '.codex.bak.*'  -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+    for prefix in .claude.bak .codex.bak; do
+        find "$HOME" -maxdepth 1 -type d -name "$prefix.*" -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+        ls -dt "$HOME/$prefix".* 2>/dev/null | tail -n +$(( KEEP_BACKUPS + 1 )) | xargs -I{} rm -rf {} || true
+    done
 fi
 
 # ── 3. Tool bootstraps ──
