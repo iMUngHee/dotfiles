@@ -2,7 +2,7 @@
 # Claude Code status line script
 #
 # Displays: model name / context usage / session cost / plan quota or proxy status
-# Supports: Anthropic OAuth accounts (ccs team/enterprise) and API/proxy profiles (ccs namc)
+# Supports: the Anthropic OAuth account in the Keychain, and local API/proxy endpoints
 #
 # Dependencies: jq, curl
 # Platform:     macOS only (Keychain for OAuth tokens)
@@ -17,7 +17,6 @@
 RESET=$'\033[0m'  BOLD=$'\033[1m'  DIM=$'\033[2m'
 CYAN=$'\033[36m'  GREEN=$'\033[32m'  YELLOW=$'\033[33m'  RED=$'\033[31m'
 _BARS="||||||||||" _DOTS=".........."
-_CCS_CFG="$HOME/.ccs/config.yaml"
 _LITELLM_CFG="$HOME/.litellm/config.yaml"
 _CACHE_TTL_DEFAULT=300
 _CONFIG_ROOT="${AI_CONFIG_ROOT:-$HOME/.config}"
@@ -62,37 +61,14 @@ detect_mode() {
 }
 
 init_oauth_config() {
-    CCS_INSTANCE="" CCS_ALT=""
-    [ -n "$CLAUDE_CONFIG_DIR" ] && CCS_INSTANCE=$(basename "$CLAUDE_CONFIG_DIR")
-    if [ -f "$_CCS_CFG" ]; then
-        [ -z "$CCS_INSTANCE" ] && \
-            CCS_INSTANCE=$(sed -n 's/^default: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$_CCS_CFG")
-        CCS_ALT=$(sed -n '/^accounts:/,/^[a-z]/{
-/^  [a-z]/{
-s/:.*//
-s/^ *//
-p
-}
-}' "$_CCS_CFG" | grep -v "^${CCS_INSTANCE}$" | head -1)
-    fi
-    USAGE_CACHE="$HOME/.claude/statusline_usage_cache${CCS_INSTANCE:+_${CCS_INSTANCE}}.json"
+    USAGE_CACHE="$HOME/.claude/statusline_usage_cache.json"
     LOCK_FILE="${USAGE_CACHE}.lock"
 }
 
+# PROFILE_NAME has no source to resolve from; renders as "proxy" downstream.
 init_proxy_config() {
     PROXY_URL="${ANTHROPIC_BASE_URL:-}"
     PROFILE_NAME="" PROXY_HEALTH="unknown"
-    [ -f "$_CCS_CFG" ] || return
-    while IFS= read -r _pname; do
-        [ -z "$_pname" ] && continue
-        local sf="$HOME/.ccs/${_pname}.settings.json"
-        [ -f "$sf" ] || continue
-        local bu
-        bu=$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$sf" 2>/dev/null)
-        if [ "$bu" = "$PROXY_URL" ]; then
-            PROFILE_NAME="$_pname"; break
-        fi
-    done < <(awk '/^profiles:/{p=1;next} p && /^[a-z]/{exit} p && /^  [a-z]/{gsub(/:.*|^ */,"");print}' "$_CCS_CFG")
 }
 
 resolve_backend() {
@@ -113,26 +89,6 @@ resolve_backend() {
 # FETCH FUNCTIONS
 # ============================================================================
 resolve_credentials() {
-    cred_json="" SUB_TYPE=""
-    if [ -n "$CCS_INSTANCE" ]; then
-        local now_ms=$(date +%s)000 fallback_cred="" fallback_sub=""
-        while IFS= read -r svc; do
-            local cj st exp
-            cj=$(security find-generic-password -s "$svc" -w 2>/dev/null)
-            st=$(echo "$cj" | jq -r '.claudeAiOauth.subscriptionType // empty')
-            [ "$st" = "$CCS_INSTANCE" ] || continue
-            exp=$(echo "$cj" | jq -r '.claudeAiOauth.expiresAt // 0')
-            if [ "$exp" -gt "$now_ms" ] 2>/dev/null; then
-                cred_json="$cj"; SUB_TYPE="$st"; return
-            elif [ -z "$fallback_cred" ]; then
-                fallback_cred="$cj"; fallback_sub="$st"
-            fi
-        done < <(security dump-keychain 2>/dev/null \
-            | sed -n 's/.*"svce"<blob>="\(Claude Code-credentials-[^"]\{1,\}\)".*/\1/p')
-        if [ -n "$fallback_cred" ]; then
-            cred_json="$fallback_cred"; SUB_TYPE="$fallback_sub"; return
-        fi
-    fi
     cred_json=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
     SUB_TYPE=$(echo "$cred_json" | jq -r '.claudeAiOauth.subscriptionType // empty')
 }
@@ -379,27 +335,6 @@ render_quota() {
     fi
 }
 
-render_ccs_hint() {
-    [ "$MODE" = "oauth" ] && [ -n "$CCS_ALT" ] || return
-
-    if [ "$fh_avail" = "true" ] && [ "$fh_pct" -ge 95 ]; then
-        printf ' %s!ccs %s%s' "$YELLOW" "$CCS_ALT" "$RESET"; return
-    fi
-    [ "$fh_avail" = "false" ] || return
-
-    local alt_cache="$HOME/.claude/statusline_usage_cache_${CCS_ALT}.json"
-    [ -f "$alt_cache" ] || return
-    local alt_reset
-    alt_reset=$(jq -r '.five_hour.resets_at // ""' "$alt_cache" 2>/dev/null)
-    [ -n "$alt_reset" ] || return
-
-    local countdown
-    countdown=$(fmt_countdown "$alt_reset")
-    if [ -n "$countdown" ]; then printf ' %s%s%s%s' "$DIM" "$CCS_ALT" "$countdown" "$RESET"
-    else                         printf ' %s%s ready%s' "$GREEN" "$CCS_ALT" "$RESET"
-    fi
-}
-
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -417,4 +352,4 @@ else                           check_proxy_health
 fi
 
 render_model; printf '\n'
-render_context; render_cost; render_fresh; render_plan; render_quota; render_ccs_hint; printf '\n'
+render_context; render_cost; render_fresh; render_plan; render_quota; printf '\n'
