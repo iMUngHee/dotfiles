@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Claude Code status line script
 #
-# Displays: model name / context usage / session cost / plan quota or proxy status
-# Supports: the Anthropic OAuth account in the Keychain, and local API/proxy endpoints
+# Displays: model name / context usage / session cost / plan quota
+# Supports: the Anthropic OAuth account in the Keychain
 #
 # Dependencies: jq, curl
 # Platform:     macOS only (Keychain for OAuth tokens)
@@ -17,7 +17,6 @@
 RESET=$'\033[0m'  BOLD=$'\033[1m'  DIM=$'\033[2m'
 CYAN=$'\033[36m'  GREEN=$'\033[32m'  YELLOW=$'\033[33m'  RED=$'\033[31m'
 _BARS="||||||||||" _DOTS=".........."
-_LITELLM_CFG="$HOME/.litellm/config.yaml"
 _CACHE_TTL_DEFAULT=300
 _CONFIG_ROOT="${AI_CONFIG_ROOT:-$HOME/.config}"
 _ROUTING_ENGINE="$_CONFIG_ROOT/ai/lib/worktree.mjs"
@@ -47,42 +46,9 @@ fmt_countdown() {
 # ============================================================================
 # CONFIG FUNCTIONS
 # ============================================================================
-detect_mode() {
-    MODE="oauth"
-    local base_url="${ANTHROPIC_BASE_URL:-}"
-    case "$base_url" in
-        http://localhost:*|http://127.0.0.1:*|http://0.0.0.0:*|\
-        https://localhost:*|https://127.0.0.1:*|https://0.0.0.0:*)
-            MODE="proxy" ;;
-        https://*.anthropic.com*|https://api.anthropic.com*|"")
-            MODE="oauth" ;;
-        *)  MODE="proxy" ;;
-    esac
-}
-
 init_oauth_config() {
     USAGE_CACHE="$HOME/.claude/statusline_usage_cache.json"
     LOCK_FILE="${USAGE_CACHE}.lock"
-}
-
-# PROFILE_NAME has no source to resolve from; renders as "proxy" downstream.
-init_proxy_config() {
-    PROXY_URL="${ANTHROPIC_BASE_URL:-}"
-    PROFILE_NAME="" PROXY_HEALTH="unknown"
-}
-
-resolve_backend() {
-    local alias="$1"
-    [ -f "$_LITELLM_CFG" ] && [ -n "$alias" ] || return
-    awk -v m="$alias" '
-        /^_.*: &/{aname=$2; sub(/^&/,"",aname); anchors[aname]=$NF}
-        /- model_name:/{name=$NF}
-        name==m && /model:/{
-            val=$NF
-            if(val~/^\*/){ref=val; sub(/^\*/,"",ref); val=anchors[ref]}
-            sub(/.*\//,"",val); print val; exit
-        }
-    ' "$_LITELLM_CFG"
 }
 
 # ============================================================================
@@ -119,27 +85,7 @@ fetch_usage() {
     rm -f "$resp_file" "$LOCK_FILE"
 }
 
-check_proxy_health() {
-    PROXY_HEALTH="unknown"
-    [ -z "$PROXY_URL" ] && return
-    local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
-        "${PROXY_URL}/health/liveliness" 2>/dev/null)
-    if [ "$code" = "200" ]; then PROXY_HEALTH="ok"
-    else                         PROXY_HEALTH="down"
-    fi
-}
-
 handle_refresh() {
-    if [ "$MODE" = "proxy" ]; then
-        check_proxy_health
-        local backend
-        backend=$(resolve_backend "${ANTHROPIC_MODEL:-}")
-        echo "Profile: ${PROFILE_NAME:-proxy}"
-        echo "Backend: ${backend:-unknown}"
-        echo "Proxy:   ${PROXY_HEALTH} (${PROXY_URL})"
-        return
-    fi
     rm -f "$LOCK_FILE"; fetch_usage
     if [ -n "$FETCH_ERROR" ]; then
         case "$FETCH_ERROR" in
@@ -228,14 +174,8 @@ refresh_and_parse_cache() {
 # ============================================================================
 render_model() {
     local short
-    if [ "$MODE" = "proxy" ]; then
-        short=$(resolve_backend "$model_id")
-        [ -z "$short" ] && short=$(resolve_backend "${ANTHROPIC_MODEL:-}")
-        [ -z "$short" ] && short="$model_id"
-    else
-        short=$(echo "$model" \
-            | sed 's/^Claude //; s/^Sonnet /S/; s/^Haiku /H/; s/^Opus /O/; s/ Sonnet$/S/; s/ Haiku$/H/; s/ Opus$/O/; s/ Sonnet / S/; s/ Haiku / H/; s/ Opus / O/')
-    fi
+    short=$(echo "$model" \
+        | sed 's/^Claude //; s/^Sonnet /S/; s/^Haiku /H/; s/^Opus /O/; s/ Sonnet$/S/; s/ Haiku$/H/; s/ Opus$/O/; s/ Sonnet / S/; s/ Haiku / H/; s/ Opus / O/')
     printf '%s%s%s' "$CYAN$BOLD" "$short" "$RESET"
 }
 
@@ -300,17 +240,6 @@ render_plan() {
 }
 
 render_quota() {
-    if [ "$MODE" = "proxy" ]; then
-        local label
-        label=$(printf '%s' "${PROFILE_NAME:-proxy}" | tr '[:lower:]' '[:upper:]')
-        printf ' %s│%s %s%s%s' "$DIM" "$RESET" "$CYAN$BOLD" "$label" "$RESET"
-        case "$PROXY_HEALTH" in
-            ok)   printf ' %s●%s %sok%s' "$GREEN" "$RESET" "$DIM" "$RESET" ;;
-            down) printf ' %s✗%s %sdown%s' "$RED" "$RESET" "$DIM" "$RESET" ;;
-        esac
-        return
-    fi
-
     [ -n "$sub_type" ] || return
     local plan_label sep=""
     case "$sub_type" in
@@ -338,18 +267,14 @@ render_quota() {
 # ============================================================================
 # MAIN
 # ============================================================================
-detect_mode
-"init_${MODE}_config"
+init_oauth_config
 
 if [ "$1" = "--refresh" ] || [ "$1" = "-r" ]; then
     handle_refresh; exit 0
 fi
 
 parse_stdin
-
-if [ "$MODE" = "oauth" ]; then refresh_and_parse_cache
-else                           check_proxy_health
-fi
+refresh_and_parse_cache
 
 render_model; printf '\n'
 render_context; render_cost; render_fresh; render_plan; render_quota; printf '\n'
