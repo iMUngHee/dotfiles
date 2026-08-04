@@ -146,10 +146,6 @@ claude() {
 	_ai_run_named_window claude claude "$@"
 }
 
-ccs() {
-	_ai_run_named_window claude ccs "$@"
-}
-
 codex() {
 	_ai_run_named_window codex codex "$@"
 }
