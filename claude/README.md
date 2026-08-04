@@ -25,8 +25,7 @@ claude/
 │   └── statusline.sh           # Status line (model, context, cost, quota/proxy status, plan widget)
 └── scripts/
     ├── bootstrap.sh            # Deploy ai/ + claude/ → ~/.claude/
-    ├── sync-back.sh            # Pull repo-tracked keys back from ~/.claude/settings.json
-    └── record-quota-reset.sh   # Manual quota reset time recording
+    └── sync-back.sh            # Pull repo-tracked keys back from ~/.claude/settings.json
 ```
 
 ## Prerequisites
@@ -99,8 +98,6 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `inject-context.sh` | UserPromptSubmit | Resolve the exact Claude session binding, allow only checkout-local legacy normalization, and inject bound plan/worktree routing (30s bound); unbound main is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered |
 | `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |
 | `stop-handler.sh` | Stop | Final gate — auto-format, then this repo's own test suites selected by changed path, then type check |
-| `on-rate-limit.sh` | StopFailure | Auto-switch CCS quota account on rate limit |
-| `check-quota-switch.sh` | SessionStart (startup, clear) | Quota reset check, account swap if elapsed |
 | `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format + type check (30s debounce) |
 | `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage (autocompact at 70%) |
 | `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files |

@@ -178,26 +178,6 @@
       {
         "hooks": [
           {
-            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
-            "timeout": 10000,
-            "type": "command"
-          }
-        ],
-        "matcher": "startup"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/check-quota-switch.sh",
-            "timeout": 10000,
-            "type": "command"
-          }
-        ],
-        "matcher": "clear"
-      },
-      {
-        "hooks": [
-          {
             "command": "crux hook sessionstart",
             "type": "command"
           }
@@ -216,18 +196,6 @@
           }
         ],
         "matcher": ""
-      }
-    ],
-    "StopFailure": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/on-rate-limit.sh",
-            "timeout": 10000,
-            "type": "command"
-          }
-        ],
-        "matcher": "rate_limit"
       }
     ],
     "UserPromptSubmit": [
