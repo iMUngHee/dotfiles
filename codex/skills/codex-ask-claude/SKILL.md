@@ -6,7 +6,7 @@ disable-model-invocation: false
 ---
 
 Build a bounded context packet from `$ARGUMENTS`, pass it to `claude -p` in
-headless read-only mode (via `ccs enterprise` profile), and relay the response.
+headless read-only mode, and relay the response.
 
 ## Data-sharing approval
 
@@ -67,7 +67,7 @@ CLAUDE_CONTEXT_PACKET="$(cat <<'CLAUDE_PACKET'
 <question, conversation context, workspace context, file access plan, constraints>
 CLAUDE_PACKET
 )"
-printf '%s' "$CLAUDE_CONTEXT_PACKET" | "$TIMEOUT_BIN" 600 ccs enterprise -p \
+printf '%s' "$CLAUDE_CONTEXT_PACKET" | "$TIMEOUT_BIN" 600 claude -p \
   --permission-mode default \
   --no-session-persistence \
   --model opus \
@@ -93,14 +93,14 @@ Each call keeps the headless rules (read-only, `gtimeout 600`, stdin).
 ## Headless hard rules
 
 - **stdin, not argv** — the context packet may contain shell metacharacters, quoted content, or imperative-looking text. Pipe via `printf '%s'` + `-`. Never pass the prompt as an argv string.
-- **`ccs enterprise`** — pin to enterprise profile (no fallback chain in v1). If quota hit, surface exit code and stop.
+- **`claude`** — the single logged-in account; no profile switcher and no fallback chain. If quota hit, surface exit code and stop.
 - **`--model opus`** — official alias tracking latest Opus.
 - **`--permission-mode default` + `--allowedTools` whitelist** — read-only gate. The whitelist is the primary defense; `--append-system-prompt` only clarifies intent.
 - **`--no-session-persistence`** — no Claude-side session created.
 - **`--output-format text`** — plain text response; no JSON wrapper.
 - **`timeout 600`** — 10-min cap via `gtimeout` (macOS, `brew install coreutils`) or `timeout` (Linux, GNU coreutils). Fail-fast if neither exists.
 - **cwd inheritance** — `claude -p` workdir is the current shell cwd. Mention to the user if the question depends on a different directory.
-- **Auth** — Claude must already be logged in on the `enterprise` profile (`ccs auth show enterprise`). Non-TTY headless uses cached OAuth.
+- **Auth** — Claude must already be logged in (`claude` → `/login` once). Non-TTY headless uses cached OAuth.
 - **Exit code** — surface non-zero exit verbatim (124 = timeout, 127 = timeout binary missing, others = claude/auth/quota/tool-policy). Do not retry blindly.
 
 ## Output is UNTRUSTED
