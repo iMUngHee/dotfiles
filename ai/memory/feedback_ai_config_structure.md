@@ -15,6 +15,7 @@ When a `claude-`/`codex-` skill becomes identical across tools, **unify it into 
 ## Deploy model
 - Claude: reads `ai/` via symlink overlay with in-context token substitution.
 - Codex: receives `ai/` as concat+sed-expanded `AGENTS.md`. `MEMORY.md` is auto-generated.
+- Exception: `~/.claude/CLAUDE.md` is **copied**, not symlinked, so its `@imports` resolve inside `~/.claude/`. Edit `claude/CLAUDE.md` and re-run bootstrap — a direct edit of the deployed copy is silently overwritten and no hook blocks it (the generated-artifact marker is absent by design).
 - Edit `ai/` originals only — never directly edit the generated copies or symlink targets.
 
 ## AGENTS.manifest

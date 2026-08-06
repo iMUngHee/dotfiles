@@ -84,7 +84,8 @@ cat <<'EOF'
 
 === Bootstrap complete ===
 Edit source files under ~/.config/ai/, claude/, codex/ — NOT the deployed copies.
-- ~/.claude/* are symlinks (Claude); editing those mutates ai/ originals.
+- Most ~/.claude/* are symlinks (Claude); editing those mutates ai/ originals.
+- ~/.claude/CLAUDE.md is a COPY (keeps @imports internal). Direct edits are lost.
 - ~/.codex/AGENTS.md is generated (concat+sed expand). Direct edits are lost.
 - ~/.claude/MEMORY.md is generated. Direct edits are lost.
 - Skills overlay: ~/.claude/skills/, ~/.agents/skills/ (Codex).
