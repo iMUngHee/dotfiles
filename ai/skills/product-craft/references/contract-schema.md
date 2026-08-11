@@ -77,6 +77,12 @@ and in what state.
   enough to strip the artifact of authority.
   This replaces dependency manifests and realpath checks: one file means one hash, and no
   reference path means no drift path.
+  The bar is on external references, not on licensed faces. A typeface embedded as a base64
+  `@font-face` data URI satisfies self-containment, so the artifact is not limited to whatever
+  fonts the host machine happens to have installed. Subset to the glyphs actually used —
+  Google Fonts' `css2?family=...&text=...` endpoint will return a subset, which you fetch once
+  and inline as base64 — and the file stays around 100KB rather than several megabytes. The
+  artifact itself never references that endpoint, or any other, at render time.
 - `Revision`: first 12 characters of the file's sha256. Because the file is self-contained,
   this hash covers the whole rendered authority. Recompute it when verifying.
 - `Covers`: the obligations this artifact is authoritative for. Two `selected` artifacts
