@@ -58,8 +58,17 @@ decorative cards.
 
 Each candidate is a single self-contained HTML file carrying realistic content — real text
 lengths, real data volume, real Korean strings when the product is Korean. Inline everything:
-style, script, SVG, images as data URI. No external reference, and no stylesheet shared
-between candidates. One file, one hash, one authority.
+style, script, SVG, images and fonts as data URI. No external reference, and no stylesheet
+shared between candidates. One file, one hash, one authority.
+
+Self-containment bars external references, not real typefaces. Embed the faces a candidate
+needs as base64 `@font-face` data URIs, subset to the glyphs actually used. Reading the rule
+as "only fonts already installed on this machine" is what quietly returns every candidate to
+the same system stack.
+
+The type pairing is a decision, not an inheritance. Name the display face and the body face
+and say what each is for. A candidate still on the platform default stack — Georgia, Arial,
+Helvetica, Times, or bare `system-ui` — has not chosen a typeface.
 
 Show candidates on the same screen with the same content so the comparison is controlled. The
 screen and the content hold still; everything else is free to move.
