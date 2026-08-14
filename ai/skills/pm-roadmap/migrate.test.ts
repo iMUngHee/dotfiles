@@ -209,6 +209,34 @@ async function main() {
     } finally { await rm(root, { recursive: true, force: true }); }
   }
 
+  // ── (e2) D9: inbox relocation refuses when either side carries orphans ──
+  // The merge re-serializes both parsed models, so orphan text on either side would be
+  // destroyed. This path builds its own transaction and never touches ops, so it needs its
+  // own guard.
+  {
+    const root = await tmp();
+    try {
+      await mkdir(join(root, ".agents", "tasks"), { recursive: true });
+      const legacy = join(root, ".agents", "inbox.md");
+      const source = `# _INBOX — Inbox\n\n- **legacy-1** — Legacy\n  - Priority: P2\n  - Status: open\n  - Note: keep\n\nSTRANDED-IN-INBOX\n`;
+      await writeFile(legacy, source);
+
+      await assert.rejects(
+        () => migrate(root, { ...APPLY, runid: "inbox-orphan" }),
+        /refusing to relocate the inbox/,
+        "orphan-bearing legacy inbox is refused",
+      );
+      assert.equal(await readFile(legacy, "utf8"), source, "legacy source preserved byte-for-byte");
+      assert.equal(await exists(join(root, ".agents", "tasks", "_inbox.md")), false, "nothing written to the destination");
+
+      // repaired → relocates normally
+      await writeFile(legacy, source.replace("\nSTRANDED-IN-INBOX\n", ""));
+      const ok = await migrate(root, { ...APPLY, runid: "inbox-repaired" });
+      assert.ok(ok.applied && ok.ok, ok.out);
+      assert.deepEqual(await ids(join(root, ".agents", "tasks", "_inbox.md")), ["legacy-1"]);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }
+
   // ── (f) pending journal makes dry-run refuse without mutating ──
   {
     const root = await tmp();

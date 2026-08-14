@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile, readFile, mkdir, readdir, stat, utimes } from "
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import {
-  parseBlocks, serializeBlocks, getField, setField,
+  type Block, parseBlocks, serializeBlocks, getField, setField,
   parseFrontmatter, serializeFrontmatter, getFmField,
   acquireLock, releaseLock, lockPath, tasksDir,
   readStamped, writeCAS, ensureGitignore, LockError, inboxPath,
@@ -38,6 +38,73 @@ async function main() {
     assert.deepEqual(parseBlocks(serializeBlocks(links.title, links.blocks)), links);
     const mem = parseBlocks(`# K — Memory\n\n- **decision** — \n  - Note: keep it\n  - Date: 2026-06-10\n`);
     assert.deepEqual(parseBlocks(serializeBlocks(mem.title, mem.blocks)), mem);
+
+    // ── orphans: content the parser drops, which the next write would destroy ──
+    // A well-formed document reports none, so the guard never fires on ordinary data.
+    assert.deepEqual(parsed.orphans, []);
+    assert.deepEqual(closed.orphans, []);
+    assert.deepEqual(links.orphans, []);
+
+    // A multi-line value: only the first line lands in the field, the rest is stranded.
+    const stranded = parseBlocks(`# K — Backlog\n\n- **a** — t\n  - Note: one\n\nSTRANDED\n`);
+    assert.equal(getField(stranded.blocks[0], "note"), "one");
+    assert.deepEqual(stranded.orphans, [{ line: 6, text: "STRANDED" }]);
+    // and serializing the parsed model is exactly what erases it
+    assert.ok(!serializeBlocks(stranded.title, stranded.blocks).includes("STRANDED"));
+
+    // A field line before any block head has nowhere to attach (`sub && cur`).
+    const early = parseBlocks(`# K — Backlog\n\n  - Note: nowhere\n\n- **a** — t\n  - Note: one\n`);
+    assert.deepEqual(early.orphans, [{ line: 3, text: "  - Note: nowhere" }]);
+    assert.equal(early.blocks.length, 1);
+    assert.equal(getField(early.blocks[0], "note"), "one");
+
+    // A later H1 silently replaces the earlier one, so the earlier line is lost too.
+    const twoH1 = parseBlocks(`# first\n# second\n\n- **a** — t\n  - Note: one\n`);
+    assert.equal(twoH1.title, "second");
+    assert.deepEqual(twoH1.orphans, [{ line: 1, text: "# first" }]);
+
+    // orphans stay in line order even though a superseded H1 is discovered later
+    const mixed = parseBlocks(`# first\nLOOSE\n# second\n\n- **a** — t\n  - Note: one\n`);
+    assert.deepEqual(mixed.orphans.map((o) => o.line), [1, 2]);
+
+    // blank lines are not orphans (they are re-emitted by the serializer)
+    assert.deepEqual(parseBlocks(`# K — Backlog\n\n\n- **a** — t\n  - Note: one\n\n`).orphans, []);
+
+    // ── serializeBlocks refuses any model it cannot write back losslessly ──
+    // Escapes, never literals: a literal U+2028 pasted into a source file or a shell command
+    // is easily normalized to a space in transit, and the test would then assert nothing.
+    const one = (fields: [string, string][]) => [{ id: "a", title: "t", fields }];
+    const refuses = (t: string, bs: Block[], why: RegExp, label: string) =>
+      assert.throws(() => serializeBlocks(t, bs), why, label);
+
+    refuses("K", one([["Note", "a\nb"]]), /field 'Note' must be single-line/, "newline in a value");
+    refuses("K", one([["Note", "a\r\nb"]]), /field 'Note' must be single-line/, "CRLF in a value");
+    // the injection shape: the continuation line would parse as a real field
+    refuses("K", one([["Note", "x\n  - Owner: evil"]]), /field 'Note' must be single-line/, "field injection via a note");
+    // no newline at all — these are the cases a character blacklist would let through
+    refuses("K", one([["Note", "a\u2028b"]]), /cannot be represented/, "U+2028 line separator");
+    refuses("K", one([["Note", "a\u2029b"]]), /cannot be represented/, "U+2029 paragraph separator");
+    refuses("K", one([["Note", "  padded  "]]), /cannot be represented/, "edge whitespace the parser would trim");
+    refuses("K\nX", [], /file title must be single-line/, "newline in the file title");
+    refuses("K", [{ id: "", title: "t", fields: [] }], /block id must not be empty/, "empty id");
+    refuses("K", [{ id: "   ", title: "t", fields: [] }], /block id must not be empty/, "whitespace-only id");
+    refuses("K", [{ id: "a*b", title: "t", fields: [] }], /must not contain '\*'/, "'*' in an id (breaks the head grammar)");
+    refuses("K", [{ id: "a", title: "x\ny", fields: [] }], /title must be single-line/, "newline in a block title");
+    refuses("K", one([["Bad Key", "v"]]), /field key .* must match/, "field key outside the parser's pattern");
+
+    // and the accepted shapes still round-trip, including ones that look risky
+    for (const [label, t, bs] of [
+      ["empty document", "K — Backlog", [] as Block[]],
+      ["'**' inside a title", "K", [{ id: "a", title: "has **bold** text", fields: [] }]],
+      ["'—' inside a title", "K", [{ id: "a", title: "x — y", fields: [] }]],
+      ["empty title", "K", [{ id: "a", title: "", fields: [["Note", ""]] as [string, string][] }]],
+      ["duplicate keys", "K", [{ id: "a", title: "t", fields: [["Note", "1"], ["Note", "2"]] as [string, string][] }]],
+    ] as const) {
+      const text = serializeBlocks(t, bs as Block[]);
+      const back = parseBlocks(text);
+      assert.deepEqual(back.orphans, [], `${label}: no orphans`);
+      assert.equal(serializeBlocks(back.title, back.blocks), text, `${label}: round-trip is a fixed point`);
+    }
 
     // setField updates in place / appends
     setField(mem.blocks[0], "Note", "changed");

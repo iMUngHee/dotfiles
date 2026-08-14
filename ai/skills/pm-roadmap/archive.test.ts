@@ -51,6 +51,31 @@ async function main() {
     assert.equal(await planField(root, "A", "old-1"), ".agents/plans/archive/2026-01-01-old.md", "closed.md pointer rewritten");
     assert.equal(await planField(root, "A", "recent-1"), ".agents/plans/2026-06-20-recent.md", "recent pointer unchanged");
 
+    // ── D7/D9: an orphan-bearing closed.md aborts the archive BEFORE the plan is renamed ──
+    // rewriteClosedPointer runs after the rename, so without the preflight a refusal would
+    // leave the plan moved and its pointer stale.
+    {
+      await closeWithPlan(root, "guard-1", ".agents/plans/2026-01-03-guard.md", "done");
+      const cl = taskFile(root, "A", "closed.md");
+      const clean = (await readStamped(cl))!.content;
+      await writeFile(cl, `${clean}\nSTRANDED-IN-CLOSED\n`);
+      const corrupted = (await readStamped(cl))!.content;
+
+      await assert.rejects(
+        () => archivePlans(root, { today: "2026-06-22" }),
+        /refusing to archive: A\/closed\.md/,
+        "archiving refuses while a closed.md carries orphans",
+      );
+      assert.equal(await exists(join(root, ".agents/plans/2026-01-03-guard.md")), true, "plan NOT renamed by the aborted run");
+      assert.equal(await exists(join(root, ".agents/plans/archive/2026-01-03-guard.md")), false, "nothing landed in archive/");
+      assert.equal((await readStamped(cl))!.content, corrupted, "orphan text preserved byte-for-byte");
+
+      await writeFile(cl, clean);
+      const recovered = await archivePlans(root, { today: "2026-06-22" });
+      assert.ok(recovered.moved.some((m) => m.plan === ".agents/plans/2026-01-03-guard.md"), "archives normally once repaired");
+      assert.equal(await planField(root, "A", "guard-1"), ".agents/plans/archive/2026-01-03-guard.md", "pointer rewritten after repair");
+    }
+
     // current.txt protection
     await closeWithPlan(root, "cur-1", ".agents/plans/2026-01-02-cur.md", "done");
     await mkdir(join(root, ".agents", "state"), { recursive: true });
