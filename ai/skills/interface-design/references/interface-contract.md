@@ -6,11 +6,11 @@ This file defines the concreteness bar for interface-owned sections. It does not
 
 Capture only evidence relevant to the selected depth:
 
-- Representative screens, shell/layout, navigation placement, modals/drawers, and responsive transformations.
+- Representative screens, shell/layout, navigation placement, interruption surfaces, and adaptation transformations.
 - Existing tokens: color roles, typography, spacing, radius, border/elevation, z-index, and motion.
 - Used primitives and component families with their actual variants and states.
-- Realistic content volume, screenshots, browser evidence, and prior accepted design decisions.
-- Accessibility evidence: focus, contrast, touch sizing, reduced motion, semantics, and error/status presentation.
+- Realistic content volume, captures, render evidence in the declared medium's own substrate, and prior accepted design decisions.
+- Accessibility evidence, in the declared medium's own mechanisms: focus, contrast, target sizing, motion reduction, semantics, and error/status presentation.
 
 Mark existing values `[captured]` and new values `[proposed]` while proposing. An approved contract names plain committed values and keeps only useful provenance in Decision Log.
 
@@ -25,7 +25,7 @@ authority for what the screen looks like, and the contract records the decisions
 and what the artifact did not cover. Do not transcribe an artifact into prose; that is how
 detail leaks out.
 
-Palette, type, spacing, radius, elevation, motion, density, breakpoint behavior, and display
+Palette, type, spacing, radius, elevation, motion, density, adaptation behavior, and display
 formatting are the dimensions that usually need pinning down. Treat that as where to look
 first, not as the full extent of the question — this surface may turn on something not on any
 such list. Korean line breaking, optical alignment in a specific component, or how one long
@@ -41,9 +41,9 @@ Include only component families used by the approved workflows. `Used In` ties e
 
 | Component / variant | Size | Padding | Radius | Type | States | Used In | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Example: task-table row | 36px height | 8px 12px cells | 0 | 13px / 18px | hover, selected, disabled | Task list | Preserve dense comparison. |
+| Example (web): task-table row | 36px height | 8px 12px cells | 0 | 13px / 18px | hover, selected, disabled | Task list | Preserve dense comparison. |
 
-Applicable states may include default, hover, focus-visible, active, selected, disabled, loading, empty, invalid, destructive, success, warning, and error. State meaning comes from the experience contract; this matrix defines its presentation.
+Applicable states are the intersection of what the experience defines and what the medium can express — see the medium's state vocabulary. On the web that includes default, hover, focus-visible, active, selected, disabled, loading, empty, invalid, destructive, success, warning, and error; a cell grid has no hover and a page has no interaction states at all. State meaning comes from the experience contract; this matrix defines its presentation.
 
 ## Invariants and Rationale
 
@@ -59,8 +59,8 @@ Do / Don't rules and reserved color/type rules also include a short why when not
 Record concrete unknowns rather than inventing them:
 
 - Unverified content volume or string length.
-- Missing contrast, keyboard, screen-reader, touch, or reduced-motion evidence.
-- Unconfirmed responsive transformation.
+- Missing contrast, keyboard, assistive-technology, target-size, or motion-reduction evidence in the medium's own mechanism.
+- Unconfirmed adaptation transformation.
 - Missing primitive, token, asset, or implementation mapping.
 - An experience-owned uncertainty requiring `EXPERIENCE DELTA REQUIRED`.
 
@@ -73,7 +73,7 @@ Check evidence, not taste in isolation:
 - Macrostructure and hierarchy reflect approved content priority.
 - Density fits frequency and volume.
 - Components sharing a group align in height, baseline, and state language.
-- Responsive behavior preserves primary jobs and recovery.
+- Adaptation behavior preserves primary jobs and recovery at every extreme the medium has.
 - Accessibility values meet the shared floor.
 - Perceived latency and formatting communicate state and meaning accurately.
 - Tokens and component rules follow the captured product identity.
@@ -93,7 +93,7 @@ Each finding includes severity, concrete observation, evidence location, user-jo
 
 ## Iteration Questions
 
-- Can UI engineering implement the affected screen without guessing composition, spacing, type, radius, color roles, component states, or responsive behavior?
+- Can UI engineering implement the affected screen without guessing composition, spacing, type, radius, color roles, component states, or adaptation behavior?
 - Does every component map to an approved workflow location?
 - Are dense surfaces resilient to real data and repeated action?
 - Are expressive surfaces anchored in product, audience, content, and asset decisions?

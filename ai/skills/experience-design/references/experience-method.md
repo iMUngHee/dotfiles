@@ -122,7 +122,7 @@ Use only when adjacency or ordering is difficult to evaluate in prose.
 
 - Show labeled regions, navigation relationship, content priority, actions, and state placement.
 - Use neutral boxes and text; no palette, font choice, radius, shadow, imagery treatment, or decorative motif.
-- Annotate responsive or state changes as behavior, not visual styling.
+- Annotate adaptation or state changes as behavior, not visual styling.
 - Label it `low-fidelity experience structure — not interface direction`.
 
 ## Audit Method

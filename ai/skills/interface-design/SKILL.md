@@ -1,6 +1,6 @@
 ---
 name: interface-design
-description: "Own interface planning for approved product experiences: macrostructure, screen composition, hierarchy, art direction, visual systems, component appearance, responsive presentation, and UI craft. Use directly for read-only UI audits, redesign, reference study, or focused interface deltas; product-craft routes new surfaces here after the Experience gate."
+description: "Own interface planning for approved product experiences: macrostructure, screen composition, hierarchy, art direction, visual systems, component appearance, adaptive presentation, and UI craft. Use directly for read-only UI audits, redesign, reference study, or focused interface deltas; product-craft routes new surfaces here after the Experience gate."
 argument-hint: "[audit | redesign | study | delta | interface request]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 model: opus
@@ -50,7 +50,7 @@ Composition, macrostructure, and hierarchy are expressed through these sections 
 1. The approved Experience gate and its affected experience-owned contract sections.
 2. Nearest applicable `design-contract.md`, captured product system, representative screens, theme/tokens, and used component primitives.
 3. `../product-craft/references/contract-schema.md`, `../product-craft/references/quality-floor.md`, and `../product-craft/references/output-formats.md`.
-4. The one applicable profile in `references/surface-profiles.md`.
+4. The one applicable profile in `references/medium-profiles.md` for the declared medium, and `references/surface-profiles.md`.
 5. `references/reference-study.md` before drawing candidates for any new direction. Study how
    this job has already been solved well; candidates drawn without it converge on defaults.
 6. `references/concept-stage.md` when direction is being chosen or materially changed, or when
@@ -82,8 +82,10 @@ use the concept method to draw candidates that differ in structure rather than i
 structural relationships, hierarchy, density, and component voice together instead of
 assembling independently fashionable defaults.
 
-Candidates are single self-contained HTML files with realistic content, compared on the same
-screen and the same data. Render and inspect each at wide and narrow before showing it.
+Candidates are single self-contained artifacts **in the declared medium's own substrate** with
+realistic content, compared on the same screen and the same data — see
+`references/medium-profiles.md` for what that file is. Render and inspect each at both extremes
+of that medium's adaptation axis, or at what its profile names instead, before showing it.
 
 **The user picks.** Present the candidates with a recommendation and stop; taste is theirs to
 supply. Where there is no owner to ask — an external product surface — commit the sharpest
@@ -91,14 +93,14 @@ direction that serves the job and survives every floor, and say that you did. A 
 unclear audience is a gate.
 
 The selected artifact becomes durable reference, not a discarded specimen. Record it in the
-contract's `## Artifact Ledger` with its revision, coverage, and the states and viewports
-actually reviewed; implementation reads it directly. Keep artifacts under `.agents/`, never in
+contract's `## Artifact Ledger` with its revision, selection coordinate, coverage, and the
+states and adaptation extremes actually reviewed; implementation reads it directly. Keep artifacts under `.agents/`, never in
 product source paths, and never wire APIs, persistence, production routing, or durable
 application state into them. Unselected candidates stay in the ledger as `exploratory`.
 
 ### 4. Make the Interface Contract Concrete
 
-Specify only used dimensions and components. Name token/value/rule, component state, responsive behavior, accessibility value, formatting behavior, design tension, and signature moment or justified `N/A`. A naked adjective is not a contract value.
+Specify only used dimensions and components. Name token/value/rule, component state, adaptation behavior, accessibility value, formatting behavior, design tension, and signature moment or justified `N/A`. A naked adjective is not a contract value.
 
 Seed covers touched presentation decisions. Focused Delta covers approved changed sections only. Full covers all used dimensions, component families mapped to workflows, invariants with rationale, and known gaps.
 
@@ -107,7 +109,7 @@ Seed covers touched presentation decisions. Focused Delta covers approved change
 Emit `Surface Obligations` rows for this stage using
 `../product-craft/references/output-formats.md`: `Stage: interface`, each row deriving from
 the experience obligations it serves, evidence shaped as
-`artifact:<ART-NNN>#<state>@<viewport>`, and `GAP` where a required interface decision is
+`artifact:<ART-NNN>#<state>@<adaptation extreme>`, and `GAP` where a required interface decision is
 missing or contradictory.
 
 Record the selected artifact in `## Artifact Ledger`. This stage's approval token is
@@ -116,16 +118,16 @@ Record the selected artifact in `## Artifact Ledger`. This stage's approval toke
 
 Every applicable experience obligation needs at least one interface obligation deriving from
 it. Each interface row names one implementable requirement and cites inspected artifact
-evidence — artifact or render, state, viewport, and what was actually observed. Generating an
+evidence — artifact or render, state, adaptation extreme, and what was actually observed. Generating an
 artifact without looking at it is `missing`, not evidence.
 
-Full work, changed macrostructure, and changed responsive behavior need inspected evidence at
-both wide and narrow. One representative screen per affected macrostructure is enough; do not
+Full work, changed macrostructure, and changed adaptation behavior need inspected evidence at
+both extremes the medium has. One representative screen per affected macrostructure is enough; do not
 multiply screens per row. A fixed canvas or genuinely unaffected presentation may use
 `N/A:<concrete reason>`.
 
 Emit the exact Interface gate record. `READY FOR BUILD` requires concrete composition,
-direction, component presentation, responsive behavior, and accessibility values, no open
+direction, component presentation, adaptation behavior, and accessibility values, no open
 material interface question, every applicable experience obligation covered, every interface
 obligation at `PASS` with its evidence inspected, and `direction_selected` recorded from the
 user's own words. Implementation obligations stay `PENDING` until ui-engineering produces
@@ -144,7 +146,7 @@ An audit is read-only and identity-preserving.
 1. Establish the lens: accessibility floor → approved contract or captured product system → selected surface profile.
 2. Inspect the rendered surface and key states when feasible; name uninspected scope.
 3. Report findings by severity (`blocks the job`, `slows the job`, `polish`) with observation, evidence, user-job impact, and concrete correction.
-4. Separate strengths from friction. Test hierarchy, density, macrostructure, component consistency, responsive behavior, and product specificity.
+4. Separate strengths from friction. Test hierarchy, density, macrostructure, component consistency, adaptation behavior, and product specificity.
 5. If changes are requested later, convert only accepted findings into Focused Delta or `redesign`.
 
 ## Routed Stops

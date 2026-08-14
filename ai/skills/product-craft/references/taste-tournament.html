@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<!--
+  Taste tournament template.
+
+  Fill ROUNDS below and open the file. One axis is asked in two different media; the page
+  derives `resolved` from the answers per output-formats.md:
+    both observations agree  -> one entry, medium "*", observations 2
+    they disagree            -> two entries, one per medium, observations 1
+    "neither"                -> no entry; the axis is flagged as a bad-candidate signal
+
+  Self-contained: no external reference of any kind. Set TEMPLATE_REVISION to the first 12
+  characters of the sha256 of the CHECKED-IN TEMPLATE at
+  ai/skills/product-craft/references/taste-tournament.html — not of this filled instance, which
+  cannot contain its own hash. It identifies which axis list the answers were collected against.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>취향 토너먼트</title>
+<style>
+  :root {
+    --ink: #16191d;      /* on --paper: 15.8:1 */
+    --ink-2: #4a5057;    /* on --paper:  7.5:1 */
+    --paper: #fbfaf8;
+    --line: #d6d2cb;
+    --pick: #1b4d8f;     /* on --paper:  8.1:1 */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, sans-serif;
+    word-break: keep-all; line-break: strict;   /* Korean breaks at 어절 */
+  }
+  header { padding: 24px 24px 0; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); font-size: 14px; margin: 0; }
+  .bar { height: 4px; background: var(--line); margin: 16px 0 0; }
+  .bar > i { display: block; height: 100%; background: var(--pick); width: 0; }
+  @media (prefers-reduced-motion: no-preference) { .bar > i { transition: width 160ms; } }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .ask { font-size: 15px; color: var(--ink-2); margin: 0 0 16px; }
+  .ask b { color: var(--ink); font-weight: 600; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--line); background: #fff; display: flex; flex-direction: column; }
+  .card figure { margin: 0; padding: 20px; flex: 1; overflow: auto; }
+  .card figcaption {
+    font-size: 13px; color: var(--ink-2); padding: 8px 12px;
+    border-top: 1px solid var(--line);
+  }
+  button {
+    font: inherit; min-height: 44px; padding: 10px 16px; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+  }
+  button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+  .choose { width: 100%; border-top: 1px solid var(--line); border-left: 0; border-right: 0; border-bottom: 0; }
+  .choose b { color: var(--pick); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; align-items: center; }
+  .quiet { color: var(--ink-2); font-size: 14px; }
+  .redraft { margin-left: auto; border-color: var(--pick); color: var(--pick); }
+  label { display: block; font-size: 14px; margin: 20px 0 6px; }
+  textarea {
+    font: inherit; width: 100%; min-height: 84px; padding: 10px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+  }
+  textarea:focus-visible { outline: 2px solid var(--pick); outline-offset: 1px; }
+  .warn { border-left: 3px solid var(--pick); padding: 8px 12px; background: #fff; font-size: 14px; }
+  pre {
+    border: 1px solid var(--line); background: #fff; padding: 12px; overflow: auto;
+    font: 13px/1.5 ui-monospace, monospace; max-height: 300px;
+  }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>취향 토너먼트</h1>
+  <p class="sub">같은 내용을 한 축만 다르게 그린 두 개입니다. 더 끌리는 쪽을 고르세요. 둘 다 아니면 그렇게 말해도 됩니다.</p>
+  <div class="bar"><i id="bar"></i></div>
+</header>
+
+<main>
+  <section id="play">
+    <p class="ask" id="ask"></p>
+    <div class="pair">
+      <div class="card">
+        <figure id="figA"></figure>
+        <figcaption id="capA"></figcaption>
+        <button class="choose" data-pick="a"><b>A</b> 이쪽</button>
+      </div>
+      <div class="card">
+        <figure id="figB"></figure>
+        <figcaption id="capB"></figcaption>
+        <button class="choose" data-pick="b"><b>B</b> 이쪽</button>
+      </div>
+    </div>
+    <div class="row">
+      <button data-pick="neither">둘 다 아님</button>
+      <span class="quiet">후보가 잘못 그려졌다는 신호로 기록됩니다. 둘 다 고르기는 없습니다.</span>
+      <button class="redraft" id="redraft">축이 이게 아님 · 다시 그려</button>
+    </div>
+  </section>
+
+  <section id="done" class="hide">
+    <p class="warn" id="summary"></p>
+    <label for="note">왜 이렇게 골랐는지 한 줄 (필수)</label>
+    <textarea id="note" placeholder="예: 웹은 여백이 편한데 터미널은 조밀한 게 낫더라"></textarea>
+    <div class="row">
+      <button id="copy">payload 복사</button>
+      <span class="quiet" id="copystate"></span>
+    </div>
+    <pre id="out"></pre>
+  </section>
+</main>
+
+<script>
+/* Replace this array. Each round pairs two renderings of the SAME content differing in ONE axis.
+   Ask every axis in two different media so agreement can be tested. */
+const ROUNDS = [
+  { pair:"p1", axis:"density", medium:"web",
+    a:{ value:"tight",  label:"조밀", html:"<div style='font:13px/1.35 sans-serif'><b>주문 12건</b><div>2026-08-01 · 배송중 · 32,000원</div><div>2026-08-01 · 배송완료 · 8,900원</div><div>2026-07-31 · 취소 · 15,400원</div></div>" },
+    b:{ value:"airy",   label:"여백", html:"<div style='font:15px/2 sans-serif'><b>주문 12건</b><div style='margin-top:14px'>2026-08-01 · 배송중 · 32,000원</div><div style='margin-top:14px'>2026-08-01 · 배송완료 · 8,900원</div></div>" } },
+  { pair:"p2", axis:"density", medium:"tui",
+    a:{ value:"tight",  label:"조밀", html:"<pre style='font:12px/1.2 ui-monospace,monospace;margin:0'>#12 배송중   32,000\n#11 배송완료  8,900\n#10 취소     15,400</pre>" },
+    b:{ value:"airy",   label:"여백", html:"<pre style='font:12px/2.2 ui-monospace,monospace;margin:0'>#12  배송중    32,000\n\n#11  배송완료   8,900</pre>" } }
+  /* … 6 axes × 2 media = 12 rounds … */
+];
+const TEMPLATE_REVISION = "000000000000";
+
+const $ = (id) => document.getElementById(id);
+let i = 0;
+const answers = [];
+
+function render() {
+  const r = ROUNDS[i];
+  $("ask").innerHTML = "<b>" + r.axis + "</b> · " + r.medium + " · " + (i + 1) + " / " + ROUNDS.length;
+  $("figA").innerHTML = r.a.html; $("capA").textContent = "A — " + r.a.label;
+  $("figB").innerHTML = r.b.html; $("capB").textContent = "B — " + r.b.label;
+  $("bar").style.width = (i / ROUNDS.length * 100) + "%";
+}
+
+function answer(chosen) {
+  const r = ROUNDS[i];
+  answers.push({ pair: r.pair, axis: r.axis, medium: r.medium, chosen: chosen });
+  i += 1;
+  if (i < ROUNDS.length) { render(); return; }
+  $("bar").style.width = "100%";
+  $("play").classList.add("hide");
+  $("done").classList.remove("hide");
+  $("summary").textContent = summarize();
+  $("note").focus();
+}
+
+/* agree across the two media -> invariant "*"; disagree -> one entry per medium */
+function resolve() {
+  const byAxis = {};
+  answers.forEach(a => { (byAxis[a.axis] = byAxis[a.axis] || []).push(a); });
+  const out = [];
+  const bad = [];
+  Object.keys(byAxis).forEach(axis => {
+    const obs = byAxis[axis];
+    if (obs.some(o => o.chosen === "neither")) { bad.push(axis); return; }
+    const val = o => ROUNDS.find(r => r.pair === o.pair)[o.chosen].value;
+    const vals = obs.map(val);
+    if (vals.every(v => v === vals[0])) {
+      out.push({ axis: axis, medium: "*", value: vals[0], observations: 2 });
+    } else {
+      obs.forEach((o, n) => out.push({ axis: axis, medium: o.medium, value: vals[n], observations: 1 }));
+    }
+  });
+  return { resolved: out, bad: bad };
+}
+
+function summarize() {
+  const r = resolve();
+  const inv = r.resolved.filter(x => x.medium === "*").length;
+  const bound = r.resolved.length - inv;
+  let s = "불변 " + inv + "축, 매체 결속 " + bound + "축.";
+  if (bound) s += " 매체마다 갈린 축은 불변 코어가 아니라는 뜻이라, 분류가 그만큼 교정됩니다.";
+  if (r.bad.length) s += " 후보 불량 신호: " + r.bad.join(", ") + ".";
+  return s;
+}
+
+function payload(redraft) {
+  const note = $("note") ? $("note").value.trim() : "";
+  if (redraft) return { kind: "taste", schema: 1, note: note || "축이 이게 아님", redraft: true };
+  const r = resolve();
+  return {
+    kind: "taste", schema: 1, template_revision: TEMPLATE_REVISION,
+    rounds: answers, resolved: r.resolved, note: note, redraft: false
+  };
+}
+
+async function copyOut(obj) {
+  const text = JSON.stringify(obj, null, 2);
+  $("out").textContent = text;
+  try { await navigator.clipboard.writeText(text); $("copystate").textContent = "복사됨 — 대화에 붙여넣으세요."; }
+  catch (e) { $("copystate").textContent = "클립보드를 못 씁니다. 아래 내용을 직접 복사하세요."; }
+}
+
+document.querySelectorAll("[data-pick]").forEach(b =>
+  b.addEventListener("click", () => answer(b.dataset.pick)));
+
+$("redraft").addEventListener("click", () => {
+  $("play").classList.add("hide"); $("done").classList.remove("hide");
+  $("summary").textContent = "재작성 신호로 기록됩니다. 승인 토큰은 만들어지지 않습니다. 무엇이 축이어야 하는지 한 줄 남겨주세요.";
+});
+
+$("copy").addEventListener("click", () => {
+  const note = $("note").value.trim();
+  if (!note) { $("copystate").textContent = "한 줄이 필요합니다 — 이 문장이 그대로 근거로 기록됩니다."; $("note").focus(); return; }
+  copyOut(payload($("summary").textContent.startsWith("재작성")));
+});
+
+render();
+</script>
+</body>
+</html>

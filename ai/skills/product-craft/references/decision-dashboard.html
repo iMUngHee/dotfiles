@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<!--
+  Decision dashboard template.
+
+  Three tiers, all visible at once:
+    1. base candidates, actually rendered
+    2. open axes, toggled WITHIN the chosen base — never across bases
+    3. open questions still owed by the experience stage
+
+  The dashboard is always HTML even when the product's medium is not. It is a chooser, not the
+  artifact. For a non-web medium, CANDIDATES[].html carries the capture: a <pre> of the terminal
+  run, both TTY and piped output for a stream, a slide or page image, or a screenshot explicitly
+  labeled a mock.
+
+  Every value you substitute must be JSON-encoded — a candidate capture contains real newlines
+  and quotes, and pasting it raw terminates the JS string and blanks the whole page with a
+  SyntaxError. Encode, do not concatenate.
+
+  Self-contained: no external reference. Give each entry in CANDIDATES its own `revision` — the
+  first 12 characters of that artifact file's sha256 — and fill SURFACE / STAGE / MEDIUM. The
+  payload records the revision of the candidate actually chosen, so one page-wide constant is
+  not enough.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>결정 대시보드</title>
+<style>
+  :root {
+    --ink: #16191d; --ink-2: #4a5057; --paper: #fbfaf8;
+    --line: #d6d2cb; --pick: #1b4d8f; --flag: #7a4a00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, sans-serif;
+    word-break: keep-all; line-break: strict;
+  }
+  header, main { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+  header { padding-top: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 32px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .sub { color: var(--ink-2); font-size: 14px; margin: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .cand { border: 1px solid var(--line); background: #fff; display: flex; flex-direction: column; }
+  .cand[aria-checked="true"] { border-color: var(--pick); border-width: 2px; }
+  .cand figure { margin: 0; padding: 16px; flex: 1; overflow: auto; max-height: 340px; }
+  .cand figure pre { font: 12px/1.35 ui-monospace, monospace; margin: 0; }
+  .cand footer { border-top: 1px solid var(--line); padding: 10px 12px; font-size: 14px; }
+  .cand .idea { color: var(--ink-2); font-size: 13px; display: block; margin-top: 4px; }
+  button, select {
+    font: inherit; min-height: 44px; padding: 8px 14px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer;
+  }
+  button:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--pick); outline-offset: 2px;
+  }
+  .pickbtn { width: 100%; border: 0; border-top: 1px solid var(--line); text-align: left; }
+  .pickbtn[aria-pressed="true"]::before { content: "선택됨 · "; color: var(--pick); font-weight: 600; }
+  .axis { display: grid; grid-template-columns: 200px 1fr auto; gap: 12px; align-items: center;
+          padding: 10px 0; border-bottom: 1px solid var(--line); }
+  @media (max-width: 700px) { .axis { grid-template-columns: 1fr; } }
+  .axis .name { font-size: 14px; }
+  .from-profile { color: var(--flag); font-size: 12px; display: block; }
+  .opts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .opts button[aria-pressed="true"] { border-color: var(--pick); border-width: 2px; }
+  .opts button[aria-pressed="true"]::after { content: " ✓"; color: var(--pick); }
+  .q { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 20px 0 40px; }
+  .redraft { border-color: var(--pick); color: var(--pick); margin-left: auto; }
+  label { display: block; font-size: 14px; margin: 20px 0 6px; }
+  textarea { font: inherit; width: 100%; min-height: 80px; padding: 10px;
+             border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  .quiet { color: var(--ink-2); font-size: 14px; }
+  pre#out { border: 1px solid var(--line); background: #fff; padding: 12px; overflow: auto;
+            font: 13px/1.5 ui-monospace, monospace; max-height: 320px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>결정 대시보드</h1>
+  <p class="sub" id="scope"></p>
+</header>
+<main>
+  <h2>1 · 방향 (통째로 고릅니다)</h2>
+  <div class="grid" id="cands" role="radiogroup" aria-label="방향 후보"></div>
+
+  <h2>2 · 열린 축 (고른 방향 안에서만 움직입니다)</h2>
+  <p class="quiet">다른 방향의 요소를 가져오는 건 오버라이드가 아니라 후보를 다시 그리라는 신호입니다.</p>
+  <div id="axes"></div>
+
+  <h2>3 · 아직 남은 질문</h2>
+  <div id="qs"></div>
+
+  <label for="note">왜 이걸 골랐는지 한 줄 (필수)</label>
+  <textarea id="note" placeholder="예: 좌측 고정이 스캔이 빨라서"></textarea>
+  <div class="row">
+    <button id="copy">선택 확정 · payload 복사</button>
+    <span class="quiet" id="state"></span>
+    <button class="redraft" id="redraft">축이 이게 아님 · 다시 그려</button>
+  </div>
+  <pre id="out"></pre>
+</main>
+
+<script>
+/* ---- fill these ---- */
+const SURFACE  = "<repo-relative design-contract.md path>";
+const STAGE    = "interface";                 /* experience | interface */
+const MEDIUM   = "web";                       /* web|tui|cli|desktop-gui|mobile-gui|deck|print */
+const REVIEWED = ["default@wide", "empty@narrow"];
+/* Each candidate carries its own revision — the payload records the hash of the artifact that
+   was actually chosen, so a single page-wide constant cannot express it. */
+
+const CANDIDATES = [
+  { id:"ART-001", revision:"000000000000", name:"안내형", idea:"읽는 사람이 먼저 상태를 이해하고 그다음 행동한다",
+    html:"<pre>[ 대기 12 ]  [ 진행 3 ]  [ 실패 1 ]\n\n오늘 배포 3건이 실패했습니다.\n실패부터 보시겠어요?  [ 실패 보기 ]</pre>" },
+  { id:"ART-002", revision:"000000000000", name:"작업대형", idea:"목록이 화면을 지배하고 상세는 잠깐 열린다",
+    html:"<pre>#1240  api-gw     실패    2분 전\n#1239  search     성공    9분 전\n#1238  ranking    성공    22분 전</pre>" }
+];
+
+/* Only axes that are genuinely open. Cap 4. `from_profile` marks a profile-supplied default. */
+const AXES = [
+  { id:"list-shape",  name:"목록 형태", from_profile:false,
+    options:[{v:"table", label:"표"},{v:"list", label:"리스트"}] },
+  { id:"density",     name:"밀도", from_profile:true,
+    options:[{v:"tight", label:"조밀"},{v:"airy", label:"여백"}] }
+];
+
+/* Open questions handed over by the experience stage. */
+const QUESTIONS = [
+  { id:"empty-state", text:"실패 이력이 하나도 없을 때 무엇을 보여줄까요?",
+    options:["최근 성공 목록", "빈 상태 안내만"] }
+];
+/* ---- end fill ---- */
+
+const $ = (id) => document.getElementById(id);
+let base = null;
+const axisPick = {}, qPick = {};
+AXES.forEach(a => { if (a.from_profile) axisPick[a.id] = a.options[0].v; });
+
+$("scope").textContent = SURFACE + " · " + STAGE + " · " + MEDIUM;
+
+$("cands").innerHTML = CANDIDATES.map(c => `
+  <div class="cand" role="radio" aria-checked="false" id="c-${c.id}">
+    <figure>${c.html}</figure>
+    <footer><b>${c.id}</b> ${c.name}<span class="idea">${c.idea}</span></footer>
+    <button class="pickbtn" data-base="${c.id}" aria-pressed="false">이 방향으로</button>
+  </div>`).join("");
+
+$("axes").innerHTML = AXES.map(a => `
+  <div class="axis">
+    <div class="name">${a.name}${a.from_profile ? '<span class="from-profile">프로필에서 옴 — 바꿀 수 있습니다</span>' : ''}</div>
+    <div class="opts">${a.options.map(o =>
+      `<button data-axis="${a.id}" data-val="${o.v}" aria-pressed="${axisPick[a.id] === o.v}">${o.label}</button>`).join("")}</div>
+    <span class="quiet">${a.id}</span>
+  </div>`).join("");
+
+$("qs").innerHTML = QUESTIONS.length ? QUESTIONS.map(q => `
+  <div class="q"><div>${q.text}</div>
+    <div class="opts" style="margin-top:8px">${q.options.map(o =>
+      `<button data-q="${q.id}" data-val="${o}" aria-pressed="false">${o}</button>`).join("")}</div>
+  </div>`).join("") : '<p class="quiet">없습니다.</p>';
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.base) {
+    base = b.dataset.base;
+    document.querySelectorAll("[data-base]").forEach(x => {
+      const on = x.dataset.base === base;
+      x.setAttribute("aria-pressed", on);
+      $("c-" + x.dataset.base).setAttribute("aria-checked", on);
+    });
+  } else if (b.dataset.axis) {
+    axisPick[b.dataset.axis] = b.dataset.val;
+    document.querySelectorAll(`[data-axis="${b.dataset.axis}"]`).forEach(x =>
+      x.setAttribute("aria-pressed", x.dataset.val === b.dataset.val));
+  } else if (b.dataset.q) {
+    qPick[b.dataset.q] = b.dataset.val;
+    document.querySelectorAll(`[data-q="${b.dataset.q}"]`).forEach(x =>
+      x.setAttribute("aria-pressed", x.dataset.val === b.dataset.val));
+  }
+});
+
+function overturned() {
+  return AXES.filter(a => a.from_profile && axisPick[a.id] !== a.options[0].v).map(a => a.id);
+}
+function fromProfile() {
+  return AXES.filter(a => a.from_profile && axisPick[a.id] === a.options[0].v).map(a => a.id);
+}
+
+async function emit(obj) {
+  const text = JSON.stringify(obj, null, 2);
+  $("out").textContent = text;
+  try { await navigator.clipboard.writeText(text); $("state").textContent = "복사됨 — 대화에 붙여넣으세요."; }
+  catch (e) { $("state").textContent = "클립보드를 못 씁니다. 아래 내용을 직접 복사하세요."; }
+}
+
+$("copy").addEventListener("click", () => {
+  const note = $("note").value.trim();
+  if (!note) { $("state").textContent = "한 줄이 필요합니다 — 이 문장이 그대로 근거로 기록됩니다."; $("note").focus(); return; }
+  if (!base) { $("state").textContent = "먼저 방향을 하나 고르세요."; return; }
+  emit({ kind:"decision", schema:1, medium:MEDIUM, surface:SURFACE, stage:STAGE,
+         base:base, revision:(CANDIDATES.find(c => c.id === base) || {}).revision,
+         axes:Object.assign({}, axisPick), questions:Object.assign({}, qPick),
+         profile_origin:fromProfile(), overturned:overturned(),
+         reviewed:REVIEWED, note:note, redraft:false });
+});
+
+$("redraft").addEventListener("click", () => {
+  const note = $("note").value.trim();
+  emit({ kind:"decision", schema:1, note: note || "축이 이게 아님 — 다시 그려주세요", redraft:true });
+  $("state").textContent = "재작성 신호입니다. 승인 토큰은 만들어지지 않습니다.";
+});
+</script>
+</body>
+</html>

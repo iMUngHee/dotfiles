@@ -66,7 +66,7 @@ Use the method reference to define only what the depth requires:
 - IA, navigation intent, routes, and screen inventory.
 - Content priority per screen.
 - Primary and recovery flows.
-- Empty, loading, error, partial, overflow, validation, destructive, conflict, and success states when applicable.
+- Empty, loading, error, partial, overflow, validation, destructive, conflict, and success states when applicable. These are semantic states and they are owned here; which of them the medium can express is the medium's business, and one it cannot express raises `CONTRACT GAP` rather than disappearing.
 - Keyboard intent, feedback, recovery semantics, and task-specific microcopy.
 
 **Do not settle on the first plausible structure.** At Full depth, work out more than one way
@@ -74,11 +74,14 @@ to organize this surface and put them side by side before choosing. Alternatives
 only in section naming are one alternative wearing two labels — they must differ in how
 content is grouped, where the entry points are, or what the user does first.
 
-Make the alternatives reactable. A single self-contained HTML page showing each structure with
-real content length — labeled regions, actual navigation, actual ordering — tells the user more
-in ten seconds than a paragraph does, and lets them recognize a preference they could not have
-stated in advance. Keep it visually neutral: no palette, typography, radius, decoration, or art
-direction. Structure is the subject.
+Make the alternatives reactable. Use the shared shell —
+`../product-craft/references/decision-dashboard.html` — with tier 1 only and no axes: each
+structure shown with real content length, labeled regions, actual navigation, actual ordering.
+That tells the user more in ten seconds than a paragraph does, and lets them recognize a
+preference they could not have stated in advance. Keep it visually neutral: no palette,
+typography, radius, decoration, or art direction. Structure is the subject, and the regions
+carry `data-region` / `data-parent` / `data-entry` so two alternatives can be compared as
+skeletons rather than by impression.
 
 ### 3. Blind-Spot Pass
 
