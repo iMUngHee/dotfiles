@@ -117,8 +117,9 @@ this stage cannot recover from.
 Present them through `../../product-craft/references/decision-dashboard.html` so every open
 decision is visible at once instead of arriving one at a time in prose. Tier 1 picks a base
 candidate whole. Tier 2 offers only axes that are **genuinely open** — not settled by the
-contract, the captured evidence, or the taste profile — capped at four, and each option moves
-**within the chosen base**. A request to take one base's element into another is not an
+contract or the captured evidence — capped at four, and each option moves **within the chosen
+base**. An axis the taste profile has settled is a different case: it stays on the page as a
+marked pre-selection rather than a question, outside the cap, so it can still be flipped. A request to take one base's element into another is not an
 override; it is a signal to redraw, because element-level mixing across bases is precisely how
 candidates collapse into one idea in two coats.
 

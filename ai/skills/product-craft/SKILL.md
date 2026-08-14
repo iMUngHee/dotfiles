@@ -85,8 +85,19 @@ through prose across a conversation.
 
 - `references/decision-dashboard.html` — per-surface, at a glance. Tier 1 picks a base
   candidate whole; tier 2 toggles only genuinely open axes **within that base**; tier 3 carries
-  the questions the experience stage still owes. Cap the axes at four, and offer only axes that
-  are actually undecided — not ones the contract, the evidence, or the profile already settled.
+  the questions the experience stage still owes.
+
+  Two different things get called "settled" and they behave oppositely. An axis the **contract
+  or captured evidence** decided is not offered at all — flipping it is a contract change, not a
+  preference. An axis the **profile** decided is always shown, pre-selected and marked, because
+  that is the only way it stays flippable and the only way the overturn counter can ever move;
+  a profile default that disappears makes the anti-ossification rule dead code. Profile defaults
+  do not count against the cap of four, because they are disclosed answers rather than
+  questions.
+
+  So the page shrinks with use: the same medium starts with a similar menu drawn from its
+  differentiation vocabulary, and each recurring answer moves from the question list to the
+  marked-default list.
 - `references/taste-tournament.html` — cross-project, forced pairwise choice, used to collect
   the durable taste profile.
 
