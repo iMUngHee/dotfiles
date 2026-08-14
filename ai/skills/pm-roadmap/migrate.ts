@@ -151,6 +151,7 @@ async function migrateLegacyRoadmap(root: string, opts: { apply?: boolean; yes?:
   // build per-task bundles
   interface Bundle { key: string; backlog: Block[]; closed: Block[]; links: Block[]; memory: Block[]; status: string; }
   const bundles: Bundle[] = [];
+  const skippedLinks: string[] = [];
   for (const key of [...taskKeys].sort()) {
     const backlog = legacy.open.filter((it) => it.task === key).map(backlogBlock);
     const closed = legacy.closed.filter((c) => c.task === key).map(closedBlock);
@@ -160,10 +161,18 @@ async function migrateLegacyRoadmap(root: string, opts: { apply?: boolean; yes?:
     const memFile = parseLegacyMemoryFile(memRaw);
     const seen = new Set(memFile.map((m) => m.title));
     const memUnion = [...memFile, ...tc.memory.filter((m) => !seen.has(m.title))]; // file ∪ legacy section
-    bundles.push({ key, backlog, closed, links: tc.links.map(linkBlock), memory: memUnion.map(memBlock), status: backlog.length ? "active" : "done" });
+    // A legacy entry can carry a URL with no label. The label becomes the block id, and an
+    // empty id cannot round-trip, so report and skip it rather than abort the whole migration.
+    const usableLinks = tc.links.filter((l) => {
+      if (l.label.trim()) return true;
+      skippedLinks.push(`${key}: link with no label (url ${l.url || "-"})`);
+      return false;
+    });
+    bundles.push({ key, backlog, closed, links: usableLinks.map(linkBlock), memory: memUnion.map(memBlock), status: backlog.length ? "active" : "done" });
     lines.push(`  task ${key} [${backlog.length ? "active" : "done"}]: ${backlog.length} open, ${closed.length} closed, ${tc.links.length} links, ${memUnion.length} memory`);
   }
   if (inboxItems.length) lines.push(`  inbox.md: ${inboxItems.length} untriaged (${inboxItems.map((i) => i.id).join(", ")})`);
+  for (const s of skippedLinks) lines.push(`  SKIPPED ${s}`);
   if (!opts.apply) { lines.push("", "DRY-RUN — nothing written. Re-run with --apply to migrate (after review)."); return { out: lines.join("\n"), applied: false, ok: true }; }
 
   // ── APPLY ──
@@ -171,15 +180,26 @@ async function migrateLegacyRoadmap(root: string, opts: { apply?: boolean; yes?:
   const backup = join(root, `.agents.backup-${runid}`); // OUTSIDE .agents (cp can't copy a dir into itself)
   await cp(agents, backup, { recursive: true });
 
+  // Render every document before the first write (D7). Serializing inside the write loop
+  // would abort a legacy conversion halfway through, leaving a half-built task store.
+  const rendered: { path: string; content: string }[] = [];
   for (const b of bundles) {
-    await mkdir(taskDir(root, b.key), { recursive: true });
-    await writeFile(taskFile(root, b.key, "task.md"), serializeFrontmatter([["key", b.key], ["title", b.key], ["status", b.status], ["created", nowDate], ["updated", nowDate]], `# ${b.key}\n`));
-    await writeFile(taskFile(root, b.key, "backlog.md"), serializeBlocks(`${b.key} — Backlog`, b.backlog));
-    await writeFile(taskFile(root, b.key, "closed.md"), serializeBlocks(`${b.key} — Closed`, b.closed));
-    await writeFile(taskFile(root, b.key, "links.md"), serializeBlocks(`${b.key} — Links`, b.links));
-    await writeFile(taskFile(root, b.key, "memory.md"), serializeBlocks(`${b.key} — Memory`, b.memory));
+    rendered.push(
+      { path: taskFile(root, b.key, "task.md"), content: serializeFrontmatter([["key", b.key], ["title", b.key], ["status", b.status], ["created", nowDate], ["updated", nowDate]], `# ${b.key}\n`) },
+      { path: taskFile(root, b.key, "backlog.md"), content: serializeBlocks(`${b.key} — Backlog`, b.backlog) },
+      { path: taskFile(root, b.key, "closed.md"), content: serializeBlocks(`${b.key} — Closed`, b.closed) },
+      { path: taskFile(root, b.key, "links.md"), content: serializeBlocks(`${b.key} — Links`, b.links) },
+      { path: taskFile(root, b.key, "memory.md"), content: serializeBlocks(`${b.key} — Memory`, b.memory) },
+    );
   }
-  if (inboxItems.length) await writeFile(inboxPath(root), serializeBlocks("_INBOX — Inbox", inboxItems.map(inboxBlock)));
+  if (inboxItems.length) rendered.push({ path: inboxPath(root), content: serializeBlocks("_INBOX — Inbox", inboxItems.map(inboxBlock)) });
+  // Migration only creates task documents. Anything already present was never parsed here and
+  // could carry orphans, so refuse rather than clobber it (D9).
+  for (const r of rendered) {
+    if (await exists(r.path)) throw new Error(`refusing to migrate: ${r.path} already exists — migration only creates task documents`);
+  }
+  for (const b of bundles) await mkdir(taskDir(root, b.key), { recursive: true });
+  for (const r of rendered) await writeFile(r.path, r.content);
   // stamp pm_loop:true on the in-flight plan (current.txt)
   const cur = (await readFile(join(agents, "state", "current.txt"), "utf-8").catch(() => "")).trim();
   if (cur && await exists(join(root, cur))) {
@@ -272,6 +292,15 @@ async function relocateInbox(root: string, runid: string, transaction: Transacti
     const newRaw = await readFile(newPath, "utf8").catch(() => "");
     const oldParsed = parseBlocks(oldRaw);
     const newParsed = parseBlocks(newRaw);
+    // The merge re-serializes from the parsed models, so orphans in either side would be
+    // destroyed. Refuse before the transaction is built (D9); this path bypasses ops entirely.
+    for (const [label, parsed] of [[oldPath, oldParsed], [newPath, newParsed]] as const) {
+      if (!parsed.orphans.length) continue;
+      throw new Error(
+        `refusing to relocate the inbox: ${label} line(s) ${parsed.orphans.map((o) => o.line).join(", ")} ` +
+        `hold content outside any item block that the merge would destroy. Repair the file by hand, then retry.`,
+      );
+    }
     const newIds = new Set(newParsed.blocks.map((block) => block.id));
     const collisions = oldParsed.blocks.map((block) => block.id).filter((id) => newIds.has(id));
     if (collisions.length) throw new Error(`inbox migration collision: ${collisions.join(", ")}`);
