@@ -4,7 +4,7 @@ Before drawing candidates, look at how this problem has already been solved well
 is not to copy a look; it is to reach the candidate stage holding real structural material
 instead of defaults.
 
-The best reference is source. A live product's markup and CSS carry more than a screenshot,
+The best reference is source. A live product's own substrate carries more than a screenshot,
 and far more than an adjective.
 
 ## Choosing what to study

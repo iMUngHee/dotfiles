@@ -76,7 +76,7 @@ only the plan requirement.
 
 ## Owned Contract Section
 
-UI engineering is the sole writer for `Implementation Bridge` after build authorization. It records existing libraries, primitives, token/code mappings, CSS conventions, asset rules, technical constraints, and verification commands. It cannot override experience- or interface-owned sections.
+UI engineering is the sole writer for `Implementation Bridge` after build authorization. It records existing libraries, primitives, token/code mappings, styling conventions, asset rules, technical constraints, and verification commands. It cannot override experience- or interface-owned sections.
 
 ## Required Context
 
@@ -85,8 +85,8 @@ UI engineering is the sole writer for `Implementation Bridge` after build author
 3. Existing component primitives, design tokens, theme/style entry points, layout conventions, accessibility helpers, and tests.
 4. `../product-craft/references/quality-floor.md`, `../product-craft/references/output-formats.md`, `references/implementation-baseline.md`, and `references/verification.md`.
 5. The selected artifact named in the contract's `## Artifact Ledger`, read as source. Within
-   the states and viewports it was reviewed at, the artifact is the authority for what the
-   screen looks like — read its markup and CSS rather than reconstructing the look from prose.
+   the states and adaptation extremes it was reviewed at, the artifact is the authority for what the
+   screen looks like — read its own substrate rather than reconstructing the look from prose.
    Recompute its revision before trusting it; a mismatch is `ARTIFACT DRIFT`, not a detail to
    reconcile by eye.
 
@@ -112,7 +112,7 @@ Reject duplicate, unknown, or sourceless rows and unjustified N/A.
 If code evidence conflicts with or cannot express approved intent:
 
 - Emit `EXPERIENCE DELTA REQUIRED` for jobs, IA, flow, visible-state meaning, interaction semantics, recovery, or microcopy.
-- Emit `INTERFACE DELTA REQUIRED` for composition, art direction, visual tokens, component appearance, responsive presentation, or interface formatting.
+- Emit `INTERFACE DELTA REQUIRED` for composition, art direction, visual tokens, component appearance, adaptation presentation, or interface formatting.
 - Emit `CONTRACT GAP` when intent is missing/contradictory or ownership is unclear.
 
 Stop the affected path. Do not resolve a gap with an arbitrary implementation choice.
@@ -122,7 +122,7 @@ Stop the affected path. Do not resolve a gap with an arbitrary implementation ch
 - Preserve technical architecture and existing product invariants.
 - Reuse existing primitives and tokens before creating variants or dependencies.
 - Implement all applicable states and recovery paths, not only the happy render.
-- Apply semantic HTML, keyboard/focus behavior, contrast, touch, and reduced-motion floors.
+- Apply the invariant floor through the declared medium's mechanisms — see `../interface-design/references/medium-profiles.md`. Where a medium supplies no mechanism for an intent, that is a GAP to report, not a pass. For a medium that produces no durable source at all, this skill still owns render-grounded evidence and the Implementation Bridge records how the artifact was produced and inspected.
 - Keep motion frequency-appropriate and performance-safe.
 - Use realistic content constraints and explicit overflow behavior.
 - Update Implementation Bridge only with verified mappings and commands.

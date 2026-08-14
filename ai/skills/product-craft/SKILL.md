@@ -48,8 +48,8 @@ Do not inflate Seed into a design system. Do not use Focused Delta to smuggle ch
 ## Orchestration
 
 1. Locate the nearest applicable `design-contract.md`; a repository-root contract is a base and a nearer app contract overrides only its declared sections.
-2. Read `references/contract-schema.md`, `references/quality-floor.md`, and `references/output-formats.md`. Read `references/craft-review.md` when a render will be judged.
-3. Record scope, contract depth, inherited evidence, proposed sections, and owner for each proposal.
+2. **Declare the medium** (see below) and read `references/contract-schema.md`, `references/quality-floor.md`, and `references/output-formats.md`. Read `references/craft-review.md` when a render will be judged. Read `taste-profile.md` so its values can be offered as marked defaults.
+3. Record scope, contract depth, declared medium, inherited evidence, proposed sections, and owner for each proposal.
 4. Run `experience-design` when experience-owned decisions are missing or changing. Pass only Product Context, UX Model, Data & State Model, Interaction Model, and Microcopy plus relevant evidence. Require its experience-stage obligations before considering `READY FOR INTERFACE`.
 5. Validate unique ids, material obligation coverage, evidence, depth scope, and `experience_approved`.
 6. Continue to `interface-design` only after `READY FOR INTERFACE`. Pass the approved experience sections and their obligations, surface scope, and the shared quality floor.
@@ -60,6 +60,49 @@ Do not inflate Seed into a design system. Do not use Focused Delta to smuggle ch
 
 For Seed, an explicit build request may auto-chain disclosed compact experience and interface inferences when none is materially ambiguous. For Focused Delta, every changed section requires approval. Full requires separate Experience and Interface approvals plus explicit implementation authorization.
 
+## Medium
+
+Every surface has a medium — web, TUI, CLI, desktop GUI, mobile GUI, deck, or print — and it
+decides units, capabilities, which states exist, and how a candidate is inspected. The medium
+is **declared, not offered as a choice**, and it is never one of the axes a selection page
+presents.
+
+1. Repository evidence first.
+2. Otherwise the request, or whatever plan or artifact the request already produced. At least
+   one of these always exists, so no detection machinery is needed.
+3. When substrate and medium diverge, the medium wins — Electron and Tauri render DOM but are
+   desktop GUI products.
+4. Still ambiguous → `CONTRACT GAP`. A misread medium is a gate, not one more axis; adding an
+   axis to paper over it is the failure this rule exists to stop.
+
+Pass the declared medium to every leaf. `interface-design/references/medium-profiles.md` holds
+its substrate, mechanisms, craft defaults, purpose calibration, and differentiation vocabulary.
+
+## Selection Pages
+
+Bring the open decisions into one surface the owner can see at once, instead of scattering them
+through prose across a conversation.
+
+- `references/decision-dashboard.html` — per-surface, at a glance. Tier 1 picks a base
+  candidate whole; tier 2 toggles only genuinely open axes **within that base**; tier 3 carries
+  the questions the experience stage still owes. Cap the axes at four, and offer only axes that
+  are actually undecided — not ones the contract, the evidence, or the profile already settled.
+- `references/taste-tournament.html` — cross-project, forced pairwise choice, used to collect
+  the durable taste profile.
+
+Both pages are HTML whatever the product's medium is: they are choosers, not artifacts. A
+non-web medium embeds its own capture — the terminal run, both stream forms, the rendered unit
+or page, or a screenshot explicitly labeled a mock.
+
+Both pages always show **"축이 이게 아님 · 다시 그려"**. That is a redraft signal, not a
+selection: it records no approval token. Selecting from the wrong axes produces confident
+choices and a surface that still misses, with an approval token laundering the bad frame — the
+escape exists to prevent exactly that.
+
+Moving an element from one base into another is not an override. It is a signal to redraw the
+candidates, because two bases mixed at the element level is how candidates collapse into
+palette swaps.
+
 ## Canonical Contract Rules
 
 - `references/contract-schema.md` is the only normative schema.
@@ -69,12 +112,30 @@ For Seed, an explicit build request may auto-chain disclosed compact experience 
 - `design-contract.md` describes how a product surface works and feels. `.agents/plans/*.md` describes how a technical change will be executed.
 - Never create or edit a contract, specimen, or product source without user authorization.
 
+## Taste Profile
+
+`taste-profile.md` carries the owner's durable design preferences across projects, so the same
+choices are not re-elicited every session. It is read before candidates are drawn and written
+only through the two rules below.
+
+- A `taste` payload never writes directly. Produce the proposed diff, show it, and commit only
+  on explicit approval. This bounds repository churn and stops a misread click from hardening
+  into a durable preference.
+- A profile value appears in a selection page **pre-selected and marked as profile-supplied**,
+  so it can always be seen and flipped. A silent default is the same defect as an undisclosed
+  inference. A value with fewer than three confirmations is shown but never pre-selected.
+- Three consecutive overturns of an axis retire its value to `uncertain` and return the axis to
+  the next tournament.
+
+The `Note` column holds the owner's words verbatim and is the one place Korean is expected in
+this family; do not translate it and do not flag it in a language sweep.
+
 ## Gate Protocol
 
 Use the exact records in `references/output-formats.md`.
 
 - `READY FOR INTERFACE` — produced by experience-design; consumed by interface-design. Continue only when jobs, IA/flow, visible states, recovery, and material questions are resolved for the selected depth, every applicable EXP obligation has one valid PASS row, and Required approvals are present in Recorded approvals.
-- `READY FOR BUILD` — produced by interface-design; consumed by design or ui-engineering. Continue only when composition, art direction, component presentation, responsive behavior, and accessibility values are concrete for the selected depth, every EXP row is mapped, required specimens were inspected, every INT row is valid, and Required approvals are present in Recorded approvals.
+- `READY FOR BUILD` — produced by interface-design; consumed by design or ui-engineering. Continue only when composition, art direction, component presentation, adaptation behavior, and accessibility values are concrete for the selected depth, every EXP row is mapped, required specimens were inspected, every INT row is valid, and Required approvals are present in Recorded approvals.
 - `EXPERIENCE DELTA REQUIRED` — produced by interface-design or ui-engineering when an experience-owned section must change. Stop the affected path and return to experience-design.
 - `INTERFACE DELTA REQUIRED` — produced by ui-engineering when an interface-owned section must change. Stop the affected path and return to interface-design.
 - `CONTRACT GAP` — produced by a leaf when required intent is absent or conflicting and ownership cannot safely be bypassed. Product-craft routes it; the affected path stays stopped.
@@ -92,7 +153,7 @@ Use `Surface Obligations`, `Approvals`, `Craft Findings`, and `ARTIFACT DRIFT` f
    recorded only from explicit user evidence. `direction_selected` belongs to the user —
    record their own words and the chosen `ART-NNN`. Never select on their behalf.
 4. When a design artifact carries the visual decision, record it in the contract's
-   `## Artifact Ledger` with path, revision, coverage, and reviewed state/viewport scope.
+   `## Artifact Ledger` with path, revision, coverage, and reviewed state and adaptation scope.
    Inside that reviewed scope the selected artifact outranks written decisions.
 5. On approval, persist the obligations, ledger rows, and approvals under the durable
    contract's `## Decision Log & Open Questions`, keeping the path inside the execution root.
@@ -113,7 +174,7 @@ contained contract path explicitly; it never invents or implies an active plan.
 
 ## Handoff Boundaries
 
-`experience-design` owns jobs, IA, routes, screen inventory, content priority, workflows, visible states, recovery, and microcopy. `interface-design` owns macrostructure, composition, hierarchy, art direction, visual systems, component appearance, responsive presentation, and interface accessibility values. `ui-engineering` owns durable UI code, Implementation Bridge, and render-grounded evidence.
+`experience-design` owns jobs, IA, routes, screen inventory, content priority, workflows, visible states, recovery, and microcopy. `interface-design` owns macrostructure, composition, hierarchy, art direction, visual systems, component appearance, adaptive presentation, and interface accessibility values. `ui-engineering` owns durable UI code, Implementation Bridge, and render-grounded evidence.
 
 Interface planning produces design artifacts that carry the visual decision. A selected
 artifact is durable reference — recorded in `## Artifact Ledger` and read by implementation —

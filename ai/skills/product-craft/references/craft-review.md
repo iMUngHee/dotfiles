@@ -31,7 +31,7 @@ a clean pass on every heading while the screen is visibly broken means the looki
 a defect, not a rendering quirk. Chinese and Japanese follow their own line-breaking
 conventions and must not inherit the Korean rule. Long unspaced strings — URLs, identifiers,
 code — wrap, scroll, or truncate with a route to the full value; they never overflow
-silently. Judge this at the narrowest supported viewport, not the wide one.
+silently. Judge this at the tightest extreme of the medium's adaptation axis, not the roomy one.
 
 **Optical alignment.** Geometric centering is not optical centering. Icons beside text,
 arrows inside buttons, and glyphs with heavy sidebearing usually need a nudge. Punctuation,
@@ -47,7 +47,7 @@ on one screen, none of them meaning anything, is arbitrary rhythm. Related items
 closer to each other than to the next group.
 
 **Clipping and overflow.** Look at every edge. Code blocks, tables, long labels, and
-absolutely positioned elements clip quietly. A scrollbar appearing only on hover still means
+absolutely positioned elements clip quietly. A scrollbar appearing only on a transient reveal still means
 content is cut. Check that nothing important sits under a sticky header or fixed bar.
 
 **Density coherence.** One screen should read at one density. A compact table beside a
@@ -62,7 +62,7 @@ Give the observation, where it is (screenshot, selector, or measurement), what i
 reader or user, and one concrete correction. Rank by cost: unusable, then degrades the task,
 then polish.
 
-State what you did not inspect. An unexamined viewport or state is uncovered scope, not a
+State what you did not inspect. An unexamined adaptation extreme or state is uncovered scope, not a
 pass.
 
 A finding supported only by "I would have done it differently" is not a finding.

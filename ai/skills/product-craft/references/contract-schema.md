@@ -14,12 +14,12 @@ This is the only normative shape for canonical `design-contract.md`. Trim sectio
 | Interaction Model | `experience-design` | Behavior, validation, keyboard intent, destructive actions, feedback, recovery semantics. |
 | Visual System | `interface-design` | Art direction, design tension, signature moment, tokens, type, spacing, radius, elevation, motion budget. |
 | Component Rules | `interface-design` | Composition, appearance, variants, and visible/interactive states constrained by the UX model. |
-| Responsive & Accessibility | `interface-design` | Concrete responsive presentation and accessibility values satisfying the quality floor and experience requirements. |
+| Responsive & Accessibility | `interface-design` | Concrete adaptation presentation and accessibility values satisfying the quality floor and experience requirements. The section name is a stable identifier kept for existing contracts; read "responsive" as "adapts along the declared medium's axis", which for a fixed canvas or a page means scaling the frame rather than reflowing. |
 | Performance & Formatting | `interface-design` | Perceived-latency presentation and display formatting; business-meaning changes require an experience delta. |
 | Microcopy | `experience-design` | Labels, helper text, validation, recovery, confirmation, and state language. |
 | Do / Don't | `interface-design` | Surface-specific visual and component guardrails. |
-| Artifact Ledger | `interface-design` | Selected and superseded design artifacts, their revisions, coverage, and reviewed state/viewport scope. |
-| Implementation Bridge | `ui-engineering` | Existing libraries, primitives, token/code mappings, CSS conventions, asset rules, verification commands. |
+| Artifact Ledger | `interface-design` | Selected and superseded design artifacts, their revisions, coverage, and reviewed state and adaptation scope. |
+| Implementation Bridge | `ui-engineering` | Existing libraries, primitives, token/code mappings, styling conventions, asset rules, verification commands. |
 | Decision Log & Open Questions | `product-craft` | Approved decisions, rejected proposals, owner, rationale, and unresolved routed questions. |
 
 ## Canonical Shape
@@ -58,16 +58,16 @@ This is the only normative shape for canonical `design-contract.md`. Trim sectio
 ## Decision Log & Open Questions
 ```
 
-For Presentation/Deck surfaces, UX Model describes slide and speaker flow; Responsive & Accessibility describes fixed-canvas scaling and projection contrast. Mark irrelevant web dimensions `N/A`.
+For a presenting surface, UX Model describes unit and speaker flow; Responsive & Accessibility describes fixed-canvas scaling and distance-legibility contrast. Mark irrelevant web dimensions `N/A`.
 
 ## Artifact Ledger
 
-A design artifact — usually a self-contained HTML file — carries visual and structural
+A design artifact — a self-contained file in the declared medium's substrate — carries visual and structural
 authority that prose cannot. The ledger records which artifact is authoritative, for what,
 and in what state.
 
 ```text
-| ART ID | Path | Revision | Covers | States / viewports | Status | Supersedes |
+| ART ID | Path | Revision | Selection | Covers | States / extremes | Status | Supersedes |
 ```
 
 - `Path`: inside the execution root, under `.agents/`. Never a product source path.
@@ -83,11 +83,20 @@ and in what state.
   Google Fonts' `css2?family=...&text=...` endpoint will return a subset, which you fetch once
   and inline as base64 — and the file stays around 100KB rather than several megabytes. The
   artifact itself never references that endpoint, or any other, at render time.
+  Self-containment is a property of the medium's own substrate, not of HTML. A terminal
+  artifact is the captured run at its declared widths; a deck artifact is the rendered units;
+  a paged artifact is the rendered pages. The rule is unchanged — one file, no external
+  reference — but what that file *is* comes from `../../interface-design/references/medium-profiles.md`.
 - `Revision`: first 12 characters of the file's sha256. Because the file is self-contained,
   this hash covers the whole rendered authority. Recompute it when verifying.
+- `Selection`: `ART-NNN` alone when the artifact has one form, or `ART-NNN@<axis combination>`
+  when the artifact carries variant hooks and the user chose a combination within it. The
+  combination is a coordinate, not a second hash: the revision still covers the whole file, so
+  editing the file changes the revision and any earlier selection surfaces as drift under the
+  existing check.
 - `Covers`: the obligations this artifact is authoritative for. Two `selected` artifacts
   cannot cover the same obligation.
-- `States / viewports`: what was actually reviewed when it was selected. Outside that scope
+- `States / extremes`: what was actually reviewed when it was selected — the states, and the medium's adaptation extremes or whatever its profile names instead. Outside that scope
   the artifact carries no authority.
 - `Status`: `selected` | `superseded` | `exploratory`.
 - `Supersedes`: the replaced artifact, which becomes `superseded` and loses authority

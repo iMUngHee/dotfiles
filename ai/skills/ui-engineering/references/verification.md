@@ -6,7 +6,7 @@ Verify fitness against the approved contract, surface job, and quality floor. Do
 
 1. User-job closure and active plan success criteria.
 2. Approved `design-contract.md` and gate records.
-3. Code/tests/browser measurements.
+3. Code, tests, and measurements taken from the medium's own render.
 4. Inspected renders of realistic content and relevant states.
 
 Subjective design confidence cannot turn a failed or missing objective check into readiness.
@@ -15,10 +15,10 @@ Subjective design confidence cannot turn a failed or missing objective check int
 
 Bound coverage by risk rather than every combination:
 
-- Seed: touched screen with realistic data and affected states. Add the relevant narrow viewport when layout, wrapping, media, navigation, or touch behavior changed.
+- Seed: touched screen with realistic data and affected states. Add the relevant adaptation extreme when layout, wrapping, media, navigation, or target behavior changed.
 - Focused Delta: changed screens/states plus one adjacent state when layout, data shape, or interaction may propagate.
-- Full/multi-screen: map routes/screens, then inspect one representative path per primary user job; render primary screens at desktop and mobile plus only job-relevant internal states.
-- Presentation/Deck: render the fixed canvas instead of desktop/mobile breakpoints.
+- Full/multi-screen: map routes/screens, then inspect one representative path per primary user job; render primary screens at both adaptation extremes plus only job-relevant internal states.
+- A medium with no adaptation axis inspects what its profile names instead — a deck at full size and thumbnail, a page at its boundaries and in greyscale, a stream on a TTY and piped.
 
 Name every unrendered area as out of scope. If rendering is infeasible, state why and report craft quality `NOT VERIFIED`.
 
@@ -40,12 +40,12 @@ EXP/INT obligation, verify transitive coverage by at least one applicable IMP ro
 compare the same material requirement across:
 
 1. Concrete code evidence.
-2. An affirmative test or browser assertion.
+2. An affirmative test, or an assertion made against the medium's own render.
 3. A directly inspected render or measurement.
 
 Page-level substitutes do not prove a more specific contracted transformation. For
-example, document-level no-overflow does not prove a required mobile navigation drawer,
-and inner table scroll does not prove a contracted non-scrolling mobile evidence list.
+example, document-level no-overflow does not prove a required narrow-form navigation change,
+and inner table scroll does not prove a contracted non-scrolling narrow-form evidence list.
 Reject a generic test summary, screenshot path without inspection, unrelated selector,
 or technical-plan prose as substitute evidence.
 
@@ -79,7 +79,7 @@ buckets yields `Design-Fit Outcome: NOT VERIFIED`.
 - Interaction: keyboard path, focus, validation, feedback, disabled/loading semantics, confirmation, undo, and retry.
 - Components: used button, form, table/filter, dialog, card, navigation, and data-display variants/states.
 - Geometry: clipping, overflow, wrapping, control alignment, content order, and narrow/fixed-canvas behavior.
-- Accessibility: semantics, accessible names, contrast, visible focus, touch target, focus management, status/error announcements, and reduced motion.
+- Accessibility, in the medium's own mechanisms: semantics, accessible names, contrast, visible focus, target size, focus management, status/error announcements, and motion reduction.
 - Motion/performance: frequency, duration, explicit properties, layout/paint cost, scroll behavior, and offscreen work.
 - Visual system: tokens, spacing, type, radius, elevation, density, formatting, asset rules, design tension, and signature moment match the contract.
 - Contract integrity: no naked adjectives, silent substitutions, missing Implementation Bridge mapping, or implementation-authored product decision.
