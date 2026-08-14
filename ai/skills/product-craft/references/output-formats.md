@@ -96,8 +96,11 @@ current one. Route that like `ARTIFACT DRIFT` rather than folding old choices in
 - `resolved[].medium` is `*` when both observations of an axis agreed across two media, and a
   specific medium when they disagreed — a disagreement means the axis is medium-bound, not
   invariant, and it yields one entry per medium with `observations: 1`.
-- `profile_origin` lists axes left at the value `taste-profile.md` supplied. `overturned` lists
-  axes where that default was flipped. Together they are the audit trail for what the profile
+- `profile_origin` lists axes left at the value `taste-profile.md` supplied. Every id in it must
+  name a row that actually exists in the profile with that value; a page that claims a profile
+  origin the profile never had is filled wrong, and the claim is refused rather than recorded.
+  With an empty profile this list is empty. `overturned` lists axes where that default was
+  flipped. Together they are the audit trail for what the profile
   decided versus what the user decided, and `overturned` drives the counter that retires a
   stale profile value.
 
@@ -125,7 +128,11 @@ Order matters. Check in this sequence; each step stops the ones below it.
    - `Confirmations` counts **tournaments**, not observations. A first tournament yields 1
      regardless of whether `observations` was 1 or 2; a later tournament agreeing on the same
      axis and value increments it. Three is where a value stops being provisional.
-4. **`kind: "decision"`** — verify the revision before recording anything.
+4. **`kind: "decision"`** — check `profile_origin` and `overturned` against `taste-profile.md`:
+   every id in either list must name an existing row whose value matches what the page offered.
+   A claim with no matching row means the page was filled from something other than the profile;
+   refuse it rather than recording a preference nobody expressed. Then verify the revision before
+   recording anything.
 
 ### Revision check on a decision payload
 
