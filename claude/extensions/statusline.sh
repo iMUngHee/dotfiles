@@ -221,6 +221,27 @@ render_fresh() {
     printf ' 🌱 %s%d%%%s' "$color" "$fresh_pct" "$RESET"
 }
 
+# pager names every session automatically; this is where a person reads that
+# name, which is what makes "send that to foo" possible at all.
+#
+# Silent when there is no name. A nameless session means pager's hooks have not
+# run yet or host detection failed, and the status line is not where that gets
+# diagnosed — `pager whoami` says so in full. Printing "none" here would spend a
+# permanent slot on a transient state.
+#
+# The session id comes from stdin, so this never pays for host detection. The
+# lookup costs ~18ms against the ~88ms render_plan below already spends, so it
+# adds no new class of cost and needs no cache.
+render_pager() {
+    local name
+    [ -n "$session_id_raw" ] || return
+    command -v pager >/dev/null 2>&1 || return
+    name=$(pager whoami --session "$session_id_raw" 2>/dev/null | awk '/^name:/{print $2; exit}')
+    # "none" is whoami's own placeholder for an unnamed session, not a name.
+    [ -n "$name" ] && [ "$name" != "none" ] || return
+    printf ' 📟 %s%s%s' "$CYAN" "$name" "$RESET"
+}
+
 render_plan() {
     local resolved status color icon
     [ -n "$session_id_raw" ] || return
@@ -277,4 +298,4 @@ parse_stdin
 refresh_and_parse_cache
 
 render_model; printf '\n'
-render_context; render_cost; render_fresh; render_plan; render_quota; printf '\n'
+render_context; render_cost; render_fresh; render_pager; render_plan; render_quota; printf '\n'
