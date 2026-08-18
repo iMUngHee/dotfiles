@@ -1,0 +1,7 @@
+#!/bin/bash
+# Auto-run ai/ orchestrator bootstrap if any tier changed in the merge.
+changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- ai/ claude/ codex/)
+if [ -n "$changed" ]; then
+    echo "[post-merge] ai/claude/codex/ changed, running ai bootstrap..."
+    "$(git rev-parse --show-toplevel)/ai/scripts/bootstrap.sh"
+fi
