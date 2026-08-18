@@ -49,7 +49,7 @@ export async function handle(root: string, method: string, pathname: string, par
         task: c.key, plan: c.plan, nextStep: info?.nextStep ?? null,
         baseBranch: info?.baseBranch ?? "", baseCommit: info?.baseCommit ?? "",
         branch: info?.branch ?? "", worktree: info?.worktree ?? "",
-        note: c.note, blockedBy: c.blockedBy, dependsOn: c.dependsOn,
+        note: c.note, blockedBy: c.blockedBy, blockedByReason: c.blockedByReason, dependsOn: c.dependsOn,
         owner: c.owner, ownerNote: c.ownerNote, mode: c.mode,
       };
     }));
