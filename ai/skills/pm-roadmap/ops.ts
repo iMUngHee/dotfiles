@@ -480,6 +480,11 @@ async function _harvestApply(root: string, key: string, deferred: Deferred[], no
 // history and burn a real id forever. Not a lifecycle transition; see SKILL.md.
 async function _itemExpunge(root: string, key: string, id: string, force: boolean): Promise<void> {
   const inbox = key === "_INBOX";
+  // Runs BEFORE the document scan, and not merely for tidiness: afterwards the code can no
+  // longer tell "archived" from "genuinely absent", so an archived key would be reported as a
+  // missing item — the opposite of the truth, since the item exists, its id stays reserved, and
+  // restore → expunge → archive removes it. _INBOX is a pseudo-key, not a task dir, so it skips.
+  if (!inbox) await assertActiveTask(root, key);
   const docs = inbox
     ? [{ path: inboxPath(root), fallback: "_INBOX — Inbox" }]
     : [
