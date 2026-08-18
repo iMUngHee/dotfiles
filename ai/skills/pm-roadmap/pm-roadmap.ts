@@ -243,6 +243,21 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: `added ${id}`, code: 0 };
     }
     case "plan": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "plan-path")]; await ops.itemSetPlan(root, k, i, v); return { out: `linked ${i} → ${v}`, code: 0 }; }
+    // Note and title were the last two item fields with no setter; '-' clears either.
+    case "note": {
+      const [k, i] = [req(pos[0], "KEY"), req(pos[1], "id")];
+      const text = pos.slice(2).join(" ");
+      if (!text) return { out: "note needs <KEY> <id> <text|-> (use - to clear)", code: 1 };
+      await ops.itemSetNote(root, k, i, text);
+      return { out: text === "-" ? `cleared note on ${k}/${i}` : `noted ${k}/${i}`, code: 0 };
+    }
+    case "retitle": {
+      const [k, i] = [req(pos[0], "KEY"), req(pos[1], "id")];
+      const text = pos.slice(2).join(" ");
+      if (!text) return { out: "retitle needs <KEY> <id> <title|-> (use - to clear)", code: 1 };
+      await ops.itemSetTitle(root, k, i, text);
+      return { out: text === "-" ? `cleared title on ${k}/${i}` : `retitled ${k}/${i} → ${text}`, code: 0 };
+    }
     case "reprioritize": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "P0|P1|P2|P3")]; await ops.itemSetPriority(root, k, i, v); return { out: `reprioritized ${i} → ${v}`, code: 0 }; }
     case "reorder": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "order|-")]; await ops.itemSetOrder(root, k, i, v); return { out: v === "-" ? `cleared order on ${k}/${i}` : `reordered ${i} → ${v}`, code: 0 }; }
     // dependency edges: `depend <KEY> <id> <csv|->` sets the full DependsOn list; `-` clears.
@@ -443,7 +458,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: current.state === "linked" ? current.item.key : "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|expunge|triage|memory|links|current-task|persist|complete|reclassify|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|expunge|note|retitle|triage|memory|links|current-task|persist|complete|reclassify|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
   }
 }
 
