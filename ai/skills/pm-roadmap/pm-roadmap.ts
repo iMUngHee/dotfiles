@@ -24,9 +24,19 @@ import {
   validateManagedWorktrees,
 } from "../../lib/worktree.mjs";
 
-interface Parsed { pos: string[]; opts: Record<string, string | true>; }
+// `pos` is deliberately typed possibly-undefined: an argument typed as a flag (`--id x` instead
+// of a bare `x`) leaves its positional slot empty, and the old `string[]` type let that
+// `undefined` flow into ops as if it were a real id. Every positional read goes through req(),
+// which only throws — it never substitutes a default, so success paths are unchanged and the
+// compiler enumerates any site that forgets.
+function req(v: string | undefined, name: string): string {
+  if (v === undefined) throw new Error(`missing <${name}>`);
+  return v;
+}
+
+interface Parsed { pos: (string | undefined)[]; opts: Record<string, string | true>; }
 function parseArgs(rest: string[]): Parsed {
-  const pos: string[] = [], opts: Record<string, string | true> = {};
+  const pos: (string | undefined)[] = [], opts: Record<string, string | true> = {};
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a.startsWith("--") || (a.startsWith("-") && a.length === 2 && !/^-\d/.test(a))) {
@@ -172,7 +182,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: lines.join("\n") || "(no tasks)", code: 0 };
     }
     case "get": {
-      const id = pos[0];
+      const id = req(pos[0], "id");
       const key = str(opts.task) ?? (await findTask(root, id));
       if (!key) return { out: `item '${id}' not found`, code: 1 };
       const v = await resolveItem(root, key, id);
@@ -203,14 +213,14 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: formatReport(r), code: r.errors.length ? 1 : 0 };
     }
     case "task": {
-      const sub = pos[0], key = pos[1];
+      const sub = req(pos[0], "create|done|archive|restore|set-mode|collaborators"), key = req(pos[1], "KEY");
       if (sub === "create") await ops.taskCreate(root, key, str(opts.title) ?? key, { mode: str(opts.mode) });
       else if (sub === "done") await ops.taskDone(root, key);
       else if (sub === "archive") await ops.taskArchive(root, key);
       else if (sub === "restore") await ops.taskRestore(root, key);
       else if (sub === "set-mode") { // ops enforces the actor precondition on solo→collab
         const { actor, source } = resolveActorSource(root, opts);
-        const r = await ops.taskSetMode(root, key, pos[2], actor);
+        const r = await ops.taskSetMode(root, key, req(pos[2], "solo|collab"), actor);
         let out = `task ${key}: mode → ${r.mode}`;
         if (r.assigned > 0) out += ` — assigned ${r.assigned} unowned item${r.assigned === 1 ? "" : "s"} to ${r.actor}`;
         if (r.assigned > 0 && source === "git user.email") out += `\n⚠ owner '${r.actor}' resolved from git user.email — if that's a personal address, undo with 'pm task set-mode ${key} solo' or reassign owners; set identity via --actor / PM_ACTOR / 'pm whoami <name>'`;
@@ -224,15 +234,15 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: `task ${key}: ${sub} ok`, code: 0 };
     }
     case "add": {
-      const id = pos[0], title = str(opts.title) ?? (pos.slice(1).join(" ") || id);
+      const id = req(pos[0], "id"), title = str(opts.title) ?? (pos.slice(1).join(" ") || id);
       const target = opts.inbox ? { inbox: true as const } : { task: str(opts.task)! };
       if (!opts.inbox && !str(opts.task)) return { out: "add needs --task <KEY> or --inbox", code: 1 };
       await ops.itemAdd(root, target, { id, title, priority: str(opts.p), order: str(opts.o), note: str(opts.note) });
       return { out: `added ${id}`, code: 0 };
     }
-    case "plan": { await ops.itemSetPlan(root, pos[0], pos[1], pos[2]); return { out: `linked ${pos[1]} → ${pos[2]}`, code: 0 }; }
-    case "reprioritize": { await ops.itemSetPriority(root, pos[0], pos[1], pos[2]); return { out: `reprioritized ${pos[1]} → ${pos[2]}`, code: 0 }; }
-    case "reorder": { await ops.itemSetOrder(root, pos[0], pos[1], pos[2]); return { out: `reordered ${pos[1]} → ${pos[2]}`, code: 0 }; }
+    case "plan": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "plan-path")]; await ops.itemSetPlan(root, k, i, v); return { out: `linked ${i} → ${v}`, code: 0 }; }
+    case "reprioritize": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "P0|P1|P2|P3")]; await ops.itemSetPriority(root, k, i, v); return { out: `reprioritized ${i} → ${v}`, code: 0 }; }
+    case "reorder": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "order")]; await ops.itemSetOrder(root, k, i, v); return { out: `reordered ${i} → ${v}`, code: 0 }; }
     // dependency edges: `depend <KEY> <id> <csv|->` sets the full DependsOn list; `-` clears.
     case "depend": {
       const [key, id, targets] = pos;
@@ -249,19 +259,28 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
         await ops.standaloneApprove(root, plan);
         return { out: `approved standalone ${plan}`, code: 0 };
       }
-      const approvedView = await resolveItem(root, pos[0], pos[1]);
+      const [aKey, aId] = [req(pos[0], "KEY"), req(pos[1], "id")];
+      const approvedView = await resolveItem(root, aKey, aId);
       if (approvedView?.plan) await assertLifecycleRoot(root, approvedView.plan.path);
-      await ops.itemApprove(root, pos[0], pos[1]);
+      await ops.itemApprove(root, aKey, aId);
       return { out: `approved ${pos[1]}`, code: 0 };
     }
     case "close": {
       const status = str(opts.status) ?? "done";
       if (status !== "done" && status !== "dropped") return { out: `close --status must be done|dropped (got '${status}')`, code: 1 };
-      await ops.itemClose(root, pos[0], pos[1], { status, reason: str(opts.reason), plan: str(opts.plan), closedBy: await collabBy(root, pos[0], opts) });
+      const [cKey, cId] = [req(pos[0], "KEY"), req(pos[1], "id")];
+      await ops.itemClose(root, cKey, cId, { status, reason: str(opts.reason), plan: str(opts.plan), closedBy: await collabBy(root, cKey, opts) });
       return { out: `closed ${pos[1]}`, code: 0 };
     }
-    case "drop": { await ops.dropItem(root, pos[0], pos[1], { reason: str(opts.reason) ?? "", closedBy: await collabBy(root, pos[0], opts) }); return { out: `dropped ${pos[1]}`, code: 0 }; }
-    case "triage": { await ops.triage(root, pos[0], pos[1]); return { out: `triaged ${pos[0]} → ${pos[1]}`, code: 0 }; }
+    case "drop": { const [k, i] = [req(pos[0], "KEY"), req(pos[1], "id")]; await ops.dropItem(root, k, i, { reason: str(opts.reason) ?? "", closedBy: await collabBy(root, k, opts) }); return { out: `dropped ${i}`, code: 0 }; }
+    // Escape hatch, not a lifecycle verb: erases the block and frees the id. See SKILL.md.
+    case "expunge": {
+      const [key, id] = pos;
+      if (!key || !id) return { out: "expunge needs <KEY> <id> (use _INBOX for an untriaged item)", code: 1 };
+      await ops.itemExpunge(root, key, id, { force: opts.force === true });
+      return { out: `expunged ${key}/${id} — id released`, code: 0 };
+    }
+    case "triage": { const [i, k] = [req(pos[0], "id"), req(pos[1], "KEY")]; await ops.triage(root, i, k); return { out: `triaged ${i} → ${k}`, code: 0 }; }
     case "migrate": {
       const r = await migrate(root, { apply: !!opts.apply, yes: !!opts.yes });
       return { out: r.out, code: r.ok ? 0 : 1 };
@@ -277,7 +296,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
         const persisted = await ops.createStandalonePlan(root, id, plan);
         return lifecycleResult(`${persisted.outcome} standalone ${id} → ${plan}`, root, plan, "persist");
       }
-      const [key, id] = pos;
+      const [key, id] = [req(pos[0], "KEY"), req(pos[1], "id")];
       await assertPersistRoot(root, id, plan);
       const persisted = await ops.createPlanAndBacklogItem(root, key, { id, title: str(opts.title) ?? id }, plan);
       return lifecycleResult(`${persisted.outcome} ${id} → ${plan}`, root, plan, "persist");
@@ -293,7 +312,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
         await ops.standaloneComplete(root, plan, status);
         return { out: `completed standalone ${plan} (${status})`, code: 0 };
       }
-      const [key, id] = pos;
+      const [key, id] = [req(pos[0], "KEY"), req(pos[1], "id")];
       const s = await readStamped(join(root, plan));
       const deferred = s
         ? parseBlocks(section(s.content, "Deferred")).blocks.map((b) => ({
@@ -326,7 +345,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: `reclassified ${id} (plan ${result.planFrom}→${status}, item ${result.itemFrom}→${status})`, code: 0 };
     }
     case "plan-step": {
-      const [action, plan, rawStep] = pos;
+      const [action, plan, rawStep] = [pos[0], req(pos[1], "plan"), req(pos[2], "step")];
       if (action !== "check" && action !== "uncheck") return { out: "plan-step needs check|uncheck <plan> <step>", code: 1 };
       await assertLifecycleRoot(root, plan);
       await ops.planStep(root, plan, Number(rawStep), action === "check");
@@ -422,7 +441,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       return { out: current.state === "linked" ? current.item.key : "", code: 0 };
     }
     default:
-      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|triage|memory|links|current-task|persist|complete|reclassify|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
+      return { out: `pm-roadmap <list|tree|get|next|recent|validate|migrate|task|add|plan|reprioritize|reorder|depend|approve|close|drop|expunge|triage|memory|links|current-task|persist|complete|reclassify|plan-step|select|worktree|whoami|assign|claim|mine|who>`, code: cmd ? 1 : 0 };
   }
 }
 

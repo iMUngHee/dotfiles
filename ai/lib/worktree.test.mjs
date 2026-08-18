@@ -936,6 +936,41 @@ test("provisional cancellation removes only clean commit-free worktrees", async 
   assert.equal(git(root, "worktree", "list", "--porcelain").includes(current.execution_root), true);
 });
 
+test("provisional cancellation clears a reservation whose worktree is already gone", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const orphan = await ensureManagedWorktree({ root, id: "cancel-orphan", base: "main" });
+  const paths = reservationPaths(root, "cancel-orphan");
+  await writeFile(paths.stage, "---\nid: cancel-orphan\n---\n");
+
+  // Reproduce the observed incident: the worktree directory was removed by hand, so git no
+  // longer lists it while the reservation JSON and staged plan stay behind.
+  await rm(orphan.execution_root, { recursive: true, force: true });
+  git(root, "worktree", "prune");
+  assert.equal(git(root, "worktree", "list", "--porcelain").includes(orphan.execution_root), false);
+
+  const result = await cancelProvisional({ root, id: "cancel-orphan" });
+  assert.equal(result.removed, true, "a reservation with no worktree is still the tool's to clean");
+  assert.equal(result.reason, "reservation_only");
+  assert.equal(await readFile(paths.json, "utf8").catch(() => ""), "", "reservation JSON removed");
+  assert.equal(await readFile(paths.stage, "utf8").catch(() => ""), "", "staged plan removed");
+});
+
+test("a missing worktree does not bypass the durable plan-ownership guard", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const owned = await ensureManagedWorktree({ root, id: "cancel-orphan-owned", base: "main" });
+  const planRel = ".agents/plans/2026-08-18-cancel-orphan-owned.md";
+  await writeFile(join(root, planRel), `---\nid: cancel-orphan-owned\nstatus: active\nbase_branch: main\nbase_commit: ${owned.base_commit}\nbranch: ${owned.branch}\nworktree: ${owned.worktree}\n---\n`);
+  await rm(owned.execution_root, { recursive: true, force: true });
+  git(root, "worktree", "prune");
+
+  const result = await cancelProvisional({ root, id: "cancel-orphan-owned" });
+  assert.equal(result.removed, false, "a non-terminal plan still owns the reservation");
+  assert.equal(result.reason, "owned_by_plan");
+  assert.equal((await readFile(reservationPaths(root, "cancel-orphan-owned").json, "utf8")).length > 0, true);
+});
+
 test("validation reports provisional, abandoned, handoff, and orphan reservation states", async (t) => {
   const { root } = await fixture();
   t.after(() => rm(root, { recursive: true, force: true }));

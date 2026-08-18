@@ -2,6 +2,7 @@
 // tasks/<KEY>/{task,backlog,closed}.md + inbox.md + archive + state pointers.
 // Never mutates — fix via ops. CLI: tsx validate.ts [root]  (exit 1 on errors).
 import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { basename, dirname, isAbsolute, join as pathJoin, relative, resolve, sep } from "node:path";
 import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, coerceMode, parseIdList, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
 import { listActiveTasks } from "./join.ts";
@@ -87,7 +88,7 @@ async function orphansOf(path: string): Promise<{ line: number; text: string }[]
 }
 async function readState(root: string, name: string): Promise<string> { const s = await readStamped(pathJoin(root, ".agents", "state", name)); return s ? s.content.trim() : ""; }
 async function listArchiveKeys(root: string): Promise<string[]> {
-  const ents = await readdir(pathJoin(tasksDir(root), "archive"), { withFileTypes: true }).catch(() => []);
+  const ents: Dirent[] = await readdir(pathJoin(tasksDir(root), "archive"), { withFileTypes: true }).catch(() => []);
   return ents.filter((e) => e.isDirectory()).map((e) => e.name);
 }
 

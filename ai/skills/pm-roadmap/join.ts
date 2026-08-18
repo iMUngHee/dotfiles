@@ -3,6 +3,7 @@
 // same-task done-sibling inheritance, recent-closed merge, and an item join view.
 // ops.ts owns all mutation; this module only reads.
 import { readdir } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { join as pathJoin } from "node:path";
 import { type Block, parseBlocks, getField, parseFrontmatter, getFmField, coerceMode, parseIdList, taskFile, tasksDir, inboxPath, readStamped } from "./store.ts";
 
@@ -20,7 +21,7 @@ async function blocksOf(path: string): Promise<Block[]> {
 }
 
 export async function listActiveTasks(root: string): Promise<string[]> {
-  const ents = await readdir(tasksDir(root), { withFileTypes: true }).catch(() => []);
+  const ents: Dirent[] = await readdir(tasksDir(root), { withFileTypes: true }).catch(() => []);
   return ents.filter((e) => e.isDirectory() && TASK_KEY.test(e.name)).map((e) => e.name).sort();
 }
 
