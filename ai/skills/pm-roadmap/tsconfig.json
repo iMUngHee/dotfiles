@@ -5,6 +5,7 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    "strictNullChecks": true,
     "skipLibCheck": true,
     "types": ["node"]
   },

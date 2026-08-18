@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add or close a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | triage ... | memory ... | links ... | manage"
+argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | expunge <KEY> <id> [--force] | triage ... | memory ... | links ... | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -52,7 +52,9 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
 - **closed item** (`closed.md`): `Status` (done|dropped), `Plan`, `Reason` (required for
   dropped), `Closed` (date), `ClosedSource`, and (collab only) `ClosedBy`. **Unbounded — never trimmed.**
 - **id**: globally unique across all tasks' backlog+closed, **never reused** (closed ids stay
-  reserved, incl. archived tasks), aligned 1:1 with the plan slug. Kebab-case.
+  reserved, incl. archived tasks), aligned 1:1 with the plan slug. Kebab-case. **One exception:**
+  `expunge` releases an id, because the invariant protects ids that named real work and an
+  expunged item named none. Every other path keeps ids reserved forever.
 - **Plan**: 1:1 — at most one item (backlog or closed, any task) per plan path.
 - **pointers**: main `current.txt` selects the launcher plan; each managed worktree has a
   local execution `current.txt`. Every writer uses checkout-local lock+content-CAS.
@@ -118,6 +120,18 @@ launcher/dashboard callers that do not claim ownership for an agent session.
   mapping. Main is never an execution mapping.
 - **plan / reprioritize / reorder / depend / close / drop / triage** — lower-level
   item transitions and escape hatches. Design/retro use the lifecycle commands above.
+- **expunge `<KEY> <id>` [`--force`]** — erase a write that should never have existed. Removes
+  the block outright from `backlog.md`, `closed.md`, or `_inbox.md` (use `_INBOX` as the key)
+  with **no tombstone**, and **releases the id**. This is NOT a lifecycle transition: `drop`
+  means "closed as dropped, with a tombstone" and is what a real abandoned item gets. Reach for
+  `expunge` only when a malformed command created the record — `drop` on such a record makes it
+  permanent, which is the trap it exists to undo. Three preflight guards, all before any write:
+  the item must exist; its `Plan:` must not resolve to a plan that still exists (checked as the
+  recorded path **or** `.agents/plans/archive/<basename>`, because the archiver rewrites that
+  pointer *after* moving the file); and no other item's `DependsOn` may name it. `--force`
+  relaxes **only** the plan guard — needed because `plan` cannot unlink a closed item, which
+  would otherwise strand it forever. Irreversible, and `tasks/` is gitignored: copy the file
+  aside first.
 - **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
 - **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
 - **current-task** — read-only launcher/dashboard projection: prints the KEY linked to that checkout's selected launcher plan. Empty for no selection, standalone plans, stale plans, and terminal plans. Interactive agent consumers use `resolve-session` plus `pm get <plan-id>` instead; they never use this command as a session fallback.

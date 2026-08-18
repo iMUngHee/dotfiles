@@ -197,15 +197,6 @@
             "command": "crux hook posttooluse"
           }
         ]
-      },
-      {
-        "matcher": "Bash|Read|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "crux hook posttooluse"
-          }
-        ]
       }
     ],
     "PostToolUseFailure": [
@@ -262,10 +253,6 @@
             "command": "crux hook pretooluse"
           }
         ]
-      },
-      {
-        "matcher": "Bash|Read|Grep|WebFetch|Agent|mcp__crux__cx_execute(_file)?",
-        "hooks": []
       }
     ],
     "SessionStart": [

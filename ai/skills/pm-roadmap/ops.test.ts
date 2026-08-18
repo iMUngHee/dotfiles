@@ -70,6 +70,19 @@ async function main() {
     await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "a-one", title: "dup" }, O), ops.OpError);
     await assert.rejects(() => ops.itemAdd(root, { task: "ALPHA" }, { id: "Bad_Id", title: "x" }, O), ops.OpError);
 
+    // ── non-string id refusal ──
+    // KEBAB.test() coerces with String(), so `undefined` was tested as the string "undefined"
+    // and passed — that is how `- **undefined**` reached closed.md twice. The guard must check
+    // the type before the pattern, or the pattern certifies the bug.
+    for (const bad of [undefined, null, 12, true]) {
+      await assert.rejects(
+        () => ops.itemAdd(root, { task: "ALPHA" }, { id: bad as any, title: "x" }, O),
+        ops.OpError,
+        `itemAdd must reject a non-string id (${String(bad)})`,
+      );
+    }
+    assert.deepEqual(await ids(BL("ALPHA")), ["a-one"], "no rejected id was written");
+
     // ── inbox add + reservedIds spans task+inbox ──
     await ops.itemAdd(root, { inbox: true }, { id: "untriaged-x", title: "U" }, O);
     const reserved = await ops.reservedIds(root, O);
@@ -636,6 +649,69 @@ async function main() {
     await ops.dropItem(root, "DEP", "dep-b", { reason: "gone", ...O }); // _itemClose builds a fresh block
     assert.equal(await field(CL("DEP"), "dep-b", "DependsOn"), null, "closed item drops DependsOn");
     await assert.rejects(() => ops.itemSetDeps(root, "DEP", "missing-x", ["dep-a"], O), ops.OpError, "unknown subject refused");
+
+    // ── expunge: erase a write that should never have existed, and free its id ──
+    await ops.taskCreate(root, "EXP", "Expunge", O);
+    await ops.itemAdd(root, { task: "EXP" }, { id: "exp-garbage", title: "Garbage" }, O);
+    await ops.dropItem(root, "EXP", "exp-garbage", { reason: "typo", ...O });
+    assert.deepEqual(await ids(CL("EXP")), ["exp-garbage"], "drop leaves a tombstone in closed.md");
+    assert.ok((await ops.reservedIds(root, O)).has("exp-garbage"), "and burns the id");
+
+    await ops.itemExpunge(root, "EXP", "exp-garbage", O);
+    assert.deepEqual(await ids(CL("EXP")), [], "expunge removes the closed block outright");
+    assert.ok(!(await ops.reservedIds(root, O)).has("exp-garbage"), "and releases the id");
+    await ops.itemAdd(root, { task: "EXP" }, { id: "exp-garbage", title: "Reused" }, O);
+    assert.deepEqual(await ids(BL("EXP")), ["exp-garbage"], "the freed id is re-addable");
+
+    // guard (a) — the item must exist
+    await assert.rejects(() => ops.itemExpunge(root, "EXP", "exp-nonexistent", O), ops.OpError, "unknown id refused");
+
+    // guard (b) — a Plan naming a file that exists means real work; use close/complete
+    await makePlan(root, ".agents/plans/2026-06-22-exp-planned.md", "done", "exp-planned");
+    await ops.itemAdd(root, { task: "EXP" }, { id: "exp-planned", title: "Planned" }, O);
+    await ops.itemSetPlan(root, "EXP", "exp-planned", ".agents/plans/2026-06-22-exp-planned.md", O);
+    await assert.rejects(() => ops.itemExpunge(root, "EXP", "exp-planned", O), ops.OpError, "live plan link refused");
+    assert.ok((await ids(BL("EXP"))).includes("exp-planned"), "refusal left the item in place");
+
+    // --force relaxes guard (b) only
+    await ops.itemExpunge(root, "EXP", "exp-planned", { force: true, ...O });
+    assert.ok(!(await ids(BL("EXP"))).includes("exp-planned"), "--force overrides the plan guard");
+    await assert.rejects(() => ops.itemExpunge(root, "EXP", "exp-nonexistent", { force: true, ...O }), ops.OpError, "--force does not relax guard (a)");
+
+    // guard (c) — refuse while another item's DependsOn names it (would strand a C14 edge)
+    await ops.itemAdd(root, { task: "EXP" }, { id: "exp-target", title: "Target" }, O);
+    await ops.itemAdd(root, { task: "EXP" }, { id: "exp-dependent", title: "Dependent" }, O);
+    await ops.itemSetDeps(root, "EXP", "exp-dependent", ["exp-target"], O);
+    await assert.rejects(() => ops.itemExpunge(root, "EXP", "exp-target", O), ops.OpError, "depended-on id refused");
+    await assert.rejects(() => ops.itemExpunge(root, "EXP", "exp-target", { force: true, ...O }), ops.OpError, "--force does not relax guard (c)");
+    await ops.itemSetDeps(root, "EXP", "exp-dependent", [], O);
+    await ops.itemExpunge(root, "EXP", "exp-target", O);
+    assert.ok(!(await ids(BL("EXP"))).includes("exp-target"), "clearing the edge unblocks expunge");
+
+    // R1 finding — the archive stale-pointer window. archivePlans renames a terminal plan into
+    // plans/archive/ and only THEN rewrites this pointer, so a crash in between leaves a real
+    // completed item pointing at a path that no longer exists. A bare exists(recorded path)
+    // guard would have deleted it. Asserting on the message proves the archive branch fired,
+    // not the plain-exists branch.
+    await ops.itemAdd(root, { task: "EXP" }, { id: "exp-stale", title: "Stale" }, O);
+    await makePlan(root, ".agents/plans/2026-06-22-exp-stale.md", "done", "exp-stale");
+    await ops.itemSetPlan(root, "EXP", "exp-stale", ".agents/plans/2026-06-22-exp-stale.md", O);
+    await ops.itemClose(root, "EXP", "exp-stale", { status: "done", plan: ".agents/plans/2026-06-22-exp-stale.md", ...O });
+    await mkdir(join(root, ".agents", "plans", "archive"), { recursive: true });
+    await writeFile(join(root, ".agents/plans/archive/2026-06-22-exp-stale.md"), "---\nid: exp-stale\nstatus: done\n---\n");
+    await rm(join(root, ".agents/plans/2026-06-22-exp-stale.md"), { force: true }); // the crash window
+    await assert.rejects(
+      () => ops.itemExpunge(root, "EXP", "exp-stale", O),
+      (e: any) => e instanceof ops.OpError && /archived at .*stale pointer/.test(e.message),
+      "a completed item stranded by the archive window must survive expunge",
+    );
+    assert.ok((await ids(CL("EXP"))).includes("exp-stale"), "refusal left the closed record intact");
+    await ops.itemExpunge(root, "EXP", "exp-stale", { force: true, ...O }); // still overridable
+
+    // inbox items are expungeable through the _INBOX pseudo-key
+    await ops.itemAdd(root, { inbox: true }, { id: "exp-inbox", title: "I" }, O);
+    await ops.itemExpunge(root, "_INBOX", "exp-inbox", O);
+    assert.ok(!(await ids(inboxPath(root))).includes("exp-inbox"), "inbox block removed");
 
     console.log("ops.test.ts OK");
   } finally {
