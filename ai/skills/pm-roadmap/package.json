@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
-    "test": "npm run typecheck && for t in *.test.ts; do tsx \"$t\" || exit 1; done"
+    "typecheck": "./node_modules/.bin/tsc -p tsconfig.json",
+    "test": "npm run typecheck && for t in *.test.ts; do ./node_modules/.bin/tsx \"$t\" || exit 1; done"
   },
   "dependencies": {
     "tsx": "^4.0.0"
