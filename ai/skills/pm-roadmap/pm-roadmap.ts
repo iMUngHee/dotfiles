@@ -163,7 +163,9 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const elig = flt(nc.eligible), blk = flt(nc.blocked);
       const out = ["## Eligible (next candidates)", fmtCandidates(elig),
         blk.length ? "\n## Blocked (dependency or earlier-Order sibling)" : "",
-        blk.length ? blk.map((c) => `  [${c.priority}] ${c.key}/${c.id} — blocked by ${c.blockedBy}${ownerBadge(c)}`).join("\n") : "",
+        // Name the cause: an Order chain and a DependsOn otherwise look identical here, which is
+        // why clearing deps while a chain remains reads as having done nothing.
+        blk.length ? blk.map((c) => `  [${c.priority}] ${c.key}/${c.id} — blocked by ${c.blockedBy}${c.blockedByReason === "order" ? " (earlier Order — clear it with `reorder " + c.key + " " + c.id + " -`)" : " (dependency)"}${ownerBadge(c)}`).join("\n") : "",
         nc.inbox ? `\n> inbox: ${nc.inbox} awaiting triage` : ""].filter(Boolean).join("\n");
       return { out, code: 0 };
     }
@@ -242,7 +244,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
     }
     case "plan": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "plan-path")]; await ops.itemSetPlan(root, k, i, v); return { out: `linked ${i} → ${v}`, code: 0 }; }
     case "reprioritize": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "P0|P1|P2|P3")]; await ops.itemSetPriority(root, k, i, v); return { out: `reprioritized ${i} → ${v}`, code: 0 }; }
-    case "reorder": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "order")]; await ops.itemSetOrder(root, k, i, v); return { out: `reordered ${i} → ${v}`, code: 0 }; }
+    case "reorder": { const [k, i, v] = [req(pos[0], "KEY"), req(pos[1], "id"), req(pos[2], "order|-")]; await ops.itemSetOrder(root, k, i, v); return { out: v === "-" ? `cleared order on ${k}/${i}` : `reordered ${i} → ${v}`, code: 0 }; }
     // dependency edges: `depend <KEY> <id> <csv|->` sets the full DependsOn list; `-` clears.
     case "depend": {
       const [key, id, targets] = pos;

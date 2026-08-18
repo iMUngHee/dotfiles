@@ -130,6 +130,24 @@ async function main() {
     await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "a-one", "1e2", O), ops.OpError); // exponent literal
     await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "nope", "1", O), ops.OpError); // missing id
 
+    // ── reorder '-' clears the field: the only way out of an earlier-Order block ──
+    // join.ts blocks any item with a lower positive-Order sibling, and escaping needs Order
+    // absent or 0. Every value was refused, so the only exit was expunge + re-add, which
+    // discards the item's other fields. '-' removes the field, matching depend's csv|- shape.
+    await ops.itemSetOrder(root, "ALPHA", "a-one", "-", O);
+    assert.equal(await field(BL("ALPHA"), "a-one", "Order"), null, "'-' removes the Order field");
+    const clearedRaw = (await readStamped(BL("ALPHA")))!.content;
+    assert.ok(!/Order: 0/.test(clearedRaw), "cleared means absent, not a stored 0 (a second encoding of the same state)");
+    await ops.itemSetOrder(root, "ALPHA", "a-one", "-", O);
+    assert.equal(await field(BL("ALPHA"), "a-one", "Order"), null, "clearing an absent Order is idempotent, not an error");
+    await ops.itemSetOrder(root, "ALPHA", "a-one", "4", O);
+    assert.equal(await field(BL("ALPHA"), "a-one", "Order"), "4", "a real value still sets after a clear");
+    // the positive-integer contract is unchanged — '-' is handled before assertOrder, not by it
+    for (const bad of ["0", "", "-1", "1.5", "1abc", "1e2", "--"]) {
+      await assert.rejects(() => ops.itemSetOrder(root, "ALPHA", "a-one", bad, O), ops.OpError, `'${bad}' still refused`);
+    }
+    assert.equal(await field(BL("ALPHA"), "a-one", "Order"), "4", "no rejected value was written");
+
     // ── close refusals: planless done; dropped without reason ──
     await assert.rejects(() => ops.itemClose(root, "ALPHA", "untriaged-x", { status: "done", closedDate: "2026-06-22", ...O }), ops.OpError);
     await assert.rejects(() => ops.dropItem(root, "ALPHA", "untriaged-x", { reason: "", ...O }), ops.OpError);
