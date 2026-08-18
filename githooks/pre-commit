@@ -1,0 +1,8 @@
+#!/bin/bash
+# Auto sync-back via ai/ orchestrator if any tier files are staged.
+staged=$(git diff --cached --name-only -- ai/ claude/ codex/)
+if [ -n "$staged" ]; then
+    root=$(git rev-parse --show-toplevel)
+    "$root/ai/scripts/sync-back.sh" || true
+    git add "$root/claude/settings.json" 2>/dev/null || true
+fi
