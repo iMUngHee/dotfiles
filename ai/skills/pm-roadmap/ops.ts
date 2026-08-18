@@ -380,11 +380,18 @@ async function _itemSetPriority(root: string, key: string, id: string, priority:
 
 async function _itemSetOrder(root: string, key: string, id: string, order: string): Promise<void> {
   await assertActiveTask(root, key);
-  assertOrder(order); // shared positive-integer-string policy (no lossy parseInt: 1.5/1abc/1e2 rejected)
+  // '-' clears, mirroring depend's csv|- argument. Handled BEFORE assertOrder so the
+  // positive-integer contract for real values is untouched. Clearing removes the field rather
+  // than storing 0: absent and 0 already mean the same thing to join/C10, and a second encoding
+  // of one state is what lets those two disagree later. Without this, escaping an earlier-Order
+  // block required expunge + re-add, which discards the item's other fields.
+  const clear = order === "-";
+  if (!clear) assertOrder(order); // shared positive-integer-string policy (no lossy parseInt: 1.5/1abc/1e2 rejected)
   const f = await loadBlocks(taskFile(root, key, "backlog.md"));
   const it = findItem(f.blocks, id);
   if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
-  setField(it, "Order", order);
+  if (clear) it.fields = it.fields.filter(([k]) => k.toLowerCase() !== "order");
+  else setField(it, "Order", order);
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
 }
 

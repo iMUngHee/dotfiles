@@ -188,6 +188,40 @@ worktree: .agents/worktrees/standalone
     const dprompt = j.buildNextPrompt(cv!);
     assert.ok(dprompt.includes("## Depends on") && dprompt.includes("c-2"), "kickoff shows Depends on list");
 
+    // ── blocker reason: Order chains and DependsOn render identically without it ──
+    // Two items blocked by the same id for different reasons read the same in `list`, so
+    // clearing a dependency while an Order chain remains looks like it did nothing.
+    await ops.taskCreate(root, "ORD", "Order task", O);
+    await ops.itemAdd(root, { task: "ORD" }, { id: "o-1", title: "O1", order: "1" }, O);
+    await ops.itemAdd(root, { task: "ORD" }, { id: "o-2", title: "O2", order: "2" }, O);
+    await ops.itemAdd(root, { task: "ORD" }, { id: "o-dep", title: "Odep" }, O);
+    await ops.itemSetDeps(root, "ORD", "o-dep", ["o-1"], O);
+
+    let ordered = await j.nextCandidates(root);
+    const byOrder = ordered.blocked.find((c) => c.id === "o-2");
+    const byDep = ordered.blocked.find((c) => c.id === "o-dep");
+    assert.ok(byOrder && byOrder.blockedBy === "o-1", "o-2 blocked by o-1");
+    assert.ok(byDep && byDep.blockedBy === "o-1", "o-dep blocked by o-1 too — same id, different cause");
+    assert.equal(byOrder!.blockedByReason, "order", "an earlier-Order sibling is reported as order");
+    assert.equal(byDep!.blockedByReason, "dependency", "a DependsOn target is reported as dependency");
+
+    // precedence is unchanged: a dep outranks an Order sibling on the same item
+    await ops.itemSetOrder(root, "ORD", "o-dep", "3", O);
+    ordered = await j.nextCandidates(root);
+    const both = ordered.blocked.find((c) => c.id === "o-dep");
+    assert.equal(both!.blockedBy, "o-1", "dep blocker still wins the id");
+    assert.equal(both!.blockedByReason, "dependency", "dep blocker still wins the reason");
+
+    // eligible items carry no reason at all
+    assert.ok(ordered.eligible.every((c) => c.blockedByReason === undefined), "eligible candidates have no blocker reason");
+
+    // clearing the Order is what unblocks o-2 — the exit this plan adds
+    await ops.itemSetOrder(root, "ORD", "o-2", "-", O);
+    ordered = await j.nextCandidates(root);
+    assert.ok(ordered.eligible.some((c) => c.id === "o-2"), "clearing Order moves the item to eligible");
+    assert.ok(ordered.eligible.some((c) => c.id === "o-1"), "the sibling that was never blocked is unaffected");
+    assert.ok(ordered.blocked.some((c) => c.id === "o-dep"), "a genuine dependency still blocks");
+
     console.log("join.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });
