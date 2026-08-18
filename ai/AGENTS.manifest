@@ -9,6 +9,7 @@ guardrails.md
 # Rules (alphabetical by topic)
 rules/code-review.md
 rules/diagnostics.md
+rules/pager.md
 rules/rationalization.md
 rules/testing.md
 
