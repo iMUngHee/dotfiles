@@ -48,6 +48,29 @@ async function main() {
     assert.equal((await cli("expunge", "ALPHA")).code, 1, "expunge needs both positionals");
     assert.equal((await cli("validate")).code, 0, "store still valid after expunge");
 
+    // ── the reported scenario: an Order chain silently outlives `depend` ──
+    // Reported via pager #16: adding items with -o 1..N left only the lowest eligible, and
+    // expressing real deps with `pm depend` had no visible effect because the Order chain kept
+    // blocking. `list` must name which cause applies, and `reorder ... -` must be the exit.
+    assert.equal((await cli("task", "create", "ORDT", "--title", "Ordered")).code, 0);
+    for (const n of ["1", "2", "3"]) {
+      assert.equal((await cli("add", `ord-${n}`, "--task", "ORDT", "--title", `O${n}`, "-o", n)).code, 0);
+    }
+    assert.equal((await cli("depend", "ORDT", "ord-3", "ord-1")).code, 0);
+    let ordList = (await cli("list")).out;
+    assert.match(ordList, /ord-2 — blocked by ord-1 \(earlier Order/, "an Order chain names itself");
+    assert.match(ordList, /ord-3 — blocked by ord-1 \(dependency\)/, "a real dep names itself");
+    assert.match(ordList, /reorder ORDT ord-2 -/, "the message names the exit command");
+
+    const cleared = await cli("reorder", "ORDT", "ord-2", "-");
+    assert.equal(cleared.code, 0);
+    assert.match(cleared.out, /cleared order/, "clearing reports itself distinctly from reordering");
+    ordList = (await cli("list")).out;
+    assert.match(ordList, /ORDT\/ord-2/, "ord-2 is listed");
+    assert.doesNotMatch(ordList, /ord-2 — blocked by/, "ord-2 is no longer blocked");
+    assert.match(ordList, /ord-3 — blocked by ord-1 \(dependency\)/, "the genuine dependency survives");
+    assert.equal((await cli("validate")).code, 0, "a task with mixed Order presence is valid");
+
     let r = await cli("list");
     assert.ok(r.out.includes("ALPHA/a-1") && r.out.includes("inbox: 1"), "list shows item + inbox");
     r = await cli("tree");

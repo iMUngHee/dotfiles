@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add or close a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | expunge <KEY> <id> [--force] | triage ... | memory ... | links ... | manage"
+argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | reorder <KEY> <id> <order|-> | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | expunge <KEY> <id> [--force] | triage ... | memory ... | links ... | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -91,7 +91,7 @@ launcher/dashboard callers that do not claim ownership for an agent session.
 
 ## Subcommands
 
-- **list** / **tree** — eligible next candidates (sorted `priority, taskKey, order, id`) + blocked + inbox count / per-task backlog. In collab tasks both show an `@owner` / `(unassigned)` badge (tree also marks `[collab]`); **list** default-filters collab items to *me + unassigned* (`--owner X` to filter by another, `--all` to show everything; solo items always shown).
+- **list** / **tree** — eligible next candidates (sorted `priority, taskKey, order, id`) + blocked + inbox count / per-task backlog. Each blocked row names its cause — `(dependency)` for an unresolved `DependsOn`, or `(earlier Order — clear it with reorder ...)` for a lower-Order sibling in the same task. The two are different problems: `depend` has no effect on an item that an Order chain is blocking. In collab tasks both show an `@owner` / `(unassigned)` badge (tree also marks `[collab]`); **list** default-filters collab items to *me + unassigned* (`--owner X` to filter by another, `--all` to show everything; solo items always shown).
 - **get `<id>`** — an item's join view (plan goal + next step, task links + memory, recent done-sibling notes, note).
 - **next `[id]` `[--owner X]` `[--all]`** — paste-ready kickoff prompt. Target: explicit id, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). The candidate-list path applies the same collab default filter as `list` (me + unassigned; `--owner`/`--all` override); an explicit id bypasses the filter. The prompt surfaces item owner + handoff note and memory/link `By` for collab tasks. After emitting, ask whether to run it **here** (no copy — a linked plan first runs session-aware `pm select --plan <plan>`, while an unplanned item proceeds into `/design <id>` and binds on persist; then resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
 - **recent** — derived recent-closed view (all `closed.md` merged by date, capped).
@@ -120,6 +120,10 @@ launcher/dashboard callers that do not claim ownership for an agent session.
   mapping. Main is never an execution mapping.
 - **plan / reprioritize / reorder / depend / close / drop / triage** — lower-level
   item transitions and escape hatches. Design/retro use the lifecycle commands above.
+  `reorder <KEY> <id> <order|->` takes a positive integer, or `-` to **remove** the Order field
+  (`0` stays rejected — absent already means "no position", and storing a literal `0` would give
+  the same state two encodings). Removing it is how an item leaves a per-task Order chain, since
+  only the lowest Order in a task is eligible.
 - **expunge `<KEY> <id>` [`--force`]** — erase a write that should never have existed. Removes
   the block outright from `backlog.md`, `closed.md`, or `_inbox.md` (use `_INBOX` as the key)
   with **no tombstone**, and **releases the id**. This is NOT a lifecycle transition: `drop`

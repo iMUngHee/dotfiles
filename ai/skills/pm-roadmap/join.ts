@@ -88,7 +88,7 @@ export function postImplNotes(md: string): string {
 
 // ── next candidates ──
 // owner/ownerNote/mode are additive (collab attribution); solo items carry empty owner + mode "solo".
-export interface Candidate { key: string; id: string; title: string; priority: string; order: number; plan: string | null; note: string; status: string; owner: string; ownerNote: string; mode: string; dependsOn: string[]; blockedBy?: string; }
+export interface Candidate { key: string; id: string; title: string; priority: string; order: number; plan: string | null; note: string; status: string; owner: string; ownerNote: string; mode: string; dependsOn: string[]; blockedBy?: string; blockedByReason?: "dependency" | "order"; }
 
 function toCandidate(key: string, b: Block, mode: string): Candidate {
   const plan = getField(b, "Plan");
@@ -132,7 +132,11 @@ export async function nextCandidates(root: string): Promise<{ eligible: Candidat
     const depBlocker = c.dependsOn.find((t) => t !== c.id && backlogIds.has(t)); // first unresolved dep (list order)
     const earlier = all.find((o) => o.key === c.key && o.order > 0 && c.order > 0 && o.order < c.order);
     const blocker = depBlocker ?? (earlier ? earlier.id : undefined);
-    if (blocker) { blocked.push({ ...c, blockedBy: blocker }); } else eligible.push(c);
+    // The reason travels with the id. Precedence is unchanged — a dep still wins — but without
+    // this an Order chain and a real DependsOn render identically in `list`, so clearing deps
+    // while a chain remains looks like it had no effect. Additive: eligibility does not move.
+    const reason = depBlocker ? "dependency" as const : "order" as const;
+    if (blocker) { blocked.push({ ...c, blockedBy: blocker, blockedByReason: reason }); } else eligible.push(c);
   }
   eligible.sort(candidateSort);
   const inbox = (await blocksOf(inboxPath(root))).length;
