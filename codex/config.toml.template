@@ -61,6 +61,16 @@ command = "$HOME/.config/codex/hooks/crux-hook.sh userpromptsubmit"
 timeout = 5
 statusMessage = "crux prompt capture"
 
+# pager: cross-session message delivery. Event name is taken from the payload,
+# so no argument is passed (an argument would be a casing hazard next to the
+# lowercase crux entries above). Stop is intentionally omitted — Codex's
+# additionalContext support on Stop is unverified.
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "pager hook"
+timeout = 10
+statusMessage = "pager delivery"
+
 [[hooks.PreToolUse]]
 
 [[hooks.PreToolUse.hooks]]
@@ -119,6 +129,12 @@ type = "command"
 command = "$HOME/.config/codex/hooks/crux-hook.sh sessionstart"
 timeout = 5
 statusMessage = "crux session start"
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "pager hook"
+timeout = 10
+statusMessage = "pager delivery"
 
 [[hooks.Stop]]
 
