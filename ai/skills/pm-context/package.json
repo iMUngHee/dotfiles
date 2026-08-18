@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx server.ts",
-    "test": "for t in *.test.ts; do tsx \"$t\" || exit 1; done"
+    "start": "./node_modules/.bin/tsx server.ts",
+    "test": "for t in *.test.ts; do ./node_modules/.bin/tsx \"$t\" || exit 1; done"
   },
   "dependencies": {
     "tsx": "^4.0.0"
