@@ -19,25 +19,76 @@ export interface Block {
   fields: [string, string][];
 }
 
-export function parseBlocks(md: string): { title: string; blocks: Block[] } {
+// Content this parser drops. serializeBlocks only ever writes back the parsed model, so
+// anything listed here is destroyed by the next write. Callers that merely read may ignore
+// it; every writer must refuse (ops guard) and validate reports it as C17.
+export interface Orphan {
+  line: number; // 1-based
+  text: string;
+}
+
+export function parseBlocks(md: string): { title: string; blocks: Block[]; orphans: Orphan[] } {
   const lines = md.split("\n").map((l) => l.replace(/\r$/, ""));
   let h1 = "";
+  let h1Line = 0;
   const blocks: Block[] = [];
+  const orphans: Orphan[] = [];
   let cur: Block | null = null;
   const flush = () => { if (cur) blocks.push(cur); cur = null; };
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const h = line.match(/^#\s+(.*)$/);
-    if (h) { h1 = h[1].trim(); continue; }
+    // A later H1 silently replaces the earlier one, so the earlier line is lost content too.
+    if (h) { if (h1Line) orphans.push({ line: h1Line, text: lines[h1Line - 1] }); h1 = h[1].trim(); h1Line = i + 1; continue; }
     const head = line.match(/^-\s+\*\*([^*]+)\*\*(?:\s*—\s*(.*))?$/);
     if (head) { flush(); cur = { id: head[1].trim(), title: (head[2] ?? "").trim(), fields: [] }; continue; }
     const sub = line.match(/^\s{2,}-\s+([A-Za-z][\w-]*):\s*(.*)$/);
+    // A field line before any block head has nowhere to attach — it is dropped, not stored.
     if (sub && cur) { cur.fields.push([sub[1], sub[2].trim()]); continue; }
+    if (line.trim()) orphans.push({ line: i + 1, text: line });
   }
   flush();
-  return { title: h1, blocks };
+  orphans.sort((a, b) => a.line - b.line); // a superseded H1 is discovered out of order
+  return { title: h1, blocks, orphans };
 }
 
-export function serializeBlocks(title: string, blocks: Block[]): string {
+const FIELD_KEY = /^[A-Za-z][\w-]*$/;
+
+// Named diagnostics for the cases people actually hit, so the error names the field instead
+// of saying "does not round-trip". The comparison in serializeBlocks is the real contract;
+// this only supplies the message.
+function diagnose(title: string, blocks: Block[]): string | null {
+  const multiline = (s: string) => /[\r\n]/.test(s);
+  if (multiline(title)) return "file title must be single-line";
+  for (const b of blocks) {
+    if (!b.id.trim()) return "block id must not be empty";
+    if (b.id.includes("*")) return `block id must not contain '*' (got ${JSON.stringify(b.id)})`;
+    if (multiline(b.id)) return `block id must be single-line (got ${JSON.stringify(b.id)})`;
+    if (multiline(b.title)) return `block '${b.id}' title must be single-line`;
+    for (const [k, v] of b.fields) {
+      if (!FIELD_KEY.test(k)) return `block '${b.id}' field key ${JSON.stringify(k)} must match ${FIELD_KEY.source}`;
+      if (multiline(v)) return `block '${b.id}' field '${k}' must be single-line — put long prose in the plan file and keep a one-line summary here`;
+    }
+  }
+  return null;
+}
+
+// Compare a reparsed document against the model it came from. `orphans` is checked
+// separately by the caller, so only {title, blocks} are compared here — comparing the two
+// full parse results would always differ once orphans exists.
+function sameModel(back: { title: string; blocks: Block[] }, title: string, blocks: Block[]): boolean {
+  if (back.title !== title || back.blocks.length !== blocks.length) return false;
+  for (let i = 0; i < blocks.length; i++) {
+    const want = blocks[i], got = back.blocks[i];
+    if (want.id !== got.id || want.title !== got.title || want.fields.length !== got.fields.length) return false;
+    for (let j = 0; j < want.fields.length; j++) {
+      if (want.fields[j][0] !== got.fields[j][0] || want.fields[j][1] !== got.fields[j][1]) return false;
+    }
+  }
+  return true;
+}
+
+function renderRaw(title: string, blocks: Block[]): string {
   const out: string[] = [`# ${title}`, ""];
   for (const b of blocks) {
     out.push(b.title ? `- **${b.id}** — ${b.title}` : `- **${b.id}**`);
@@ -45,6 +96,43 @@ export function serializeBlocks(title: string, blocks: Block[]): string {
   }
   if (blocks.length) out.push("");
   return out.join("\n");
+}
+
+// When no named diagnostic matches, probe each position with a minimal document to name the
+// one that fails. This is how the message stays useful for the cases a character list can
+// never enumerate — a Unicode line separator, or whitespace the parser trims away.
+function locate(title: string, blocks: Block[]): string | null {
+  const survives = (t: string, bs: Block[]) => {
+    const back = parseBlocks(renderRaw(t, bs));
+    return !back.orphans.length && sameModel(back, t, bs);
+  };
+  const hint = "check for leading/trailing whitespace or a Unicode line separator (U+2028/U+2029)";
+  if (!survives(title, [])) return `file title ${JSON.stringify(title)} cannot be represented — ${hint}`;
+  for (const b of blocks) {
+    if (!survives("probe", [{ id: b.id, title: b.title, fields: [] }])) {
+      return `block id ${JSON.stringify(b.id)} or its title cannot be represented — ${hint}`;
+    }
+    for (const [k, v] of b.fields) {
+      if (!survives("probe", [{ id: "probe", title: "", fields: [[k, v]] }])) {
+        return `block '${b.id}' field '${k}' value ${JSON.stringify(v)} cannot be represented — ${hint}`;
+      }
+    }
+  }
+  return null;
+}
+
+export function serializeBlocks(title: string, blocks: Block[]): string {
+  const text = renderRaw(title, blocks);
+  // The contract: these bytes must reparse to exactly the model we were handed. Enumerating
+  // forbidden characters cannot be completed — U+2028/U+2029 defeat every `.`-based capture
+  // in the parser and `.trim()` silently normalizes edge whitespace — so the property is
+  // enforced rather than approximated, and it survives future grammar edits.
+  const back = parseBlocks(text);
+  if (back.orphans.length || !sameModel(back, title, blocks)) {
+    const why = diagnose(title, blocks) ?? locate(title, blocks) ?? "the model cannot be represented in the block grammar without loss";
+    throw new Error(`refusing to serialize: ${why}`);
+  }
+  return text;
 }
 
 export function getField(b: Block, key: string): string | null {

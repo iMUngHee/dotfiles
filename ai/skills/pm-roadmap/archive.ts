@@ -48,6 +48,30 @@ async function backlogPlanRefs(root: string): Promise<Set<string>> {
   return refs;
 }
 
+// D7/D9 preflight. rewriteClosedPointer runs AFTER the plan file has been renamed, so a
+// refusal there would strand a moved plan behind stale pointers. Assert up front that every
+// closed.md a rewrite could touch is orphan-free and round-trips, before the first rename.
+async function assertClosedDocsWritable(root: string): Promise<void> {
+  const check = async (dir: string, keys: string[]) => {
+    for (const k of keys) {
+      const path = join(dir, k, "closed.md");
+      const s = await readStamped(path);
+      if (!s) continue;
+      const parsed = parseBlocks(s.content);
+      if (parsed.orphans.length) {
+        const at = parsed.orphans.map((o) => o.line).join(", ");
+        throw new Error(
+          `refusing to archive: ${k}/closed.md line(s) ${at} hold content outside any item block, ` +
+          `which a pointer rewrite would destroy. Run 'pm validate', repair the file by hand, then retry.`,
+        );
+      }
+      serializeBlocks(parsed.title, parsed.blocks); // throws on a model that cannot round-trip
+    }
+  };
+  await check(tasksDir(root), await listActiveTasks(root));
+  await check(join(tasksDir(root), "archive"), await archiveTaskKeys(root));
+}
+
 // rewrite Plan: oldRel → newRel in every task's closed.md (active + archived).
 async function rewriteClosedPointer(root: string, oldRel: string, newRel: string): Promise<void> {
   const apply = async (dir: string, keys: string[]) => {
@@ -115,6 +139,7 @@ export async function archivePlans(root: string, opts: { today?: string; dryRun?
   if (opts.dryRun) return result;
 
   if (result.moved.length) {
+    await assertClosedDocsWritable(root);                    // before the first rename (D7)
     await mkdir(archiveDir, { recursive: true });
     for (const m of result.moved) {
       await rename(join(root, m.plan), join(root, m.to));   // move file first
