@@ -23,6 +23,31 @@ async function main() {
     assert.equal((await cli("add", "noted-1", "--task", "ALPHA", "--title", "N", "--note", "hello note")).code, 0);
     assert.ok((await readFile(join(root, ".agents/tasks/ALPHA/backlog.md"), "utf8")).includes("Note: hello note"), "add --note written to backlog.md");
 
+    // The observed incident: the id was typed as a flag, so its positional slot was empty and
+    // the literal string "undefined" reached closed.md twice. The message must name the missing
+    // argument — the pre-fix behaviour was a bare TypeError from inside serializeBlocks.
+    const beforeMistype = await readFile(join(root, ".agents/tasks/ALPHA/backlog.md"), "utf8");
+    await assert.rejects(
+      () => cli("add", "--id", "flag-typed-id", "--task", "ALPHA", "--title", "T"),
+      /missing <id>/,
+      "an id typed as a flag is refused by name",
+    );
+    assert.equal(await readFile(join(root, ".agents/tasks/ALPHA/backlog.md"), "utf8"), beforeMistype, "nothing was written");
+    for (const c of [["plan", "ALPHA"], ["reprioritize", "ALPHA"], ["reorder", "ALPHA"], ["approve", "ALPHA"], ["triage", "x"]]) {
+      await assert.rejects(() => cli(...c), /missing </, `${c[0]} names its missing positional`);
+    }
+
+    // expunge: erase a bad write and release its id (drop alone burns the id forever)
+    assert.equal((await cli("add", "junk-x", "--task", "ALPHA", "--title", "Junk")).code, 0);
+    assert.equal((await cli("drop", "ALPHA", "junk-x", "--reason", "typo")).code, 0);
+    await assert.rejects(() => cli("add", "junk-x", "--task", "ALPHA", "--title", "again"), /already used/, "closed id stays reserved");
+    const expunged = await cli("expunge", "ALPHA", "junk-x");
+    assert.equal(expunged.code, 0);
+    assert.match(expunged.out, /id released/);
+    assert.equal((await cli("add", "junk-x", "--task", "ALPHA", "--title", "reused")).code, 0, "the freed id is re-addable");
+    assert.equal((await cli("expunge", "ALPHA")).code, 1, "expunge needs both positionals");
+    assert.equal((await cli("validate")).code, 0, "store still valid after expunge");
+
     let r = await cli("list");
     assert.ok(r.out.includes("ALPHA/a-1") && r.out.includes("inbox: 1"), "list shows item + inbox");
     r = await cli("tree");

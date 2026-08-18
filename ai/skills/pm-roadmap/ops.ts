@@ -4,8 +4,9 @@
 // hand-edits markdown. Internal _impl helpers assume the lock is already held;
 // public ops wrap them in withLock so composites reuse one lock (no re-entrancy).
 import { readdir, mkdir, rename, stat, unlink } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { createHash } from "node:crypto";
-import { join as pathJoin, sep as pathSep } from "node:path";
+import { join as pathJoin, sep as pathSep, basename as pathBasename } from "node:path";
 import {
   type Block, type Orphan, parseBlocks, serializeBlocks, getField, setField,
   parseFrontmatter, serializeFrontmatter, getFmField, coerceMode, parseIdList,
@@ -28,6 +29,14 @@ const PRIORITIES = new Set(["P0", "P1", "P2", "P3"]);
 const TASK_KEY = /^[A-Z0-9_-]+$/;
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const MODES = new Set(["solo", "collab"]);
+
+// RegExp.prototype.test coerces its argument with String(), so KEBAB.test(undefined) tests the
+// string "undefined" and passes — as do null, true, and 12. That is how `- **undefined**` was
+// written twice. Check the type before the pattern; a bare KEBAB.test is not a string guard.
+function assertItemId(id: unknown, label: string): asserts id is string {
+  if (typeof id !== "string") throw new OpError(`${label} must be a string (got ${id === null ? "null" : typeof id})`);
+  if (!KEBAB.test(id)) throw new OpError(`${label} '${id}' is not kebab-case`);
+}
 
 export interface ItemInput { id: string; title: string; priority?: string; order?: string; note?: string; plan?: string; }
 export interface Deferred { id: string; title: string; priority?: string; order?: string; note?: string; }
@@ -143,11 +152,11 @@ function backlogBlock(it: ItemInput, status: string): Block {
 
 // ── directory scans ──
 async function listTaskKeys(root: string): Promise<string[]> {
-  const ents = await readdir(tasksDir(root), { withFileTypes: true }).catch(() => []);
+  const ents: Dirent[] = await readdir(tasksDir(root), { withFileTypes: true }).catch(() => []);
   return ents.filter((e) => e.isDirectory() && TASK_KEY.test(e.name)).map((e) => e.name);
 }
 async function listArchiveKeys(root: string): Promise<string[]> {
-  const ents = await readdir(archiveDir(root), { withFileTypes: true }).catch(() => []);
+  const ents: Dirent[] = await readdir(archiveDir(root), { withFileTypes: true }).catch(() => []);
   return ents.filter((e) => e.isDirectory()).map((e) => e.name);
 }
 
@@ -330,7 +339,7 @@ async function _taskSetMode(root: string, key: string, mode: string, actor: stri
 }
 
 async function _itemAdd(root: string, target: { task: string } | { inbox: true }, it: ItemInput, nowDate: string): Promise<void> {
-  if (!KEBAB.test(it.id)) throw new OpError(`item id '${it.id}' is not kebab-case`);
+  assertItemId(it.id, "item id");
   if ((await reservedIdsImpl(root)).has(it.id)) throw new OpError(`id '${it.id}' already used (reserved, no reuse)`);
   if ("inbox" in target) {
     const f = await loadBlocks(inboxPath(root));
@@ -466,11 +475,57 @@ async function _harvestApply(root: string, key: string, deferred: Deferred[], no
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title || `${key} — Backlog`, f.blocks);
   await reopenIfDone(root, key, nowDate);
 }
+// Erase a write that should never have existed. Unlike close/drop this leaves NO tombstone and
+// releases the id, because the item never happened — a tombstone would record a typo as project
+// history and burn a real id forever. Not a lifecycle transition; see SKILL.md.
+async function _itemExpunge(root: string, key: string, id: string, force: boolean): Promise<void> {
+  const inbox = key === "_INBOX";
+  const docs = inbox
+    ? [{ path: inboxPath(root), fallback: "_INBOX — Inbox" }]
+    : [
+        { path: taskFile(root, key, "backlog.md"), fallback: `${key} — Backlog` },
+        { path: taskFile(root, key, "closed.md"), fallback: `${key} — Closed` },
+      ];
+
+  // ── preflight: every check before any write ──
+  let hit: { path: string; fallback: string; title: string; blocks: Block[]; block: Block } | null = null;
+  for (const d of docs) {
+    const f = await loadBlocks(d.path);
+    const block = findItem(f.blocks, id);
+    if (block) { hit = { ...d, title: f.title, blocks: f.blocks, block }; break; }
+  }
+  // (a) the item must exist
+  if (!hit) throw new OpError(`item '${id}' not found in ${key}`);
+
+  // (b) a plan that still exists means real work — close/complete is the verb for that.
+  // The recorded path alone is not enough: archivePlans renames the plan into plans/archive/
+  // BEFORE rewriting this pointer (archive.ts), so a crash in that window leaves a completed
+  // item pointing at a path that no longer exists. Test the archive basename too, exactly as
+  // archive.ts's own recovery scan does, or expunge would erase real history.
+  const plan = getField(hit.block, "Plan");
+  if (!force && plan && plan !== "-") {
+    const archived = pathJoin(root, ".agents", "plans", "archive", pathBasename(plan));
+    if (await exists(pathJoin(root, plan))) throw new OpError(`'${id}' links live plan '${plan}' — expunge erases history; use close/complete (or --force)`);
+    if (await exists(archived)) throw new OpError(`'${id}' links plan '${plan}', archived at '.agents/plans/archive/${pathBasename(plan)}' with a stale pointer — recover it (run archive) before expunging (or --force)`);
+  }
+
+  // (c) never strand a DependsOn edge (C14). --force does not relax this: the damage would
+  // land on a DIFFERENT item than the one being repaired.
+  const dependents: string[] = [];
+  for (const [subject, targets] of await backlogDepGraph(root)) {
+    if (subject !== id && targets.includes(id)) dependents.push(subject);
+  }
+  if (dependents.length) throw new OpError(`'${id}' is a DependsOn target of ${dependents.join(", ")} — clear those edges first`);
+
+  hit.blocks.splice(hit.blocks.indexOf(hit.block), 1);
+  await writeBlocks(hit.path, hit.title || hit.fallback, hit.blocks);
+}
+
 async function _harvestPreflight(root: string, deferred: Deferred[]): Promise<void> {
   const reserved = await reservedIdsImpl(root);
   const seen = new Set<string>();
   for (const d of deferred) {
-    if (!KEBAB.test(d.id)) throw new OpError(`deferred id '${d.id}' is not kebab-case`);
+    assertItemId(d.id, "deferred id");
     if (reserved.has(d.id) || seen.has(d.id)) throw new OpError(`deferred id '${d.id}' collides — aborting whole harvest`);
     if (d.order !== undefined) assertOrder(d.order); // raw Order validated before any write (backlogBlock throw in _harvestApply would be a partial write)
     seen.add(d.id);
@@ -672,6 +727,10 @@ export const itemSetDeps = (root: string, key: string, id: string, deps: string[
 export const itemClose = (root: string, key: string, id: string, opt: { status: "done" | "dropped"; reason?: string; closedDate?: string; plan?: string; closedBy?: string } & LockOpts) =>
   withLock(root, "itemClose", () => _itemClose(root, key, id, { status: opt.status, reason: opt.reason, closedDate: opt.closedDate ?? today(), plan: opt.plan, closedBy: opt.closedBy }), opt);
 
+// Escape hatch, NOT a lifecycle verb: erases the block and frees the id (D1). `force` relaxes
+// only the plan guard; the existence and DependsOn guards always apply (D2).
+export const itemExpunge = (root: string, key: string, id: string, o: { force?: boolean } & LockOpts = {}) =>
+  withLock(root, "itemExpunge", () => _itemExpunge(root, key, id, o.force === true), o);
 export const dropItem = (root: string, key: string, id: string, opt: { reason: string; closedBy?: string } & LockOpts) =>
   withLock(root, "dropItem", () => _itemClose(root, key, id, { status: "dropped", reason: opt.reason, closedDate: today(), closedBy: opt.closedBy }), opt);
 
@@ -754,7 +813,7 @@ async function _createPlanAndBacklogItem(
       if (await planInUse(root, planPath)) throw new OpError(`plan '${planPath}' already linked (1:1)`);
     }
 
-    const targets = [];
+    const targets: TransactionTarget[] = [];
     let reservation: any = null;
     let preflightTargetCurrent = "";
     if (reservationPaths) {

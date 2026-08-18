@@ -9,7 +9,7 @@ import { join, basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Block, serializeBlocks, serializeFrontmatter, taskFile, taskDir, tasksDir, inboxPath, ensureGitignore, parseBlocks, withLock } from "./store.ts";
 import { validateRoadmap, formatReport } from "./validate.ts";
-import { absentDescriptor, listTransactions, makeTarget, recoverTransactions, regularDescriptor, runTransaction } from "./transaction.ts";
+import { absentDescriptor, listTransactions, makeTarget, recoverTransactions, regularDescriptor, runTransaction, type TransactionTarget } from "./transaction.ts";
 import { listGitWorktrees, mainCheckout } from "../../lib/worktree.mjs";
 
 const SUPERSEDE_NOTE = "single-file-roadmap-verdict";
@@ -286,7 +286,7 @@ async function relocateInbox(root: string, runid: string, transaction: Transacti
   }
   if (!oldInfo && !legacyLinks.length) return { applied: false, out: "inbox relocation: already migrated" };
 
-  const targets = [];
+  const targets: TransactionTarget[] = [];
   if (oldInfo) {
     const oldRaw = await readFile(oldPath, "utf8");
     const newRaw = await readFile(newPath, "utf8").catch(() => "");

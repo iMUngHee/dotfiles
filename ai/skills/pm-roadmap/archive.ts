@@ -5,6 +5,7 @@
 // is rewritten on the next run. (Task-directory archive/restore lives in ops.ts.)
 // CLI: tsx archive.ts <root> [--today=YYYY-MM-DD] [--dry-run]
 import { readdir, readFile, writeFile, rename, mkdir, stat } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseBlocks, serializeBlocks, getField, setField, tasksDir, parseFrontmatter, getFmField, readStamped } from "./store.ts";
@@ -32,7 +33,7 @@ function dayMs(ymd: string): number {
 
 async function blocksOf(path: string) { const s = await readStamped(path); return s ? parseBlocks(s.content) : { title: "", blocks: [] }; }
 async function archiveTaskKeys(root: string): Promise<string[]> {
-  const ents = await readdir(join(tasksDir(root), "archive"), { withFileTypes: true }).catch(() => []);
+  const ents: Dirent[] = await readdir(join(tasksDir(root), "archive"), { withFileTypes: true }).catch(() => []);
   return ents.filter((e) => e.isDirectory()).map((e) => e.name);
 }
 // every plan referenced by a backlog item (active or archived task) — these are protected.

@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "for t in *.test.ts; do tsx \"$t\" || exit 1; done"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run typecheck && for t in *.test.ts; do tsx \"$t\" || exit 1; done"
   },
   "dependencies": {
     "tsx": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
   }
 }
