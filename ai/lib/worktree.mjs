@@ -1448,7 +1448,16 @@ export async function cancelProvisional({ root = process.cwd(), id }) {
       if (owner) return { removed: false, reason: "owned_by_plan", plan: owner };
       const target = resolve(main, reservation.worktree);
       const entry = listGitWorktrees(main).find((item) => resolve(item.path) === target);
-      if (!entry) return { removed: false, reason: "missing_worktree" };
+      // The worktree is already gone, so the reservation is all that is left to clean. The one
+      // guard that does not depend on the worktree — durable plan ownership — has already run
+      // above; the guards below (current pointer, dirty tree, commits) are all properties of a
+      // directory that no longer exists, so there is nothing for them to inspect. Refusing here
+      // would leave a reservation only a human could remove.
+      if (!entry) {
+        await unlink(stage).catch(() => {});
+        await unlink(json).catch(() => {});
+        return { removed: true, reason: "reservation_only" };
+      }
       const pointer = (await readText(join(target, ".agents", "state", "current.txt"))).trim();
       if (pointer) return { removed: false, reason: "current", plan: pointer };
       const dirty = runGit(target, ["status", "--porcelain"], { allowFailure: true });
