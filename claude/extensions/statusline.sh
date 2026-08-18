@@ -233,13 +233,23 @@ render_fresh() {
 # lookup costs ~18ms against the ~88ms render_plan below already spends, so it
 # adds no new class of cost and needs no cache.
 render_pager() {
-    local name
+    local name pending
     [ -n "$session_id_raw" ] || return
     command -v pager >/dev/null 2>&1 || return
     name=$(pager whoami --session "$session_id_raw" 2>/dev/null | awk '/^name:/{print $2; exit}')
     # "none" is whoami's own placeholder for an unnamed session, not a name.
     [ -n "$name" ] && [ "$name" != "none" ] || return
-    printf ' 📟 %s%s%s' "$CYAN" "$name" "$RESET"
+
+    # Waiting mail is the half that matters. Delivery rides on hook events, so a
+    # message that arrives mid-turn sits in the queue until the next prompt — and
+    # without a count here the only person who can notice is 대협, who then has to
+    # say so out loud. That is the exact manual step this tool exists to remove.
+    pending=$(pager ls --session "$session_id_raw" 2>/dev/null | grep -c 'waiting')
+    if [ "${pending:-0}" -gt 0 ]; then
+        printf ' 📬 %s%s %d%s' "$YELLOW$BOLD" "$name" "$pending" "$RESET"
+    else
+        printf ' 📟 %s%s%s' "$CYAN" "$name" "$RESET"
+    fi
 }
 
 render_plan() {
