@@ -131,7 +131,10 @@ launcher/dashboard callers that do not claim ownership for an agent session.
   pointer *after* moving the file); and no other item's `DependsOn` may name it. `--force`
   relaxes **only** the plan guard — needed because `plan` cannot unlink a closed item, which
   would otherwise strand it forever. Irreversible, and `tasks/` is gitignored: copy the file
-  aside first.
+  aside first. **Archived tasks are refused**, like every other item mutator — `archive/` is a
+  read-only tombstone. An id inside an archived task is still reserved, so to free it restore,
+  expunge, then re-archive: `task restore <KEY>` → `expunge <KEY> <id>` → `task archive <KEY>`
+  (re-archiving requires the backlog to be empty, which it is if you only expunged).
 - **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
 - **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
 - **current-task** — read-only launcher/dashboard projection: prints the KEY linked to that checkout's selected launcher plan. Empty for no selection, standalone plans, stale plans, and terminal plans. Interactive agent consumers use `resolve-session` plus `pm get <plan-id>` instead; they never use this command as a session fallback.
