@@ -368,6 +368,32 @@ async function _itemSetPlan(root: string, key: string, id: string, planPath: str
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
 }
 
+// Note and the block title were the last two item fields without a setter, so correcting either
+// meant expunge + re-add — which silently reset every field the caller did not retype. Both write
+// through writeBlocks, so serializeBlocks refuses anything that cannot round-trip (newline,
+// U+2028/9) before a byte lands; no separate character rule is re-derived here.
+async function _itemSetNote(root: string, key: string, id: string, note: string): Promise<void> {
+  await assertActiveTask(root, key);
+  const f = await loadBlocks(taskFile(root, key, "backlog.md"));
+  const it = findItem(f.blocks, id);
+  if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
+  // '-' clears, as in depend/reorder. An empty Note is what backlogBlock writes when none is
+  // given, so clearing keeps the field rather than removing it — one encoding of one state.
+  setField(it, "Note", note === "-" ? "" : note);
+  await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
+}
+
+// The title lives in the block header (`- **id** — title`), not in a field, so this cannot reuse
+// setField. store.ts renders a bare `- **id**` when the title is empty, which is what '-' means.
+async function _itemSetTitle(root: string, key: string, id: string, title: string): Promise<void> {
+  await assertActiveTask(root, key);
+  const f = await loadBlocks(taskFile(root, key, "backlog.md"));
+  const it = findItem(f.blocks, id);
+  if (!it) throw new OpError(`item '${id}' not in ${key} backlog`);
+  it.title = title === "-" ? "" : title;
+  await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
+}
+
 async function _itemSetPriority(root: string, key: string, id: string, priority: string): Promise<void> {
   await assertActiveTask(root, key);
   if (!PRIORITIES.has(priority)) throw new OpError(`priority must be one of P0|P1|P2|P3 (got '${priority}')`);
@@ -727,6 +753,11 @@ export const itemApprove = (root: string, key: string, id: string, o: LockOpts =
 export const itemSetPlan = (root: string, key: string, id: string, planPath: string, o: LockOpts = {}) =>
   withLock(root, "itemSetPlan", () => _itemSetPlan(root, key, id, planPath), o);
 
+// The last two item fields to get setters. '-' clears either; see the ops above for why.
+export const itemSetNote = (root: string, key: string, id: string, note: string, o: LockOpts = {}) =>
+  withLock(root, "itemSetNote", () => _itemSetNote(root, key, id, note), o);
+export const itemSetTitle = (root: string, key: string, id: string, title: string, o: LockOpts = {}) =>
+  withLock(root, "itemSetTitle", () => _itemSetTitle(root, key, id, title), o);
 export const itemSetPriority = (root: string, key: string, id: string, priority: string, o: LockOpts = {}) =>
   withLock(root, "itemSetPriority", () => _itemSetPriority(root, key, id, priority), o);
 

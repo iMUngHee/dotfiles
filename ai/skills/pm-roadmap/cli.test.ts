@@ -71,6 +71,31 @@ async function main() {
     assert.match(ordList, /ord-3 — blocked by ord-1 \(dependency\)/, "the genuine dependency survives");
     assert.equal((await cli("validate")).code, 0, "a task with mixed Order presence is valid");
 
+    // ── note + retitle: the last two item fields to get setters ──
+    // Before these, correcting either meant expunge + re-add, which silently reset every field
+    // the caller did not retype. The title case came from another session via pager #12.
+    assert.equal((await cli("task", "create", "NOTE", "--title", "Notes")).code, 0);
+    assert.equal((await cli("add", "n-1", "--task", "NOTE", "--title", "노크잇 탭 도메인·SSR 편입", "-p", "P1", "--note", "first")).code, 0);
+    assert.equal((await cli("note", "NOTE", "n-1", "corrected", "note", "text")).code, 0);
+    assert.match((await cli("get", "n-1")).out, /corrected note text/, "note replaced, multi-word without quoting");
+
+    const retitled = await cli("retitle", "NOTE", "n-1", "노크잇 탭 도메인 편입");
+    assert.equal(retitled.code, 0);
+    assert.match(retitled.out, /retitled NOTE\/n-1/);
+    const gotten = (await cli("get", "n-1")).out;
+    assert.match(gotten, /노크잇 탭 도메인 편입/, "the reported title case works");
+    assert.doesNotMatch(gotten, /SSR/, "the old title is gone");
+    assert.match(gotten, /"priority": "P1"/, "retitle did not reset Priority — the expunge workaround did");
+
+    assert.match((await cli("note", "NOTE", "n-1", "-")).out, /cleared note/);
+    assert.match((await cli("retitle", "NOTE", "n-1", "-")).out, /cleared title/);
+    assert.equal((await cli("note", "NOTE", "n-1")).code, 1, "note needs its text");
+    assert.equal((await cli("retitle", "NOTE", "n-1")).code, 1, "retitle needs its text");
+    await assert.rejects(() => cli("note", "NOTE"), /missing <id>/, "note names its missing positional");
+    await assert.rejects(() => cli("retitle"), /missing <KEY>/, "retitle names its missing positional");
+    assert.equal((await cli("validate")).code, 0, "store still valid");
+    assert.match((await cli()).out, /\|note\|retitle\|/, "usage string lists both");
+
     let r = await cli("list");
     assert.ok(r.out.includes("ALPHA/a-1") && r.out.includes("inbox: 1"), "list shows item + inbox");
     r = await cli("tree");

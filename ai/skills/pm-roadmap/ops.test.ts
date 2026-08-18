@@ -760,6 +760,67 @@ async function main() {
     await ops.itemAdd(root, { task: "EXP" }, { id: "arch-garbage", title: "Reused" }, O);
     assert.ok((await ids(BL("EXP"))).includes("arch-garbage"), "the freed id is re-addable after recovery");
 
+    // ── note + retitle: the last two item fields that had no setter ──
+    // Correcting either meant expunge + re-add, which silently reset every field not retyped
+    // (Priority P1 -> P2, Order dropped). Both setters must leave siblings byte-identical.
+    await ops.taskCreate(root, "SET", "Setters", O);
+    await ops.itemAdd(root, { task: "SET" }, { id: "s-rich", title: "Original title", priority: "P1", order: "5", note: "original note" }, O);
+    await ops.itemAdd(root, { task: "SET" }, { id: "s-dep", title: "Dep", note: "n" }, O);
+    await ops.itemSetDeps(root, "SET", "s-rich", ["s-dep"], O);
+    await makePlan(root, ".agents/plans/2026-06-22-s-rich.md", "draft", "s-rich");
+    await ops.itemSetPlan(root, "SET", "s-rich", ".agents/plans/2026-06-22-s-rich.md", O);
+    const siblings = async () => ({
+      priority: await field(BL("SET"), "s-rich", "Priority"),
+      order: await field(BL("SET"), "s-rich", "Order"),
+      plan: await field(BL("SET"), "s-rich", "Plan"),
+      deps: await field(BL("SET"), "s-rich", "DependsOn"),
+      status: await field(BL("SET"), "s-rich", "Status"),
+    });
+    const sibsBefore = await siblings();
+
+    await ops.itemSetNote(root, "SET", "s-rich", "corrected note", O);
+    assert.equal(await field(BL("SET"), "s-rich", "Note"), "corrected note", "note replaced");
+    await ops.itemSetTitle(root, "SET", "s-rich", "Shorter title", O);
+    const retitled = parseBlocks((await readStamped(BL("SET")))!.content).blocks.find((b) => b.id === "s-rich");
+    assert.equal(retitled!.title, "Shorter title", "title replaced");
+    assert.deepEqual(await siblings(), sibsBefore, "neither setter disturbed Priority/Order/Plan/DependsOn/Status");
+
+    // clearing, consistent with depend/reorder using '-'
+    await ops.itemSetNote(root, "SET", "s-rich", "-", O);
+    assert.equal(await field(BL("SET"), "s-rich", "Note"), "", "note '-' clears to empty, matching what creation writes");
+    await ops.itemSetTitle(root, "SET", "s-rich", "-", O);
+    const untitled = (await readStamped(BL("SET")))!.content;
+    assert.ok(/^- \*\*s-rich\*\*$/m.test(untitled), "title '-' renders the bare header with no em dash");
+    await ops.itemSetTitle(root, "SET", "s-rich", "Back again", O);
+    assert.equal(parseBlocks((await readStamped(BL("SET")))!.content).blocks.find((b) => b.id === "s-rich")!.title, "Back again", "a real title sets after a clear");
+
+    // setting a note on an item created without one
+    await ops.itemAdd(root, { task: "SET" }, { id: "s-bare", title: "Bare" }, O);
+    await ops.itemSetNote(root, "SET", "s-bare", "added later", O);
+    assert.equal(await field(BL("SET"), "s-bare", "Note"), "added later", "note set on an item created without one");
+
+    // unrepresentable values must be refused with nothing written (the multiline data-loss class).
+    // U+2028 is written as an escape with a charCodeAt guard — a literal is normalised in transit.
+    const LS = " ";
+    assert.equal(LS.charCodeAt(0), 0x2028, "the separator under test is really U+2028");
+    for (const bad of ["two\nlines", `ls${LS}here`]) {
+      const snapshot = (await readStamped(BL("SET")))!.content;
+      await assert.rejects(() => ops.itemSetNote(root, "SET", "s-bare", bad, O), /refusing to serialize/, "unrepresentable note refused");
+      assert.equal((await readStamped(BL("SET")))!.content, snapshot, "refused note wrote nothing");
+      await assert.rejects(() => ops.itemSetTitle(root, "SET", "s-bare", bad, O), /refusing to serialize/, "unrepresentable title refused");
+      assert.equal((await readStamped(BL("SET")))!.content, snapshot, "refused title wrote nothing");
+    }
+
+    // unknown id, closed item, archived task each name their own cause
+    await assert.rejects(() => ops.itemSetNote(root, "SET", "s-nope", "x", O), (e: any) => /not in SET backlog/.test(e.message), "unknown id");
+    await assert.rejects(() => ops.itemSetTitle(root, "SET", "s-nope", "x", O), (e: any) => /not in SET backlog/.test(e.message), "unknown id");
+    await ops.dropItem(root, "SET", "s-dep", { reason: "gone", ...O });
+    await assert.rejects(() => ops.itemSetNote(root, "SET", "s-dep", "x", O), (e: any) => /not in SET backlog/.test(e.message), "a closed item is not editable");
+    await ops.taskCreate(root, "SETARCH", "Arch", O);
+    await ops.taskArchive(root, "SETARCH", O);
+    await assert.rejects(() => ops.itemSetNote(root, "SETARCH", "x", "y", O), (e: any) => /archived; restore it first/.test(e.message), "archived task named");
+    await assert.rejects(() => ops.itemSetTitle(root, "SETARCH", "x", "y", O), (e: any) => /archived; restore it first/.test(e.message), "archived task named");
+
     console.log("ops.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });
