@@ -713,6 +713,35 @@ async function main() {
     await ops.itemExpunge(root, "_INBOX", "exp-inbox", O);
     assert.ok(!(await ids(inboxPath(root))).includes("exp-inbox"), "inbox block removed");
 
+    // ── expunge must name an archived task, not report the item as missing ──
+    // Every sibling mutator calls assertActiveTask; expunge was the lone omission, so an
+    // archived key answered "not found" — telling the operator the opposite of the truth
+    // (the item exists, its id is still reserved, and restore→expunge→archive removes it).
+    await ops.taskCreate(root, "ARCH", "Archived", O);
+    await ops.itemAdd(root, { task: "ARCH" }, { id: "arch-garbage", title: "Garbage" }, O);
+    await ops.dropItem(root, "ARCH", "arch-garbage", { reason: "typo", ...O });
+    await ops.taskArchive(root, "ARCH", O);
+    const archivedClosed = join(root, ".agents", "tasks", "archive", "ARCH", "closed.md");
+    const archivedBefore = await readFile(archivedClosed, "utf8");
+    await assert.rejects(
+      () => ops.itemExpunge(root, "ARCH", "arch-garbage", O),
+      (e: any) => e instanceof ops.OpError && /archived; restore it first/.test(e.message),
+      "an archived task's key must name the archive, not report a missing item",
+    );
+    assert.equal(await readFile(archivedClosed, "utf8"), archivedBefore, "refusal wrote nothing");
+    await assert.rejects(
+      () => ops.itemExpunge(root, "NEVERMADE", "whatever", O),
+      (e: any) => e instanceof ops.OpError && /does not exist/.test(e.message),
+      "a nonexistent key is distinguished from a missing item",
+    );
+
+    // The documented recovery: restore → expunge → archive, and the id is genuinely freed.
+    await ops.taskRestore(root, "ARCH", O);
+    await ops.itemExpunge(root, "ARCH", "arch-garbage", O);
+    await ops.taskArchive(root, "ARCH", O);
+    await ops.itemAdd(root, { task: "EXP" }, { id: "arch-garbage", title: "Reused" }, O);
+    assert.ok((await ids(BL("EXP"))).includes("arch-garbage"), "the freed id is re-addable after recovery");
+
     console.log("ops.test.ts OK");
   } finally {
     await rm(root, { recursive: true, force: true });
