@@ -9,7 +9,7 @@ ai/
 ├── PERSONAL.md                 # Collaboration rules (addressing, expertise, file modification, etc.)
 ├── guardrails.md               # Verification, absence proofs, scope resolution, pre-implementation gate
 ├── AGENTS.manifest             # Concat order for ~/.codex/AGENTS.md build
-├── rules/                      # Path-scoped rules (code-review, diagnostics, rationalization, testing)
+├── rules/                      # Session rules — always-on unless `paths:`-scoped (see Rule load scope)
 ├── memory/                     # Tool-agnostic feedback memories
 │   └── private/                # gitignored (sensitive references, internal scan rules)
 ├── skills/                     # Skills usable from any AI assistant
@@ -64,6 +64,32 @@ Four shared skills form one project-management system over those `.agents/` arti
 | `ai/skills/private/*/` | same overlay | same overlay |
 
 `~/.claude/MEMORY.md` and `~/.codex/AGENTS.md` are **auto-generated**. They carry an `AUTO-GENERATED` header. Do not edit them — edit the source files in `ai/` (or `claude/`, `codex/` for tool-only content) and re-run bootstrap.
+
+## Rule load scope
+
+Deploying a rule is not the same as having it read. A file in `rules/` is loaded into every
+Claude session by default; a `paths:` frontmatter block makes it **path-scoped**, and Claude
+then loads it only when the session touches a file matching one of the globs:
+
+```yaml
+---
+paths:
+  - "**/*.test.*"
+---
+```
+
+So the block is a load-time decision, not documentation. Omit it when the rule must hold no
+matter what the session touches — `pager.md` and `code-review.md` depend on that.
+
+**Codex has no equivalent.** `codex/scripts/bootstrap.sh` strips frontmatter before concat,
+so every manifest entry is unconditionally present in `~/.codex/AGENTS.md`. A path-scoped
+rule is narrow on Claude and always-on for Codex; write one only when that asymmetry is
+acceptable.
+
+Measured 2026-08-18: of the six deployed rules, the two carrying `paths:`
+(`rationalization.md`, `testing.md`) were absent from a Claude session whose changed files
+were only `.md` and `.manifest`, while the four without it were present. Both bodies were
+in `AGENTS.md`, with zero surviving `paths:` blocks.
 
 ## Skill naming
 
