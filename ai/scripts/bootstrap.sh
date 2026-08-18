@@ -75,11 +75,22 @@ case "$(uname -s)" in
         ;;
 esac
 
-# ── 5. Sanity ──
+# ── 5. Git hooks ──
+# The hooks live in githooks/ because .git/hooks is not version-controlled: a fresh
+# clone had no post-merge hook, so merging a tier change deployed nothing and said
+# nothing. core.hooksPath is absolute on purpose — a relative one resolves against
+# the working directory, which differs per worktree.
+if [ -e "$ROOT_DIR/.git" ] && [ -d "$ROOT_DIR/githooks" ]; then
+    chmod +x "$ROOT_DIR"/githooks/* 2>/dev/null || true
+    git -C "$ROOT_DIR" config core.hooksPath "$ROOT_DIR/githooks"
+    echo "Git hooks: core.hooksPath → $ROOT_DIR/githooks"
+fi
+
+# ── 6. Sanity ──
 "$AI_DIR/lib/verify-no-residual-tokens.sh"
 "$AI_DIR/lib/verify-agents-md-size.sh"
 
-# ── 6. Notice ──
+# ── 7. Notice ──
 cat <<'EOF'
 
 === Bootstrap complete ===
@@ -90,5 +101,7 @@ Edit source files under ~/.config/ai/, claude/, codex/ — NOT the deployed copi
 - ~/.claude/MEMORY.md is generated. Direct edits are lost.
 - Skills overlay: ~/.claude/skills/, ~/.agents/skills/ (Codex).
 - AgentNotifier is shared by Claude and Codex hooks.
+- Git hooks live in githooks/ via core.hooksPath — .git/hooks is not tracked.
+- Merging a tier change into main runs this script (githooks/post-merge).
 - New ai/*.md? Add to ai/AGENTS.manifest before next bootstrap.
 EOF

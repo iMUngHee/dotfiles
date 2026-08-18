@@ -3,6 +3,7 @@
 
 # Included list
 !ghostty/
+!githooks/
 !nvim/
 !tmux/
 !zsh/
