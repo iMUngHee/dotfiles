@@ -93,7 +93,7 @@ launcher/dashboard callers that do not claim ownership for an agent session.
 - **get `<id>`** — an item's join view (plan goal + next step, task links + memory, recent done-sibling notes, note).
 - **next `[id]` `[--owner X]` `[--all]`** — paste-ready kickoff prompt. Target: explicit id, else the candidate list (`Choose a candidate` — never auto-picks an eligible item; `_INBOX` excluded). The candidate-list path applies the same collab default filter as `list` (me + unassigned; `--owner`/`--all` override); an explicit id bypasses the filter. The prompt surfaces item owner + handoff note and memory/link `By` for collab tasks. After emitting, ask whether to run it **here** (no copy — a linked plan first runs session-aware `pm select --plan <plan>`, while an unplanned item proceeds into `/design <id>` and binds on persist; then resume the plan's next unchecked step) or **hand off** to a fresh session (copy via `/copy`, then stop).
 - **recent** — derived recent-closed view (all `closed.md` merged by date, capped).
-- **validate** — full-scan invariant check (C1..C13; see below). Exit 1 on errors. `/retro` runs it after its sink.
+- **validate** — full-scan invariant check (C1–C17; see below). Exit 1 on errors. `/retro` runs it after its sink.
 - **migrate `[--apply]`** — convert a legacy repo's `.agents/` to the task-first model. Default dry-run (prints the mapping). `--apply` after review. See Migration.
 - **task `create|done|archive|restore|set-mode|collaborators` `<KEY>`** — task lifecycle. `archive` refuses if open items remain; `restore` re-activates an archived task. `create [--mode collab]` records mode (default solo, **always written** going forward). `set-mode <solo|collab>` switches a task either way — solo→collab assigns the switcher (resolved actor) as Owner to **every** un-owned `backlog.md` item (open|draft|active) and **requires** a resolvable actor (reports the assigned count + owner, and **warns** when that owner resolved from the `git user.email` fallback — guards against a personal email silently owning the backlog); collab→solo keeps attribution fields (lossless). `collaborators <csv>` sets the roster (empty clears).
 - **add `<id> <title>` (`--task KEY` | `--inbox`) [-p] [-o] [--note]** — append a workable unit (or an untriaged inbox item). `-o` takes a positive-integer order; `--note` attaches a note.
@@ -135,9 +135,12 @@ launcher/dashboard callers that do not claim ownership for an agent session.
 
 ## Invariants (validate)
 
-Errors: **C1–C15** preserve the existing id, plan-link, status, pointer,
+Errors: **C1** through **C15** preserve the existing id, plan-link, status, pointer,
 collaboration, and dependency contracts. **C16** rejects duplicate non-terminal worktree
-ownership and main-checkout execution mappings. Never mutates — fix via ops.
+ownership and main-checkout execution mappings. **C17** reports any line in
+`backlog.md`/`closed.md`/`links.md`/`memory.md`/`_inbox.md` that belongs to no item block —
+including a heading superseded by a later `# ` — because the parser drops it and the next
+write destroys it. Never mutates — fix via ops.
 
 ## Plan archiving
 
@@ -212,6 +215,16 @@ canonicalize shared writes to main as required.
 ## Rules
 
 - All file content English; quoted triggers may stay Korean.
+- **Every field value is single-line.** The block grammar stores one line per `Key: Value`,
+  so a value carrying a newline (or a Unicode line separator, or leading/trailing whitespace
+  the parser would trim) is refused at write time rather than silently truncated. **Long prose
+  belongs in `.agents/plans/*.md`**, which has no grammar constraint; a task-memory note keeps
+  a one-line summary plus the plan reference. This applies to the dashboard's memory/summary
+  textareas too — a multi-line note there returns 409 with the reason.
 - **Never hand-edit `tasks/*` markdown — always go through the CLI/ops.** That is the single write path (lock + CAS + lossless serialize).
+  One sanctioned exception: repairing C17 damage. A document that already carries lines outside
+  any item block is refused by every writer (so the CLI cannot repair it), which makes that file
+  read-only until a human folds the stranded text back into a field or moves it to a plan.
+  Confirm the repair with `pm validate`. Other documents and tasks stay writable.
 - Reads (`list`/`tree`/`get`/`next`/`recent`/`validate`) are safe to auto-invoke; mutations come from lifecycle gates or explicit subcommands.
 - `tasks/` is gitignored (durability is the files themselves, not git).

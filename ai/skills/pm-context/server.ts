@@ -278,6 +278,12 @@ export async function handle(root: string, method: string, pathname: string, par
       });
       try {
         if (!(await exists(taskFile(root, key, "task.md")))) await ops.taskCreate(root, key, key);
+        // Validate both documents before either is written. These are two separate ops calls,
+        // so a rejected memory note would otherwise land after links had been replaced (D7).
+        await ops.assertDocumentsWritable([
+          { path: taskFile(root, key, "links.md"), title: `${key} — Links`, blocks: linkBlocks },
+          { path: taskFile(root, key, "memory.md"), title: `${key} — Memory`, blocks: memBlocks },
+        ]);
         await ops.updateTaskLinks(root, key, linkBlocks);
         await ops.updateTaskMemory(root, key, memBlocks);
         return { status: 200, json: { key, links: body?.links ?? [], memory: body?.memory ?? [] } };

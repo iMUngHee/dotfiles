@@ -171,6 +171,37 @@ async function main() {
     r = await handle(root, "POST", "/api/roadmap/a-1/drop", P, { reason: "no" });
     assert.equal((r.json as any).dropped, true);
 
+    // ── D7/D9: a rejected PUT writes nothing at all ──
+    // The handler replaces links and memory through two separate ops calls, links first. A
+    // multi-line memory note must not land after links have already been rewritten.
+    {
+      const linksPath = join(root, ".agents/tasks/ALPHA/links.md");
+      const memPath = join(root, ".agents/tasks/ALPHA/memory.md");
+      const [linksBefore, memBefore] = await Promise.all([readFile(linksPath), readFile(memPath)]);
+
+      const bad = await handle(root, "PUT", "/api/tasks/ALPHA", P, {
+        links: [{ label: "W", url: "https://changed", triggers: [], summary: "would land first" }],
+        memory: [{ title: "n1", note: "line one\nline two", date: "2026-01-01" }],
+      });
+      assert.equal(bad.status, 409, "multi-line memory note is refused");
+      assert.match((bad.json as any).error, /must be single-line/, "409 body names the reason");
+      assert.deepEqual(await readFile(linksPath), linksBefore, "links.md byte-identical (no partial write)");
+      assert.deepEqual(await readFile(memPath), memBefore, "memory.md byte-identical");
+
+      // and a document already carrying orphans is refused before anything is replaced
+      const orphaned = `${memBefore.toString()}\nSTRANDED-VIA-GUI\n`;
+      await writeFile(memPath, orphaned);
+      const guarded = await handle(root, "PUT", "/api/tasks/ALPHA", P, {
+        links: [{ label: "W", url: "https://x", triggers: ["a", "b"], summary: "s" }],
+        memory: [{ title: "n1", note: "hi", date: "2026-01-01" }],
+      });
+      assert.equal(guarded.status, 409, "orphan-bearing memory.md blocks the PUT");
+      assert.match((guarded.json as any).error, /refusing to write/, "409 body explains the refusal");
+      assert.equal((await readFile(memPath)).toString(), orphaned, "orphan text preserved");
+      assert.deepEqual(await readFile(linksPath), linksBefore, "links.md still untouched");
+      await writeFile(memPath, memBefore);
+    }
+
     // D7a — a By-stamped link/memory survives a GET→PUT round-trip (merge-by-id non-erasure).
     // The GUI never authors By, so the PUT payload omits it; server.ts must re-attach it by id
     // from the on-disk blocks, else a full-state PUT would erase every By field (data loss).

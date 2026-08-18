@@ -80,6 +80,36 @@ async function main() {
     await writeFile(taskFile(root, "A", "backlog.md"), `# A — Backlog\n\n- **a-1** — x\n  - Priority: P2\n  - Status: open\n  - Order: 1\n  - Plan: -\n  - Note: \n- **a-2** — y\n  - Priority: P2\n  - Status: open\n  - Order: 1\n  - Plan: -\n  - Note: \n`);
     assert.ok((await validateRoadmap(root)).warns.some((w) => w.check === "C10"), "C10 dup order warn");
 
+    // ── C17: content outside any item block, which the next write destroys ──
+    // Asserted against a positive control in the same run: a lone silent check would pass
+    // trivially if C17 were absent.
+    {
+      const bl = taskFile(root, "A", "backlog.md");
+      const clean = `# A — Backlog\n\n- **a-1** — x\n  - Priority: P2\n  - Status: open\n  - Plan: -\n  - Note: \n`;
+      await writeFile(bl, clean);
+      assert.ok(!has(await validateRoadmap(root), "C17"), "C17 silent on a well-formed document (negative control)");
+
+      await writeFile(bl, `${clean}\nSTRANDED\n`);
+      const stranded = (await validateRoadmap(root)).errors.filter((e) => e.check === "C17");
+      assert.equal(stranded.length, 1, "C17 fires once for the stranded line");
+      assert.match(stranded[0].message, /line 9\b/, "C17 names the exact line");
+      assert.match(stranded[0].message, /STRANDED/, "C17 quotes the text that would be lost");
+
+      // a superseded H1 is discarded just as silently
+      await writeFile(bl, `# first\n${clean}`);
+      assert.ok((await validateRoadmap(root)).errors.some((e) => e.check === "C17" && /# first/.test(e.message)), "C17 reports an overwritten H1");
+
+      // links.md and memory.md are covered too — they share the grammar and the dashboard writes them
+      await writeFile(bl, clean);
+      for (const doc of ["links", "memory"] as const) {
+        const p = taskFile(root, "A", `${doc}.md`);
+        await writeFile(p, `# A — ${doc}\n\nORPHAN-IN-${doc.toUpperCase()}\n`);
+        assert.ok((await validateRoadmap(root)).errors.some((e) => e.check === "C17" && e.id === `A/${doc}`), `C17 covers ${doc}.md`);
+        await writeFile(p, `# A — ${doc}\n`);
+      }
+      assert.ok(!has(await validateRoadmap(root), "C17"), "C17 clears once every document is repaired");
+    }
+
     // ── C12: invalid task.md mode (absence/solo/collab allowed) ──
     await ops.taskCreate(root, "M", "M", O);
     await writeFile(taskFile(root, "M", "task.md"), `---\nkey: M\ntitle: M\nstatus: active\nmode: bogus\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n# M\n`);

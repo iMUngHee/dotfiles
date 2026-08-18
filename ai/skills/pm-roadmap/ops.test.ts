@@ -5,7 +5,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as ops from "./ops.ts";
-import { taskFile, inboxPath, parseBlocks, serializeBlocks, parseFrontmatter, getField, setField, getFmField, readStamped } from "./store.ts";
+import { type Block, taskFile, inboxPath, parseBlocks, serializeBlocks, parseFrontmatter, getField, setField, getFmField, readStamped } from "./store.ts";
 import { listTransactions } from "./transaction.ts";
 import { ensureManagedWorktree, reservationPaths, stagePlan } from "../../lib/worktree.mjs";
 
@@ -41,7 +41,7 @@ function testBlock(id: string, status = "open", plan = "-") {
 
 async function withInjectedBlock(path: string, fallbackTitle: string, block: ReturnType<typeof testBlock>, run: () => Promise<void>): Promise<void> {
   const before = await readStamped(path);
-  const parsed = before ? parseBlocks(before.content) : { title: fallbackTitle, blocks: [] };
+  const parsed = before ? parseBlocks(before.content) : { title: fallbackTitle, blocks: [] as Block[] };
   parsed.blocks.push(block);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, serializeBlocks(parsed.title || fallbackTitle, parsed.blocks));
@@ -309,6 +309,43 @@ async function main() {
     assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "draft", "interrupted complete rolled back plan status");
     assert.ok((await ids(BL("ALPHA"))).includes("a-two"), "interrupted complete restored backlog item");
     assert.ok(!(await ids(CL("ALPHA"))).includes("a-two"), "interrupted complete did not leave a closed item");
+
+    // ── D9: a transaction target carrying orphans is refused before the journal is created ──
+    // completePlanFromRetro writes closed.md through runTransaction, which never touches
+    // writeBlocksAll, so this fails if D9 is wired only into the multi-document helper.
+    // The check reads the `before` descriptor makeTarget captured — the exact bytes
+    // runTransaction pins as its precondition — so no window exists between check and capture.
+    {
+      const before = (await readStamped(CL("ALPHA")))!.content;
+      await writeFile(CL("ALPHA"), `${before}\nSTRANDED-IN-CLOSED\n`);
+      const corrupted = (await readStamped(CL("ALPHA")))!.content;
+      await assert.rejects(
+        () => ops.completePlanFromRetro(root, "ALPHA", "a-two", {
+          planPath: ".agents/plans/2026-06-22-a-two.md", terminalStatus: "done", closedDate: "2026-06-22", ...O,
+        }),
+        /refusing to write .*closed\.md/,
+        "D9 refuses a transaction target that carries orphans",
+      );
+      assert.equal(await planStatus(root, ".agents/plans/2026-06-22-a-two.md"), "draft", "D9 refusal did not flip the plan");
+      assert.ok((await ids(BL("ALPHA"))).includes("a-two"), "D9 refusal left the backlog item in place");
+      assert.equal((await readStamped(CL("ALPHA")))!.content, corrupted, "D9 refusal preserved the orphan text");
+      await writeFile(CL("ALPHA"), before);
+    }
+
+    // ── D9: the dashboard's full-state replacement is refused too ──
+    // updateTaskMemory replaces the document wholesale, so it has no loaded model to inspect;
+    // the guard reads the file itself before writing.
+    {
+      const mem = taskFile(root, "ALPHA", "memory.md");
+      await writeFile(mem, `# ALPHA — Memory\n\nSTRANDED-IN-MEMORY\n`);
+      await assert.rejects(
+        () => ops.updateTaskMemory(root, "ALPHA", [testBlock("m1")], O),
+        /refusing to write .*memory\.md/,
+        "D9 covers the dashboard full-state replacement path",
+      );
+      assert.match((await readStamped(mem))!.content, /STRANDED-IN-MEMORY/, "refusal preserved the orphan text");
+      await rm(mem, { force: true });
+    }
 
     // ── completePlanFromRetro success: plan→done + item closed + deferred harvested + current cleared ──
     await ops.completePlanFromRetro(root, "ALPHA", "a-two", {

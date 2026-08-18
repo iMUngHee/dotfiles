@@ -79,6 +79,12 @@ async function canonicalManagedRootIdentity(ownershipRoot: string, mainRoot: str
 
 async function exists(p: string): Promise<boolean> { return stat(p).then(() => true).catch(() => false); }
 async function blocksOf(path: string): Promise<Block[]> { const s = await readStamped(path); return s ? parseBlocks(s.content).blocks : []; }
+// C17 — content the parser drops. It is invisible in every read view and is destroyed by the
+// next write, so it has to be reported from the parser itself rather than re-matched here.
+async function orphansOf(path: string): Promise<{ line: number; text: string }[]> {
+  const s = await readStamped(path);
+  return s ? parseBlocks(s.content).orphans : [];
+}
 async function readState(root: string, name: string): Promise<string> { const s = await readStamped(pathJoin(root, ".agents", "state", name)); return s ? s.content.trim() : ""; }
 async function listArchiveKeys(root: string): Promise<string[]> {
   const ents = await readdir(pathJoin(tasksDir(root), "archive"), { withFileTypes: true }).catch(() => []);
@@ -114,6 +120,14 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
       if (mode !== null && mode.trim() !== "" && !TASK_MODE.has(mode)) err("C12", key, `task.md mode '${mode}' invalid (solo|collab)`);
       taskModeVal = coerceMode(mode);
       roster = (getFmField(fm, "collaborators") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    // C17 — links.md and memory.md carry no other invariants, but they use the same grammar
+    // and are what the dashboard writes, so the orphan scan covers them too.
+    for (const sec of ["backlog", "closed", "links", "memory"] as const) {
+      const clip = (s: string) => (s.length > 60 ? `${s.slice(0, 57)}...` : s);
+      for (const o of await orphansOf(pathJoin(dir, key, `${sec}.md`))) {
+        err("C17", `${key}/${sec}`, `line ${o.line} is outside any item block and the next write will destroy it: ${JSON.stringify(clip(o.text))}`);
+      }
     }
     for (const sec of ["backlog", "closed"] as const) {
       const blocks = await blocksOf(pathJoin(dir, key, `${sec}.md`));
@@ -166,6 +180,12 @@ export async function validateRoadmap(root: string): Promise<ValidationReport> {
 
   for (const key of keys) await scan(key, tasksDir(root), true);
   for (const key of archiveKeys) await scan(key, pathJoin(tasksDir(root), "archive"), false);
+  {
+    const clip = (s: string) => (s.length > 60 ? `${s.slice(0, 57)}...` : s);
+    for (const o of await orphansOf(inboxPath(root))) {
+      err("C17", "_INBOX", `line ${o.line} is outside any item block and the next write will destroy it: ${JSON.stringify(clip(o.text))}`);
+    }
+  }
   // inbox ids count toward uniqueness (no plan/status invariants there)
   for (const b of await blocksOf(inboxPath(root))) {
     if (idSeen.has(b.id)) err("C1", b.id, `duplicate id (also at ${idSeen.get(b.id)})`);

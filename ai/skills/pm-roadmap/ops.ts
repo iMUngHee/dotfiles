@@ -5,13 +5,13 @@
 // public ops wrap them in withLock so composites reuse one lock (no re-entrancy).
 import { readdir, mkdir, rename, stat, unlink } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join as pathJoin } from "node:path";
+import { join as pathJoin, sep as pathSep } from "node:path";
 import {
-  type Block, parseBlocks, serializeBlocks, getField, setField,
+  type Block, type Orphan, parseBlocks, serializeBlocks, getField, setField,
   parseFrontmatter, serializeFrontmatter, getFmField, coerceMode, parseIdList,
   taskDir, taskFile, tasksDir, inboxPath, withLock, readStamped, writeCAS,
 } from "./store.ts";
-import { makeTarget, regularDescriptor, runTransaction, type TransactionOptions, type TransactionTarget } from "./transaction.ts";
+import { makeTarget, regularDescriptor, runTransaction as runTransactionRaw, type TransactionOptions, type TransactionTarget } from "./transaction.ts";
 import {
   listGitWorktrees,
   mainCheckout,
@@ -44,8 +44,80 @@ async function loadBlocks(path: string): Promise<{ title: string; blocks: Block[
   const s = await readStamped(path);
   return s ? parseBlocks(s.content) : { title: "", blocks: [] };
 }
+
+// ── D9: never overwrite content the parser did not understand ──
+// serializeBlocks writes back only the parsed model, so rewriting a document that carries
+// orphans destroys them. Every writer passes through here; scan-only loaders (reservedIds,
+// planInUse, assertNoOtherOwners) and the read paths in join/validate/server stay lenient so
+// a damaged store remains browsable and diagnosable while that one document is unwritable.
+function orphanRefusal(path: string, orphans: Orphan[]): OpError {
+  const where = path.split(pathSep).slice(-2).join("/");
+  const clip = (s: string) => (s.length > 60 ? `${s.slice(0, 57)}...` : s);
+  const at = orphans.length === 1
+    ? `line ${orphans[0].line} holds`
+    : `lines ${orphans.map((o) => o.line).join(", ")} hold`;
+  return new OpError(
+    `refusing to write ${where}: ${at} content outside any item block and this write would destroy it ` +
+    `(first: ${JSON.stringify(clip(orphans[0].text))}). Run 'pm validate' for the full list, repair the file by hand, then retry.`,
+  );
+}
+
+// Preflight for one document. Returns the bytes to write so a caller can render and verify
+// every document before issuing the first write (D7).
+async function renderChecked(path: string, title: string, blocks: Block[]): Promise<{ path: string; content: string }> {
+  const s = await readStamped(path);
+  if (s) {
+    const { orphans } = parseBlocks(s.content);
+    if (orphans.length) throw orphanRefusal(path, orphans);
+  }
+  return { path, content: serializeBlocks(title, blocks) }; // serializeBlocks throws on an unrepresentable model
+}
+
 async function writeBlocks(path: string, title: string, blocks: Block[]): Promise<void> {
-  await writeCAS(path, serializeBlocks(title, blocks), null); // serialized by the lock
+  const { content } = await renderChecked(path, title, blocks);
+  await writeCAS(path, content, null); // serialized by the lock
+}
+
+// Multi-document write: render and check EVERY document before the first write, so a refusal
+// can never half-apply an operation (D7).
+async function writeBlocksAll(docs: { path: string; title: string; blocks: Block[] }[]): Promise<void> {
+  const rendered = await Promise.all(docs.map((d) => renderChecked(d.path, d.title, d.blocks)));
+  for (const r of rendered) await writeCAS(r.path, r.content, null);
+}
+
+// Pre-validate a set of documents without writing any of them. The dashboard PUT replaces
+// links and memory through two separate ops calls, so it must check both up front — otherwise
+// a rejected memory note lands after links have already been replaced (D7).
+export async function assertDocumentsWritable(docs: { path: string; title: string; blocks: Block[] }[]): Promise<void> {
+  await Promise.all(docs.map((d) => renderChecked(d.path, d.title, d.blocks)));
+}
+
+// D9 for transaction targets. makeTarget captures `before` with its own read, and
+// runTransaction enforces only `current === target.before`, so checking the file separately
+// beforehand is a TOCTOU hole: orphans appearing between the check and the capture would
+// become the accepted snapshot and be overwritten with every precondition passing. Validate
+// the exact bytes the precondition pins, before the journal is created.
+// Shadowing the import means every transaction in this module is checked; no call site can
+// forget it, and a future one gets the guard for free.
+async function runTransaction(
+  root: string,
+  operation: string,
+  targets: TransactionTarget[],
+  opts: TransactionOptions = {},
+): Promise<{ id: string; applied: number }> {
+  assertTargetsWritable(targets);
+  return runTransactionRaw(root, operation, targets, opts);
+}
+
+const BLOCK_DOCS = new Set(["backlog.md", "closed.md", "links.md", "memory.md", "_inbox.md"]);
+function assertTargetsWritable(targets: TransactionTarget[]): void {
+  for (const target of targets) {
+    if (!BLOCK_DOCS.has(target.path.split(pathSep).pop() ?? "")) continue; // plans/pointers are not block grammar
+    const before = target.before as { type: string; content?: string };
+    if (before?.type !== "regular" || !before.content) continue; // absent or symlink: nothing to lose
+    const { orphans } = parseBlocks(Buffer.from(before.content, "base64").toString("utf-8"));
+    if (orphans.length) throw orphanRefusal(target.path, orphans);
+  }
 }
 
 function setFm(fields: [string, string][], key: string, val: string): void {
@@ -380,8 +452,12 @@ async function _itemClose(root: string, key: string, id: string, o: { status: "d
   setField(cb, "ClosedSource", "op");
   if (o.closedBy) setField(cb, "ClosedBy", o.closedBy); // collab attribution (CLI passes only on collab tasks)
   cl.blocks.unshift(cb); // newest first
-  await writeBlocks(taskFile(root, key, "backlog.md"), bl.title, bl.blocks);
-  await writeBlocks(taskFile(root, key, "closed.md"), cl.title, cl.blocks);
+  // Both documents render and check before either is written: a rejection here must not
+  // leave the item removed from the backlog and absent from closed (D7).
+  await writeBlocksAll([
+    { path: taskFile(root, key, "backlog.md"), title: bl.title, blocks: bl.blocks },
+    { path: taskFile(root, key, "closed.md"), title: cl.title, blocks: cl.blocks },
+  ]);
 }
 
 async function _harvestApply(root: string, key: string, deferred: Deferred[], nowDate: string): Promise<void> {
@@ -409,8 +485,12 @@ async function _triage(root: string, id: string, toKey: string): Promise<void> {
   const [it] = inbox.blocks.splice(idx, 1);
   const bl = await loadBlocks(taskFile(root, toKey, "backlog.md"));
   bl.blocks.push(it);
-  await writeBlocks(inboxPath(root), inbox.title || "_INBOX — Inbox", inbox.blocks);
-  await writeBlocks(taskFile(root, toKey, "backlog.md"), bl.title || `${toKey} — Backlog`, bl.blocks);
+  // Both render and check before either is written, so a rejection cannot drop the item
+  // from the inbox without landing it in the destination backlog (D7).
+  await writeBlocksAll([
+    { path: inboxPath(root), title: inbox.title || "_INBOX — Inbox", blocks: inbox.blocks },
+    { path: taskFile(root, toKey, "backlog.md"), title: bl.title || `${toKey} — Backlog`, blocks: bl.blocks },
+  ]);
 }
 
 async function _setPlanStatus(root: string, planRel: string, status: string): Promise<void> {
