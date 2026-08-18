@@ -1,7 +1,7 @@
 ---
 name: pm-roadmap
 description: "Manage a project's per-task backlog (task-first model under .agents/tasks/) and generate next-task session prompts. TRIGGER when: asked for the backlog/roadmap, what to work on next, or a kickoff prompt for the next task ('다음 작업' / '백로그' / '다음 세션 프롬프트' / 'what's next' / 'roadmap'); or to add or close a backlog item. Reads are model-invocable; writes also fire automatically from /design (persist, 승인, 취소) and /retro lifecycle gates. SKIP: single-file edits with no backlog; planning a specific task (use /design); closing a plan (use /retro)."
-argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | reorder <KEY> <id> <order|-> | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | expunge <KEY> <id> [--force] | triage ... | memory ... | links ... | manage"
+argument-hint: "list | tree | get <id> | next [id] | validate | migrate [--apply] | task ... | add ... | plan ... | note <KEY> <id> <text|-> | retitle <KEY> <id> <title|-> | reorder <KEY> <id> <order|-> | approve <KEY> <id> | persist <KEY> <id> <plan> | complete <KEY> <id> --plan P --status done|dropped | reclassify <KEY> <id> --plan P --status done|dropped [--reason T] | plan-step <check|uncheck> <plan> <N> | select --plan P | worktree adopt --plan P --base R [--base-commit OID] [--start R] [--select] | worktree <resolve|ensure|validate|prune> | expunge <KEY> <id> [--force] | triage ... | memory ... | links ... | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 model: sonnet
 disable-model-invocation: false
@@ -118,6 +118,13 @@ launcher/dashboard callers that do not claim ownership for an agent session.
   JSON outcomes. Terminal cleanup is
   `worktree prune --plan <done-or-dropped-plan>`; the engine derives and revalidates its
   mapping. Main is never an execution mapping.
+- **note `<KEY> <id> <text|->`** / **retitle `<KEY> <id> <title|->`** — edit an open item's
+  Note or its title. These were the last two of an item's eight fields without a setter, so
+  correcting either used to mean `expunge` + re-`add`, which silently reset every field the caller
+  did not retype (Priority back to P2, Order dropped). `-` clears: an empty `Note` is what
+  creation writes, and an empty title renders the bare `- **id**` header. Both refuse a value the
+  block grammar cannot represent (newline, `U+2028/9`) before writing a byte, and both work on
+  `backlog.md` only — a closed item's note is history, and an archived task is refused by name.
 - **plan / reprioritize / reorder / depend / close / drop / triage** — lower-level
   item transitions and escape hatches. Design/retro use the lifecycle commands above.
   `reorder <KEY> <id> <order|->` takes a positive integer, or `-` to **remove** the Order field
