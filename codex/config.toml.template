@@ -63,8 +63,16 @@ statusMessage = "crux prompt capture"
 
 # pager: cross-session message delivery. Event name is taken from the payload,
 # so no argument is passed (an argument would be a casing hazard next to the
-# lowercase crux entries above). Stop is intentionally omitted — Codex's
-# additionalContext support on Stop is unverified.
+# lowercase crux entries above).
+#
+# Stop is omitted because Codex does not honour additionalContext there — the
+# only way out of a Stop hook is decision:"block" with a reason, which Codex
+# turns into a continuation prompt and resumes the turn. Waking an agent up to
+# hand it a message is not delivery, it is interruption. Verified 2026-08-19
+# against learn.chatgpt.com/docs/hooks; the note this replaces said the support
+# was merely unverified. Claude is the mirror image: it honours
+# additionalContext on Stop and drops it on PostToolUse, so the two tools share
+# no mid-turn injection point and the event lists differ on purpose.
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
 command = "pager hook"
