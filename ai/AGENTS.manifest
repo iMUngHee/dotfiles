@@ -23,6 +23,7 @@ memory/feedback_code_review_per_commit.md
 memory/feedback_raw_urls.md
 memory/feedback_memory_english.md
 memory/feedback_global_memory_path.md
+memory/feedback_pager_poll_during_long_turns.md
 
 # Private memory (gitignored — only readable on the local machine)
 memory/private/reference_naver_tools.md
