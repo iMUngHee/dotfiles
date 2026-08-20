@@ -22,12 +22,19 @@ command -v sqlite3 >/dev/null 2>&1 || exit 0
 
 # Only aliases with undelivered mail, newest-pressure first is not needed —
 # alphabetical keeps the badge from reordering under the cursor every second.
+# Two axes, unioned: delivered_at means a hook injected it into the recipient's
+# context, listed_at means an agent looked at it through MCP msg_list. Either one
+# is somebody having picked it up, so it leaves the badge. Counting delivered_at
+# alone left anything read by polling on the bar forever — and the polling rule
+# in ai/memory/ tells agents to read that way, so the badge got worse the better
+# the rule was followed. `pager ls` stamps nothing, so neither this query nor a
+# person running `ls --session` consumes mail.
 rows=$(sqlite3 -readonly -separator '|' "$DB" \
     "SELECT a.alias, count(m.id), COALESCE(s.host_pid, 0)
        FROM messages m
        JOIN aliases a ON a.alias = m.alias
        LEFT JOIN sessions s ON s.session_id = a.session_id
-      WHERE m.delivered_at IS NULL
+      WHERE m.delivered_at IS NULL AND m.listed_at IS NULL
       GROUP BY a.alias
       ORDER BY a.alias;" 2>/dev/null) || exit 0
 [ -n "$rows" ] || exit 0
