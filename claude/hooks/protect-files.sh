@@ -151,6 +151,7 @@ check_command() {
     local re='\'"$p"'([^[:alnum:]_]|$)'
     if [[ "$scan" =~ $re ]]; then
       echo "Blocked: command references sensitive pattern '$p'." >&2
+      echo "If '$p' is a jq/yq path expression and not a file, move the program to a file and run it with -f — the pattern then never appears in the command." >&2
       return 0
     fi
   done
