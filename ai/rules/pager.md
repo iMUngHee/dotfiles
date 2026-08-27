@@ -14,8 +14,8 @@ send is not. Send when one of these holds — not otherwise.
 
 ## Do not send
 
-- **You cannot name the recipient.** Run `pager who`; if nobody there owns the
-  affected work, there is nowhere to send.
+- **You cannot name the recipient.** Run `pager who` or `ListAgents`; if nobody there
+  owns the affected work, there is nowhere to send.
 - **The body would only say what changed.** Without why it matters, the message costs
   the recipient context and returns nothing.
 - **They will hit it themselves.** Already in a commit or plan they read anyway.
@@ -23,5 +23,16 @@ send is not. Send when one of these holds — not otherwise.
 
 ## How
 
-`pager who` for the name, then `pager send <name> "<body>"`. Lead with the
-consequence for them, not with what you did.
+Two channels reach another session, and their inboxes do not cross over: a
+`SendMessage` never lands in `msg_list`, and a `pager send` never lands in the peer's
+built-in inbox. Pick one per exchange and expect the reply on that same one.
+
+- **Default — `pager`.** `pager who` for the name, then `pager send <name> "<body>"`.
+  The only channel that reaches Codex, and the only one with an inbox you can read
+  (`msg_list`) — so use it whenever you expect a reply.
+- **Built-in `SendMessage`** — Claude Code peers only; `ListAgents` for the name and
+  its live busy/idle state. One-way: the peer's user may have to approve it, and it can
+  be declined, expire, be refused outright, or be dropped at their inbox. Do not wait
+  for a reply and do not resend. Use for a notice, not a question.
+
+Lead with the consequence for them, not with what you did.
