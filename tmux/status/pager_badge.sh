@@ -44,11 +44,17 @@ out=$(pager inbox 2>/dev/null) || exit 0
 # not filter.
 #
 # Rows are accepted only when WAITING is numeric, which skips the header and the
-# 'nothing waiting' line without matching either by text. If pager ever appends
-# a column, HOST absorbs it and stops equalling 'gone', so the badge shows too
-# much rather than silently hiding mail.
+# 'nothing waiting' line without matching either by text.
+#
+# The trailing sink is what makes HOST positional instead of greedy: bash read
+# hands its last variable every remaining field, so without it an appended
+# column would leave host as 'gone  4m' — never equal to 'gone' — and the badge
+# would show exactly the dead inboxes it exists to hide. pager pins these three
+# as its parsing contract and would append after HOST rather than before it, so
+# field 3 stays HOST; but only a reader that takes exactly three fields gets to
+# rely on that.
 rows=""
-while read -r alias count host; do
+while read -r alias count host _rest; do
     case "$count" in
         ''|*[!0-9]*) continue ;;
     esac
