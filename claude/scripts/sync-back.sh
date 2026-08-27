@@ -26,7 +26,11 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
       .[0] as $repo | .[1] |
       with_entries(select(.key | IN($repo | keys[]))) |
       .permissions.allow = ([.permissions.allow[] | select(IN($repo.permissions.allow[]))]) |
-      .permissions.deny  = ([.permissions.deny[]  | select(IN($repo.permissions.deny[]))])
+      .permissions.deny  = ([.permissions.deny[]  | select(IN($repo.permissions.deny[]))]) |
+      # env comes over wholesale, so it carries whatever order the CLI appended
+      # runtime keys in. Sort it so the repo copy keeps one canonical order
+      # instead of reflowing on every sync.
+      (if has("env") then .env |= (to_entries | sort_by(.key) | from_entries) else . end)
     ' "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" \
         > "$REPO_DIR/settings.json.tmp"
     if ! diff -q "$REPO_DIR/settings.json" "$REPO_DIR/settings.json.tmp" &>/dev/null; then
