@@ -22,15 +22,32 @@ changed=false
 
 # ── 1. settings.json — keep only repo-tracked keys ──
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
+    # Name the runtime keys the filter below is about to drop, so a flag enabled
+    # in a live session is a decision to make rather than a silent loss.
+    untracked_env=$(jq -s -r \
+        '((.[1].env // {} | keys) - (.[0].env // {} | keys))[]' \
+        "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json")
+    if [ -n "$untracked_env" ]; then
+        echo "WARN: env keys in ~/.claude/settings.json are not tracked in the repo (not synced):"
+        echo "$untracked_env" | sed 's/^/  /'
+        echo "  add them to claude/settings.json by hand if they should persist"
+    fi
+
     jq -s '
       .[0] as $repo | .[1] |
       with_entries(select(.key | IN($repo | keys[]))) |
       .permissions.allow = ([.permissions.allow[] | select(IN($repo.permissions.allow[]))]) |
       .permissions.deny  = ([.permissions.deny[]  | select(IN($repo.permissions.deny[]))]) |
-      # env comes over wholesale, so it carries whatever order the CLI appended
-      # runtime keys in. Sort it so the repo copy keeps one canonical order
-      # instead of reflowing on every sync.
-      (if has("env") then .env |= (to_entries | sort_by(.key) | from_entries) else . end)
+      # env is the one object copied as a whole, so give it the same treatment
+      # permissions gets: keep only keys the repo already tracks, in one
+      # canonical order. Otherwise runtime keys the CLI appends land in the
+      # source unreviewed and reflow it on every sync.
+      (if has("env")
+       then .env |= (to_entries
+                     | map(select(.key | IN($repo.env // {} | keys[])))
+                     | sort_by(.key)
+                     | from_entries)
+       else . end)
     ' "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" \
         > "$REPO_DIR/settings.json.tmp"
     if ! diff -q "$REPO_DIR/settings.json" "$REPO_DIR/settings.json.tmp" &>/dev/null; then
