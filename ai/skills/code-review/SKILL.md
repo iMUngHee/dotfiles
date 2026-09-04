@@ -3,7 +3,6 @@ name: code-review
 description: "Review PR changes per-commit to avoid misattributing sync-merged changes. TRIGGER when: asked to review a PR, code review, or check branch changes; asked to 'review diff' / 'look at this PR' / '리뷰해줘' / 'PR 봐줘'. SKIP: feedback on uncommitted single-file edits (use /verify); general code quality review with no PR context."
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
-model: sonnet
 effort: max
 disable-model-invocation: false
 ---

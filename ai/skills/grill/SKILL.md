@@ -3,7 +3,6 @@ name: grill
 description: "Read-only pre-design interview for tacit intent. TRIGGER: explicit 'grill'/'캐물어봐'/'의도 맞춰줘'/'심문해'; or before design only when intent risk remains high after code/context discovery and at least two hold: large blast radius, irreversible/high-cost choice, multiple valid directions, unstated priority/constraint. SKIP: one clarification suffices; root-cause debugging; clear single-step work; ordinary multi-file planning; already in design/debug/verify/retro/pm-* unless the latest request explicitly asks for grill."
 argument-hint: "[what to grill about]"
 allowed-tools: Bash, Read, Glob, Grep, AskUserQuestion
-model: opus
 effort: high
 disable-model-invocation: false
 ---

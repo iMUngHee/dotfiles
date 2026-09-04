@@ -3,7 +3,6 @@ name: ask-codex
 description: "Delegate a free-form instruction to Codex CLI in read-only headless mode and surface its response. Use when the user explicitly invites a second opinion from Codex — e.g., 'ask codex', 'codex 한테 물어봐', 'codex 의견', 'codex 라면 어떻게', 'second opinion from codex', '/ask-codex'. SKIP when: the user wants Claude to answer directly; the question depends on this session's conversation state Codex can't observe; trivial lookups Claude can resolve alone; another skill is already mid-flight."
 argument-hint: "<free-form instruction for Codex>"
 allowed-tools: Bash
-model: opus
 disable-model-invocation: false
 ---
 

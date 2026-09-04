@@ -3,7 +3,6 @@ name: design
 description: "Design and plan implementation for multi-file changes or architecture decisions. TRIGGER when: asked to design, plan, or architect a solution; change expected across 3+ files; new architecture decision; scope ambiguous; user says '설계해' / 'design this'. SKIP: single-file bug fixes; renames or typos; small refactors with clear scope."
 argument-hint: "[task description | handoff | continue]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
-model: opus
 effort: max
 disable-model-invocation: false
 ---

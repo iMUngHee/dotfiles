@@ -3,7 +3,6 @@ name: experience-design
 description: "Own product experience decisions for client surfaces: user jobs, information architecture, routes and navigation intent, screen inventory, content priority, workflows, visible states, recovery, and microcopy. Use directly for read-only UX audits or focused experience deltas; product-craft routes new or materially changed surfaces here before interface design."
 argument-hint: "[audit | delta | experience request]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-model: opus
 disable-model-invocation: false
 ---
 

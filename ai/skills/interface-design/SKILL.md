@@ -3,7 +3,6 @@ name: interface-design
 description: "Own interface planning for approved product experiences: macrostructure, screen composition, hierarchy, art direction, visual systems, component appearance, adaptive presentation, and UI craft. Use directly for read-only UI audits, redesign, reference study, or focused interface deltas; product-craft routes new surfaces here after the Experience gate."
 argument-hint: "[audit | redesign | study | delta | interface request]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-model: opus
 disable-model-invocation: false
 ---
 

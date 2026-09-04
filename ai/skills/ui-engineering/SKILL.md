@@ -3,7 +3,6 @@ name: ui-engineering
 description: "Implement approved product-surface contracts in durable frontend code and produce render-grounded contract evidence. Use for authorized UI builds and read-only accessibility, motion, implementation-baseline, or contract/code drift audits. Do not use to invent missing UX or interface decisions, review PRs, or replace completed-feature verification."
 argument-hint: "[audit | authorized UI implementation request]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-model: opus
 disable-model-invocation: false
 ---
 

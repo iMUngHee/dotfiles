@@ -3,7 +3,6 @@ name: product-craft
 description: "Route UX planning, interface planning, and durable UI implementation for new or materially changed client surfaces. Use for pages, apps, dashboards, workflows, navigation or state models, reusable component families, visual systems, redesigns, UX/UI audits, and design-contract.md work. Skip routine frontend edits with no UX/UI decision, PR review, and completed-feature verification."
 argument-hint: "[product-surface request]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-model: opus
 disable-model-invocation: false
 ---
 

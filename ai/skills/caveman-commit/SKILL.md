@@ -3,7 +3,6 @@ name: caveman-commit
 description: "Draft or rewrite concise commit-message text. TRIGGER when: asked for a commit message, commit subject/body, or wording for a commit. SKIP: requests to stage, commit, amend, push, or execute Git operations; PR bodies use pr-body; release notes are out of scope."
 argument-hint: "[change summary or intended commit message]"
 allowed-tools: Read, Grep, Glob
-model: sonnet
 effort: low
 disable-model-invocation: false
 ---
