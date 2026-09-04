@@ -3,7 +3,6 @@ name: debug
 description: "Systematic debugging for issues with unclear root cause. TRIGGER when: a bug's cause is not obvious; a fix attempt has failed; rules/diagnostics.md 3-strike escalation fires; user reports 'not working' / 'broken' / '왜 안 돼' without clear reason. SKIP: typos or syntax errors with explicit error messages; style/lint fixes; feature requests."
 argument-hint: "[error description or reproduction steps]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
-model: opus
 effort: max
 disable-model-invocation: false
 ---

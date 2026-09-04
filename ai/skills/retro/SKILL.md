@@ -3,7 +3,6 @@ name: retro
 description: "Post-work retrospective for the pm-* loop: close the landed plan and harvest follow-ups + durable per-task decisions. TRIGGER when: user asks for a retrospective ('회고해' / '돌아보기'); after completing significant work. SKIP: mid-task — use only at end-of-session; do NOT auto-invoke while actively coding."
 argument-hint: "[commit range, e.g. HEAD~3, or blank for HEAD~5]"
 allowed-tools: Bash, Read, Write, Glob, Grep, Edit
-model: sonnet
 disable-model-invocation: false
 ---
 

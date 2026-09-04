@@ -3,7 +3,6 @@ name: spa-fetch
 description: "Fetch rendered content from SPA sites using Playwright. TRIGGER when: WebFetch fails on JS-rendered pages; asked to fetch/read an SPA or authenticated internal site ('이 페이지 긁어줘' / '페이지 가져와'); page requires login or Cloudflare/bot bypass. SKIP: static HTML (use WebFetch first); API endpoints (use curl/MCP); official Anthropic/Claude docs (WebFetch handles these)."
 argument-hint: "<url> [css-selector] [--html]"
 allowed-tools: Bash, Read, AskUserQuestion
-model: sonnet
 disable-model-invocation: false
 ---
 

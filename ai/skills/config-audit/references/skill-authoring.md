@@ -36,6 +36,8 @@ The reporter recognizes the current Claude Code skill fields below:
 
 Claude Code treats these fields as optional, with `description` recommended. The local catalog expects `name`, `description`, and `disable-model-invocation` to be explicit so invocation intent is reviewable. Missing explicit local fields are warnings, not parse failures.
 
+Measured 2026-09-04 on Claude Code 2.1.260: `model` switches the model only when the skill also sets `context: fork`. In inline execution — direct `/name` and Skill-tool auto-invocation, in both `-p` and interactive sessions — the session model is used regardless of the field. `effort` is honored inline (`${CLAUDE_EFFORT}` reflects the override). The reporter keeps accepting `model` as a valid field, but the local catalog carries none; do not add it to a skill that does not fork.
+
 Unknown fields are warnings rather than failures. Claude Code can add fields independently of this repository, so an unknown field must be checked against current official documentation before it is removed or rejected.
 
 ## Invocation and listing semantics

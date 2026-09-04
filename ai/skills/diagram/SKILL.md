@@ -4,7 +4,6 @@ description: "Generate Mermaid diagrams for architecture, flows, and data struct
 argument-hint: "[diagram description]"
 allowed-tools: Bash
 disable-model-invocation: false
-model: sonnet
 effort: medium
 ---
 

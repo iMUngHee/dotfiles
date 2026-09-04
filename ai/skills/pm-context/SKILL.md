@@ -3,7 +3,6 @@ name: pm-context
 description: "Manage per-task document links and inject context into sessions. Manual invocation only — do NOT auto-trigger."
 argument-hint: "get [KEY] | add <KEY> <URL> [LABEL] | remove <KEY> <MATCH> | annotate <KEY> [LABEL] [--regen-triggers] | list | manage"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, WebFetch
-model: sonnet
 disable-model-invocation: true
 ---
 

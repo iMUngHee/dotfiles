@@ -2,7 +2,6 @@
 name: self-review
 description: "Self-review rule compliance for the current session"
 allowed-tools: Read, Grep, Glob
-model: opus
 disable-model-invocation: true
 ---
 

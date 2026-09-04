@@ -3,7 +3,6 @@ name: pr-body
 description: "Generate or update a PR body from branch changes. Updates an existing PR directly via GitHub MCP (preserving owner-written sections), or copies to clipboard as a fallback. TRIGGER when: asked to write/update a PR body, PR description, or merge request description; given a PR URL/number to fill in; asked to 'describe this PR' / 'PR 설명 써줘' / 'PR 본문 만들어' / 'PR 본문 템플릿에 맞게 업데이트'. SKIP: commit message authoring; release notes spanning multiple PRs."
 argument-hint: "<PR URL or #number> | [base-branch]"
 allowed-tools: Bash, Read, Glob, ToolSearch
-model: sonnet
 effort: medium
 disable-model-invocation: false
 ---
