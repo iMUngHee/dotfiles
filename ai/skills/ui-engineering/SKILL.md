@@ -21,7 +21,7 @@ Task: $ARGUMENTS (if empty, infer the authorized implementation scope)
 5. Whenever `design` independently triggers, including every expected three-or-more-file change, its technical plan must be persisted and active before durable writes.
 6. Routine frontend work with no UX/UI decision and no contract need → ordinary implementation path.
 
-Fanout may parallelize disjoint implementation units only after ownership, authorization, and write sets are explicit. It never owns design decisions.
+Parallel sub-agents may take disjoint implementation units only after ownership, authorization, and write sets are explicit. They never own design decisions.
 
 ## Modes
 

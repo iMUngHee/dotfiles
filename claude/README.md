@@ -14,8 +14,7 @@ claude/
 ├── memory/
 │   └── claude-feedback_*.md    # Claude-only feedback memories (claude- prefix)
 ├── skills/
-│   ├── claude-ask-codex/       # Claude-only skill; invokes as `ask-codex`
-│   └── claude-fanout/          # Claude-only skill; invokes as `fanout`
+│   └── claude-ask-codex/       # Claude-only skill; invokes as `ask-codex`
 ├── hooks/                      # PreToolUse, PostToolUse, UserPromptSubmit, Stop, etc. — see Hooks section
 │   └── lib/                    # Shared helpers
 ├── agents/                     # Subagent definitions (pre-commit-verifier, reviewer, verifier)
@@ -30,7 +29,7 @@ claude/
 
 ## Prerequisites
 
-- `jq` — required by bootstrap, RTK hook, statusline
+- `jq` — required by bootstrap, statusline
 - `go` — optional, for shared AgentNotifier sender build (required for the Linux daemon)
 - `swiftc` — optional on macOS, for shared AgentNotifier build (Xcode CLI tools)
 - `notify-send` (libnotify) — Linux only, for desktop notifications
@@ -92,7 +91,6 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `rtk-rewrite.sh` | PreToolUse (Bash) | Rewrite commands through RTK for token savings |
 | `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files); block writes to generated files (`AUTO-GENERATED`/`@generated`/`DO NOT EDIT` header) |
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
 | `inject-context.sh` | UserPromptSubmit | Resolve the exact Claude session binding, allow only checkout-local legacy normalization, and inject bound plan/worktree routing (30s bound); unbound main is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered |
@@ -102,6 +100,7 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage (autocompact at 70%) |
 | `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files |
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
+| `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
 
 ### Gate stages (stop-handler.sh / codex stop-gate.sh)
 
@@ -132,7 +131,5 @@ Workflow({ scriptPath: "~/.config/claude/workflows/rule-ab.js", args: {
 Pick tickets that contain a genuine over-build trap (a native feature already covers the need) and whose deliverable is code the agent can write from the brief alone. It found the Pre-Implementation Gate's delegation loophole (`907a85f`).
 
 **It does not fit every question.** An instruction that depends on repo state, git, or worktrees cannot be isolated this way — attempting it on `design/SKILL.md` module splitting produced 0% completion on both arms and no signal.
-| `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
-| `context-mode-go hook *` | PreToolUse, PostToolUse, UserPromptSubmit, PreCompact, SessionStart | context-mode MCP integration (sandboxed output indexing/search) |
 
 Claude Code's built-in notification emitter is disabled via `preferredNotifChannel: notifications_disabled` in `settings.json`, so desktop alerts go through a single path (`notify.sh` → AgentNotifier) instead of the terminal's own emitter — which otherwise surfaced under the terminal app's name (e.g. Ghostty), especially while waiting on approvals.

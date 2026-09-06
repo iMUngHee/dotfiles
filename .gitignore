@@ -33,7 +33,6 @@ zsh/*
 zsh/**/.git
 
 # claude
-claude/hooks/.rtk-hook.sha256
 claude/memory/private/
 claude/MEMORY.private.md
 claude/*.lock

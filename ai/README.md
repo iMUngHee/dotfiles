@@ -6,7 +6,7 @@ Single source of truth for **tool-agnostic** rules, memory, and skills shared be
 
 ```
 ai/
-├── PERSONAL.md                 # Collaboration rules (addressing, expertise, file modification, etc.)
+├── PERSONAL.md                 # Collaboration rules (addressing, file modification, response style, etc.)
 ├── guardrails.md               # Verification, absence proofs, scope resolution, pre-implementation gate
 ├── AGENTS.manifest             # Concat order for ~/.codex/AGENTS.md build
 ├── rules/                      # Session rules — always-on unless `paths:`-scoped (see Rule load scope)

@@ -44,11 +44,9 @@ ln -sfn "$REPO_DIR/extensions/statusline.sh" "$CLAUDE_DIR/statusline.sh"
 # ── 2. Symlink: hooks/, commands/, agents/ (Claude-only) ──
 echo "Linking hooks/commands/agents..."
 if [ -d "$CLAUDE_DIR/hooks" ] && [ ! -L "$CLAUDE_DIR/hooks" ]; then
-    cp "$CLAUDE_DIR/hooks/.rtk-hook.sha256" /tmp/.rtk-hook.sha256.bak 2>/dev/null || true
     rm -rf "$CLAUDE_DIR/hooks"
 fi
 ln -sfn "$REPO_DIR/hooks" "$CLAUDE_DIR/hooks"
-cp /tmp/.rtk-hook.sha256.bak "$CLAUDE_DIR/hooks/.rtk-hook.sha256" 2>/dev/null || true
 
 for dir in commands agents; do
     if [ -d "$CLAUDE_DIR/$dir" ] && [ ! -L "$CLAUDE_DIR/$dir" ]; then

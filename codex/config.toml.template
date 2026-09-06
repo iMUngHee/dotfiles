@@ -55,15 +55,8 @@ command = "$HOME/.config/codex/hooks/inject-context.sh"
 timeout = 30
 statusMessage = "codex active plan context"
 
-[[hooks.UserPromptSubmit.hooks]]
-type = "command"
-command = "$HOME/.config/codex/hooks/crux-hook.sh userpromptsubmit"
-timeout = 5
-statusMessage = "crux prompt capture"
-
 # pager: cross-session message delivery. Event name is taken from the payload,
-# so no argument is passed (an argument would be a casing hazard next to the
-# lowercase crux entries above).
+# so no argument is passed.
 #
 # Stop is omitted because Codex does not honour additionalContext there — the
 # only way out of a Stop hook is decision:"block" with a reason, which Codex
@@ -87,15 +80,6 @@ command = "$HOME/.config/codex/hooks/protect-files.sh"
 timeout = 5
 statusMessage = "codex file safety"
 
-[[hooks.PreToolUse]]
-matcher = "^(Bash|Read|Grep|WebFetch|Agent|mcp__crux__cx_execute(_file)?)$"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "$HOME/.config/codex/hooks/crux-hook.sh pretooluse"
-timeout = 5
-statusMessage = "crux routing"
-
 [[hooks.PostToolUse]]
 matcher = "^(Write|Edit|apply_patch)$"
 
@@ -113,30 +97,7 @@ command = "$HOME/.config/codex/hooks/context-monitor.sh"
 timeout = 5
 statusMessage = "codex context monitor"
 
-[[hooks.PostToolUse]]
-matcher = "^(Bash|Read|WebFetch|apply_patch|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__.*)$"
-
-[[hooks.PostToolUse.hooks]]
-type = "command"
-command = "$HOME/.config/codex/hooks/crux-hook.sh posttooluse"
-timeout = 5
-statusMessage = "crux output capture"
-
-[[hooks.PreCompact]]
-
-[[hooks.PreCompact.hooks]]
-type = "command"
-command = "$HOME/.config/codex/hooks/crux-hook.sh precompact"
-timeout = 10
-statusMessage = "crux precompact"
-
 [[hooks.SessionStart]]
-
-[[hooks.SessionStart.hooks]]
-type = "command"
-command = "$HOME/.config/codex/hooks/crux-hook.sh sessionstart"
-timeout = 5
-statusMessage = "crux session start"
 
 [[hooks.SessionStart.hooks]]
 type = "command"

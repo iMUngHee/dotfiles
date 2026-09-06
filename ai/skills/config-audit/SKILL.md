@@ -49,7 +49,7 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 - `~/.codex/config.toml` parses as valid TOML → FAIL on parse error.
 - `[mcp_servers.<name>]` blocks have `command` (stdio) or `url` (HTTP) → WARN if neither.
 - `project_doc_max_bytes` is set ≥ current AGENTS.md size → FAIL otherwise.
-- `codex/config.toml.template` `UserPromptSubmit` hooks missing `codex/hooks/inject-context.sh` before `crux-hook.sh userpromptsubmit`, or its timeout is not exactly 30 seconds → FAIL (session binding resolution is not completed before prompt capture).
+- `codex/config.toml.template` `UserPromptSubmit` hooks missing `codex/hooks/inject-context.sh`, or its timeout is not exactly 30 seconds → FAIL (session binding must resolve within the prompt turn).
 - Either inject-context adapter does not parse the exact `session_id`, pass its strict tool
   namespace to `ensure-session`, or preserve the 30-second bound → FAIL. A `default`/PPID
   binding key or an `ensure-current` prompt path is also a FAIL.
@@ -59,7 +59,6 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
   branch without a validated draft/active session binding (normal unbound/empty,
   `legacy_unmapped`, `internal_error`, malformed `ok`, or unexpected status), or emits it
   for a validated draft/active `ok` binding → FAIL.
-- Codex Crux hook matchers missing parity targets (`PreToolUse`: Bash, Read, Grep, WebFetch, Agent, `mcp__crux__cx_execute(_file)?`; `PostToolUse`: Bash, Read, WebFetch, Write, Edit, Grep, Glob, TodoWrite, Agent, Skill, `apply_patch`, `mcp__.*`) → WARN.
 - `~/.agents/.codex/state/current.txt` exists and is non-empty → WARN (legacy tool-specific state pointer; current shared state is repo-local `.agents/state/current.txt`).
 - Any legacy `~/.agents/.codex/plans/*.md` frontmatter has `status: draft` or `status: active` → WARN (old Codex plan namespace may conflict with shared plan/state expectations).
 - `~/.agents/skills/<name>` symlinks resolve under `ai/skills/` or `codex/skills/` → FAIL on broken.

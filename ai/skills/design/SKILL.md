@@ -319,7 +319,7 @@ Package the current session-bound plan so a fresh session or another agent can r
 4. For a pm-loop plan (`pm_loop: true`), pull the owning task's links + memory via `pm get <id>` (id == plan slug). **On `pm get` failure / item-not-found (linkage drift)** → note that fact and continue with a plan-only handoff (do not stop). Skip this step for a standalone (`pm_loop: false`) plan.
 5. Emit a paste-ready kickoff prompt containing the mapping and rooted resume commands:
    `codex -C <execution_root>` and `cd <execution_root> && claude`, plus `/design continue`.
-6. Copy the prompt to the clipboard via `/copy`, then tell the user to paste it into the fresh session and stop. **If `/copy` / clipboard access fails, do NOT claim it was copied** — print the prompt inline (fenced) and tell the user to copy it manually.
+6. Copy the prompt to the clipboard (`pbcopy`; `wl-copy`/`xclip` on Linux), then tell the user to paste it into the fresh session and stop. **If clipboard access fails, do NOT claim it was copied** — print the prompt inline (fenced) and tell the user to copy it manually.
 
 ## Continue mode (`/design continue`)
 

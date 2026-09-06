@@ -20,7 +20,7 @@ Task: $ARGUMENTS (if empty, infer the requested product surface and desired outc
 
 ## Routing Precedence
 
-Apply this order without exception. Fanout is an execution modifier beneath the selected owner; it never changes ownership.
+Apply this order without exception. Parallel sub-agents are an execution modifier beneath the selected owner; they never change ownership.
 
 1. PRs, branch diffs, and review feedback → `code-review`. Stop product-craft routing.
 2. Confirmation that a completed feature meets its goal → `verify`. It may consume UI-engineering evidence.

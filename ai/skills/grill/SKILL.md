@@ -1,6 +1,6 @@
 ---
 name: grill
-description: "Read-only pre-design interview for tacit intent. TRIGGER: explicit 'grill'/'캐물어봐'/'의도 맞춰줘'/'심문해'; or before design only when intent risk remains high after code/context discovery and at least two hold: large blast radius, irreversible/high-cost choice, multiple valid directions, unstated priority/constraint. SKIP: one clarification suffices; root-cause debugging; clear single-step work; ordinary multi-file planning; already in design/debug/verify/retro/pm-* unless the latest request explicitly asks for grill."
+description: "Read-only pre-design interview for tacit intent. TRIGGER: explicit 'grill'/'캐물어봐'/'의도 맞춰줘'/'심문해'; or before design only when intent risk remains high after code/context discovery and at least two hold: large blast radius, irreversible/high-cost choice, multiple valid directions, unstated priority/constraint. SKIP: one clarification suffices; root-cause debugging; clear single-step work; ordinary multi-file planning; already in design/verify/retro/pm-* unless the latest request explicitly asks for grill."
 argument-hint: "[what to grill about]"
 allowed-tools: Bash, Read, Glob, Grep, AskUserQuestion
 effort: high
@@ -52,5 +52,5 @@ Stop when ANY holds: the actionable choices are settled; the user says proceed/s
 
 - **Write nothing.** Write/Edit are omitted from `allowed-tools`, and Bash is restricted to read-only commands only: `git rev-parse`, `git status/log/branch`, `pm list|tree|get|next|recent|validate|current-task`, and read-only `rg`/`grep`/`find`/`ls`/`sed -n`. Forbidden: shell redirection, heredocs, `tee`, `sed -i`, `npm install`, and every pm write subcommand (`task`/`add`/`plan`/`approve`/`close`/`drop`/`triage`/`memory`/`links`/`persist`/`complete`/`migrate --apply`). Durable capture is delegated downstream — point there, never write it yourself.
 - **Don't re-ask what code/context answers.** Exploring first is mandatory, not optional.
-- **Recursion SKIP**: if already inside another skill flow (design / debug / …), do not start grill anew unless the user's latest message explicitly asks for it.
+- **Recursion SKIP**: if already inside another skill flow (design / verify / …), do not start grill anew unless the user's latest message explicitly asks for it.
 - Questions are decision-shaped (about intent), not a code review.

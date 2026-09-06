@@ -6,6 +6,8 @@ If a user request matches a registered skill's trigger condition, use that skill
 
 Design/planning requests such as `"설계해"` or `"design this"` use the `design` skill workflow. Do not treat a UI mode switch as a substitute for the design skill workflow; the skill owns plan artifacts under `.agents/plans/` and the state pointer at `.agents/state/current.txt`.
 
+Sub-agents (`spawn_agent`): spawn only when 대협 explicitly asks for parallel or delegated agent work; otherwise handle the task solo, and never set a per-worker model override.
+
 ## Commit Verification
 
 Before running `git commit` in a 대협-owned repo, run:

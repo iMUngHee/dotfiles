@@ -10,8 +10,7 @@ codex/
 ├── config.toml.template        # Keys ENFORCED on every bootstrap (deep-merged into ~/.codex/config.toml)
 ├── hooks/                      # Codex hook commands
 ├── skills/                     # Codex-native skills (codex-* prefix)
-│   ├── codex-ask-claude/       # Codex-only skill; invokes as `ask-claude`
-│   └── codex-fanout/           # Codex-only skill; invokes as `fanout`
+│   └── codex-ask-claude/       # Codex-only skill; invokes as `ask-claude`
 └── scripts/
     ├── bootstrap.sh            # Build AGENTS.md, deep-merge config.toml, overlay skills, prune bundled skills
     ├── mcp-secret-env.sh       # Load MCP env from the OS secret store, then exec server
@@ -60,7 +59,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 - `[tui].status_line_use_colors`
 - `[tui].status_line`
 - `[tui].terminal_title`
-- Codex safety, crux, quality gate, and notification hooks
+- Codex safety, quality gate, and notification hooks
 - `[notice].fast_default_opt_out`
 
 Everything else under `~/.codex/config.toml` is user/machine-managed and is preserved across bootstraps.
@@ -95,9 +94,9 @@ Verify with `codex mcp list`.
 
 Codex discovers skills at `~/.agents/skills/` (note: `.agents/`, not `.codex/`). The bootstrap overlay merges three sources into that directory:
 
-- `ai/skills/<name>/` — shared (17)
+- `ai/skills/<name>/` — shared (19)
 - `ai/skills/private/<name>/` — shared but gitignored (kafdrop-hunt, track-logging)
-- `codex/skills/codex-<id>/` — Codex-only (2: `ask-claude`, `fanout`)
+- `codex/skills/codex-<id>/` — Codex-only (1: `ask-claude`)
 
 Repo-local artifacts use `.agents/plans`, `.agents/state`, and `.agents/tasks/` (per-task backlog/closed/links/memory); do not place them under `.agents/skills`.
 
@@ -115,7 +114,6 @@ Codex hook blocks are enforced through `config.toml.template`.
 
 - `UserPromptSubmit` → `prompt-guard.sh` blocks high-confidence secrets before submission.
 - `UserPromptSubmit` → `inject-context.sh` resolves the exact Codex session binding through `ensure-session`, permits only checkout-local legacy normalization, and injects the bound draft/active plan within a 30-second bound. An unbound main session is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered; direct `resolve-session` remains read-only.
-- `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionStart` → `crux-hook.sh` forwards supported Codex hook events to `crux`.
 - `PreToolUse` → `protect-files.sh` blocks sensitive file and lockfile access.
 - `PostToolUse` → `post-edit-pipeline.sh` runs bounded format/check feedback after edits.
 - `PostToolUse` → `context-monitor.sh` emits context usage warnings when Codex supplies usage metrics.

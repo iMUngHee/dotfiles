@@ -21,7 +21,7 @@ Task: $ARGUMENTS (if empty, infer the experience outcome from the request)
 5. A change limited to experience-owned sections of an approved contract → run `delta` here.
 6. Whenever `design` independently triggers, finish the required experience/interface gates before technical planning; no durable write occurs here.
 
-Fanout may assist only below the selected owner. It never owns an experience decision.
+Parallel sub-agents may assist only below the selected owner. They never own an experience decision.
 
 ## Modes
 
