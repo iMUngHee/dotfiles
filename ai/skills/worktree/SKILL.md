@@ -1,6 +1,6 @@
 ---
 name: worktree
-description: "Create and set up a git worktree under .agents/worktrees/<branch> — pm store wired in (shared backlog/plans/inbox + lock, local state/) and dependencies installed. TRIGGER: 'create worktree' / 'worktree 만들어' / requests for an isolated parallel checkout. SKIP: in-place edits where isolation isn't needed."
+description: "Create a git worktree under .agents/worktrees/<branch> with the pm store wired in and dependencies installed, for an isolated parallel checkout. Skip in-place edits that need no isolation."
 argument-hint: "<target-branch> [base-branch]"
 allowed-tools: Bash, Read, Glob, Grep
 disable-model-invocation: true

@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Review PR changes per-commit to avoid misattributing sync-merged changes. TRIGGER when: asked to review a PR, code review, or check branch changes; asked to 'review diff' / 'look at this PR' / '리뷰해줘' / 'PR 봐줘'. SKIP: feedback on uncommitted single-file edits (use /verify); general code quality review with no PR context."
+description: "Review a PR or feature branch commit by commit so sync-merged changes are not misattributed. Skip feedback on uncommitted edits (verify) and quality questions with no PR or branch context."
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
 effort: max

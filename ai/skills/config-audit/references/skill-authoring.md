@@ -50,6 +50,8 @@ Unknown fields are warnings rather than failures. Claude Code can add fields ind
 
 Critical shared routing text must not be moved from `description` into `when_to_use` solely for cosmetic structure until the installed Codex consumer is verified to preserve it.
 
+Measured 2026-09-06 on Codex 0.153.4 (kitu session): every deployed skill's `description` is injected verbatim into the system prompt on every turn regardless of `skill_search`, and routing is semantic — no keyword or utterance matcher reads the text. Claude Code routes the same way. Write a description as one positive-intent line plus only the SKIP boundaries that disambiguate a real neighbour skill; quoted trigger-phrase lists (`TRIGGER when: 'x' / 'y'`) add listing characters without routing value. The 2026-09-07 rewrite of 15 descriptions under this rule cut the Claude listing from 6,999 to 4,839 characters with routing probes unchanged on both tools.
+
 ## Deployment scopes
 
 The reporter mirrors the source order used by the bootstrap overlays:

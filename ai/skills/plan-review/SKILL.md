@@ -1,6 +1,6 @@
 ---
 name: plan-review
-description: "Coordinate an independent fresh-session review loop for a saved design plan before approval. TRIGGER when: /design has saved a draft plan that is high-risk, multi-file, architectural, unclear, or costly to undo; user asks to review/check a plan, run plan-review, get a fresh reviewer, converge reviewer feedback, or record SKIP; user says '플랜 리뷰' / '계획 검토해' / 'review the plan'. SKIP: implementation-stage code review (use /code-review); finished-feature verification (use /verify); single-file or low-risk plans where approval is straightforward; the planning step itself (use /design)."
+description: "Run an independent fresh-session review loop over a saved design plan before approval, converging reviewer feedback or recording SKIP. Use for high-risk, multi-file, architectural, or costly-to-undo plans. Skip implementation code review (code-review), finished-feature verification (verify), and drafting the plan itself (design)."
 argument-hint: "handoff [plan] | run [plan] | continue [plan] | skip [plan] --reason cost|latency|auth_unavailable|low_risk|user_override|other"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion
 effort: high
