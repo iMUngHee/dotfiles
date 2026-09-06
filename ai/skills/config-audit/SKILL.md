@@ -1,6 +1,6 @@
 ---
 name: config-audit
-description: "Audit ~/.config/{ai,claude,codex}/ structure compliance — 3-tier layout, prefix convention, AGENTS.manifest sync, deploy model integrity, generated-file protection. TRIGGER when: creating/editing/moving config files in ~/.config/{ai,claude,codex}/ or {{TOOL_HOME}}/, or asked '구조 검토' / 'config audit'. SKIP project-local .claude/ config; unrelated dotfiles (zsh, vim, etc.); runtime debugging of the AI CLI binary."
+description: "Audit ~/.config/{ai,claude,codex}/ and {{TOOL_HOME}}/ for 3-tier structure compliance: layout, prefix convention, AGENTS.manifest sync, deploy-model integrity, generated-file protection. Use after creating, editing, or moving files there. Skip project-local .claude/ config and unrelated dotfiles."
 allowed-tools: Bash, Read, Grep, Glob
 disable-model-invocation: false
 ---

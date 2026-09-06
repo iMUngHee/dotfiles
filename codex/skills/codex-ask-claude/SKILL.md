@@ -1,6 +1,6 @@
 ---
 name: ask-claude
-description: "Delegate a user-approved question to Claude Code CLI in read-only headless mode with a bounded context packet: local paths, relevant excerpts, and user-visible conversation summary. Use when the user explicitly invites a second opinion from Claude — e.g., 'ask claude', 'claude 한테 물어봐', 'claude 의견', 'claude 라면 어떻게', 'second opinion from claude', '/ask-claude'. SKIP when: the user wants Codex to answer directly; the answer requires hidden session state that cannot be summarized or shared; trivial lookups Codex can resolve alone; another skill is already mid-flight."
+description: "Delegate a user-approved question to Claude Code CLI in read-only headless mode with a bounded context packet (paths, excerpts, conversation summary) when the user explicitly wants a second opinion from Claude. Skip when Codex should answer directly, when hidden session state cannot be shared, for trivial lookups, and while another skill is mid-flight."
 argument-hint: "<free-form instruction for Claude>"
 disable-model-invocation: false
 ---
