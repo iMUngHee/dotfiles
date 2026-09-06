@@ -21,7 +21,7 @@ Task: $ARGUMENTS (if empty, infer the desired interface outcome)
 5. A change limited to interface-owned sections of an approved contract → run `delta` here.
 6. Whenever `design` independently triggers, finish the required surface gates before technical planning; no durable write occurs here.
 
-Fanout may assist only below this owner after boundaries are approved. It never owns interface direction.
+Parallel sub-agents may assist only below this owner after boundaries are approved. They never own interface direction.
 
 ## Modes
 

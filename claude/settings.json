@@ -85,7 +85,6 @@
       "Bash(pwd*)",
       "Bash(python3*)",
       "Bash(readlink*)",
-      "Bash(rtk *)",
       "Bash(rustc --version*)",
       "Bash(sed*)",
       "Bash(sort*)",
@@ -189,15 +188,6 @@
             "command": "$HOME/.claude/hooks/context-monitor.sh"
           }
         ]
-      },
-      {
-        "matcher": "Bash|Read|WebFetch|Write|Edit|Grep|Glob|TodoWrite|Agent|Skill|mcp__",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "crux hook posttooluse"
-          }
-        ]
       }
     ],
     "PostToolUseFailure": [
@@ -212,29 +202,7 @@
         ]
       }
     ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "crux hook precompact"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/rtk-rewrite.sh",
-            "timeout": 5000,
-            "statusMessage": "Optimizing command..."
-          }
-        ]
-      },
       {
         "matcher": "Bash|Edit|Write|MultiEdit",
         "hooks": [
@@ -243,15 +211,6 @@
             "command": "$HOME/.claude/hooks/protect-files.sh",
             "timeout": 5000,
             "statusMessage": "Checking file safety..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Read|Grep|WebFetch|Agent|mcp__crux__cx_execute(_file)?",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "crux hook pretooluse"
           }
         ]
       }
@@ -269,10 +228,6 @@
       {
         "matcher": "",
         "hooks": [
-          {
-            "type": "command",
-            "command": "crux hook sessionstart"
-          },
           {
             "type": "command",
             "command": "pager hook",
@@ -315,10 +270,6 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/inject-context.sh",
             "timeout": 30000
-          },
-          {
-            "type": "command",
-            "command": "crux hook userpromptsubmit"
           },
           {
             "type": "command",

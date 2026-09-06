@@ -1,6 +1,6 @@
 ---
 name: verify
-description: "Goal-backward verification for completed features. TRIGGER when: a feature is finished and needs confirmation; before creating a PR; asked to verify work; user says '확인해' / 'verify'. SKIP: intermediate progress checks (use /debug if stuck); code review comments (use /code-review); pre-code planning (use /design)."
+description: "Goal-backward verification for completed features. TRIGGER when: a feature is finished and needs confirmation; before creating a PR; asked to verify work; user says '확인해' / 'verify'. SKIP: intermediate progress checks; code review comments (use /code-review); pre-code planning (use /design)."
 argument-hint: "[feature or goal description]"
 allowed-tools: Bash, Read, Glob, Grep, Agent, Skill
 disable-model-invocation: false

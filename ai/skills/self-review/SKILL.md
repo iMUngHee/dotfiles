@@ -40,7 +40,6 @@ Review whether rules were followed in this session.
 |------|--------|----------|
 | Address convention (PERSONAL.md) | ✓/✗ | ... |
 | Response Style — result first, concise full sentences, explicit formats preserved | ✓/✗ | ... |
-| Expertise level | ✓/✗ | ... |
 | File Modification (explicit request only) | ✓/✗ | ... |
 | Critical Analysis — Justification | ✓/✗ | ... |
 | Critical Analysis — Simplification | ✓/✗ | ... |

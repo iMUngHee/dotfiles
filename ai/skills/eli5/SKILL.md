@@ -1,6 +1,6 @@
 ---
 name: eli5
-description: "Explain any topic, code, concept, or error tailored to a specific audience's level of understanding. TRIGGER when: user says 'explain like I am' / 'ELI5' / 'explain this to my …' / 'break this down for' / 'dumb it down' / 'simplify this for' / '쉽게 설명' / '비유로 설명' / '초등학생도 알게', or asks to explain something to a specific person or audience type ('explain this to a manager', 'PM한테 설명할 수 있게'). SKIP: plain 'explain this' / '설명해줘' with no simplification or audience ask; writing docs, comments, or commit text; PR review (code-review); root-cause debugging (debug)."
+description: "Explain any topic, code, concept, or error tailored to a specific audience's level of understanding. TRIGGER when: user says 'explain like I am' / 'ELI5' / 'explain this to my …' / 'break this down for' / 'dumb it down' / 'simplify this for' / '쉽게 설명' / '비유로 설명' / '초등학생도 알게', or asks to explain something to a specific person or audience type ('explain this to a manager', 'PM한테 설명할 수 있게'). SKIP: plain 'explain this' / '설명해줘' with no simplification or audience ask; writing docs, comments, or commit text; PR review (code-review); root-cause debugging."
 argument-hint: "[topic | file-or-symbol | error text] [for <audience>]"
 allowed-tools: Read, Grep, Glob
 disable-model-invocation: false

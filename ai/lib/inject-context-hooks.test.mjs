@@ -215,16 +215,18 @@ test("paired injection configurations allow exactly thirty seconds", async () =>
   assert.match(codex, /command = "\$HOME\/\.config\/codex\/hooks\/inject-context\.sh"\ntimeout = 30\b/);
 });
 
-test("codex hook template and audit contract target the active Crux tools", async () => {
-  const template = await readFile(join(repo, "codex", "config.toml.template"), "utf8");
-  const audit = await readFile(join(repo, "ai", "skills", "config-audit", "SKILL.md"), "utf8");
-  const injectIndex = template.indexOf("codex/hooks/inject-context.sh");
-  const captureIndex = template.indexOf("codex/hooks/crux-hook.sh userpromptsubmit");
-
-  assert.ok(injectIndex >= 0 && captureIndex > injectIndex, "context injection precedes Crux prompt capture");
-  assert.match(template, /mcp__crux__cx_execute\(_file\)\?/);
-  assert.doesNotMatch(template, /mcp__crux__ctx_execute/);
-  assert.match(audit, /crux-hook\.sh userpromptsubmit/);
-  assert.match(audit, /mcp__crux__cx_execute\(_file\)\?/);
-  assert.doesNotMatch(audit, /context-mode\.sh userpromptsubmit|mcp__context_mode__ctx_execute/);
+test("no retired token-saving integration survives in the deployed contract", async () => {
+  for (const rel of [
+    "claude/settings.json",
+    "codex/config.toml.template",
+    "ai/skills/config-audit/SKILL.md",
+    "claude/CLAUDE.md",
+  ]) {
+    const text = await readFile(join(repo, rel), "utf8");
+    assert.doesNotMatch(
+      text,
+      /\b(rtk|crux|context[-_]mode)\b|mcp__crux__|cx_execute/i,
+      `${rel} still references a retired integration`,
+    );
+  }
 });
