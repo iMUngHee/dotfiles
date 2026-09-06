@@ -183,12 +183,8 @@ render_context() {
     if [ -z "$used_pct" ]; then
         printf '%s[ctx:--]%s' "$DIM" "$RESET"; return
     fi
-    local used_int filled empty session_id_cache
+    local used_int filled empty
     used_int=$(printf "%.0f" "$used_pct")
-    session_id_cache="${session_id_raw//[^a-zA-Z0-9_-]/}"
-    local sid_dir="/tmp/claude/sessions/${session_id_cache:-default}"
-    mkdir -p "$sid_dir" 2>/dev/null
-    echo "$used_int" > "$sid_dir/context-pct"
     filled=$(( used_int * 10 / 100 )); empty=$(( 10 - filled ))
     printf '%s[%s%s]%s %s%d%%%s' \
         "$(color_by_pct "$used_int")" "${_BARS:0:filled}" "${_DOTS:0:empty}" "$RESET" \

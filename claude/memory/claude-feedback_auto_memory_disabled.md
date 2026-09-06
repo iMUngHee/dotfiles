@@ -6,7 +6,7 @@ type: feedback
 
 Auto memory (`autoMemoryEnabled` / project-level `~/.claude/projects/<project>/memory/MEMORY.md`) is intentionally disabled. Do not suggest turning it on during audits or recommendations.
 
-**Why:** 대협 explicitly opted out to prevent context bloat. Automatic project memory grows unboundedly and conflicts with the existing context discipline: the 70% autocompact override and the context-monitor hook at 50/65%.
+**Why:** 대협 explicitly opted out to prevent context bloat. Automatic project memory grows unboundedly, while the hand-curated `MEMORY.md` index plus `memory/*.md` files is the deliberate alternative: every always-loaded line is reviewed before it lands.
 
 **How to apply:**
 - Treat auto memory as a deliberate opt-out, not a gap.

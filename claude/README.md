@@ -97,7 +97,6 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |
 | `stop-handler.sh` | Stop | Final gate — auto-format, then this repo's own test suites selected by changed path, then type check |
 | `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format + type check (30s debounce) |
-| `context-monitor.sh` | PostToolUse | Warn at 50%/65% context usage (autocompact at 70%) |
 | `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files |
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
 | `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
