@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: "Per-commit PR code review by a dedicated agent. Use when /code-review needs deep exploration across multiple commits or a large diff without polluting the main context. NOT used at commit time — pre-commit-verifier handles light scope/convention/sanity checks at the staged stage."
-model: sonnet
+model: opus
 allowed-tools: Read, Grep, Glob, Bash
 memory: user
 ---

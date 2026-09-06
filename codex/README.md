@@ -116,7 +116,6 @@ Codex hook blocks are enforced through `config.toml.template`.
 - `UserPromptSubmit` → `inject-context.sh` resolves the exact Codex session binding through `ensure-session`, permits only checkout-local legacy normalization, and injects the bound draft/active plan within a 30-second bound. An unbound main session is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered; direct `resolve-session` remains read-only.
 - `PreToolUse` → `protect-files.sh` blocks sensitive file and lockfile access.
 - `PostToolUse` → `post-edit-pipeline.sh` runs bounded format/check feedback after edits.
-- `PostToolUse` → `context-monitor.sh` emits context usage warnings when Codex supplies usage metrics.
 - `Stop` → `stop-gate.sh` runs the final quality gate and then sends task completion or review-needed notifications.
 - `PermissionRequest` → `codex/hooks/notify.sh approval` sends approval notifications.
 

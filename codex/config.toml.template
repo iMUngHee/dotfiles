@@ -89,14 +89,6 @@ command = "$HOME/.config/codex/hooks/post-edit-pipeline.sh"
 timeout = 40
 statusMessage = "codex edit pipeline"
 
-[[hooks.PostToolUse]]
-
-[[hooks.PostToolUse.hooks]]
-type = "command"
-command = "$HOME/.config/codex/hooks/context-monitor.sh"
-timeout = 5
-statusMessage = "codex context monitor"
-
 [[hooks.SessionStart]]
 
 [[hooks.SessionStart.hooks]]

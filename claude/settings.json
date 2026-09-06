@@ -5,7 +5,6 @@
   "env": {
     "BASH_DEFAULT_TIMEOUT_MS": "300000",
     "BASH_MAX_TIMEOUT_MS": "900000",
-    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "CLAUDE_CODE_ENABLE_AUTO_MODE": "1",
     "CLAUDE_CODE_ENABLE_AWAY_SUMMARY": "1",
@@ -177,15 +176,6 @@
             "command": "$HOME/.claude/hooks/post-edit-pipeline.sh",
             "timeout": 60000,
             "statusMessage": "Formatting & checking..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|Bash|Agent|NotebookEdit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/context-monitor.sh"
           }
         ]
       }
