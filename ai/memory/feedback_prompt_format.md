@@ -1,14 +1,11 @@
 ---
-name: Format-level instructions for agent rules
-description: Write agent rules as concrete output-format requirements, not abstract behavioral directives.
+name: Rule phrasing for agent instructions
+description: State agent rules as one short behavioral sentence; use exact-format wording only for output a hook, test, script, or 대협's contract consumes (A/B 2026-09-07: format-forcing added nothing).
 type: feedback
 ---
 
-When writing rules for agent behavior (CLAUDE.md, DEVGUARD.md, skills, etc.), use concrete output format requirements instead of abstract behavioral directives.
+State a rule as one short behavioral sentence. Use exact-format wording only when something other than the model consumes the output — a hook, a test, a script, or a user contract (`✓/✗/—`, the `⚠️ test framework detected…` string, the `(추천)` label).
 
-**Why:** During DEVGUARD.md testing, "always warn when skipping tests" was ignored 3 times across iterations. Changing to "append this exact string: ⚠️ test framework detected..." worked immediately. Same pattern: "show evidence" failed, "include a fenced code block" worked.
+**Why:** Early DEVGUARD.md testing needed exact strings ("show evidence" failed, "include a fenced code block" worked). Re-measured 2026-09-07 on current models (workflow wf_718d7131-a6b: 3 tickets × 2 rules × no-rule/behavioral/format arms, blind judges): all arms tied at 100% evidence, 0% unsupported claims, 0% scope creep. Format-forcing now only costs prompt space.
 
-**How to apply:** When drafting a rule, ask: "Is this a behavior instruction or a format instruction?" If behavior, convert to format. Examples:
-- Bad: "always warn about X" → Good: "append `⚠️ specific warning text`"
-- Bad: "show verification evidence" → Good: "include a fenced code block with file content or command output"
-- Bad: "be careful about Y" → Good: "your response must contain Z"
+**How to apply:** Draft the behavior first; keep an exact format only if you can name its consumer. Before re-adding format-forcing, re-run the A/B.
