@@ -16,7 +16,8 @@ ai/
 │   └── private/                # gitignored (sensitive workflows: kafdrop-hunt, track-logging)
 ├── scripts/
 │   ├── bootstrap.sh            # Orchestrator — calls claude/ + codex/ bootstrap
-│   └── sync-back.sh            # Orchestrator — calls per-tool sync-back
+│   ├── sync-back.sh            # Orchestrator — calls per-tool sync-back
+│   └── diagram-engines.sh      # User-invoked — installs the pinned archify engine outside skill discovery
 └── lib/
     ├── verify-no-residual-tokens.sh
     └── verify-agents-md-size.sh
@@ -125,3 +126,7 @@ ai/scripts/bootstrap.sh --no-cleanup-backups
 ```
 
 `ai/scripts/sync-back.sh [--strict]` forwards to each tool's sync-back. `--strict` turns AGENTS.manifest drift into a hard fail.
+
+## Diagram engines
+
+`ai/skills/diagram` is a router: Mermaid by default (and for ERD/class/gantt), archify only when a polished, shareable, interactive technical HTML is asked for. archify is deliberately **not** a skill in either tool. `ai/scripts/diagram-engines.sh` clones it at a pinned release tag into `~/.local/share/diagram-engines/archify`, outside `~/.claude/skills` and `~/.agents/skills`, so the skill listing carries only the router's description and the engine's own 137-line SKILL.md is read on demand. Bump `ARCHIFY_TAG` in the script to update; `--check` prints the pin next to the latest upstream tag. The router runs every engine command with `ARCHIFY_UPDATE_CHECK_DISABLED=1`, so a diagram run makes no network call and writes no ack state. The script is user-invoked only — `bootstrap.sh` never calls it, so deploys stay offline-safe. Hosts without a shell (Claude Cowork, the Codex desktop app) always get the Mermaid route. Evaluated and not adopted on 2026-09-07: cathrynlavery/diagram-design (hand-placed SVG, ~1,000 instruction lines per diagram).
