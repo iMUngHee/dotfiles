@@ -1,13 +1,11 @@
 ---
 name: All persistent files in English only
-description: All AI-config files (instructions, guardrails, skills, memory) in English to cut tokens; quoted triggers stay Korean.
+description: All AI-config files (instructions, guardrails, rules, skills, memory) stay in English for one-language consistency and greppability; only the address 대협, proper nouns, and strings 대협 types or reads verbatim stay Korean.
 type: feedback
 ---
 
-All persistent AI-assistant config files must be written in English. This includes the global instructions file ({{INSTRUCTIONS_FILE}}), guardrails, skills, AND memory files. Korean text consumes 1.5–3x more tokens than English.
+All persistent AI-assistant config files are written in English: the global instructions file ({{INSTRUCTIONS_FILE}}), guardrails, rules, skills, and memory files.
 
-**Why:** 대협 explicitly requested this after measuring that PERSONAL.md (Korean) consumed 483 tokens vs ~200 tokens expected in English. The original rule only covered "memory files" — this allowed Korean to slip into the guardrails file, which is loaded every session and equally expensive.
+**Why:** 대협 keeps the whole `~/.config/{ai,claude,codex}` tree in one language on purpose. Vendored skill families, the `ai/lib` contract tests, and the config-audit reporter match English phrases, and one language keeps files greppable and stops mixed-language drift between tiers. The original reason — Korean costing 1.5–3x the tokens of English on 200K-context models — no longer applies on 1M-context models; 대협 re-confirmed English-only on 2026-09-07 with this rationale in its place.
 
-**How to apply:** When writing or editing ANY file under `~/.config/ai/`, `{{TOOL_HOME}}/`, or project {{INSTRUCTIONS_FILE}} files, write all content in English. The only exception is proper nouns like "대협" or internal system names. Match the existing language of the file.
-
-**Exception — quoted triggers and example dialogue:** Short Korean strings used as skill/rule trigger phrases or example user prompts (e.g., `"설계해"`, `"어떰?"`, `"왜 안 돼?"`) stay in Korean. Translating them breaks trigger matching, and they are quoted strings — not prose — so the token cost is bounded.
+**How to apply:** When writing or editing any file under `~/.config/ai/`, `{{TOOL_HOME}}/`, or a project {{INSTRUCTIONS_FILE}}, write in English and match the existing language of the file. Exceptions: the address 대협, proper nouns and system names, and strings 대협 types or reads verbatim (the `(추천)` label, the `어떰?` scope trigger, self-review's feasibility labels). Skill descriptions carry no Korean trigger lists — routing is semantic on both tools (see config-audit's skill-authoring.md).
