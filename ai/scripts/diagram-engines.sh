@@ -2,17 +2,18 @@
 # ai/scripts/diagram-engines.sh — install or update the local diagram engines that the
 # `diagram` skill routes to. Engines live outside every tool's skill discovery path
 # (~/.claude/skills, ~/.agents/skills), so only the diagram router appears in skill
-# listings. Each engine is pinned to a release tag; bump the tag here to update.
+# listings. Each engine tracks its latest upstream *release* tag (never the dev main
+# branch); rerun this script to update. Set ARCHIFY_TAG=vX.Y.Z to pin instead.
 #
-#   diagram-engines.sh          install or move every engine to its pinned tag, then run doctor
-#   diagram-engines.sh --check  print pinned vs latest upstream tag; changes nothing
+#   diagram-engines.sh          install or move every engine to the latest release, then run doctor
+#   diagram-engines.sh --check  print installed vs latest upstream release; changes nothing
 #
 # User-invoked only: ai/scripts/bootstrap.sh never calls this (it must stay offline-safe).
 set -euo pipefail
 
 ENGINES_DIR="${DIAGRAM_ENGINES_DIR:-$HOME/.local/share/diagram-engines}"
 ARCHIFY_REPO="${ARCHIFY_REPO:-https://github.com/tt-a1i/archify}"
-ARCHIFY_TAG="v2.16.0"
+ARCHIFY_TAG="${ARCHIFY_TAG:-}"
 
 CHECK=0
 for arg in "$@"; do
@@ -45,14 +46,17 @@ sync_engine() {
     fi
 }
 
+# Assign first: a failing pipeline inside an echo argument would be masked by set -e.
+latest="$(latest_tag "$ARCHIFY_REPO")" || { echo "archify: could not read upstream tags from $ARCHIFY_REPO" >&2; exit 1; }
+[ -n "$latest" ] || { echo "archify: no v* tags found at $ARCHIFY_REPO" >&2; exit 1; }
+target="${ARCHIFY_TAG:-$latest}"
+
 if [ "$CHECK" -eq 1 ]; then
-    # Assign first: a failing pipeline inside an echo argument would be masked by set -e.
-    latest="$(latest_tag "$ARCHIFY_REPO")" || { echo "archify: could not read upstream tags from $ARCHIFY_REPO" >&2; exit 1; }
-    [ -n "$latest" ] || { echo "archify: no v* tags found at $ARCHIFY_REPO" >&2; exit 1; }
-    echo "archify: pinned $ARCHIFY_TAG, latest upstream $latest"
+    installed="$(git -C "$ENGINES_DIR/archify" describe --tags --exact-match 2>/dev/null || echo "not installed")"
+    echo "archify: installed $installed, latest upstream $latest${ARCHIFY_TAG:+, pinned $ARCHIFY_TAG}"
     exit 0
 fi
 
 command -v node >/dev/null || { echo "node >= 18 is required for the archify engine" >&2; exit 1; }
-sync_engine archify "$ARCHIFY_REPO" "$ARCHIFY_TAG"
-ARCHIFY_UPDATE_CHECK_DISABLED=1 node "$ENGINES_DIR/archify/archify/bin/archify.mjs" doctor | tail -1
+sync_engine archify "$ARCHIFY_REPO" "$target"
+node "$ENGINES_DIR/archify/archify/bin/archify.mjs" doctor | tail -1

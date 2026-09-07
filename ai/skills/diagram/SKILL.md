@@ -13,7 +13,7 @@ Create a diagram for: $ARGUMENTS
 
 - **Mermaid (default)** — quick or editable output, and every flowchart, sequence, class, state, ER, or gantt diagram.
 - **archify** — only when the user asks for a polished, shareable, or interactive HTML (or names archify) AND the diagram is an architecture, workflow, sequence, data-flow, or lifecycle/state diagram. Everything else stays on Mermaid.
-- Engine missing (`~/.local/share/diagram-engines/archify` absent, or no `node`): say so, offer `~/.config/ai/scripts/diagram-engines.sh` (network clone of a pinned tag — run only with 대협's consent), and deliver Mermaid meanwhile. Environments without a shell (Claude Cowork, Codex desktop app) always take the Mermaid route.
+- Engine missing (`~/.local/share/diagram-engines/archify` absent, or no `node`): say so, offer `~/.config/ai/scripts/diagram-engines.sh` (network clone of the latest release — run only with 대협's consent), and deliver Mermaid meanwhile. Environments without a shell (Claude Cowork, Codex desktop app) always take the Mermaid route.
 
 ## Mermaid
 
@@ -29,9 +29,9 @@ Create a diagram for: $ARGUMENTS
 
 ## archify
 
-Engine root: `ENGINE=~/.local/share/diagram-engines/archify/archify` (release tag pinned by `ai/scripts/diagram-engines.sh`; `--check` compares the pin with upstream).
+Engine root: `ENGINE=~/.local/share/diagram-engines/archify/archify` (latest release installed by `ai/scripts/diagram-engines.sh`; rerun it to update, `--check` to compare).
 
 1. Read `$ENGINE/SKILL.md` "Fast authoring path" and only the one schema plus one example it names for the chosen type; follow it for authoring, `validate`, and `deliver`, running the CLI from `$ENGINE`.
-2. Two overrides. Prefix every engine command with `ARCHIFY_UPDATE_CHECK_DISABLED=1` and skip its "Update awareness" step entirely — updates come from the pinned tag, never from a run-time check. Write the spec and HTML under `/tmp/archify/<slug>.json` and `/tmp/archify/<slug>.html` unless 대협 names a path.
+2. One override: write the spec and HTML under `/tmp/archify/<slug>.json` and `/tmp/archify/<slug>.html` unless 대협 names a path. Let its "Update awareness" step run as written; when it reports a newer release, relay the notice and point 대협 to `~/.config/ai/scripts/diagram-engines.sh` — never update mid-task.
 3. Run `visual-check` only if it succeeds in this environment; otherwise report it as skipped. Never open a browser unless asked.
 4. Report the delivered HTML path, the validate/deliver receipt (a showcase pass is 9 checks, 0 errors), and anything skipped. A non-zero exit is never success; after two repair rounds without a lower error count, stop and report the remaining diagnostics.
