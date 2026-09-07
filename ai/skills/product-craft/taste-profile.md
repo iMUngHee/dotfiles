@@ -9,7 +9,7 @@ default nobody saw is the same failure as an undisclosed inference.
 
 ## Language exception
 
-Every other file in this family is written in English to keep token cost down. The `Note`
+Every other file in this family is written in English, matching the rest of the config tree. The `Note`
 column is exempt: it holds the owner's own words verbatim, and translating them would destroy
 the thing that makes the row usable as `direction_selected` evidence. Korean in that column is
 expected and correct; a Hangul sweep over this family must exclude it.
