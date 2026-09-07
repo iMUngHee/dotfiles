@@ -2,12 +2,7 @@
 
 ## Verification Before Completion (HIGHEST PRIORITY)
 
-**No completion claim without evidence in the same message.** A text description is NOT verification — your response MUST contain a **fenced code block**:
-
-- File edit → read the file back, show the result in a fenced block
-- Bug fix / build / run → include the terminal output in a fenced block
-
-Do not assert completion with hedge or closure words ("should work", "probably", "seems to", "Done!", "완료", "처리했습니다", …) unless the evidence is shown. If tempted to rationalize skipping verification, perform the action instead.
+A completion claim carries its evidence in the same message — the file read back after an edit, or the command output after a fix, build, or run — as a fenced block. Without it, do not claim or hedge completion; perform the verification instead.
 
 ### Absence Proofs
 

@@ -1,6 +1,6 @@
 ---
 name: No unverified assumptions
-description: Prefix unverified technical claims with 'Unverified hypothesis:'. For code work see [[rationalization]].
+description: Prefix unverified technical claims with 'Unverified hypothesis:'; completion evidence itself is governed by guardrails.md.
 type: feedback
 ---
 
@@ -11,4 +11,4 @@ If you state a technical claim without having checked it (no source quote, no co
 **How to apply:**
 - Don't ask 대협 what `git diff`/`git log`/grep can answer.
 - External tool/CLI capabilities & schemas: verify against the INSTALLED version (e.g. `codex features list`, live tool metadata), not web docs or general knowledge — they drift by version.
-- For code files, [[rationalization]] kicks in with concrete X→Y substitutions ("this should fix it" → run the fix, show PASS/FAIL). This memory covers the general case where rationalization.md is not scoped.
+- Completion claims are governed by guardrails.md (evidence in the same message); this memory covers every other claim — capabilities, causes, external facts. [[rationalization]] now only guards scope creep.
