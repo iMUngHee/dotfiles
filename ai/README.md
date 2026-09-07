@@ -17,7 +17,7 @@ ai/
 ├── scripts/
 │   ├── bootstrap.sh            # Orchestrator — calls claude/ + codex/ bootstrap
 │   ├── sync-back.sh            # Orchestrator — calls per-tool sync-back
-│   └── diagram-engines.sh      # User-invoked — installs the pinned archify engine outside skill discovery
+│   └── diagram-engines.sh      # User-invoked — installs the latest archify release outside skill discovery
 └── lib/
     ├── verify-no-residual-tokens.sh
     └── verify-agents-md-size.sh
@@ -129,4 +129,4 @@ ai/scripts/bootstrap.sh --no-cleanup-backups
 
 ## Diagram engines
 
-`ai/skills/diagram` is a router: Mermaid by default (and for ERD/class/gantt), archify only when a polished, shareable, interactive technical HTML is asked for. archify is deliberately **not** a skill in either tool. `ai/scripts/diagram-engines.sh` clones it at a pinned release tag into `~/.local/share/diagram-engines/archify`, outside `~/.claude/skills` and `~/.agents/skills`, so the skill listing carries only the router's description and the engine's own 137-line SKILL.md is read on demand. Bump `ARCHIFY_TAG` in the script to update; `--check` prints the pin next to the latest upstream tag. The router runs every engine command with `ARCHIFY_UPDATE_CHECK_DISABLED=1`, so a diagram run makes no network call and writes no ack state. The script is user-invoked only — `bootstrap.sh` never calls it, so deploys stay offline-safe. Hosts without a shell (Claude Cowork, the Codex desktop app) always get the Mermaid route. Evaluated and not adopted on 2026-09-07: cathrynlavery/diagram-design (hand-placed SVG, ~1,000 instruction lines per diagram).
+`ai/skills/diagram` is a router: Mermaid by default (and for ERD/class/gantt), archify only when a polished, shareable, interactive technical HTML is asked for. archify is deliberately **not** a skill in either tool. `ai/scripts/diagram-engines.sh` clones its latest release tag into `~/.local/share/diagram-engines/archify`, outside `~/.claude/skills` and `~/.agents/skills`, so the skill listing carries only the router's description and the engine's own 137-line SKILL.md is read on demand. Rerun the script to update (it follows release tags, never the dev `main`; set `ARCHIFY_TAG=vX.Y.Z` to pin); `--check` prints installed vs latest. archify's own update notice stays on: one GET per run, install never — when it fires, the router points at the script. The script is user-invoked only — `bootstrap.sh` never calls it, so deploys stay offline-safe. Hosts without a shell (Claude Cowork, the Codex desktop app) always get the Mermaid route. Evaluated and not adopted on 2026-09-07: cathrynlavery/diagram-design (hand-placed SVG, ~1,000 instruction lines per diagram).
