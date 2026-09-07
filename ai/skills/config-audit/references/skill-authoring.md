@@ -52,6 +52,8 @@ Critical shared routing text must not be moved from `description` into `when_to_
 
 Measured 2026-09-06 on Codex 0.153.4 (kitu session): every deployed skill's `description` is injected verbatim into the system prompt on every turn regardless of `skill_search`, and routing is semantic — no keyword or utterance matcher reads the text. Claude Code routes the same way. Write a description as one positive-intent line plus only the SKIP boundaries that disambiguate a real neighbour skill; quoted trigger-phrase lists (`TRIGGER when: 'x' / 'y'`) add listing characters without routing value. The 2026-09-07 rewrite of 15 descriptions under this rule cut the Claude listing from 6,999 to 4,839 characters with routing probes unchanged on both tools.
 
+Frontmatter `description` must not carry `{{...}}` tokens. Skills deploy by symlink on both tools and the description is rendered in the skill listing before any token table is in context, so a token reaches the model literally. Name both tools side by side instead (`~/.claude or ~/.codex`). Tokens stay valid in skill bodies, which the model reads with the token rules loaded.
+
 ## Deployment scopes
 
 The reporter mirrors the source order used by the bootstrap overlays:

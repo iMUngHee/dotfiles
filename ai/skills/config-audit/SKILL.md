@@ -1,6 +1,6 @@
 ---
 name: config-audit
-description: "Audit ~/.config/{ai,claude,codex}/ and {{TOOL_HOME}}/ for 3-tier structure compliance: layout, prefix convention, AGENTS.manifest sync, deploy-model integrity, generated-file protection. Use after creating, editing, or moving files there. Skip project-local .claude/ config and unrelated dotfiles."
+description: "Audit ~/.config/{ai,claude,codex}/ and the deployed tool home (~/.claude or ~/.codex) for 3-tier structure compliance: layout, prefix convention, AGENTS.manifest sync, deploy-model integrity, generated-file protection. Use after creating, editing, or moving files there. Skip project-local .claude/ config and unrelated dotfiles."
 allowed-tools: Bash, Read, Grep, Glob
 disable-model-invocation: false
 ---
