@@ -72,6 +72,32 @@ if [ -f "$MANIFEST" ]; then
     missing=$(comm -23 <(echo "$actual") <(echo "$listed"))
     stale=$(comm -13 <(echo "$actual") <(echo "$listed"))
 
+    # memory/private/* is gitignored and lives only in the main checkout; a linked
+    # worktree must not report those entries as drift. Resolve them against the
+    # main root and keep only entries that are missing there too.
+    if [ -n "$stale" ]; then
+        common_dir="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+        main_root="${common_dir%/.git}"
+        resolved=""
+        remaining=""
+        while IFS= read -r entry; do
+            [ -z "$entry" ] && continue
+            case "$entry" in
+                memory/private/*)
+                    if [ -n "$common_dir" ] && [ -f "$main_root/ai/$entry" ]; then
+                        resolved+="$entry"$'\n'
+                        continue
+                    fi ;;
+            esac
+            remaining+="$entry"$'\n'
+        done <<< "$stale"
+        if [ -n "$resolved" ]; then
+            echo "INFO: private manifest entries resolved against the main checkout ($main_root):"
+            printf '%s' "$resolved" | sed 's/^/  /'
+        fi
+        stale="$(printf '%s' "$remaining")"
+    fi
+
     if [ -n "$missing" ]; then
         echo "WARN: ai/ files NOT in AGENTS.manifest:"
         echo "$missing" | sed 's/^/  /'
