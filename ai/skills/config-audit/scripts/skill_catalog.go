@@ -210,7 +210,9 @@ func (c *catalog) discoverSkills(topDirectory, tier string) ([]skillRecord, erro
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() && entry.Name() == ".git" {
+		// .git is never a skill; node_modules holds third-party packages whose bundled
+		// SKILL.md files (e.g. Playwright's) are not deployed skills of this repository.
+		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "node_modules") {
 			return filepath.SkipDir
 		}
 		if !entry.IsDir() && entry.Name() == "SKILL.md" {

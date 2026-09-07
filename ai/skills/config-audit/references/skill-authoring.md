@@ -70,7 +70,7 @@ Codex:
   codex/skills/*
 ```
 
-A later tool-native directory with the same top-level basename shadows the earlier directory for that runtime. Nested `SKILL.md` files inside an effective top-level skill are included because the deployed directory contains them.
+A later tool-native directory with the same top-level basename shadows the earlier directory for that runtime. Nested `SKILL.md` files inside an effective top-level skill are included because the deployed directory contains them. `node_modules/` trees are skipped: their `SKILL.md` files ship with third-party packages (Playwright bundles two under spa-fetch) and neither tool lists them.
 
 ## Metrics
 

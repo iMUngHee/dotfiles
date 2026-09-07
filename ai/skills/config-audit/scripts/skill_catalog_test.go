@@ -80,7 +80,8 @@ func TestModelsOverlayNestedSkillsAndDuplicateNames(t *testing.T) {
 	writeSkill(t, root, "ai/skills/shadowed", metadata("shared-shadowed", "Shared shadowed", ""), "Instructions")
 	writeSkill(t, root, "claude/skills/shadowed", metadata("claude-shadowed", "Claude shadowed", ""), "Instructions")
 	writeSkill(t, root, "ai/skills/container", metadata("container", "Container", ""), "Instructions")
-	writeSkill(t, root, "ai/skills/container/node_modules/tool/trace", metadata("nested-trace", "Nested trace", ""), "Instructions")
+	writeSkill(t, root, "ai/skills/container/tools/trace", metadata("nested-trace", "Nested trace", ""), "Instructions")
+	writeSkill(t, root, "ai/skills/container/node_modules/dep/skill", metadata("vendored-dep", "Vendored dependency skill", ""), "Instructions")
 	writeSkill(t, root, "ai/skills/duplicate-one", metadata("duplicate", "Duplicate one", ""), "Instructions")
 	writeSkill(t, root, "ai/skills/duplicate-two", metadata("duplicate", "Duplicate two", ""), "Instructions")
 
@@ -96,6 +97,8 @@ func TestModelsOverlayNestedSkillsAndDuplicateNames(t *testing.T) {
 	assertSkillPresent(t, report, "codex", "shared-shadowed", true)
 	assertSkillPresent(t, report, "claude", "nested-trace", true)
 	assertSkillPresent(t, report, "codex", "nested-trace", true)
+	assertSkillPresent(t, report, "claude", "vendored-dep", false)
+	assertSkillPresent(t, report, "codex", "vendored-dep", false)
 }
 
 func TestChecksOnlyExplicitResourcePrefixes(t *testing.T) {
