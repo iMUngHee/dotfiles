@@ -109,6 +109,16 @@ Confirm to the user what happened (PR updated, or copied to clipboard).
 - Match the existing PR's format and language exactly — do not restructure or reformat
 - Read 2-3 recently merged PRs on the same base branch to match the author's style
 
+## Explanation style (eli5, always)
+
+Write every explanatory part of the body the way the `eli5` skill explains to a colleague engineer (its Colleague / Engineer rows): the reader knows the stack but not this change. This applies to the change-summary bullets and, on the fallback path that drafts a whole body, to `### 배경` / `### 변경 요지` as well.
+
+- First bullet answers "what changed and why it matters" in plain words, with the measured effect as numbers (before → after). No mechanism yet.
+- Following bullets give the mechanism with proper terms — file, option, flag — one idea per bullet. Bridge any term the reader may not know inside the same bullet (e.g. "`isJSON: true` skips the per-value replacer callback").
+- Name the concrete cause, not the category: "development build validates every element" beats "unoptimized runtime".
+- At most one everyday analogy, and only when it shortens the explanation; never for a term the reader already knows.
+- In `### 변경 요지` keep the order purpose → mechanism → evidence (`근거`). Evidence is a measurement, a log, a spec link, or a test — not a restatement.
+
 ## Rules
 
 - Only describe changes from unique commits (Step 3)
