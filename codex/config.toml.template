@@ -3,6 +3,8 @@
 # user/machine-managed and preserved by the merge.
 
 project_doc_max_bytes = 65536
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
 
 # Default startup automation = maximum local autonomy (no approvals + no sandbox)
 approval_policy = "never"
