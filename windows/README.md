@@ -178,5 +178,4 @@ via AppleScript). There is no equivalent here, so Windows always notifies.
 | No tmux | No native Windows port. Windows Terminal panes cover the splitting; the tmux status scripts, pane labels and the `claude`/`codex` wrapper functions in `.zshrc` have no counterpart. |
 | No Ghostty | No Windows build. `ghostty/config` maps to Windows Terminal except `adjust-cell-height` and the cursor-smear shader, which have no WT setting. |
 | No Claude Code sandboxing | Native Windows does not support it. `claude/settings.json` already sets `sandbox.enabled: false`. |
-| Codex CLI | Not installed here; `ai/scripts/bootstrap.sh` skips its deploy when `codex` is not on PATH, and the sanity checks handle the resulting absent `~/.codex/AGENTS.md`. |
 | Prompt `git:(x)` clean mark | zsh shows `✔` when clean; starship has no "clean" variable, so clean renders as bare `git:(main)`. Dirty still shows `✗`. |
