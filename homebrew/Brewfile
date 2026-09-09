@@ -22,7 +22,6 @@ brew "zoxide"
 brew "fnm"
 brew "uv"
 brew "pipx"
-brew "rtk"      # token-saving CLI proxy (homebrew-core), used by hooks
 brew "ccusage"  # Claude Code usage CLI
 
 # ── Languages / runtimes / build ─────────────────────────────
