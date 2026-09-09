@@ -105,7 +105,14 @@ link_skill_dir() {
     local d="$1"
     [ -d "$d" ] || return 0
     [ -f "$d/SKILL.md" ] || return 0
-    ln -sfn "$d" "$HOME/.agents/skills/$(basename "$d")"
+    local target="$HOME/.agents/skills/$(basename "$d")"
+    # See claude/scripts/bootstrap.sh: `ln -sfn DIR TARGET` descends into a real
+    # TARGET directory rather than replacing it, leaving a nested link that
+    # shadows the skill. The symlink-only sweep above cannot clear that.
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+        rm -rf "$target"
+    fi
+    ln -sfn "$d" "$target"
 }
 for d in "$AI_DIR/skills/"*/; do link_skill_dir "$d"; done
 for d in "$AI_DIR/skills/private/"*/; do link_skill_dir "$d"; done
