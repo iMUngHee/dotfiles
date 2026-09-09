@@ -1,0 +1,22 @@
+# Line endings.
+#
+# Git for Windows ships with core.autocrlf=true, so a fresh clone on Windows
+# rewrites every tracked text file to CRLF in the working tree. Git Bash's bash
+# tolerates a CRLF shebang, so bootstrap happens to survive that - but nothing
+# else in the toolchain promises to. WSL bash, /usr/bin/env, node shebangs and
+# the git hooks under githooks/ all fail on a stray ^M, and a machine that
+# switches between native Windows and WSL against the same ~/.config would hit
+# it immediately.
+#
+# eol=lf overrides core.autocrlf per file, so this holds regardless of how any
+# individual machine is configured. It also keeps diffs free of whole-file
+# rewrites when the same repo is edited from more than one platform.
+* text=auto eol=lf
+
+# Binary: never normalized, never diffed as text.
+*.png     binary
+*.icns    binary
+*.ico     binary
+*.zip     binary
+*.ttf     binary
+*.otf     binary
