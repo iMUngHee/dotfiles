@@ -8,13 +8,23 @@
 #
 # Run it directly, or as `cowork-skills` from the PowerShell profile.
 #
-#   cowork-skills                     # every skill
+#   cowork-skills                     # every shared skill (no private tier)
 #   cowork-skills -Only design,eli5   # just these
 #   cowork-skills -List               # report only, write nothing
+#   cowork-skills -IncludePrivate     # opt in to ai/skills/private as well
+#
+# ai/skills/private is opt-in, unlike the other tiers. It is gitignored
+# (ai/.gitignore) precisely because its contents are not meant to leave this
+# machine by the usual routes, and a zip whose documented next step is "upload
+# to your Claude account, where it follows you to web and mobile" is exactly
+# such a route. gitignore cannot help here - this script reads the working tree,
+# not the index - so the switch is the only gate. Packing a skill you did not
+# realise was private is not recoverable by deleting the zip.
 
 param(
     [string[]]$Only = @(),
     [switch]$List,
+    [switch]$IncludePrivate,
     [string]$OutDir
 )
 
@@ -23,15 +33,16 @@ param(
 $Root = Get-ConfigRoot
 if (-not $OutDir) { $OutDir = Join-Path $Root 'windows\dist\cowork-skills' }
 
-# Same three source tiers, in the same order, as the skills overlay in
-# claude/scripts/bootstrap.sh - a later tier with the same name wins.
-$sourceDirs = @(
-    (Join-Path $Root 'ai\skills'),
-    (Join-Path $Root 'ai\skills\private'),
-    (Join-Path $Root 'claude\skills')
-)
+# Same tier order as the skills overlay in claude/scripts/bootstrap.sh - a later
+# tier with the same name wins. The private tier joins only under -IncludePrivate.
+$privateDir = Join-Path $Root 'ai\skills\private'
+$sourceDirs = @(Join-Path $Root 'ai\skills')
+if ($IncludePrivate) { $sourceDirs += $privateDir }
+$sourceDirs += (Join-Path $Root 'claude\skills')
 
-$excludeDirs = @('node_modules', '.git', 'dist', '.next', 'target')
+# __pycache__: compiled bytecode is machine-specific and has no business in a
+# skill zip (kafdrop-hunt ships .py, so it accumulates there).
+$excludeDirs = @('node_modules', '.git', 'dist', '.next', 'target', '__pycache__')
 
 function Get-SkillFrontmatter {
     param([Parameter(Mandatory)][string]$SkillMd)
@@ -56,7 +67,11 @@ foreach ($src in $sourceDirs) {
         if ($dir.Name -eq 'private') { continue }
         $skillMd = Join-Path $dir.FullName 'SKILL.md'
         if (-not (Test-Path $skillMd)) { continue }
-        $skills[$dir.Name] = @{ dir = $dir.FullName; meta = (Get-SkillFrontmatter $skillMd) }
+        $skills[$dir.Name] = @{
+            dir     = $dir.FullName
+            meta    = (Get-SkillFrontmatter $skillMd)
+            private = ($src -eq $privateDir)
+        }
     }
 }
 
@@ -97,10 +112,18 @@ $report = foreach ($name in ($skills.Keys | Sort-Object)) {
         KB    = $kb
         Files = @($files).Count
         For   = $flag
+        Tier  = $(if ($s.private) { 'private' } else { '' })
         Description = $s.meta.description
     }
 }
-$report | Format-Table Skill, KB, Files, For -AutoSize
+$report | Format-Table Skill, KB, Files, For, Tier -AutoSize
+
+# Unlike the 'code' flag, this one is not cosmetic: these came from the
+# gitignored tier and the next documented step uploads them off this machine.
+$privateNames = @($report | Where-Object { $_.Tier -eq 'private' } | ForEach-Object { $_.Skill })
+if ($privateNames.Count -gt 0) {
+    Add-Warn "packing $($privateNames.Count) PRIVATE skill(s): $($privateNames -join ', ') - these leave this machine when you upload them"
+}
 
 # Cowork's uploader rejects a description containing anything that looks like an
 # XML tag: "SKILL.md description cannot contain XML tags". A placeholder written
@@ -153,7 +176,7 @@ Remove-Item $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
 # longer obvious which ones were already uploaded.
 $manifest = [PSCustomObject]@{
     generated = (Get-Date).ToString('o')
-    source    = 'ai/skills, ai/skills/private, claude/skills'
+    source    = (($sourceDirs | ForEach-Object { $_.Replace("$Root\", '').Replace('\', '/') }) -join ', ')
     note      = 'Upload in Cowork: Customize > + > Skills > upload zip.'
     skills    = @($report | Select-Object Skill, KB, Files, For, Description)
 }
