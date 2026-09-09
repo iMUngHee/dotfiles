@@ -73,9 +73,11 @@ $NpmGlobals = @(
     # brew "tree-sitter-cli". nvim-treesitter's `main` branch calls the
     # tree-sitter CLI to generate a parser before compiling it, so without this
     # every :TSInstall fails with ENOENT: 'tree-sitter'.
-    # --allow-scripts is required: the package's postinstall is what downloads
-    # the actual binary, and npm now blocks install scripts by default, which
-    # leaves a package that installs "successfully" but provides no executable.
+    # The package's postinstall is what downloads the actual binary, so install
+    # scripts must run - they do, by default: `npm config get ignore-scripts` is
+    # false on npm 11.6.2. (An earlier revision passed --allow-scripts here for
+    # that reason; npm has no such flag, and it only produced "Unknown cli config
+    # ... will stop working in the next major version of npm".)
     @{ id = 'tree-sitter-cli'; note = 'brew "tree-sitter-cli" - nvim-treesitter parser builds' },
     # cask "codex" / brew "codex" on the Mac. Deliberately NOT winget: the
     # community manifest for OpenAI.Codex sat on 0.146.1 (published 2026-08-05)
@@ -103,9 +105,9 @@ $Optional = @(
 # kotlin / gradle   JVM toolchain not used on this machine
 # tree-sitter-cli   not in winget; installed from npm below
 # rtk / ccusage     no winget package; install per their own docs if wanted
-# pager             no winget package and no public installer. claude/settings.json
-#                   guards its hook invocation on uname, so its absence is silent
-#                   rather than an error on every hook event.
+# (pager IS installed here - windows/scripts/install-pager.ps1 builds it from
+#  source, since it is in no package manager. Both surfaces guard the hook on
+#  `command -v pager`, so absence stays silent rather than erroring per event.)
 # pipx / pipenv     superseded by uv here
 # luajit            bundled with the Neovim Windows build
 # FiraCode Nerd Font  winget's entire Nerd Font catalogue is one package
@@ -205,7 +207,7 @@ if (-not (Test-Command 'npm')) {
             continue
         }
         Write-Host "   installing $id  ($($pkg.note))"
-        npm install -g --allow-scripts=$id $id *> $null
+        npm install -g $id *> $null
         if ($LASTEXITCODE -ne 0) {
             Add-Warn "npm install failed for $id (exit $LASTEXITCODE)"
         }
@@ -225,6 +227,10 @@ if (-not (Test-Command 'npm')) {
         Copy-Item $realExe (Join-Path $localBin 'tree-sitter.exe') -Force
         Add-UserPath -Directory $localBin -Prepend | Out-Null
         Write-Ok "tree-sitter.exe -> $localBin (ahead of npm's sh shim)"
+    } else {
+        # Silence here used to hide a failed npm install: the copy was skipped and
+        # nothing said so, leaving :TSInstall to fail later with a bare ENOENT.
+        Add-Warn "tree-sitter.exe not found at $realExe - :TSInstall will fail (npm install probably did not complete)"
     }
 }
 
