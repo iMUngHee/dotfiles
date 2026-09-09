@@ -51,7 +51,7 @@ Bootstrap will:
 4. Auto-generate `~/.claude/MEMORY.md` (Shared / Claude-only / Private sections, with `AUTO-GENERATED` header)
 5. Per-skill symlinks in `~/.claude/skills/` from `ai/skills/`, `ai/skills/private/`, `claude/skills/`
 6. Copy executable scripts to `~/.claude/scripts/` (excluding bootstrap/sync-back)
-7. Merge `settings.json` (permissions union; repo keys override; local-only keys like `model` preserved)
+7. Merge `settings.json` (repo keys override; local-only keys like `model` preserved; permissions resolved against `~/.claude/.settings-repo-managed.json`, so an entry the repo dropped is removed while one you approved at a prompt stays)
 
 The top-level orchestrator (`ai/scripts/bootstrap.sh`) builds the shared AgentNotifier from `notifier/` after Claude/Codex deploy.
 
