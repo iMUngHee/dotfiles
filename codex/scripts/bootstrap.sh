@@ -171,6 +171,13 @@ fi
 #     real sources in ~/.config/codex/hooks/ silently stops taking effect
 # config.toml is this repo's single representation, so the import is removed.
 # Backed up rather than deleted, since it is not ours to throw away outright.
+#
+# This reclaims, it does not prevent. Codex imports on ITS first run, which is
+# after this script has finished, so the session that triggers the import keeps
+# Claude's hook set for its whole life — including running without stop-gate.sh —
+# and only the next bootstrap clears it. githooks/post-merge makes that "the next
+# tier merge" in practice, but there is no upper bound. Preventing the import
+# outright would need a Codex-side opt-out; none is known, so this stays a sweep.
 for imported in "$HOME/.codex/hooks.json" "$HOME/.codex/hooks"; do
     if [ -e "$imported" ]; then
         mv "$imported" "$imported.imported.bak.$(date +%s)"

@@ -4,6 +4,11 @@
 # mcp_servers.pager — see the comment on that block.
 
 project_doc_max_bytes = 65536
+
+# Enforced like every key here: a model picked locally with /model is reverted on
+# the next bootstrap. That is deliberate - the model is a dotfiles decision, not a
+# per-machine one - but it is the only enforced key a user is likely to change by
+# hand and then wonder about, so it is called out rather than left to the header.
 model = "gpt-6-astra"
 model_reasoning_effort = "medium"
 
