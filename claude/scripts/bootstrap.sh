@@ -202,6 +202,7 @@ done
 # appear inside jq JSON output, so dropping all of them is safe, and on macOS
 # and Linux there are none to drop.
 MANAGED="$CLAUDE_DIR/.settings-repo-managed.json"
+MERGED=0
 echo "Merging settings.json..."
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
     # A missing, truncated or malformed manifest is reset rather than handed to
@@ -212,27 +213,46 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
     # deletion waits one run and no permission is lost.
     jq -e 'type == "object" and has("allow") and has("deny")' "$MANAGED" >/dev/null 2>&1 \
         || echo '{"allow":[],"deny":[]}' > "$MANAGED"
-    jq -s '
+    # ask gets the same rule as allow and deny. It is another array Claude Code
+    # appends to from a prompt, so leaving it to `*` alone would let a repo that
+    # ever gains an `ask` key replace the user's accumulated entries wholesale -
+    # the same accident as a unioned allow, mirrored. Only touched when one side
+    # actually has the key, so settings.json does not grow an empty `ask: []`.
+    if jq -s '
       .[0] as $local | .[1] as $repo | .[2] as $was |
       def resolve($k):
         (($local.permissions[$k] // []) - ($was[$k] // []))
         + ($repo.permissions[$k] // []) | unique;
       $local * $repo |
       .permissions.allow = resolve("allow") |
-      .permissions.deny  = resolve("deny")
+      .permissions.deny  = resolve("deny") |
+      if ($local.permissions.ask // $repo.permissions.ask)
+      then .permissions.ask = resolve("ask") else . end
     ' "$CLAUDE_DIR/settings.json" "$REPO_DIR/settings.json" "$MANAGED" \
-        | tr -d '\r' > "$CLAUDE_DIR/settings.json.tmp" \
-        && mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
+        | tr -d '\r' > "$CLAUDE_DIR/settings.json.tmp"
+    then
+        mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
+        MERGED=1
+    else
+        rm -f "$CLAUDE_DIR/settings.json.tmp"
+        echo "warn: settings.json merge failed; left as-is, manifest not advanced" >&2
+    fi
 else
     cp "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json"
+    MERGED=1
 fi
-# Written after the merge, not before, so a failed merge leaves the manifest
-# still describing the settings that are actually on disk. Through a temp file
-# for the same reason settings.json is: a redirect that dies midway leaves a
-# half-written manifest behind, and the next run has to cope with it.
-jq '{allow: (.permissions.allow // []), deny: (.permissions.deny // [])}' \
-    "$REPO_DIR/settings.json" | tr -d '\r' > "$MANAGED.tmp" \
-    && mv "$MANAGED.tmp" "$MANAGED"
+# Only after a merge that actually landed. Writing it unconditionally was worse
+# than writing it early: the manifest would describe the repo's current state
+# while settings.json still held the old one, so the entry the repo had just
+# dropped was no longer recorded as the repo's - and the next run read it as the
+# user's and kept it. That loses the deletion permanently, not for one run.
+# Through a temp file because a redirect that dies midway leaves a half-written
+# manifest for the next run to cope with.
+if [ "$MERGED" -eq 1 ]; then
+    jq '{allow: (.permissions.allow // []), deny: (.permissions.deny // []), ask: (.permissions.ask // [])}' \
+        "$REPO_DIR/settings.json" | tr -d '\r' > "$MANAGED.tmp" \
+        && mv "$MANAGED.tmp" "$MANAGED"
+fi
 
 # ── 8. pager MCP server ──
 # pager's MCP surface — msg_list, msg_roster, msg_send — is exactly what
