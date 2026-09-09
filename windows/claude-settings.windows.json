@@ -1,0 +1,16 @@
+{
+  "//": "windows/claude-settings.windows.json — Windows-only additions to ~/.claude/settings.json.",
+  "//1": "Merged by windows/scripts/deploy-ai.ps1 AFTER the shared bash deploy runs.",
+  "//2": "These keys stay out of claude/settings.json because they are meaningless",
+  "//3": "on macOS and Linux, and the shared file is deployed verbatim to both.",
+  "//4": "The merge is safe across re-runs: claude/scripts/bootstrap.sh merges the",
+  "//5": "repo settings over the local file with jq's `$local * $repo`, which",
+  "//6": "preserves local-only keys — so these survive the next bootstrap.",
+  "//7": "__GIT_BASH_PATH__ is expanded at deploy time, the same way",
+  "//8": "codex/scripts/bootstrap.sh expands tmux-__UID__, so no machine-specific",
+  "//9": "absolute path is committed.",
+
+  "env": {
+    "CLAUDE_CODE_GIT_BASH_PATH": "__GIT_BASH_PATH__"
+  }
+}

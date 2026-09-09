@@ -15,6 +15,7 @@ Personal configuration files managed via `~/.config/` and synced with git.
 | `tmux/` | tmux | `tmux.conf`, `scripts/`, `status/` |
 | `zsh/` | Zsh | `.zshrc`, `custom/plugins/` |
 | `homebrew/` | [Homebrew Bundle](https://docs.brew.sh/Brew-Bundle-and-Brewfile) | `Brewfile`, `bootstrap.sh` (cross-platform packages + shell env; `OS.mac?`/`OS.linux?` guarded) |
+| `windows/` | Native Windows | `bootstrap.ps1`, `packages.ps1` (winget), `profile.ps1`, `starship.toml`, `terminal/`, `notifier/`, Cowork skill packaging |
 | `.ideavimrc` | IdeaVim (JetBrains) | Standalone file |
 
 ### AI assistant 3-tier layout
@@ -33,9 +34,25 @@ Personal configuration files managed via `~/.config/` and synced with git.
 
 ## Setup
 
+### macOS / Linux
+
 ```bash
 git clone --recurse-submodules <repo> ~/.config
 ~/.config/bootstrap.sh   # installs packages (brew bundle + ghostty/claude-code + oh-my-zsh), then deploys Claude + Codex config
 ```
 
-For per-tool details: [`ai/`](ai/README.md), [`claude/`](claude/README.md), [`codex/`](codex/README.md).
+### Windows
+
+```powershell
+winget install --id Git.Git --exact
+git clone --recurse-submodules <repo> $HOME\.config
+pwsh -File $HOME\.config\windows\bootstrap.ps1   # winget packages + shell/terminal, then the SAME ai/scripts/bootstrap.sh under Git Bash
+```
+
+Requires Developer Mode (**Settings > System > For developers**) so the deploy can
+create symlinks unelevated. `windows/bootstrap.ps1` replaces `bootstrap.sh` only
+at the package layer — the Claude/Codex deploy is delegated to
+`ai/scripts/bootstrap.sh` verbatim, so there is one implementation of the 3-tier
+merge, not two. See [`windows/README.md`](windows/README.md).
+
+For per-tool details: [`ai/`](ai/README.md), [`claude/`](claude/README.md), [`codex/`](codex/README.md), [`windows/`](windows/README.md).

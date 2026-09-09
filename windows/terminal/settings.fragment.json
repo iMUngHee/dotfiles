@@ -1,0 +1,57 @@
+{
+  "//": "windows/terminal/settings.fragment.json — the ghostty/config port.",
+  "//1": "This is a FRAGMENT, not a whole settings.json. Windows Terminal owns",
+  "//2": "the real file: it writes machine-generated profile GUIDs into it and",
+  "//3": "rewrites it from the settings UI. deploy-shell.ps1 merges these keys in",
+  "//4": "and leaves everything else alone, the same contract jq enforces for",
+  "//5": "~/.claude/settings.json in claude/scripts/bootstrap.sh.",
+  "//6": "Only keys documented in the Windows Terminal settings reference appear",
+  "//7": "here — ghostty's adjust-cell-height and custom-shader have no WT key.",
+
+  "copyOnSelect": true,
+  "launchMode": "maximized",
+
+  "profiles": {
+    "defaults": {
+      "colorScheme": "Catppuccin Mocha",
+      "font": {
+        "face": "FiraCode Nerd Font",
+        "size": 16
+      },
+      "cursorShape": "filledBox",
+      "historySize": 10000,
+      "padding": "12, 12, 12, 12",
+      "scrollbarState": "hidden",
+      "useAcrylic": false,
+      "opacity": 100,
+      "adjustIndistinguishableColors": "never",
+      "intenseTextStyle": "bold"
+    }
+  },
+
+  "schemes": [
+    {
+      "name": "Catppuccin Mocha",
+      "background": "#1E1E2E",
+      "foreground": "#CDD6F4",
+      "cursorColor": "#F5E0DC",
+      "selectionBackground": "#585B70",
+      "black": "#45475A",
+      "red": "#F38BA8",
+      "green": "#A6E3A1",
+      "yellow": "#F9E2AF",
+      "blue": "#89B4FA",
+      "purple": "#F5C2E7",
+      "cyan": "#94E2D5",
+      "white": "#BAC2DE",
+      "brightBlack": "#585B70",
+      "brightRed": "#F38BA8",
+      "brightGreen": "#A6E3A1",
+      "brightYellow": "#F9E2AF",
+      "brightBlue": "#89B4FA",
+      "brightPurple": "#F5C2E7",
+      "brightCyan": "#94E2D5",
+      "brightWhite": "#A6ADC8"
+    }
+  ]
+}

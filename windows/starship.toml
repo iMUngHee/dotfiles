@@ -1,0 +1,77 @@
+# windows/starship.toml — port of the custom PROMPT in zsh/.zshrc:44-51.
+#
+#   ~/path/to/dir git:(branch) ✔
+#   ➜
+#
+# Colors are the same Catppuccin Mocha truecolor values the zsh prompt hardcodes
+# via its _c() helper:
+#   #89b4fa blue   path
+#   #cba6f7 mauve  git:( )
+#   #a6e3a1 green  branch, success arrow
+#   #f9e2af yellow dirty mark
+#   #f38ba8 red    error arrow
+#
+# Only the modules named in `format` render, which is what keeps this prompt as
+# quiet as the zsh one — starship's defaults would add language/version
+# segments that PROMPT never had.
+
+format = """$directory$git_branch$git_status
+$character"""
+
+add_newline = false
+command_timeout = 1000
+
+[directory]
+style = "#89b4fa"
+format = "[$path]($style)[$read_only]($read_only_style) "
+truncation_length = 0        # %~ does not truncate
+truncate_to_repo = false     # %~ is absolute-from-home, not repo-relative
+home_symbol = "~"
+read_only = " RO"
+read_only_style = "#f38ba8"
+
+[git_branch]
+# ZSH_THEME_GIT_PROMPT_PREFIX = "git:(" mauve, then the branch in green.
+# Parentheses delimit conditional groups in a starship format string, so a
+# LITERAL paren must be backslash-escaped or the module fails to parse and
+# renders nothing at all. Single-quoted TOML (a literal string) is used so the
+# backslash reaches starship instead of being eaten by TOML's own escaping.
+format = '[git:\(](#cba6f7)[$branch](#a6e3a1)'
+only_attached = false
+
+[git_status]
+# ZSH_THEME_GIT_PROMPT_{CLEAN,DIRTY} both close the paren, then diverge on the
+# mark. Two starship facts shape this:
+#
+#  1. There is no "clean" variable, so the closing paren is an unconditional
+#     literal and only the mark rides the conditional group `( ... )`, which
+#     collapses when every variable inside it is empty.
+#  2. $all_status CONCATENATES the per-category indicators, so setting them all
+#     to "X" prints one per category — `git:(main) XXX` for a tree that is
+#     modified + staged + untracked. zsh's parse_git_dirty is a single boolean.
+#
+# So each indicator is a zero-width space, written as the TOML escape \u200B so
+# it stays visible to whoever reads this file: non-empty enough to keep the
+# group alive, but invisible, which leaves exactly one literal mark no matter
+# how many categories are dirty. Result: `git:(main)` clean, `git:(main) ✗`
+# dirty.
+# The leading \) is the escaped literal paren that closes `git:(branch`; the
+# unescaped outer ( ) is the conditional group that collapses when clean.
+style = "#f9e2af"
+format = '[\)](#cba6f7)([ ✗$all_status]($style))'
+conflicted = "\u200B"
+untracked = "\u200B"
+modified = "\u200B"
+staged = "\u200B"
+renamed = "\u200B"
+deleted = "\u200B"
+typechanged = "\u200B"
+stashed = ""
+ahead = ""
+behind = ""
+diverged = ""
+
+[character]
+success_symbol = "[➜](#a6e3a1)"
+error_symbol = "[➜](#f38ba8)"
+vimcmd_symbol = "[➜](#cba6f7)"
