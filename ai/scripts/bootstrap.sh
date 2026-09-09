@@ -57,7 +57,11 @@ backup_dir() {
     # * skips dotfiles, .[!.]* skips anything whose second character is a dot,
     # and ..?* picks up that remainder without ever matching . or .. themselves.
     for entry in "$src"/* "$src"/.[!.]* "$src"/..?*; do
-        [ -e "$entry" ] || continue
+        # -e follows the link, so a broken symlink reads as absent and would be
+        # dropped - and ~/.claude is mostly symlinks into this repo, which is
+        # exactly where a broken one shows up. -L catches those; the pair still
+        # skips an unmatched glob, which is what this guard is here for.
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
         case "${entry##*/}" in
             tmp | .tmp) continue ;;
         esac
