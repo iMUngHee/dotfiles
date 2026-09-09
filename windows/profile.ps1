@@ -14,7 +14,15 @@
 #   custom PROMPT              -> windows/starship.toml
 #   zsh/private.sh             -> windows/private.ps1 (gitignored)
 
-$ConfigRoot = Join-Path $HOME '.config'
+# Resolved from this file's own location, matching Get-ConfigRoot in
+# lib/common.ps1, so the profile works from a clone that is not at ~/.config.
+# $PSScriptRoot is empty when the 5.1 stub loads this file through
+# Invoke-Expression (deploy-shell.ps1), so keep the literal as the fallback.
+$ConfigRoot = if ($PSScriptRoot) {
+    (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+} else {
+    Join-Path $HOME '.config'
+}
 
 # -- Environment -----------------------------------------------
 $env:EDITOR = 'nvim'
@@ -177,7 +185,14 @@ function buu { & (Join-Path $ConfigRoot 'windows\scripts\update-all.ps1') @args 
 
 # Windows has no `open`/`loginctl lock-session` pair; these are the equivalents.
 function ulock { rundll32.exe user32.dll,LockWorkStation }
-function open { param([Parameter(ValueFromRemainingArguments)]$Path) Invoke-Item @Path }
+# Invoke-Item takes one positional -Path, so splatting an array bound only its
+# first element and errored on the rest; loop instead. No argument opens the
+# current directory, the way `open .` does.
+function open {
+    param([Parameter(ValueFromRemainingArguments)]$Path)
+    if (-not $Path) { $Path = @('.') }
+    foreach ($p in $Path) { Invoke-Item $p }
+}
 
 # -- Config helpers --------------------------------------------
 function cfg { Set-Location $ConfigRoot }
