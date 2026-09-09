@@ -77,6 +77,23 @@ trap 'rm -f "$TEMPLATE_EXPANDED"' EXIT
 sed "s|tmux-__UID__|tmux-$(id -u)|g" "$TEMPLATE" > "$TEMPLATE_EXPANDED"
 TEMPLATE="$TEMPLATE_EXPANDED"
 
+# pager is an external binary this repo installs only on Windows, so declaring
+# [mcp_servers.pager] unconditionally makes every Codex session on a fresh
+# macOS/Linux machine try to spawn a missing command. Mirror the Claude surface,
+# which registers it only when the binary is present. Stripping the template
+# alone is not enough — the deep merge keeps target-only keys, so an entry a
+# previous deploy wrote would survive; DEL_KEYS removes it from the result too.
+DEL_KEYS='.UserPromptSubmit, .PreToolUse, .PostToolUse, .PreCompact, .SessionStart, .Stop, .PermissionRequest'
+if ! command -v pager &>/dev/null; then
+    if command -v yq &>/dev/null; then
+        yq -i -p toml -o toml 'del(.mcp_servers.pager)' "$TEMPLATE_EXPANDED"
+        DEL_KEYS="$DEL_KEYS, .mcp_servers.pager"
+        echo "Skipped [mcp_servers.pager] (pager not installed)"
+    else
+        echo "warn: pager absent and yq missing — [mcp_servers.pager] left declared" >&2
+    fi
+fi
+
 if [ ! -f "$TARGET_CFG" ]; then
     cp "$TEMPLATE" "$TARGET_CFG"
     echo "Wrote ~/.codex/config.toml from template (first deploy)"
@@ -86,7 +103,7 @@ else
         exit 1
     fi
     if yq eval-all -p toml -o toml \
-        'select(fileIndex == 0) * select(fileIndex == 1) | del(.UserPromptSubmit, .PreToolUse, .PostToolUse, .PreCompact, .SessionStart, .Stop, .PermissionRequest)' \
+        "select(fileIndex == 0) * select(fileIndex == 1) | del($DEL_KEYS)" \
         "$TARGET_CFG" "$TEMPLATE" > "$TARGET_CFG.tmp"; then
         mv "$TARGET_CFG.tmp" "$TARGET_CFG"
     else
