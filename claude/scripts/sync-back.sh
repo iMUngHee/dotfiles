@@ -33,6 +33,15 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
         echo "  add them to claude/settings.json by hand if they should persist"
     fi
 
+    # The output goes through tr because jq on Windows opens stdout in text mode
+    # and turns every newline into CRLF. This file is tracked and the pre-commit
+    # hook runs this script, so without it a commit made on Windows rewrites
+    # settings.json with line endings .gitattributes then normalises away again,
+    # leaving a working copy that permanently differs from the index — which is
+    # why git status there reported every tracked file modified while git diff
+    # showed nothing. A raw CR cannot appear inside jq JSON output, which
+    # escapes control characters, so dropping all of them is safe; on macOS and
+    # Linux there are none to drop.
     jq -s '
       .[0] as $repo | .[1] |
       with_entries(select(.key | IN($repo | keys[]))) |
@@ -49,7 +58,7 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
                      | from_entries)
        else . end)
     ' "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" \
-        > "$REPO_DIR/settings.json.tmp"
+        | tr -d '\r' > "$REPO_DIR/settings.json.tmp"
     if ! diff -q "$REPO_DIR/settings.json" "$REPO_DIR/settings.json.tmp" &>/dev/null; then
         mv "$REPO_DIR/settings.json.tmp" "$REPO_DIR/settings.json"
         echo "Synced: settings.json"
