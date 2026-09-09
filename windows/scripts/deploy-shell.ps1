@@ -117,7 +117,14 @@ if (-not $wtSettings) {
     }
 
     if ($local) {
-        Copy-Item $wtSettings "$wtSettings.bak" -Force
+        # Keep the FIRST backup only. The merge below rewrites settings.json from
+        # a parsed object, so the user's JSONC comments are already gone after
+        # run 1; overwriting .bak on run 2 would replace the one pristine copy
+        # with an already-stripped one and make the loss permanent.
+        if (-not (Test-Path "$wtSettings.bak")) {
+            Copy-Item $wtSettings "$wtSettings.bak"
+            Write-Ok "pristine backup -> settings.json.bak"
+        }
 
         # schemes is an ARRAY. A blind deep merge would replace the user's whole
         # scheme list with ours, so merge by scheme name instead.
@@ -161,7 +168,7 @@ if (-not $wtSettings) {
         }
 
         Write-Utf8NoBom -Path $wtSettings -Content ($merged | ConvertTo-Json -Depth 32)
-        Write-Ok "merged into $wtSettings (backup: settings.json.bak)"
+        Write-Ok "merged into $wtSettings (comments dropped; pristine copy: settings.json.bak)"
     }
 }
 
