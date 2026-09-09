@@ -172,19 +172,67 @@ for f in "$REPO_DIR/scripts/"*.sh; do
 done
 
 # ── 7. Merge settings.json (repo keys override, local-only keys preserved) ──
+# The permission arrays cannot be unioned and cannot be replaced.
+#
+# A union adds but never removes, so a permission deleted from the repo lives on
+# forever wherever it had already landed — dropping the blanket Bash(codex*)
+# allow changed nothing on the machine that had it, and nothing said so. A plain
+# replace has the opposite failure: Claude Code writes an "always allow" answer
+# straight into this array, so replacing would silently revoke every approval
+# given at a prompt.
+#
+# So the repo records what it contributed, in MANAGED. An entry that is gone
+# from the repo and was last put there by the repo is a deletion and goes; an
+# entry the repo never contributed is the user's and stays. A first run has no
+# manifest, which reads as an empty contribution and so behaves exactly like the
+# union it replaces — no machine loses a permission on the upgrade itself.
+#
+# deny gets the same treatment rather than staying union-only. A stale deny is
+# harmless where a stale allow is not, but the rule that is easy to reason about
+# is "the repo says what is allowed and what is denied", and one array following
+# a different rule than the other is how the next surprise gets built.
+#
+# The one case it cannot see: an entry the repo dropped that the user then
+# re-approved at a prompt. That reads as a deletion and is removed again. It
+# fails toward fewer permissions, and re-approving is one keystroke.
+#
+# Both jq writes below go through tr: jq on Windows opens stdout in text mode
+# and turns every newline into CRLF. See claude/scripts/sync-back.sh, where the
+# same conversion lands on a tracked file and does real damage. A raw CR cannot
+# appear inside jq JSON output, so dropping all of them is safe, and on macOS
+# and Linux there are none to drop.
+MANAGED="$CLAUDE_DIR/.settings-repo-managed.json"
 echo "Merging settings.json..."
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
+    # A missing, truncated or malformed manifest is reset rather than handed to
+    # jq, which would error on it, abort this script, and — the orchestrator
+    # calls it unguarded under its own set -e — take the codex deploy, the
+    # notifier build and both sanity checks down with it. Reset reads as an
+    # empty contribution, which is exactly the union this replaces: a pending
+    # deletion waits one run and no permission is lost.
+    jq -e 'type == "object" and has("allow") and has("deny")' "$MANAGED" >/dev/null 2>&1 \
+        || echo '{"allow":[],"deny":[]}' > "$MANAGED"
     jq -s '
-      .[0] as $local | .[1] as $repo |
+      .[0] as $local | .[1] as $repo | .[2] as $was |
+      def resolve($k):
+        (($local.permissions[$k] // []) - ($was[$k] // []))
+        + ($repo.permissions[$k] // []) | unique;
       $local * $repo |
-      .permissions.allow = (($local.permissions.allow // []) + ($repo.permissions.allow // []) | unique) |
-      .permissions.deny  = (($local.permissions.deny  // []) + ($repo.permissions.deny  // []) | unique)
-    ' "$CLAUDE_DIR/settings.json" "$REPO_DIR/settings.json" \
-        > "$CLAUDE_DIR/settings.json.tmp" \
+      .permissions.allow = resolve("allow") |
+      .permissions.deny  = resolve("deny")
+    ' "$CLAUDE_DIR/settings.json" "$REPO_DIR/settings.json" "$MANAGED" \
+        | tr -d '\r' > "$CLAUDE_DIR/settings.json.tmp" \
         && mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
 else
     cp "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json"
 fi
+# Written after the merge, not before, so a failed merge leaves the manifest
+# still describing the settings that are actually on disk. Through a temp file
+# for the same reason settings.json is: a redirect that dies midway leaves a
+# half-written manifest behind, and the next run has to cope with it.
+jq '{allow: (.permissions.allow // []), deny: (.permissions.deny // [])}' \
+    "$REPO_DIR/settings.json" | tr -d '\r' > "$MANAGED.tmp" \
+    && mv "$MANAGED.tmp" "$MANAGED"
 
 # ── 8. pager MCP server ──
 # pager's MCP surface — msg_list, msg_roster, msg_send — is exactly what
