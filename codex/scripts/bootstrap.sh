@@ -138,4 +138,24 @@ if [ "${CODEX_DISABLE_SYSTEM_SKILLS:-1}" = "1" ]; then
     fi
 fi
 
+# ── 7. Remove an imported Claude hook layer ──
+# Codex imports Claude Code's hooks on first run: it writes ~/.codex/hooks.json
+# from ~/.claude/settings.json and copies ~/.claude/hooks/ to ~/.codex/hooks/.
+# That is wrong for this repo in three ways:
+#   - it duplicates the hooks config.toml already defines, and Codex itself then
+#     warns "loading hooks from both ... prefer a single representation"
+#   - the imported set is CLAUDE's: stop-handler.sh, compact-restore.sh and
+#     log-instructions.sh have no codex counterpart, and codex's own stop-gate.sh
+#     is not among them
+#   - the commands point at the copies under ~/.codex/hooks/, so editing the
+#     real sources in ~/.config/codex/hooks/ silently stops taking effect
+# config.toml is this repo's single representation, so the import is removed.
+# Backed up rather than deleted, since it is not ours to throw away outright.
+for imported in "$HOME/.codex/hooks.json" "$HOME/.codex/hooks"; do
+    if [ -e "$imported" ]; then
+        mv "$imported" "$imported.imported.bak.$(date +%s)"
+        echo "Removed imported Claude hook layer: $(basename "$imported") (backup kept)"
+    fi
+done
+
 echo "=== codex bootstrap done ==="
