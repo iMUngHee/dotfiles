@@ -182,12 +182,19 @@ refresh_and_parse_cache() {
 
     # Normal stale → background refresh (current parsed data is acceptable)
     if [ -f "$LOCK_FILE" ]; then
-        # stat -f %m is BSD; GNU stat spells the same thing -c %Y. Falling all
-        # the way through to 0 makes the lock look ancient, which only ever
-        # clears a stale lock — the safe direction.
+        # GNU stat spells mtime -c %Y, BSD stat -f %m, and GNU is tried first on
+        # purpose. BSD has no -c at all, so it refuses and prints nothing; GNU
+        # does have -f, meaning "file system", and answers it with a block of
+        # filesystem statistics on stdout before exiting non-zero. Inside one
+        # command substitution that block is concatenated with whatever the
+        # fallback prints, and lock_mtime becomes six lines of text that the
+        # arithmetic below cannot use. Ordering is the whole fix.
+        #
+        # Falling all the way through to 0 makes the lock look ancient, which
+        # only ever clears a stale lock — the safe direction.
         local lock_mtime
-        lock_mtime=$(stat -f %m "$LOCK_FILE" 2>/dev/null \
-            || stat -c %Y "$LOCK_FILE" 2>/dev/null \
+        lock_mtime=$(stat -c %Y "$LOCK_FILE" 2>/dev/null \
+            || stat -f %m "$LOCK_FILE" 2>/dev/null \
             || echo 0)
         local lock_age=$(( _now - lock_mtime ))
         [ "$lock_age" -gt 30 ] && rm -f "$LOCK_FILE"
