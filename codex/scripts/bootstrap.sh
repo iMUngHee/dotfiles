@@ -108,11 +108,14 @@ link_skill_dir() {
     local target="$HOME/.agents/skills/$(basename "$d")"
     # See claude/scripts/bootstrap.sh: `ln -sfn DIR TARGET` descends into a real
     # TARGET directory rather than replacing it, leaving a nested link that
-    # shadows the skill. The symlink-only sweep above cannot clear that.
+    # shadows the skill. The symlink-only sweep above cannot clear that — and it
+    # exists to protect user-added skills, so clear it by moving, never deleting.
     if [ -e "$target" ] && [ ! -L "$target" ]; then
-        rm -rf "$target"
+        local stale="$target.stale.$(date +%s)"
+        mv "$target" "$stale" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
+        echo "warn: moved stale $target → $stale" >&2
     fi
-    ln -sfn "$d" "$target"
+    ln -sfn "$d" "$target" || echo "warn: cannot link $target → $d" >&2
 }
 for d in "$AI_DIR/skills/"*/; do link_skill_dir "$d"; done
 for d in "$AI_DIR/skills/private/"*/; do link_skill_dir "$d"; done
