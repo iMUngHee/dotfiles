@@ -46,13 +46,18 @@ fast_default_opt_out = true
 # Codex generates them with absolute, per-install paths (node_repl points into
 # a versioned runtime directory, cua_repl at the desktop app binary) — nothing
 # that survives a move to another machine. pager is the opposite: this repo
-# already depends on it (ai/rules/pager.md, and the pager hooks below), it is
-# built to ~/.local/bin on every platform, and it is invoked by name, so one
-# portable declaration works everywhere.
+# already depends on it (ai/rules/pager.md, and the pager hooks below) and it is
+# invoked by name, so one portable declaration works everywhere.
 #
 # Without this the MCP surface was invisible to the dotfiles: registered by
 # hand on the Mac, absent on every new machine, with nothing to notice the gap.
 # The deep-merge enforces only this key, so node_repl and cua_repl survive.
+#
+# pager itself is NOT installed by this repo on macOS/Linux — only
+# windows/scripts/install-pager.ps1 builds it (upstream: github.com/iMUngHee/pager,
+# `make build` → ~/.local/bin/pager). So this block is conditional at deploy time:
+# codex/scripts/bootstrap.sh drops it when the binary is absent, mirroring the
+# `command -v pager` guard claude/scripts/bootstrap.sh applies on the Claude side.
 [mcp_servers.pager]
 command = "pager"
 args = ["mcp"]
@@ -86,7 +91,7 @@ statusMessage = "codex active plan context"
 # no mid-turn injection point and the event lists differ on purpose.
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
-command = "pager hook"
+command = "if command -v pager >/dev/null 2>&1; then pager hook; fi"
 timeout = 10
 statusMessage = "pager delivery"
 
@@ -111,7 +116,7 @@ statusMessage = "codex edit pipeline"
 
 [[hooks.SessionStart.hooks]]
 type = "command"
-command = "pager hook"
+command = "if command -v pager >/dev/null 2>&1; then pager hook; fi"
 timeout = 10
 statusMessage = "pager delivery"
 
