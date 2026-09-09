@@ -10,6 +10,7 @@ return {
         "gofumpt",
         "goimports",
         "beautysh",
+        "fantomas",
       },
     },
   },
@@ -44,6 +45,7 @@ return {
         sh = { "beautysh" },
         bash = { "beautysh" },
         java = { "palantir-java-format" },
+        fsharp = { "fantomas" },
       },
       format_on_save = {
         lsp_format = "fallback",
