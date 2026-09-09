@@ -54,6 +54,10 @@ return {
           "nginx_language_server",
           "jdtls",
           "kotlin_lsp",
+          -- mason pulls fsautocomplete from nuget, so the dotnet SDK has to be
+          -- on PATH: winget Microsoft.DotNet.SDK.8 (Windows), pacman dotnet-sdk
+          -- (Omarchy), already present on the Mac.
+          "fsautocomplete",
         },
       })
     end,
