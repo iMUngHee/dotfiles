@@ -1,6 +1,6 @@
 ---
 name: worktree
-description: "Create a git worktree under .agents/worktrees/<branch> with the pm store wired in and dependencies installed, for an isolated parallel checkout. Skip in-place edits that need no isolation."
+description: "Create a git worktree under .agents/worktrees/ named for the branch, with the pm store wired in and dependencies installed, for an isolated parallel checkout. Skip in-place edits that need no isolation."
 argument-hint: "<target-branch> [base-branch]"
 allowed-tools: Bash, Read, Glob, Grep
 disable-model-invocation: true
