@@ -46,7 +46,7 @@ Write-Step "npm globals"
 if (-not (Test-Command 'npm')) {
     Add-Warn "npm not on PATH - skipped"
 } else {
-    npm update -g --allow-scripts=tree-sitter-cli
+    npm update -g tree-sitter-cli
     if ($LASTEXITCODE -ne 0) { Add-Warn "npm update -g exited $LASTEXITCODE" }
 
     # Re-copy the real binary. npm's global bin holds an extensionless sh shim
