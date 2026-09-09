@@ -30,8 +30,17 @@ fi
 } >> "$LOG_FILE"
 
 # Rotate if > 512KB
+#
+# GNU spells the size -c %s and BSD -f %z, and GNU is asked first: BSD has no -c
+# and refuses it printing nothing, while GNU does have -f — it means "file
+# system" — and answers with a block of statistics instead. Asking BSD first is
+# why this only ever rotated on macOS. The numeric guard makes a surprise from
+# either one harmless: anything that is not a plain number reads as 0, which
+# only ever skips a rotation.
 MAX_SIZE=$((512 * 1024))
-if [[ -f "$LOG_FILE" ]] && [[ $(stat -f%z "$LOG_FILE" 2>/dev/null || echo 0) -gt $MAX_SIZE ]]; then
+LOG_SIZE=$(stat -c %s "$LOG_FILE" 2>/dev/null || stat -f %z "$LOG_FILE" 2>/dev/null || echo 0)
+case "$LOG_SIZE" in '' | *[!0-9]*) LOG_SIZE=0 ;; esac
+if [[ -f "$LOG_FILE" ]] && [[ "$LOG_SIZE" -gt $MAX_SIZE ]]; then
   tail -100 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
 fi
 
