@@ -88,6 +88,38 @@ run no hooks, which is why `claude/CLAUDE.md` scopes its "Hook-Enforced" section
 explicitly — a protection that is only asserted, never executed, is worse than
 no claim at all.
 
+## Updating
+
+`buu` — the same name as the Mac alias, and deliberately more than
+`winget upgrade --all`. brew owns nearly everything on macOS; winget does not,
+because four things here have no winget package at all:
+
+| Source | What | Why not winget |
+|---|---|---|
+| winget + msstore | every CLI, runtime and app in `packages.ps1` | — |
+| `go install` | `pager` | not packaged anywhere, no release binaries |
+| `npm -g` | `tree-sitter-cli` | not in winget |
+| PSGallery | `PSReadLine`, `PSFzf` | PowerShell modules, not packages |
+| GitHub release | FiraCode Nerd Font | winget's only Nerd Font is JetBrainsMono |
+
+`winget upgrade --all` on its own silently leaves all four behind, and one of
+them fails quietly rather than loudly: upgrading `tree-sitter-cli` through npm
+does not touch the copy of `tree-sitter.exe` that `packages.ps1` places ahead of
+npm's sh shim on PATH, so Neovim would keep running the old binary. `buu`
+re-copies it.
+
+```powershell
+buu          # everything except the font
+buu -Font    # also re-check ryanoasis/nerd-fonts (27 MB download)
+```
+
+Claude Code is winget-installed and `DISABLE_AUTOUPDATER` is set in
+`claude/settings.json`, so it updates only through `buu` — its in-app
+"Update available!" banner is telling you to run exactly this.
+
+Neovim plugins and mason tools are outside all of it: `:Lazy sync`,
+`:MasonUpdate`.
+
 ## Cowork
 
 Cowork runs inside the Claude Desktop app (`winget install --id Anthropic.Claude`),
