@@ -107,13 +107,24 @@ $Optional = @(
 #                   pins is not in it. windows/scripts/install-nerdfont.ps1
 #                   fetches it from ryanoasis/nerd-fonts instead.
 
+# ── Microsoft Store ────────────────────────────────────────────────────────
+# The Codex desktop app is not in the winget community repo - the only
+# OpenAI-published entry there is the CLI. OpenAI folded Codex into the ChatGPT
+# desktop app, which ships through the Store; the Appx it installs is literally
+# named OpenAI.Codex. The winget repo's "ChatGPT" hits (j178, lencx, sonnylab)
+# are third-party wrappers, not this.
+$StoreApps = @(
+    @{ id = '9PLM9XGG6VKS';                   note = 'ChatGPT desktop = the Codex app (Publisher: OpenAI)' }
+)
+
 $groups = @(
     @{ name = 'shell + terminal'; items = $Shell },
     @{ name = 'cli';              items = $Cli },
     @{ name = 'runtimes';         items = $Runtimes }
 )
 if (-not $SkipOptional) {
-    $groups += @{ name = 'apps + fonts'; items = $Optional }
+    $groups += @{ name = 'apps + fonts';  items = $Optional }
+    $groups += @{ name = 'store apps';    items = $StoreApps; source = 'msstore' }
 }
 
 if (-not (Test-Command 'winget')) {
@@ -137,7 +148,11 @@ function Test-PackageInstalled {
 }
 
 foreach ($group in $groups) {
-    Write-Step "winget: $($group.name)"
+    # Groups default to the winget community repo; only the Store group differs.
+    $source = 'winget'
+    if ($group.ContainsKey('source')) { $source = $group.source }
+
+    Write-Step "winget[$source]: $($group.name)"
     foreach ($pkg in $group.items) {
         $id = $pkg.id
         if (Test-PackageInstalled -Id $id) {
@@ -149,7 +164,7 @@ foreach ($group in $groups) {
             continue
         }
         Write-Host "   installing $id  ($($pkg.note))"
-        winget install --id $id --exact --source winget `
+        winget install --id $id --exact --source $source `
             --accept-source-agreements --accept-package-agreements `
             --disable-interactivity --silent | Out-Null
         if ($LASTEXITCODE -ne 0) {

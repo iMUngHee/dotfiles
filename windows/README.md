@@ -68,6 +68,26 @@ Flags: `-SkipPackages`, `-SkipOptional` (no desktop apps or fonts),
 
 Re-run any time with `cfg-sync`.
 
+## AI surfaces on this machine
+
+| Surface | How it installs | Hooks run? |
+|---|---|---|
+| Claude Code (CLI) | winget `Anthropic.ClaudeCode` | yes, through Git Bash |
+| Claude Desktop / Cowork | winget `Anthropic.Claude` | no |
+| Codex CLI | winget `OpenAI.Codex` | yes, through Git Bash |
+| Codex desktop app | Microsoft Store `9PLM9XGG6VKS` | no |
+
+The Codex desktop app is the one package here that does not come from the winget
+community repo. The only OpenAI-published entry there is the CLI; OpenAI folded
+Codex into the ChatGPT desktop app, which ships through the Store — and the Appx
+it installs is in fact named `OpenAI.Codex`. The `ChatGPT` results in the winget
+repo (`j178`, `lencx`, `sonnylab`) are third-party wrappers, not this.
+
+The two GUI surfaces read the same deployed `~/.claude` and `~/.codex` files but
+run no hooks, which is why `claude/CLAUDE.md` scopes its "Hook-Enforced" section
+explicitly — a protection that is only asserted, never executed, is worse than
+no claim at all.
+
 ## Cowork
 
 Cowork runs inside the Claude Desktop app (`winget install --id Anthropic.Claude`),
