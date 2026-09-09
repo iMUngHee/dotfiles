@@ -112,7 +112,9 @@ deployed copies.
 - ~/.claude/CLAUDE.md and ~/.claude/MEMORY.md are generated. Direct edits are lost.
 - The PowerShell profile in Documents\ is a stub; the real one is
   ~/.config/windows/profile.ps1 and takes effect on the next prompt.
-- Windows Terminal settings.json was merged, not replaced (backup: .bak).
+- Windows Terminal settings.json was merged, not replaced. The merge rewrites it
+  from parsed JSON, so any comments you had are gone; settings.json.bak keeps the
+  pristine pre-merge copy and is never overwritten by a later run.
 - Cowork holds its own copy of each skill. Re-run 'cowork-skills' and re-upload
   after editing a SKILL.md.
 - Re-run this script any time with 'cfg-sync'.
