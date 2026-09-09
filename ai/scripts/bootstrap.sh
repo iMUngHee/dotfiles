@@ -25,14 +25,54 @@ echo "=== ai orchestrator bootstrap ==="
 echo "Root:   $ROOT_DIR"
 
 # ── 1. Backup (unless --no-backup) ──
+# The scratch directories are skipped, which is what makes this survivable while
+# a session of the tool being backed up is open. Codex keeps a lock file under
+# ~/.codex/tmp for the life of a run; on Windows that file is opened with no
+# sharing, so reading it fails outright — "Device or resource busy" — and under
+# set -e that aborted the whole deploy before a single file was linked. Unix
+# never saw it because an advisory lock there does not block a read.
+#
+# tmp and .tmp are the same directory under two names across Codex versions;
+# skipping only one leaves the identical failure reachable. Neither holds
+# anything a restore would want.
+#
+# cp has no exclude, so the entries are enumerated instead of copying the
+# directory whole.
+backup_dir() {
+    src=$1
+    dest=$2
+    mkdir -p "$dest"
+    # cp -a on the directory itself carried the directory's own mode across;
+    # mkdir uses the umask instead, and ~/.codex holds auth.json, so a backup
+    # must not end up more readable than what it copied. GNU spells the mode
+    # -c %a and BSD -f %Lp, and GNU is asked first because BSD has no -c to
+    # misread, while GNU's -f means "file system" and would answer with
+    # statistics rather than refusing. Windows has no mode bits to read, so
+    # nothing is found and nothing is set.
+    dir_mode=$(stat -c %a "$src" 2>/dev/null || stat -f %Lp "$src" 2>/dev/null || echo "")
+    case "$dir_mode" in
+        [0-7][0-7][0-7] | [0-7][0-7][0-7][0-7]) chmod "$dir_mode" "$dest" ;;
+    esac
+    # Three globs, because one cannot name every entry cp -a would have copied:
+    # * skips dotfiles, .[!.]* skips anything whose second character is a dot,
+    # and ..?* picks up that remainder without ever matching . or .. themselves.
+    for entry in "$src"/* "$src"/.[!.]* "$src"/..?*; do
+        [ -e "$entry" ] || continue
+        case "${entry##*/}" in
+            tmp | .tmp) continue ;;
+        esac
+        cp -a "$entry" "$dest/"
+    done
+}
+
 if [ "$NO_BACKUP" -eq 0 ]; then
     TS=$(date +%s)
     if [ -d "$HOME/.claude" ] && [ ! -L "$HOME/.claude" ]; then
-        cp -a "$HOME/.claude" "$HOME/.claude.bak.$TS"
+        backup_dir "$HOME/.claude" "$HOME/.claude.bak.$TS"
         echo "Backed up ~/.claude → ~/.claude.bak.$TS"
     fi
     if [ -d "$HOME/.codex" ] && [ ! -L "$HOME/.codex" ]; then
-        cp -a "$HOME/.codex" "$HOME/.codex.bak.$TS"
+        backup_dir "$HOME/.codex" "$HOME/.codex.bak.$TS"
         echo "Backed up ~/.codex → ~/.codex.bak.$TS"
     fi
 fi
