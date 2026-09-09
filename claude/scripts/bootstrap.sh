@@ -178,4 +178,25 @@ else
     cp "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json"
 fi
 
+# ── 8. pager MCP server ──
+# pager's MCP surface — msg_list, msg_roster, msg_send — is exactly what
+# ai/memory/feedback_pager_poll_during_long_turns.md instructs the model to call
+# mid-turn instead of waiting for hook delivery. Claude Code keeps MCP servers in
+# ~/.claude.json, its own state file, which this repo does not track: so on a
+# fresh machine the rule was unusable, because the tools it names simply did not
+# exist. Nothing surfaced that — the rule reads fine and just never applies.
+#
+# Codex gets the same server from codex/config.toml.template, whose deep-merge
+# does carry it. This is the Claude-side equivalent, done through the CLI rather
+# than by editing ~/.claude.json by hand.
+if command -v claude &>/dev/null && command -v pager &>/dev/null; then
+    if claude mcp get pager &>/dev/null; then
+        echo "pager MCP server already registered."
+    elif claude mcp add --scope user pager -- pager mcp &>/dev/null; then
+        echo "Registered pager MCP server (user scope)."
+    else
+        echo "WARN: could not register the pager MCP server."
+    fi
+fi
+
 echo "=== claude bootstrap done ==="

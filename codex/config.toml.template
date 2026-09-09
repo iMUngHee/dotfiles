@@ -1,6 +1,7 @@
 # codex/config.toml.template — keys ENFORCED on every bootstrap (deep-merge).
-# All other keys (trust levels, NUX counters, mcp_servers, etc.) are
-# user/machine-managed and preserved by the merge.
+# All other keys (trust levels, NUX counters, most mcp_servers, etc.) are
+# user/machine-managed and preserved by the merge. The one exception is
+# mcp_servers.pager — see the comment on that block.
 
 project_doc_max_bytes = 65536
 model = "gpt-6-astra"
@@ -40,6 +41,21 @@ fast_default_opt_out = true
 "/tmp/agent-notifier.sock" = "allow"
 "/private/tmp/tmux-__UID__/default" = "allow"
 "/tmp/tmux-__UID__/default" = "allow"
+
+# The one enforced mcp_servers entry. The rest stay machine-managed because
+# Codex generates them with absolute, per-install paths (node_repl points into
+# a versioned runtime directory, cua_repl at the desktop app binary) — nothing
+# that survives a move to another machine. pager is the opposite: this repo
+# already depends on it (ai/rules/pager.md, and the pager hooks below), it is
+# built to ~/.local/bin on every platform, and it is invoked by name, so one
+# portable declaration works everywhere.
+#
+# Without this the MCP surface was invisible to the dotfiles: registered by
+# hand on the Mac, absent on every new machine, with nothing to notice the gap.
+# The deep-merge enforces only this key, so node_repl and cua_repl survive.
+[mcp_servers.pager]
+command = "pager"
+args = ["mcp"]
 
 [hooks]
 
