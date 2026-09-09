@@ -74,7 +74,7 @@ Re-run any time with `cfg-sync`.
 |---|---|---|
 | Claude Code (CLI) | winget `Anthropic.ClaudeCode` | yes, through Git Bash |
 | Claude Desktop / Cowork | winget `Anthropic.Claude` | no |
-| Codex CLI | winget `OpenAI.Codex` | yes, through Git Bash |
+| Codex CLI | npm `@openai/codex` | yes, through Git Bash |
 | Codex desktop app | Microsoft Store `9PLM9XGG6VKS` | no |
 
 The Codex desktop app is the one package here that does not come from the winget
@@ -98,7 +98,7 @@ because four things here have no winget package at all:
 |---|---|---|
 | winget + msstore | every CLI, runtime and app in `packages.ps1` | — |
 | `go install` | `pager` | not packaged anywhere, no release binaries |
-| `npm -g` | `tree-sitter-cli` | not in winget |
+| `npm -g` | `tree-sitter-cli`, `@openai/codex` | not in winget / manifest 5 weeks stale |
 | PSGallery | `PSReadLine`, `PSFzf` | PowerShell modules, not packages |
 | GitHub release | FiraCode Nerd Font | winget's only Nerd Font is JetBrainsMono |
 
@@ -116,6 +116,12 @@ buu -Font    # also re-check ryanoasis/nerd-fonts (27 MB download)
 Claude Code is winget-installed and `DISABLE_AUTOUPDATER` is set in
 `claude/settings.json`, so it updates only through `buu` — its in-app
 "Update available!" banner is telling you to run exactly this.
+
+The Codex CLI moved off winget for the opposite reason: `winget upgrade`
+answered "no available upgrade" while Codex itself advertised one, because the
+community manifest was pinned to 0.146.1 (2026-08-05) five weeks after upstream
+had shipped 0.153.4 (2026-09-04). npm is OpenAI's own channel and matches
+upstream, so `buu` now actually moves it.
 
 Neovim plugins and mason tools are outside all of it: `:Lazy sync`,
 `:MasonUpdate`.
