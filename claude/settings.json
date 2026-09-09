@@ -220,7 +220,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pager hook",
+            "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
             "timeout": 10000,
             "statusMessage": "pager delivery"
           }
@@ -239,7 +239,7 @@
           },
           {
             "type": "command",
-            "command": "pager hook",
+            "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
             "timeout": 10000,
             "statusMessage": "pager delivery"
           }
@@ -263,7 +263,7 @@
           },
           {
             "type": "command",
-            "command": "pager hook",
+            "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
             "timeout": 10000,
             "statusMessage": "pager delivery"
           }
