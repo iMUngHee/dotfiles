@@ -53,6 +53,13 @@ LAUNCHD_LABEL="com.agent.notifier"
 ensure_daemon() {
     [ -S "$SOCKET" ] && return 0
     case "$(uname -s)" in
+        MINGW* | MSYS* | CYGWIN*)
+            # Windows has no daemon and no unix socket: the sender shim talks to
+            # the OS notification service directly (windows/notifier/toast.ps1).
+            # Returning here skips the 3s socket wait below, which would
+            # otherwise be paid on every single hook invocation.
+            return 0
+            ;;
         Darwin)
             # If launchd agent exists, restart via kickstart (avoids open -n which goes through Gatekeeper)
             if launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" &>/dev/null; then
