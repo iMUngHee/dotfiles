@@ -133,7 +133,19 @@ link_skill_dir() {
     local d="$1"
     [ -d "$d" ] || return 0
     [ -f "$d/SKILL.md" ] || return 0
-    ln -sfn "$d" "$CLAUDE_DIR/skills/$(basename "$d")"
+    local target="$CLAUDE_DIR/skills/$(basename "$d")"
+    # `ln -sfn DIR TARGET` descends into TARGET when TARGET is a real directory,
+    # creating TARGET/$(basename DIR) instead of replacing TARGET — so a stale
+    # real directory silently survives and shadows the skill with a nested link.
+    # The sweep above only deletes symlinks (to preserve user-added skills), so
+    # nothing else clears it. This is reachable whenever a previous deploy left
+    # copies behind: on Windows that happens if MSYS=winsymlinks:nativestrict is
+    # unset or Developer Mode is off, which is exactly the degraded mode
+    # windows/scripts/deploy-ai.ps1 checks for.
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+        rm -rf "$target"
+    fi
+    ln -sfn "$d" "$target"
 }
 for d in "$AI_DIR/skills/"*/;          do link_skill_dir "$d"; done
 for d in "$AI_DIR/skills/private/"*/;  do link_skill_dir "$d"; done
