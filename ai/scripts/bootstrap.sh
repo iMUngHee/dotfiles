@@ -21,6 +21,19 @@ for arg in "$@"; do
     esac
 done
 
+# Windows: `ln -s` has to create real NTFS symlinks, not MSYS's default copies.
+# windows/scripts/deploy-ai.ps1 exports this before calling in, but it is not the
+# only caller: githooks/post-merge runs this script directly after a pull, and so
+# does a hand-run from a shell. Those inherit MSYS unset, and copy mode cannot
+# write over a symlink an earlier nativestrict deploy left behind — `ln -sfn` on
+# it fails with ENOTDIR and set -e aborts the whole deploy at the first one
+# (claude/scripts/bootstrap.sh links hooks/ before anything else). It also leaves
+# the half-made copy behind as a random-named directory in ~/.claude.
+# Setting it here instead of in each caller makes every entry point agree.
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*) export MSYS=winsymlinks:nativestrict ;;
+esac
+
 echo "=== ai orchestrator bootstrap ==="
 echo "Root:   $ROOT_DIR"
 
