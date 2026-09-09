@@ -142,10 +142,18 @@ link_skill_dir() {
     # copies behind: on Windows that happens if MSYS=winsymlinks:nativestrict is
     # unset or Developer Mode is off, which is exactly the degraded mode
     # windows/scripts/deploy-ai.ps1 checks for.
+    # Move, never delete: a real directory here is usually a stale copy, but it
+    # can equally be a user-added skill that happens to share the name, and the
+    # symlink-only sweep above exists precisely to protect those. Moving is
+    # recoverable and self-limiting — the next deploy finds a symlink and never
+    # re-enters this branch.
     if [ -e "$target" ] && [ ! -L "$target" ]; then
-        rm -rf "$target"
+        local stale="$target.stale.$(date +%s)"
+        mv "$target" "$stale" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
+        echo "warn: moved stale $target → $stale" >&2
     fi
-    ln -sfn "$d" "$target"
+    # Never fatal: one unlinkable skill must not abort the rest of the deploy.
+    ln -sfn "$d" "$target" || echo "warn: cannot link $target → $d" >&2
 }
 for d in "$AI_DIR/skills/"*/;          do link_skill_dir "$d"; done
 for d in "$AI_DIR/skills/private/"*/;  do link_skill_dir "$d"; done
