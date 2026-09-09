@@ -74,25 +74,33 @@ if (-not $SkipPackages -and -not $SkipOptional) {
     & (Join-Path $Scripts 'install-nerdfont.ps1')
 }
 
-# -- 4. Shell + terminal + editor ------------------------------
+# -- 4. pager (built from source; no winget package) -----------
+# Before the AI deploy on purpose: claude/settings.json guards its pager hooks
+# on `command -v pager`, so building it first means the very first deployed
+# session already has message delivery instead of silently skipping it.
+if (-not $SkipPackages) {
+    & (Join-Path $Scripts 'install-pager.ps1')
+}
+
+# -- 5. Shell + terminal + editor ------------------------------
 & (Join-Path $Scripts 'deploy-shell.ps1')
 
-# -- 5. Claude / Codex config (delegates to the POSIX bootstrap) -
+# -- 6. Claude / Codex config (delegates to the POSIX bootstrap) -
 $aiArgs = @()
 if ($NoBackup) { $aiArgs += '--no-backup' }
 & (Join-Path $Scripts 'deploy-ai.ps1') -BootstrapArgs $aiArgs
 
-# -- 6. Notifier -----------------------------------------------
+# -- 7. Notifier -----------------------------------------------
 & (Join-Path $Scripts 'deploy-notifier.ps1')
 
-# -- 7. Cowork -------------------------------------------------
+# -- 8. Cowork -------------------------------------------------
 if ($SkipCowork) {
     Write-Step "Cowork (skipped)"
 } else {
     & (Join-Path $Scripts 'deploy-cowork.ps1')
 }
 
-# -- 8. Summary ------------------------------------------------
+# -- 9. Summary ------------------------------------------------
 Show-WarnSummary
 
 Write-Host ""

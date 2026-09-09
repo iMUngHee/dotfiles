@@ -49,7 +49,30 @@ $Runtimes = @(
     @{ id = 'GoLang.Go';                      note = 'brew "go" - also builds notifier/send.go' },
     @{ id = 'Rustlang.Rustup';                note = 'brew "rustup"' },
     @{ id = 'Python.Python.3.13';             note = 'brew "python" - the WindowsApps python is a Store stub' },
-    @{ id = 'OpenJS.NodeJS';                  note = 'node - ai/lib/*.mjs tests and skill tooling need it' }
+    @{ id = 'OpenJS.NodeJS';                  note = 'node - ai/lib/*.mjs tests and skill tooling need it' },
+    # nvim-treesitter compiles every parser from C. macOS has clang from the
+    # Command Line Tools and Linux has gcc, so the Brewfile never had to name a
+    # compiler; Windows ships none, and the tree-sitter CLI is built for the
+    # MSVC target so it demands cl.exe. zig supplies a full C toolchain
+    # (compiler + headers + libc) in one small package instead of several GB of
+    # Visual Studio Build Tools. windows/profile.ps1 points CC at it and
+    # rewrites the target triple for the nvim call only.
+    @{ id = 'zig.zig';                        note = 'C toolchain for nvim-treesitter parser builds' },
+    # nvim/after/lsp/jdtls.lua needs a JDK, and mason installs groovyls/jdtls
+    # which both refuse to start without java on PATH.
+    @{ id = 'EclipseAdoptium.Temurin.21.JDK';  note = 'JDK for jdtls + groovyls (mason)' }
+)
+
+# ── npm globals - the packages winget has no entry for ──────────────────────
+# Kept to the minimum: anything winget carries belongs above.
+$NpmGlobals = @(
+    # brew "tree-sitter-cli". nvim-treesitter's `main` branch calls the
+    # tree-sitter CLI to generate a parser before compiling it, so without this
+    # every :TSInstall fails with ENOENT: 'tree-sitter'.
+    # --allow-scripts is required: the package's postinstall is what downloads
+    # the actual binary, and npm now blocks install scripts by default, which
+    # leaves a package that installs "successfully" but provides no executable.
+    @{ id = 'tree-sitter-cli'; note = 'brew "tree-sitter-cli" - nvim-treesitter parser builds' }
 )
 
 # -- Optional: desktop apps + fonts -----------------------------------------
@@ -59,6 +82,7 @@ $Runtimes = @(
 $Optional = @(
     @{ id = 'Anthropic.Claude';               note = 'Claude Desktop - hosts Cowork on Windows' },
     @{ id = 'Anthropic.ClaudeCode';           note = 'cask "claude-code@latest"' },
+    @{ id = 'OpenAI.Codex';                   note = 'cask "codex" / brew "codex" - gates the codex/ deploy' },
     @{ id = 'Obsidian.Obsidian';              note = 'cask "obsidian" / flatpak md.obsidian.Obsidian' }
 )
 
@@ -67,8 +91,11 @@ $Optional = @(
 # ghostty           no Windows build; Windows Terminal + our theme instead
 # coreutils         Git Bash already ships the GNU userland used by the hooks
 # kotlin / gradle   JVM toolchain not used on this machine
-# tree-sitter-cli   installed by nvim's lazy.nvim on first launch
+# tree-sitter-cli   not in winget; installed from npm below
 # rtk / ccusage     no winget package; install per their own docs if wanted
+# pager             no winget package and no public installer. claude/settings.json
+#                   guards its hook invocation on uname, so its absence is silent
+#                   rather than an error on every hook event.
 # pipx / pipenv     superseded by uv here
 # luajit            bundled with the Neovim Windows build
 # FiraCode Nerd Font  winget's entire Nerd Font catalogue is one package
@@ -133,5 +160,47 @@ foreach ($group in $groups) {
     }
 }
 
+# Refresh before the npm step: node may have been installed moments ago in this
+# same run, and this process still carries the environment block it started with.
 Update-PathFromRegistry
-Write-Step "winget done"
+
+Write-Step "npm globals"
+if (-not (Test-Command 'npm')) {
+    Add-Warn "npm not on PATH - skipped: $(($NpmGlobals | ForEach-Object { $_.id }) -join ', ')"
+} else {
+    foreach ($pkg in $NpmGlobals) {
+        $id = $pkg.id
+        npm ls -g --depth=0 $id *> $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "$id - present, skip"
+            continue
+        }
+        if ($DryRun) {
+            Write-Host "   would install $id  ($($pkg.note))"
+            continue
+        }
+        Write-Host "   installing $id  ($($pkg.note))"
+        npm install -g --allow-scripts=$id $id *> $null
+        if ($LASTEXITCODE -ne 0) {
+            Add-Warn "npm install failed for $id (exit $LASTEXITCODE)"
+        }
+    }
+    Update-PathFromRegistry
+
+    # npm's global bin holds three shims per executable: `tree-sitter` (an sh
+    # script, for Git Bash), `tree-sitter.cmd` and `tree-sitter.ps1`. Neovim
+    # resolves the bare, extensionless one and then libuv cannot spawn it, so
+    # every parser build dies with a bare "ENOENT: no such file or directory"
+    # that never names the file. Copying the real binary somewhere earlier on
+    # PATH is what makes vim.system reach an actual executable.
+    $realExe = Join-Path $env:APPDATA 'npm\node_modules\tree-sitter-cli\tree-sitter.exe'
+    if (Test-Path $realExe) {
+        $localBin = Join-Path $HOME '.local\bin'
+        if (-not (Test-Path $localBin)) { New-Item -ItemType Directory -Path $localBin -Force | Out-Null }
+        Copy-Item $realExe (Join-Path $localBin 'tree-sitter.exe') -Force
+        Add-UserPath -Directory $localBin -Prepend | Out-Null
+        Write-Ok "tree-sitter.exe -> $localBin (ahead of npm's sh shim)"
+    }
+}
+
+Write-Step "packages done"

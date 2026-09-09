@@ -135,7 +135,33 @@ if (Get-Command eza -ErrorAction SilentlyContinue) {
     function l { Get-ChildItem -Force @args }
 }
 
-if (Get-Command nvim -ErrorAction SilentlyContinue) {
+if (Get-Command nvim.exe -ErrorAction SilentlyContinue) {
+    if (Get-Command zig -ErrorAction SilentlyContinue) {
+        # nvim-treesitter (main branch) compiles every parser by shelling out to
+        # `tree-sitter build`. That CLI is built for the MSVC target, so its cc
+        # crate looks for cl.exe and fails with "program not found" on a machine
+        # with no Visual Studio - which is what breaks :TSInstall on Windows.
+        #
+        # zig ships a complete C toolchain, headers and all, in one small
+        # package. The only obstacle is the triple: cc passes the four-field
+        # x86_64-pc-windows-msvc, which zig rejects as UnknownOperatingSystem.
+        # clang takes the LAST -target on the command line, so appending zig's
+        # own three-field gnu triple through CFLAGS overrides it.
+        #
+        # Deliberately scoped to this wrapper rather than exported: a global
+        # CFLAGS pinning a zig-specific target would be inherited by every other
+        # C build on the machine (cgo, node-gyp, native npm modules).
+        function nvim {
+            $prevCC = $env:CC
+            $prevCFLAGS = $env:CFLAGS
+            $env:CC = 'zig cc'
+            $env:CFLAGS = '-target x86_64-windows-gnu'
+            try { nvim.exe @args } finally {
+                $env:CC = $prevCC
+                $env:CFLAGS = $prevCFLAGS
+            }
+        }
+    }
     function vim { nvim @args }
     function vi  { nvim @args }
 }

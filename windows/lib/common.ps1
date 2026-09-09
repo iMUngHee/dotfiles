@@ -73,6 +73,51 @@ function Update-PathFromRegistry {
     $env:Path = ($parts -join ';')
 }
 
+# Append a directory to the persistent per-user PATH.
+#
+# Session-only ($env:Path) is not enough for anything a hook has to find: hooks
+# inherit the environment of whatever terminal launched Claude Code, and that
+# terminal reads PATH from the registry at start. A tool installed here but only
+# added to $env:Path is invisible to every hook.
+function Add-UserPath {
+    param(
+        [Parameter(Mandatory)][string]$Directory,
+        # Order matters when two directories provide the same command name. npm
+        # installs three shims per package - an extensionless sh script, a .cmd
+        # and a .ps1 - and Neovim's uv.spawn picks the extensionless one and
+        # then cannot execute it. Prepending a directory holding the real .exe
+        # is what makes the right file win.
+        [switch]$Prepend
+    )
+
+    $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $entries = @()
+    if ($user) { $entries = @($user -split ';' | Where-Object { $_.Trim() -ne '' }) }
+
+    # Compare case-insensitively and without a trailing slash so re-running does
+    # not append a second, cosmetically different copy.
+    $normalized = $Directory.TrimEnd('\')
+    $existingIndex = -1
+    for ($i = 0; $i -lt $entries.Count; $i++) {
+        if ($entries[$i].TrimEnd('\') -ieq $normalized) { $existingIndex = $i; break }
+    }
+
+    if ($existingIndex -ge 0) {
+        # Already present and already early enough - nothing to do.
+        if (-not $Prepend -or $existingIndex -eq 0) { return $false }
+        $entries = @($entries | Where-Object { $_.TrimEnd('\') -ine $normalized })
+    }
+
+    if ($Prepend) {
+        $entries = @($Directory) + $entries
+    } else {
+        $entries += $Directory
+    }
+    [System.Environment]::SetEnvironmentVariable("Path", ($entries -join ';'), "User")
+    Update-PathFromRegistry
+    return $true
+}
+
 # -- Git for Windows / Git Bash --------------------------------
 # The AI-config deploy reuses the POSIX bootstrap under Git Bash rather than
 # reimplementing it in PowerShell, so bash stays the single source of truth for
