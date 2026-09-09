@@ -76,7 +76,14 @@ $NpmGlobals = @(
     # --allow-scripts is required: the package's postinstall is what downloads
     # the actual binary, and npm now blocks install scripts by default, which
     # leaves a package that installs "successfully" but provides no executable.
-    @{ id = 'tree-sitter-cli'; note = 'brew "tree-sitter-cli" - nvim-treesitter parser builds' }
+    @{ id = 'tree-sitter-cli'; note = 'brew "tree-sitter-cli" - nvim-treesitter parser builds' },
+    # cask "codex" / brew "codex" on the Mac. Deliberately NOT winget: the
+    # community manifest for OpenAI.Codex sat on 0.146.1 (published 2026-08-05)
+    # while upstream was already 0.153.4 (2026-09-04), and `winget upgrade`
+    # cannot offer what the manifest does not carry - it just reports "no
+    # available upgrade" while the CLI keeps showing its own update banner.
+    # npm is OpenAI's own distribution channel and tracks releases exactly.
+    @{ id = '@openai/codex';   note = 'Codex CLI - gates the codex/ deploy' }
 )
 
 # -- Optional: desktop apps + fonts -----------------------------------------
@@ -86,7 +93,6 @@ $NpmGlobals = @(
 $Optional = @(
     @{ id = 'Anthropic.Claude';               note = 'Claude Desktop - hosts Cowork on Windows' },
     @{ id = 'Anthropic.ClaudeCode';           note = 'cask "claude-code@latest"' },
-    @{ id = 'OpenAI.Codex';                   note = 'cask "codex" / brew "codex" - gates the codex/ deploy' },
     @{ id = 'Obsidian.Obsidian';              note = 'cask "obsidian" / flatpak md.obsidian.Obsidian' }
 )
 
