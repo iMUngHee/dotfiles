@@ -102,6 +102,20 @@ $report = foreach ($name in ($skills.Keys | Sort-Object)) {
 }
 $report | Format-Table Skill, KB, Files, For -AutoSize
 
+# Cowork's uploader rejects a description containing anything that looks like an
+# XML tag: "SKILL.md description cannot contain XML tags". A placeholder written
+# as <branch> is enough. That check runs server-side, one zip at a time, after
+# the file is already picked in a dialog - so without this the first sign of
+# trouble is a red banner partway through a manual upload run.
+foreach ($row in $report) {
+    $desc = $row.Description
+    if (-not $desc) { continue }
+    $tags = [regex]::Matches($desc, '<[/a-zA-Z][^>]*>') | ForEach-Object { $_.Value } | Sort-Object -Unique
+    if ($tags) {
+        Add-Warn "$($row.Skill): description contains $($tags -join ' ') - Cowork will reject this zip. Rewrite the placeholder without angle brackets."
+    }
+}
+
 if ($List) {
     Write-Host "(-List: nothing written)" -ForegroundColor DarkGray
     return
