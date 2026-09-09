@@ -5,7 +5,9 @@
 # Supports: the Anthropic OAuth account in the Keychain
 #
 # Dependencies: jq, curl
-# Platform:     macOS only (Keychain for OAuth tokens)
+# Platform:     macOS, Linux, Windows (Git Bash). The OAuth token comes from the
+#               Keychain on macOS and from ~/.claude/.credentials.json elsewhere;
+#               date/stat calls fall back from BSD to GNU flags.
 #
 # Install: chmod +x statusline.sh
 #          Add to ~/.claude/settings.json: "statusCommand": "/path/to/statusline.sh"
@@ -34,7 +36,12 @@ color_by_pct() {
 # ISO 8601 → " ↻Xh Ym" or "". Requires _now to be set.
 fmt_countdown() {
     local epoch
-    epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${1:0:19}" +%s 2>/dev/null) || return
+    # BSD date (macOS) parses an explicit format with -j -f; GNU date (Linux,
+    # Git Bash) has neither flag and uses -d instead. Try BSD first so macOS
+    # keeps its existing single-call path.
+    epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${1:0:19}" +%s 2>/dev/null) \
+        || epoch=$(date -u -d "${1:0:19}Z" +%s 2>/dev/null) \
+        || return
     local s=$(( epoch - _now ))
     [ "$s" -le 0 ] && return
     local h=$(( s / 3600 )) m=$(( (s % 3600) / 60 ))
@@ -55,7 +62,19 @@ init_oauth_config() {
 # FETCH FUNCTIONS
 # ============================================================================
 resolve_credentials() {
-    cred_json=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+    # macOS keeps the OAuth blob in the Keychain. Every other platform writes
+    # the same JSON to ~/.claude/.credentials.json — identical shape, so only
+    # the source differs and the jq path below is unchanged. Without this branch
+    # `security` is missing off macOS, the token comes back empty, and the whole
+    # plan/5h/7d widget silently renders nothing.
+    case "$(uname -s)" in
+        Darwin)
+            cred_json=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+            ;;
+        *)
+            cred_json=$(cat "$HOME/.claude/.credentials.json" 2>/dev/null)
+            ;;
+    esac
     SUB_TYPE=$(echo "$cred_json" | jq -r '.claudeAiOauth.subscriptionType // empty')
 }
 
@@ -163,7 +182,14 @@ refresh_and_parse_cache() {
 
     # Normal stale → background refresh (current parsed data is acceptable)
     if [ -f "$LOCK_FILE" ]; then
-        local lock_age=$(( _now - $(stat -f %m "$LOCK_FILE" 2>/dev/null || echo 0) ))
+        # stat -f %m is BSD; GNU stat spells the same thing -c %Y. Falling all
+        # the way through to 0 makes the lock look ancient, which only ever
+        # clears a stale lock — the safe direction.
+        local lock_mtime
+        lock_mtime=$(stat -f %m "$LOCK_FILE" 2>/dev/null \
+            || stat -c %Y "$LOCK_FILE" 2>/dev/null \
+            || echo 0)
+        local lock_age=$(( _now - lock_mtime ))
         [ "$lock_age" -gt 30 ] && rm -f "$LOCK_FILE"
     fi
     ( set -o noclobber; echo $$ > "$LOCK_FILE" ) 2>/dev/null && fetch_usage &
