@@ -10,6 +10,7 @@ guardrails.md
 rules/code-review.md
 rules/diagnostics.md
 rules/pager.md
+rules/portability.md
 rules/rationalization.md
 rules/testing.md
 
