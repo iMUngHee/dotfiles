@@ -13,7 +13,9 @@
 !ai/
 !codex/
 !homebrew/
+!windows/
 !.gitignore
+!.gitattributes
 !README.md
 !bootstrap.sh
 
@@ -51,3 +53,7 @@ codex/scripts/sensitive-patterns.local
 homebrew/*
 !homebrew/Brewfile
 !homebrew/bootstrap.sh
+
+# windows — build output and machine-local overrides
+windows/dist/
+windows/private.ps1
