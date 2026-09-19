@@ -15,7 +15,12 @@ macos-titlebar-style = hidden
 macos-option-as-alt = left
 
 # Font
-font-family = FiraCode Nerd Font
+# Quoted so omarchy-font-set can find it: it rewrites this line with
+#   sed -i "s/font-family = \".*\"/font-family = \"$font_name\"/g"
+# which only matches a quoted value. Unquoted, changing the system font
+# from the Omarchy menu left the terminal alone and reported no error.
+# Ghostty accepts either form.
+font-family = "FiraCode Nerd Font"
 font-size = 16
 font-thicken = true
 adjust-cell-height = 15%
