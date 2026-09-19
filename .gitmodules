@@ -1,12 +1,12 @@
 [submodule "zsh/custom/plugins/zsh-autosuggestions"]
 	path = zsh/custom/plugins/zsh-autosuggestions
 	url = https://github.com/zsh-users/zsh-autosuggestions.git
+[submodule "zsh/custom/plugins/zsh-history-substring-search"]
+	path = zsh/custom/plugins/zsh-history-substring-search
+	url = https://github.com/zsh-users/zsh-history-substring-search.git
 [submodule "zsh/custom/plugins/zsh-syntax-highlighting"]
 	path = zsh/custom/plugins/zsh-syntax-highlighting
 	url = https://github.com/zsh-users/zsh-syntax-highlighting.git
-[submodule "alacritty/dracula"]
-	path = alacritty/dracula
-	url = https://github.com/dracula/alacritty
 [submodule "ghostty/shaders"]
 	path = ghostty/shaders
 	url = https://github.com/sahaj-b/ghostty-cursor-shaders
