@@ -11,6 +11,7 @@
 #   3) ~/.zshenv ZDOTDIR       — lib/shell-env.sh
 #   4) oh-my-zsh               — lib/shell-env.sh
 #   5) tmux plugins (tpm)      — lib/tmux-plugins.sh
+#   6) zsh/private.sh stub     — sources arch/zsh.sh
 #
 # There is no step matching homebrew/bootstrap.sh's "Linux-only" block: the
 # ghostty AppImage and the claude.ai install.sh existed because bazzite had no
@@ -43,6 +44,36 @@ done
 . "$ROOT_DIR/lib/shell-env.sh"
 # shellcheck source=../lib/tmux-plugins.sh
 . "$ROOT_DIR/lib/tmux-plugins.sh"
+
+# ── zsh/private.sh stub ─────────────────────────────────────────────────────
+# arch/zsh.sh is tracked, but nothing loads it on its own. .zshrc sources
+# $ZDOTDIR/private.sh at line 178 and that path is gitignored, so a fresh clone
+# arrives with the Omarchy zsh layer present and unreachable — the same silent
+# gap tmux/plugins had. This writes the one line that connects them.
+#
+# A marked block appended rather than a file written: private.sh is the seam for
+# anything genuinely machine-local, so whatever else is in it has to survive.
+# Same idiom as the ~/.zshenv block in lib/shell-env.sh.
+ZSH_PRIVATE="$ROOT_DIR/zsh/private.sh"
+ZSH_PRIVATE_START="# >>> arch-bootstrap >>>"
+ZSH_PRIVATE_END="# <<< arch-bootstrap <<<"
+
+ensure_zsh_private_stub() {
+    local block
+    block="$ZSH_PRIVATE_START
+# Loads the tracked Omarchy zsh layer. Edit arch/zsh.sh, not this block.
+[[ -r \"\$HOME/.config/arch/zsh.sh\" ]] && source \"\$HOME/.config/arch/zsh.sh\"
+$ZSH_PRIVATE_END"
+    if [ ! -f "$ZSH_PRIVATE" ]; then
+        printf '%s\n' "$block" >"$ZSH_PRIVATE"
+        echo "zsh/private.sh created (sources arch/zsh.sh)"
+    elif grep -qF "$ZSH_PRIVATE_START" "$ZSH_PRIVATE"; then
+        echo "zsh/private.sh already sources arch/zsh.sh — unchanged"
+    else
+        printf '\n%s\n' "$block" >>"$ZSH_PRIVATE"
+        echo "zsh/private.sh: appended arch/zsh.sh source block"
+    fi
+}
 
 if ! have pacman; then
     echo "ERROR: pacman not found — this is not an Arch system."   # critical
@@ -85,6 +116,7 @@ else
     ensure_zshenv
     ensure_oh_my_zsh
     ensure_tmux_plugins
+    ensure_zsh_private_stub
 fi
 
 # ── WARN summary (실패가 exit 0에 묻히지 않도록) ────────────────────────────
