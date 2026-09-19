@@ -21,6 +21,10 @@
 !README.md
 !bootstrap.sh
 
+# ghostty / tmux — machine-local overrides, same convention as zsh/private.sh
+ghostty/private.conf
+tmux/private.conf
+
 # nvim
 nvim/.claude/
 nvim/*.log

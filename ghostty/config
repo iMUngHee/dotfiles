@@ -6,6 +6,11 @@
 # Theme
 theme = Catppuccin Mocha
 
+# Machine-local overrides, loaded last so they win. `?` makes the include
+# optional, so a machine without the file (macOS) just keeps the theme above.
+# Same convention as zsh/.zshrc sourcing $ZDOTDIR/private.sh.
+config-file = ?"~/.config/ghostty/private.conf"
+
 # Window
 # window-decoration = false # conflict with "toggle_fullscreen"
 maximize = true
