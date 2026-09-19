@@ -66,8 +66,19 @@ conditional_eval() {
 	fi
 }
 
-## fnm
-conditional_eval fnm env --use-on-cd
+## Runtime version manager — mise where it exists, fnm otherwise.
+## Checked in that order rather than both: each puts a node shim on PATH, and
+## with both active the one evaluated later silently decides which node wins.
+## macOS installs fnm from the Brewfile; the Arch/Omarchy tier has no fnm at
+## all (arch/packages.sh drops it on purpose) and pins node, claude, codex and
+## gh in ~/.config/mise/config.toml instead. Before this, a zsh login there ran
+## neither: the fnm line found nothing and mise was never activated, so only
+## the bare shims on PATH worked and per-directory version switching did not.
+if command -v mise >/dev/null; then
+	conditional_eval mise activate zsh
+else
+	conditional_eval fnm env --use-on-cd
+fi
 
 ## thefuck
 conditional_eval thefuck --alias plz
