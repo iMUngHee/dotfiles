@@ -20,3 +20,14 @@
 *.zip     binary
 *.ttf     binary
 *.otf     binary
+
+# Machine-local lines inside tracked config.
+#
+# Omarchy's display text size slider rewrites font-size in ghostty/config, at a
+# path it hardcodes, so the line cannot be moved out to ghostty/private.conf
+# without the slider silently doing nothing. The clean filter in
+# lib/git-filter-machine-local.sh normalizes that one line on the way into the
+# index, so the working tree keeps this monitor's size while git sees none of
+# it. ai/scripts/bootstrap.sh registers the filter; without it git leaves the
+# content alone, so a machine that has not bootstrapped just sees the diff.
+ghostty/config filter=machine-local

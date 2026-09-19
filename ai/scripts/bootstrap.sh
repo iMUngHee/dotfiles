@@ -141,6 +141,17 @@ if [ -e "$ROOT_DIR/.git" ] && [ -d "$ROOT_DIR/githooks" ]; then
     chmod +x "$ROOT_DIR"/githooks/* 2>/dev/null || true
     git -C "$ROOT_DIR" config core.hooksPath "$ROOT_DIR/githooks"
     echo "Git hooks: core.hooksPath → $ROOT_DIR/githooks"
+
+    # Clean filter for machine-local lines in tracked config — see
+    # .gitattributes and lib/git-filter-machine-local.sh. It lives in the repo's
+    # own config rather than .gitattributes alone because git will not run a
+    # filter command a checkout could supply; an unregistered filter is simply
+    # not applied, so a machine that skips this step only sees the diff.
+    if [ -x "$ROOT_DIR/lib/git-filter-machine-local.sh" ]; then
+        git -C "$ROOT_DIR" config filter.machine-local.clean \
+            "$ROOT_DIR/lib/git-filter-machine-local.sh"
+        echo "Git filter: machine-local → lib/git-filter-machine-local.sh"
+    fi
 fi
 
 # ── 6. Sanity ──
