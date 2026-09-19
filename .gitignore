@@ -75,10 +75,27 @@ windows/private.ps1
 # keeps here is reproducible without us — shell.json and
 # extensions/omarchy-menu.jsonc are byte-identical to the package defaults,
 # every hooks/*.hook also exists under /usr/share/omarchy, and plugins/ and
-# themes/ are empty. Not settled: branding/*.txt (built from an image the user
-# picks, via omarchy-branding-about) and shell.toml (22 bytes, no package
-# counterpart, no reader found in the Omarchy tree). Both are candidates;
-# neither was surveyed carefully enough to whitelist blind.
+# themes/ are empty.
+#
+# branding/*.txt and shell.toml were open questions; both are settled now, and
+# both stay out.
+#
+# branding/about.txt and branding/screensaver.txt do have package defaults,
+# under other names — omarchy-branding-{about,screensaver} reset copies
+# $OMARCHY_PATH/icon.txt and logo.txt over them, which is why searching for the
+# same filename found nothing. The files here are byte-identical to those
+# (md5 d1472bfb… and 4f14293d…), so nothing has been customised and `omarchy
+# branding about reset` reproduces them. Revisit if `omarchy branding about
+# image` is ever used: transcoding a chosen PNG makes a file no default can
+# restore.
+#
+# shell.toml is written by omarchy-display-text-size, the same command that
+# rewrites font-size in ghostty/config — it holds `[font] base-size`, this
+# monitor's DPI and nothing else. Tracking it would push one machine's text
+# size onto every other, which is what the clean filter in
+# lib/git-filter-machine-local.sh exists to prevent for the ghostty half.
+# default/themed/shell.toml.tpl also rewrites it on theme changes, so it is
+# closer to a generated file than a config.
 omarchy/*
 !omarchy/themed/
 omarchy/themed/*
