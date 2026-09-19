@@ -26,6 +26,30 @@ Personal configuration files managed via `~/.config/` and synced with git.
 
 > Everything else under `~/.config/` is gitignored. See `.gitignore` for the allowlist.
 
+### Machine-local settings
+
+Anything true of one machine and not another stays out of the tracked files.
+Each config loads an optional private file last, so it overrides without being
+edited into the shared one:
+
+| Config | Hook in the tracked file | Machine-local file |
+|---|---|---|
+| zsh | `source $ZDOTDIR/private.sh` | `zsh/private.sh` |
+| ghostty | `config-file = ?"…/private.conf"` | `ghostty/private.conf` |
+| tmux | `if-shell '[ -r … ]' 'source-file …'` | `tmux/private.conf` |
+| nvim | `plugins/99_private.lua` → `require("private.plugins")` | `nvim/lua/private/plugins.lua` |
+
+All four are absent by default and silent when missing, so a fresh clone works
+with none of them. On Omarchy they are where the theme wiring lives, which is
+why macOS keeps Catppuccin while that machine follows the system theme.
+
+One case the seam cannot cover: Omarchy's display text size slider rewrites
+`font-size` in `ghostty/config` at a path it hardcodes, so moving the line out
+would make the slider silently do nothing. That one line is normalized on its
+way into the index by the clean filter in `lib/git-filter-machine-local.sh`
+(wired in `.gitattributes`, registered by `ai/scripts/bootstrap.sh`) — the
+working tree keeps this monitor's size and git never sees it.
+
 ## Submodules
 
 | Path | Repo |
