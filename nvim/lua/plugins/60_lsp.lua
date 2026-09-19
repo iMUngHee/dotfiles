@@ -51,7 +51,13 @@ return {
           "groovyls",
           "jsonls",
           "cspell_ls",
-          "nginx_language_server",
+          -- nginx_language_server is deliberately absent. mason installs it
+          -- through pip and the package declares python <3.14, while Arch ships
+          -- 3.14.7 and has no older CPython worth installing for one server, so
+          -- every startup ended in
+          --     Failed to find a python3 installation in PATH that meets the
+          --     required versions (<3.14,>=3.9). Found version: 3.14.7
+          -- Restore this line once upstream supports 3.14.
           "jdtls",
           "kotlin_lsp",
           -- mason pulls fsautocomplete from nuget, so the dotnet SDK has to be
