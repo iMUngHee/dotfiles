@@ -43,7 +43,7 @@ Must be installed **before** first launch. Mason and plugins cannot provide thes
 | `xclip` or `xsel` (X11) / `wl-clipboard` (Wayland) | `clipboard = "unnamedplus"` (system clipboard yank/paste) | `apt install xclip` / `apt install wl-clipboard` |
 | `trash-cli` | oil.nvim `delete_to_trash = true` | `apt install trash-cli` (provides `trash-put`) |
 
-> Install examples use `apt` (Debian/Ubuntu). On Fedora use `dnf`. On bazzite (immutable/rpm-ostree) install CLI tools via a `toolbox`/`distrobox` container or Homebrew, or layer onto the host with `rpm-ostree install`.
+> Install examples use `apt` (Debian/Ubuntu). On Arch/Omarchy use `pacman -S wl-clipboard trash-cli` (or `omarchy-pkg-add`); `arch/packages.sh` already installs the rest of the toolchain. On Fedora use `dnf`.
 
 On macOS, clipboard works via `pbcopy`/`pbpaste` (built-in) and oil.nvim uses the system trash API.
 
