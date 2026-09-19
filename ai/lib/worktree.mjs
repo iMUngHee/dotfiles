@@ -166,8 +166,19 @@ async function atomicWritePrivate(path, content) {
   }
 }
 
-async function withExclusiveFileLock(path, fn, { operation = "worktree", retries = 100, retryMs = 25 } = {}) {
-  return withOwnerLock(path, operation, fn, { retries, retryMs });
+// deadlineMs has to be forwarded, not just accepted by the caller: the two
+// automatic-adoption paths below ask for a 20s deadline, and dropping it here
+// left them on the default retries x retryMs budget of 2.5s instead. A
+// contender that waited longer than that for the reservation lock gave up with
+// owner_lock_timeout and reported legacy_unmapped, so a legacy plan whose
+// candidate appeared while it waited was never adopted.
+//
+// retries stays the fallback for callers that pass no deadline.
+// acquireOwnerLock already treats the two as alternatives rather than layering
+// them: once a deadline is set, the live-owner wait sleeps against the
+// remaining time and continues, never reaching the retries check.
+async function withExclusiveFileLock(path, fn, { operation = "worktree", retries = 100, retryMs = 25, deadlineMs } = {}) {
+  return withOwnerLock(path, operation, fn, { retries, retryMs, deadlineMs });
 }
 
 export function parseFrontmatter(markdown) {
