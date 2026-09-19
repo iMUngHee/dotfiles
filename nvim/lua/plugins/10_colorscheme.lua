@@ -21,9 +21,16 @@ return {
 
       vim.cmd.colorscheme("catppuccin")
 
-      local C = require("catppuccin.palettes").get_palette("mocha")
-      vim.api.nvim_set_hl(0, "@lsp.typemod.variable.readonly", { fg = C.lavender })
-      vim.api.nvim_set_hl(0, "@lsp.typemod.property.readonly", { fg = C.lavender })
+      -- Re-applied on every colorscheme change, not just here: :colorscheme
+      -- clears user highlights, so these two were silently lost the moment
+      -- anything switched the theme. The colours come from the active
+      -- colorscheme rather than the Catppuccin palette.
+      local palette = require("utils.palette")
+      palette.on_colorscheme("lsp_readonly", function()
+        local C = palette.get()
+        vim.api.nvim_set_hl(0, "@lsp.typemod.variable.readonly", { fg = C.lavender })
+        vim.api.nvim_set_hl(0, "@lsp.typemod.property.readonly", { fg = C.lavender })
+      end)
     end,
   },
 }

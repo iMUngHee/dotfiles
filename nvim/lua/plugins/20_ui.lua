@@ -8,7 +8,11 @@ return {
     dependencies = { "nvim-web-devicons" },
     opts = {
       options = {
-        theme = "catppuccin-mocha",
+        -- "auto" resolves to the bundled theme matching vim.g.colors_name and
+        -- derives one from the highlight groups when there is none. lualine
+        -- re-runs its own setup on ColorScheme, so this follows the theme with
+        -- no help from here; the pinned "catppuccin-mocha" could not.
+        theme = "auto",
         component_separators = "│",
         section_separators = "",
       },
@@ -64,7 +68,17 @@ return {
       })
     end,
     opts = function()
-      local C = require("catppuccin.palettes").get_palette("mocha")
+      -- Colours are given as bufferline highlight links rather than hex values.
+      -- bufferline re-resolves these through colors.get_color on every
+      -- ColorScheme (config.update_highlights -> Config:resolve ->
+      -- resolve_user_highlight_links), so they track the active theme on their
+      -- own. Hex values from a palette would be re-applied verbatim instead,
+      -- which is what pinned these to Catppuccin. A group a colorscheme does
+      -- not define resolves to nil and bufferline falls back to its own
+      -- computed default.
+      local err = { highlight = "DiagnosticError", attribute = "fg" }
+      local warn = { highlight = "DiagnosticWarn", attribute = "fg" }
+      local mod = { highlight = "String", attribute = "fg" }
       return {
         options = {
           mode = "buffers",
@@ -87,25 +101,25 @@ return {
         },
 
         highlights = {
-          error = { fg = C.red },
-          error_visible = { fg = C.red },
-          error_selected = { fg = C.red, bold = true, italic = true },
+          error = { fg = err },
+          error_visible = { fg = err },
+          error_selected = { fg = err, bold = true, italic = true },
 
-          error_diagnostic = { fg = C.red },
-          error_diagnostic_visible = { fg = C.red },
-          error_diagnostic_selected = { fg = C.red, bold = true, italic = true },
+          error_diagnostic = { fg = err },
+          error_diagnostic_visible = { fg = err },
+          error_diagnostic_selected = { fg = err, bold = true, italic = true },
 
-          warning = { fg = C.yellow },
-          warning_visible = { fg = C.yellow },
-          warning_selected = { fg = C.yellow, bold = true, italic = true },
+          warning = { fg = warn },
+          warning_visible = { fg = warn },
+          warning_selected = { fg = warn, bold = true, italic = true },
 
-          warning_diagnostic = { fg = C.yellow },
-          warning_diagnostic_visible = { fg = C.yellow },
-          warning_diagnostic_selected = { fg = C.yellow, bold = true, italic = true },
+          warning_diagnostic = { fg = warn },
+          warning_diagnostic_visible = { fg = warn },
+          warning_diagnostic_selected = { fg = warn, bold = true, italic = true },
 
-          modified = { fg = C.green },
-          modified_visible = { fg = C.green },
-          modified_selected = { fg = C.green, bold = true, italic = true },
+          modified = { fg = mod },
+          modified_visible = { fg = mod },
+          modified_selected = { fg = mod, bold = true, italic = true },
         },
       }
     end,
@@ -238,7 +252,7 @@ return {
     "dstein64/nvim-scrollview",
     event = { "BufReadPost", "BufNewFile" },
     opts = function()
-      local C = require("catppuccin.palettes").get_palette("mocha")
+      local C = require("utils.palette").get()
       return {
         current_only = true,
         base = "right",
@@ -271,6 +285,23 @@ return {
 
         search_symbol_color = C.yellow,
       }
+    end,
+    -- scrollview has no equivalent of bufferline's highlight links: these are
+    -- plain option values it reads once at setup, so following the theme means
+    -- recomputing them and calling setup again on ColorScheme.
+    config = function(_, opts)
+      local palette = require("utils.palette")
+      palette.on_colorscheme("scrollview", function()
+        local C = palette.get()
+        opts.diagnostics_error_symbol_color = C.red
+        opts.diagnostics_warn_symbol_color = C.yellow
+        opts.diagnostics_hint_symbol_color = C.teal
+        opts.git_add_symbol_color = C.green
+        opts.git_change_symbol_color = C.yellow
+        opts.git_delete_symbol_color = C.red
+        opts.search_symbol_color = C.yellow
+        require("scrollview").setup(opts)
+      end)
     end,
   },
   {
