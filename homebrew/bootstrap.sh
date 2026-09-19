@@ -3,6 +3,7 @@
 #   - brew bundle (formula/cask; OS guards live in the Brewfile)
 #   - ~/.zshenv ZDOTDIR guarantee   (lib/shell-env.sh)
 #   - oh-my-zsh, keeping the repo zshrc (lib/shell-env.sh)
+#   - tmux plugins via tpm            (lib/tmux-plugins.sh)
 #
 # This is the macOS package layer. Linux reaches it only on a Linuxbrew box
 # with no pacman — Arch/Omarchy goes to arch/bootstrap.sh instead, which is why
@@ -24,6 +25,8 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # shellcheck source=../lib/shell-env.sh
 . "$ROOT_DIR/lib/shell-env.sh"
+# shellcheck source=../lib/tmux-plugins.sh
+. "$ROOT_DIR/lib/tmux-plugins.sh"
 
 # ── brew 경로 감지 (zsh/.zshrc:7-10 패턴) ──────────────────────
 if [ -x /opt/homebrew/bin/brew ]; then
@@ -55,6 +58,7 @@ brew bundle --file "$SCRIPT_DIR/Brewfile"
 # ── 2+3. shell environment (shared with the Arch path) ────────
 ensure_zshenv
 ensure_oh_my_zsh
+ensure_tmux_plugins
 
 # ── WARN summary (실패가 exit 0에 묻히지 않도록) ──────────────
 if [ "${#WARNINGS[@]}" -gt 0 ]; then
