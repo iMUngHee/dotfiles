@@ -57,6 +57,26 @@ if [[ -z ${BROWSER:-} ]] && command -v omarchy-launch-browser >/dev/null 2>&1; t
 	export BROWSER=omarchy-launch-browser
 fi
 
+# ── CUDA toolkit PATH ────────────────────────────────────────────────────────
+# /etc/profile.d/cuda.sh sets all of this, but /etc/zsh/zprofile only sources
+# /etc/profile for LOGIN shells, and the terminal spawns a non-login one — the
+# process shows as /usr/bin/zsh with no leading dash. So nvcc is on PATH in
+# `zsh -l` and missing in `zsh -i`, which is every window the user actually
+# opens, and no amount of reopening fixes it.
+#
+# NVCC_CCBIN is lost the same way. It is set here rather than left out because
+# /etc/profile.d/cuda.sh says the host compiler "will need to be switched back
+# and forth between the latest and previous GCC version, whatever nvcc
+# currently supports" — it is a moving target. Measured today: nvcc compiles a
+# kernel with gcc 16.2.1 and no NVCC_CCBIN at all (exit 0, byte-identical
+# object), so this is insurance for the next gcc bump rather than a fix for a
+# break that exists now.
+if [[ -d /opt/cuda/bin ]]; then
+	export CUDA_PATH=/opt/cuda
+	[[ :$PATH: == *:/opt/cuda/bin:* ]] || export PATH="/opt/cuda/bin:$PATH"
+	[[ -x /usr/bin/g++-15 ]] && export NVCC_CCBIN=/usr/bin/g++-15
+fi
+
 # ── `omarchy` subcommand completion (default/bash/completions) ───────────────
 # Reimplemented rather than sourced: the Omarchy version is bash-only — it
 # drives COMPREPLY/compgen and calls `shopt`, which zsh has no counterpart for,
