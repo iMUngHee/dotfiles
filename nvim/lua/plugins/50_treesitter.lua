@@ -14,6 +14,10 @@ return {
         "markdown",
         "markdown_inline",
         "c",
+        -- .cu/.cuh are filetype=cuda out of the box in 0.12, but the c parser
+        -- does not cover __global__, <<<>>> or the builtin variables, so a
+        -- kernel renders unhighlighted without this.
+        "cuda",
         "javascript",
         "typescript",
         "tsx",
