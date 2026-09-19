@@ -31,7 +31,11 @@ font-thicken = true
 adjust-cell-height = 15%
 
 # Cursor
-shell-integration-features = no-cursor
+# ssh-env is off by default (the resolved value reads no-ssh-env), so SSH
+# sessions land without the terminfo this terminal expects. Ghostty requires the
+# shell-integration options to be given together, which is why the cursor
+# setting shares the line.
+shell-integration-features = no-cursor,ssh-env
 cursor-style = block
 cursor-style-blink = false
 custom-shader = cursor_smear.glsl
@@ -49,3 +53,12 @@ scrollback-limit = 10000
 
 # Keybindings
 keybind = super+ctrl+f=toggle_fullscreen
+
+# Send Shift+Enter and Alt+Shift+Enter as CSI-u so a TUI can tell them from
+# Enter and Alt+Enter. The legacy encoding collapses both pairs, so without
+# this an editor or agent that binds Shift+Enter to "newline, do not submit"
+# never sees it, and tmux cannot match M-S-Enter. Carried over from Omarchy's
+# ghostty config; it pairs with the extended-keys/csi-u settings tmux.conf
+# already sets, and nothing here is platform-specific.
+keybind = shift+enter=csi:13;2u
+keybind = alt+shift+enter=csi:13;4u
