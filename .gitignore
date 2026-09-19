@@ -3,6 +3,7 @@
 
 # Included list
 !arch/
+!clangd/
 !ghostty/
 !githooks/
 !lib/

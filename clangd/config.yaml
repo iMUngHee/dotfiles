@@ -1,0 +1,34 @@
+# clangd user config. Read by any clangd, not just the one Neovim starts, so it
+# also covers the mason binary at ~/.local/share/nvim/mason/bin/clangd.
+#
+# Why this exists: clangd cannot find a CUDA toolkit on its own. Opening a .cu
+# file without it produces a cascade that looks like broken code but is not —
+#
+#   cannot find CUDA installation; provide its path via '--cuda-path'
+#     unknown type name '__global__'
+#     use of undeclared identifier 'blockIdx' / 'threadIdx' / 'cudaMalloc...'
+#
+# --cuda-path alone clears all of it: measured 3 errors -> 0 on a kernel using
+# __global__, blockIdx/threadIdx and cudaMallocManaged.
+#
+# --cuda-gpu-arch is deliberately not set. It would pin diagnostics to the GPU
+# in this machine (RTX 5080, Blackwell GB203 = sm_120) rather than clang's sm_52
+# default, and it parses fine either way — but the value is one card's, and this
+# file is tracked for every machine. Same reason omarchy/shell.toml stays out of
+# git. A project that wants it can say so in its own .clangd, which overrides
+# this one.
+#
+# Scoped by PathMatch rather than applied globally: CompileFlags.Add otherwise
+# appends these to every C and C++ translation unit too. Harmless in practice —
+# clang ignores them — but the narrower rule says what it means.
+#
+# Arch installs the toolkit at /opt/cuda (pacman: cuda 13.3.1). The path is
+# Arch's, but it sits in a tracked cross-platform file for the same reason
+# ghostty/config carries macos-titlebar-style: a key the other platform never
+# reaches costs nothing, and the PathMatch above means a machine with no CUDA
+# never evaluates it at all.
+If:
+  PathMatch: [.*\.cu, .*\.cuh]
+CompileFlags:
+  Add:
+    - --cuda-path=/opt/cuda
