@@ -67,7 +67,22 @@ PACMAN_LANG=(
     rustup              # brew "rustup"
     kotlin              # brew "kotlin"
     gradle              # brew "gradle"
+    jdk21-openjdk       # NOT in the Brewfile. mason builds groovy-language-server
+                        #   with the project's own Gradle 9.1.0 wrapper, which
+                        #   rejects the Java 26 that jdk-openjdk defaults to
+                        #   ("Unsupported class file major version 70").
+                        #   nvim/lua/common/init.lua points JAVA_HOME here for
+                        #   its own process only; the system default is left to
+                        #   archlinux-java.
     python              # brew "python"
+    dotnet-sdk          # NOT in the Brewfile, and the omission is the bug: mason
+                        #   installs fsautocomplete from nuget and fantomas with
+                        #   `dotnet tool install`, both SDK commands.
+                        #   nvim/lua/plugins/60_lsp.lua already names this package
+                        #   for this tier. dotnet-runtime alone arrives as a
+                        #   dependency of other software and is not enough —
+                        #   `dotnet tool` then exits 155 with "The application
+                        #   'tool' does not exist".
 )
 
 # ── Shell — zsh/ deploys a .zshrc, so the shell itself has to exist ─────────
@@ -79,6 +94,15 @@ PACMAN_SHELL=(
 PACMAN_APPS=(
     ghostty             # cask "ghostty" (macOS) — official Arch package here
     obsidian            # cask "obsidian" (macOS) / flatpak (was bazzite)
+)
+
+# ── Fonts ───────────────────────────────────────────────────────────────────
+# ghostty/config asks for "FiraCode Nerd Font" by name. Without the family
+# installed fontconfig does not fall back to another Nerd Font — it substitutes
+# Liberation Sans, which is neither monospaced nor glyph-complete, so the
+# terminal silently renders in the wrong font with broken icons.
+PACMAN_FONTS=(
+    ttf-firacode-nerd   # cask "font-fira-code-nerd-font" on macOS
 )
 
 # ── AUR ─────────────────────────────────────────────────────────────────────
@@ -131,6 +155,7 @@ echo "=== arch packages ==="
 install_pacman "${PACMAN_CLI[@]}"
 install_pacman "${PACMAN_LANG[@]}"
 install_pacman "${PACMAN_SHELL[@]}"
+install_pacman "${PACMAN_FONTS[@]}"
 if [ "$SKIP_OPTIONAL" -eq 0 ]; then
     install_pacman "${PACMAN_APPS[@]}"
     install_aur "${AUR[@]}"
