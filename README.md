@@ -14,7 +14,9 @@ Personal configuration files managed via `~/.config/` and synced with git.
 | `nvim/` | Neovim | `init.lua`, `lua/plugins/` |
 | `tmux/` | tmux | `tmux.conf`, `scripts/`, `status/` |
 | `zsh/` | Zsh | `.zshrc`, `custom/plugins/` |
-| `homebrew/` | [Homebrew Bundle](https://docs.brew.sh/Brew-Bundle-and-Brewfile) | `Brewfile`, `bootstrap.sh` (cross-platform packages + shell env; `OS.mac?`/`OS.linux?` guarded) |
+| `homebrew/` | [Homebrew Bundle](https://docs.brew.sh/Brew-Bundle-and-Brewfile) | `Brewfile`, `bootstrap.sh` (macOS package set + shell env) |
+| `arch/` | Arch Linux / [Omarchy](https://omarchy.org/) | `packages.sh` (pacman + AUR, the Brewfile mapping), `bootstrap.sh` (packages + mise + shell env) |
+| `lib/` | Shared bootstrap | `shell-env.sh` (`~/.zshenv` ZDOTDIR + oh-my-zsh, used by both Unix package layers) |
 | `windows/` | Native Windows | `bootstrap.ps1`, `packages.ps1` (winget), `profile.ps1`, `starship.toml`, `terminal/`, `notifier/`, Cowork skill packaging |
 | `.ideavimrc` | IdeaVim (JetBrains) | Standalone file |
 
@@ -29,7 +31,9 @@ Personal configuration files managed via `~/.config/` and synced with git.
 | Path | Repo |
 |------|------|
 | `zsh/custom/plugins/zsh-autosuggestions` | zsh-users/zsh-autosuggestions |
+| `zsh/custom/plugins/zsh-history-substring-search` | zsh-users/zsh-history-substring-search |
 | `zsh/custom/plugins/zsh-syntax-highlighting` | zsh-users/zsh-syntax-highlighting |
+| `zsh/custom/plugins/fzf-tab` | aloxaf/fzf-tab |
 | `ghostty/shaders` | sahaj-b/ghostty-cursor-shaders |
 
 ## Setup
@@ -38,8 +42,26 @@ Personal configuration files managed via `~/.config/` and synced with git.
 
 ```bash
 git clone --recurse-submodules <repo> ~/.config
-~/.config/bootstrap.sh   # installs packages (brew bundle + ghostty/claude-code + oh-my-zsh), then deploys Claude + Codex config
+~/.config/bootstrap.sh   # packages + shell env, then deploys Claude + Codex config
 ```
+
+`bootstrap.sh` picks the package layer from the machine, then hands off to the
+same `ai/scripts/bootstrap.sh` in every case:
+
+| Machine | Package layer | Source of `claude` / `codex` |
+|---|---|---|
+| macOS | `homebrew/bootstrap.sh` → `brew bundle` | Homebrew casks |
+| Arch / Omarchy | `arch/bootstrap.sh` → pacman + AUR | [mise](https://mise.jdx.dev) (`~/.config/mise/config.toml`, machine-local) |
+| Linux with Homebrew, no pacman | `homebrew/bootstrap.sh` | Homebrew |
+
+On Omarchy the package step uses `omarchy-pkg-add` / `omarchy-pkg-aur-add` when
+they exist, so packages installed here look the same as ones added through the
+Omarchy menu. `arch/packages.sh --dry-run` prints the plan without installing;
+`--skip-optional` leaves out desktop apps and AUR.
+
+> `~/.config` is usually not empty on a fresh Omarchy install — `ghostty/`,
+> `nvim/` and `tmux/` already exist. The tracked versions here replace them;
+> move the originals aside first if you want them back.
 
 ### Windows
 
