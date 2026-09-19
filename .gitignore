@@ -16,6 +16,7 @@
 !codex/
 !homebrew/
 !windows/
+!omarchy/
 !.gitignore
 !.gitattributes
 !README.md
@@ -63,3 +64,22 @@ homebrew/*
 # windows — build output and machine-local overrides
 windows/dist/
 windows/private.ps1
+
+# omarchy — the theme templates, and so far only those. themed/*.tpl is
+# hand-written and machine-independent, and losing it fails silently: a missing
+# template just drops the prompt back to Omarchy's stock starship config with
+# no error. The .sample alongside it ships with the omarchy package, so *.tpl
+# deliberately does not match it.
+#
+# The directory is opened one pattern at a time because most of what Omarchy
+# keeps here is reproducible without us — shell.json and
+# extensions/omarchy-menu.jsonc are byte-identical to the package defaults,
+# every hooks/*.hook also exists under /usr/share/omarchy, and plugins/ and
+# themes/ are empty. Not settled: branding/*.txt (built from an image the user
+# picks, via omarchy-branding-about) and shell.toml (22 bytes, no package
+# counterpart, no reader found in the Omarchy tree). Both are candidates;
+# neither was surveyed carefully enough to whitelist blind.
+omarchy/*
+!omarchy/themed/
+omarchy/themed/*
+!omarchy/themed/*.tpl
