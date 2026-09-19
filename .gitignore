@@ -16,6 +16,7 @@
 !ai/
 !codex/
 !homebrew/
+!hypr/
 !windows/
 !omarchy/
 !.gitignore
@@ -101,3 +102,21 @@ omarchy/*
 !omarchy/themed/
 omarchy/themed/*
 !omarchy/themed/*.tpl
+
+# hypr — the hand-edited Hyprland config, minus what belongs to this monitor.
+#
+# Only bindings.lua differs from the packaged defaults today, but the others are
+# tracked too: they are the files Omarchy expects to be edited, and having them
+# already under version control is what makes the next edit show up as a diff
+# rather than as a surprise. `omarchy refresh config hypr/<file>` restores any
+# of them from the package.
+#
+# monitors.lua is excluded. Its only change is omarchy_monitor_scale = 1.6,
+# which is this 4K panel and nothing else — the same reason omarchy/shell.toml
+# and the ghostty font-size line stay out of git. Tracking it would hand one
+# display's scale to every other machine.
+hypr/*
+!hypr/*.lua
+!hypr/*.conf
+hypr/monitors.lua
+hypr/*.bak.*
