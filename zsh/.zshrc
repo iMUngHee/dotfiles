@@ -112,7 +112,17 @@ export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"
 [ -d /opt/homebrew/opt/rustup/bin ] && export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 
 # Alias
-alias buu="brew update;brew upgrade -y"
+# buu means "update everything this machine owns", one spelling per platform —
+# brew on macOS, winget + the four things it cannot reach on Windows
+# (windows/profile.ps1), and arch/scripts/update-all.sh here, where `omarchy
+# update` already covers pacman, the AUR and mise in one call.
+# Checked in this order because omarchy is the more specific condition: a
+# Linuxbrew box has brew and no omarchy, and falls through to the Mac command.
+if command -v omarchy >/dev/null; then
+      alias buu="$HOME/.config/arch/scripts/update-all.sh"
+else
+      alias buu="brew update;brew upgrade -y"
+fi
 alias l="eza -alH --icons --git --color=always"
 alias vim="nvim"
 alias vi="nvim"
