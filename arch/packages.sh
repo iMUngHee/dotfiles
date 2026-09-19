@@ -49,7 +49,14 @@ PACMAN_CLI=(
     python-pipx         # brew "pipx"
     python-pipenv       # brew "pipenv"
     jq                  # REQUIRED by claude/scripts/bootstrap.sh (settings.json merge)
-    yq                  # REQUIRED by codex/scripts/bootstrap.sh  (config.toml merge)
+    go-yq               # REQUIRED by codex/scripts/bootstrap.sh  (config.toml merge).
+                        #   NOT `yq`: Arch's `yq` is kislyuk/yq, a jq wrapper with a
+                        #   different CLI, and `yq -i -p toml` fails there with
+                        #   "argument files: can't open 'toml'". The Brewfile's
+                        #   brew "yq" and windows' MikeFarah.yq are both
+                        #   mikefarah/yq, which Arch packages as go-yq. go-yq
+                        #   Conflicts With yq, so a box that already has the
+                        #   python one needs the replace pacman prompts for.
     ripgrep             # bundled with Claude Code, but not on PATH for hooks/scripts
 )
 
