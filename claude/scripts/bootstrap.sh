@@ -127,7 +127,32 @@ generate_memory_index
 echo "Linking skills..."
 [ -L "$CLAUDE_DIR/skills" ] && rm "$CLAUDE_DIR/skills"
 mkdir -p "$CLAUDE_DIR/skills"
-find "$CLAUDE_DIR/skills" -maxdepth 1 -type l -delete 2>/dev/null || true
+# Remove only the links THIS repo put here. The sweep used to take every
+# symlink in the directory, standing on the assumption that a symlink is ours
+# and a real directory is the user's — the comment in link_skill_dir still
+# describes it that way. That proxy holds only while nothing else links skills
+# in, and on Omarchy something does: omarchy-provision-user runs
+#   ln -sfn /usr/share/omarchy/default/agents/skills/<name> <dir>/<name>
+# for diagnose-crash and omarchy, into ~/.claude/skills, ~/.codex/skills and
+# ~/.agents/skills alike. So a deploy silently deleted them and the next
+# session came up without the skill that documents the host OS.
+#
+# Matching on the link target says what was meant. readlink is deliberately
+# not -f: a link into a skill this repo has since dropped is broken, -f
+# resolves it to nothing, and the stale link would survive the sweep it exists
+# for. The literal target is absolute here because link_skill_dir always
+# passes an absolute path.
+sweep_repo_skill_links() {
+    local dir="$1" link target
+    [ -d "$dir" ] || return 0
+    while IFS= read -r link; do
+        target="$(readlink "$link" 2>/dev/null)" || continue
+        case "$target" in
+            "$ROOT_DIR"/*) rm -f "$link" ;;
+        esac
+    done < <(find "$dir" -maxdepth 1 -mindepth 1 -type l 2>/dev/null)
+}
+sweep_repo_skill_links "$CLAUDE_DIR/skills"
 
 link_skill_dir() {
     local d="$1"
