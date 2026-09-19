@@ -1,7 +1,10 @@
-# ~/.config/homebrew/Brewfile — cross-platform (macOS + bazzite/Linuxbrew).
+# ~/.config/homebrew/Brewfile — the macOS package set.
 # Apply: brew bundle --file ~/.config/homebrew/Brewfile
-# Ruby file: OS.mac?/OS.linux? guards run at load; brew bundle (6+) handles
-# cask/mas/flatpak natively, so one file covers both machines.
+#
+# Linux does NOT come through here any more. Arch/Omarchy has its own
+# package layer in arch/packages.sh, which mirrors this file entry for
+# entry and documents what it deliberately drops. A Linuxbrew box with no
+# pacman still falls back to this file, so the OS.mac? guard stays.
 
 # ── Shared CLI / TUI ─────────────────────────────────────────
 brew "bat"
@@ -36,7 +39,7 @@ brew "python"   # versionless alias → always latest stable (python@3.14 now)
 # ── macOS only ───────────────────────────────────────────────
 if OS.mac?
   tap "morantron/tmux-fingers"
-  brew "coreutils"        # GNU userland (native on bazzite)
+  brew "coreutils"        # GNU userland (BSD userland on macOS only)
   brew "swift-format"
   brew "bdw-gc"            # tmux-fingers runtime dylib
   brew "morantron/tmux-fingers/tmux-fingers"
@@ -48,10 +51,3 @@ if OS.mac?
   cask "bettertouchtool"  # trackpad/gestures — macOS only
 end
 
-# ── bazzite (Linux) only ─────────────────────────────────────
-if OS.linux?
-  flatpak "md.obsidian.Obsidian"   # Flathub
-  brew    "codex"                  # Linuxbrew formula
-  # ghostty + claude-code are not brew-installable on Linux
-  # (AppImage/COPR, curl install.sh) — handled by the bootstrap script.
-end
