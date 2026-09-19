@@ -10,6 +10,7 @@
 #   2) mise install            — node/claude/codex/gh, if mise is configured
 #   3) ~/.zshenv ZDOTDIR       — lib/shell-env.sh
 #   4) oh-my-zsh               — lib/shell-env.sh
+#   5) tmux plugins (tpm)      — lib/tmux-plugins.sh
 #
 # There is no step matching homebrew/bootstrap.sh's "Linux-only" block: the
 # ghostty AppImage and the claude.ai install.sh existed because bazzite had no
@@ -40,6 +41,8 @@ done
 
 # shellcheck source=../lib/shell-env.sh
 . "$ROOT_DIR/lib/shell-env.sh"
+# shellcheck source=../lib/tmux-plugins.sh
+. "$ROOT_DIR/lib/tmux-plugins.sh"
 
 if ! have pacman; then
     echo "ERROR: pacman not found — this is not an Arch system."   # critical
@@ -77,10 +80,11 @@ fi
 
 # ── 3+4. shell environment (shared with the macOS path) ─────────────────────
 if [ "$DRY_RUN" -eq 1 ]; then
-    echo "── would ensure ~/.zshenv ZDOTDIR + oh-my-zsh (dry run) ──"
+    echo "── would ensure ~/.zshenv ZDOTDIR + oh-my-zsh + tpm (dry run) ──"
 else
     ensure_zshenv
     ensure_oh_my_zsh
+    ensure_tmux_plugins
 fi
 
 # ── WARN summary (실패가 exit 0에 묻히지 않도록) ────────────────────────────
