@@ -27,6 +27,10 @@ memory/feedback_global_memory_path.md
 memory/feedback_pager_poll_during_long_turns.md
 memory/feedback_commit_message_style.md
 
-# Private memory (gitignored — only readable on the local machine)
-memory/private/reference_naver_tools.md
-memory/private/feedback_pre_commit_sensitive_scan.md
+# Private memory is deliberately absent: memory/private/ is gitignored, so naming
+# a file here makes this tracked manifest reference a path that only one machine
+# has, and every other machine reports it as drift on every commit. The builder
+# and the drift check still handle memory/private/* entries (codex/scripts/
+# bootstrap.sh skips a missing one, claude/scripts/sync-back.sh resolves one
+# against the main checkout from a worktree) — that path is for a private entry
+# added on purpose, not for pinning one machine's files into the shared list.
