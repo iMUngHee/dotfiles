@@ -49,14 +49,7 @@ PACMAN_CLI=(
     python-pipx         # brew "pipx"
     python-pipenv       # brew "pipenv"
     jq                  # REQUIRED by claude/scripts/bootstrap.sh (settings.json merge)
-    go-yq               # REQUIRED by codex/scripts/bootstrap.sh  (config.toml merge).
-                        #   NOT `yq`: Arch's `yq` is kislyuk/yq, a jq wrapper with a
-                        #   different CLI, and `yq -i -p toml` fails there with
-                        #   "argument files: can't open 'toml'". The Brewfile's
-                        #   brew "yq" and windows' MikeFarah.yq are both
-                        #   mikefarah/yq, which Arch packages as go-yq. go-yq
-                        #   Conflicts With yq, so a box that already has the
-                        #   python one needs the replace pacman prompts for.
+    # go-yq is installed by install_go_yq below, not here — see the note there.
     ripgrep             # bundled with Claude Code, but not on PATH for hooks/scripts
 )
 
@@ -149,10 +142,32 @@ install_aur() {
     fi
 }
 
+# ── go-yq — on its own because it conflicts with `yq` ───────────────────────
+# REQUIRED by codex/scripts/bootstrap.sh (config.toml merge). NOT `yq`: Arch's
+# `yq` is kislyuk/yq, a jq wrapper with a different CLI, and `yq -i -p toml`
+# fails there with "argument files: can't open 'toml'". The Brewfile's
+# brew "yq" and windows' MikeFarah.yq are both mikefarah/yq, which Arch
+# packages as go-yq.
+#
+# go-yq Conflicts With yq, and pacman resolves that with a "Remove yq?" prompt
+# whose default is no — the answer --noconfirm gives — so on a box that already
+# has the python one the transaction aborts. Inside PACMAN_CLI that abort took
+# every later group with it under set -e. Installed separately, the worst case
+# is one skipped package plus the interactive command that does the swap.
+install_go_yq() {
+    if pacman -Qq yq >/dev/null 2>&1; then
+        echo "⚠ go-yq skipped: python yq is installed and conflicts with it." >&2
+        echo "  Replace it interactively (answer y to 'Remove yq?'): sudo pacman -S go-yq" >&2
+        return 0
+    fi
+    install_pacman go-yq
+}
+
 echo "=== arch packages ==="
 [ "$DRY_RUN" -eq 1 ] && echo "(dry run — nothing will be installed)"
 
 install_pacman "${PACMAN_CLI[@]}"
+install_go_yq
 install_pacman "${PACMAN_LANG[@]}"
 install_pacman "${PACMAN_SHELL[@]}"
 install_pacman "${PACMAN_FONTS[@]}"
