@@ -34,7 +34,9 @@ step() { echo -e "\n\033[0;32m── $1 ──\033[0m"; }
 # ── 1. system: pacman + AUR + mise ──────────────────────────────────────────
 if command -v omarchy >/dev/null 2>&1; then
     step "omarchy update (pacman, AUR, mise)"
-    omarchy update "$@"
+    # || warn like every other step: one failed AUR build must not skip the
+    # pager rebuild below or the summary — that is what set -e would do.
+    omarchy update "$@" || warn "omarchy update reported a failure"
 else
     warn "omarchy not found — skipping system update"
 fi
