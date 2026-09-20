@@ -11,6 +11,7 @@ Personal configuration files managed via `~/.config/` and synced with git.
 | `codex/` | [Codex CLI](https://developers.openai.com/codex/) | `config.toml.template`, `skills/` (Codex-only), `scripts/` |
 | `notifier/` | Shared AI notifier | macOS Swift app, Linux Go daemon, Go sender, shared icon |
 | `ghostty/` | [Ghostty](https://ghostty.org/) | `config`, `shaders/` (cursor animation) |
+| `brave/` | Brave Origin | `vimium-options.json` (Vimium export; restore by hand from its Options page when Brave Sync has not carried it over) |
 | `nvim/` | Neovim | `init.lua`, `lua/plugins/` |
 | `tmux/` | tmux | `tmux.conf`, `scripts/`, `status/` |
 | `zsh/` | Zsh | `.zshrc`, `custom/plugins/` |

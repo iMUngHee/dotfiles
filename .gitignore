@@ -19,6 +19,7 @@
 !hypr/
 !windows/
 !omarchy/
+!brave/
 !.gitignore
 !.gitattributes
 !README.md
@@ -120,3 +121,12 @@ hypr/*
 !hypr/*.conf
 hypr/monitors.lua
 hypr/*.bak.*
+
+# brave — Brave Origin lives on both the Windows and the Omarchy side of this
+# machine. Brave Sync carries bookmarks, settings and extension data between
+# them; what it cannot be trusted with is kept here. vimium-options.json is the
+# export from Vimium's Options page, restored by hand through its Backup and
+# Restore section when Sync has not carried it over. Nothing else from the
+# profile belongs in git.
+brave/*
+!brave/vimium-options.json
