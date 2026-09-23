@@ -11,6 +11,7 @@ Personal configuration files managed via `~/.config/` and synced with git.
 | `codex/` | [Codex CLI](https://developers.openai.com/codex/) | `config.toml.template`, `skills/` (Codex-only), `scripts/` |
 | `notifier/` | Shared AI notifier | macOS Swift app, Linux Go daemon, Go sender, shared icon |
 | `ghostty/` | [Ghostty](https://ghostty.org/) | `config`, `shaders/` (cursor animation) |
+| `aerospace/` | [AeroSpace](https://github.com/nikitabobko/AeroSpace) (macOS) | `aerospace.toml` (shipped default trimmed to digit workspaces so Option stays free for terminal Meta keys; float rules, Omarchy gaps) |
 | `brave/` | Brave Origin | `vimium-options.json` (Vimium export; restore by hand from its Options page when Brave Sync has not carried it over) |
 | `nvim/` | Neovim | `init.lua`, `lua/plugins/` |
 | `tmux/` | tmux | `tmux.conf`, `scripts/`, `status/` |
@@ -50,6 +51,9 @@ would make the slider silently do nothing. That one line is normalized on its
 way into the index by the clean filter in `lib/git-filter-machine-local.sh`
 (wired in `.gitattributes`, registered by `ai/scripts/bootstrap.sh`) — the
 working tree keeps this monitor's size and git never sees it.
+The same filter drops a `# >>> machine-local` … `# <<< machine-local` block
+whole; `aerospace/aerospace.toml` keeps its work-machine float rules there,
+since AeroSpace has no include to put them in a private file.
 
 ## Submodules
 

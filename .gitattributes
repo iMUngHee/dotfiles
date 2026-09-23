@@ -31,3 +31,6 @@
 # it. ai/scripts/bootstrap.sh registers the filter; without it git leaves the
 # content alone, so a machine that has not bootstrapped just sees the diff.
 ghostty/config filter=machine-local
+
+# Work-machine float rules in a `# >>> machine-local` block — see the filter.
+aerospace/aerospace.toml filter=machine-local

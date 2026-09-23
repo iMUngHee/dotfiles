@@ -4,6 +4,7 @@
 #   - ~/.zshenv ZDOTDIR guarantee   (lib/shell-env.sh)
 #   - oh-my-zsh, keeping the repo zshrc (lib/shell-env.sh)
 #   - tmux plugins via tpm            (lib/tmux-plugins.sh)
+#   - macOS app-menu shortcut overrides (defaults write)
 #
 # This is the macOS package layer. Linux reaches it only on a Linuxbrew box
 # with no pacman — Arch/Omarchy goes to arch/bootstrap.sh instead, which is why
@@ -59,6 +60,18 @@ brew bundle --file "$SCRIPT_DIR/Brewfile"
 ensure_zshenv
 ensure_oh_my_zsh
 ensure_tmux_plugins
+
+# ── 4. macOS app-menu shortcut overrides ──────────────────────
+# Ghostty's "Hide Ghostty" menu item owns Cmd+H and fires before the key
+# reaches tmux (M-h pane nav, see tmux/tmux.conf). Native fullscreen disables
+# Hide, which masked this until AeroSpace put Ghostty in a tiled window. Move
+# the item to Ctrl+Opt+Cmd+H; the title matches the English menu (en-first
+# AppleLanguages). Takes effect after Ghostty restarts.
+if [ "$OS" = "Darwin" ]; then
+    echo "── macOS menu shortcuts ──"
+    defaults write com.mitchellh.ghostty NSUserKeyEquivalents -dict-add "Hide Ghostty" '@~^h' \
+        || warn "Ghostty Hide shortcut override failed"
+fi
 
 # ── WARN summary (실패가 exit 0에 묻히지 않도록) ──────────────
 if [ "${#WARNINGS[@]}" -gt 0 ]; then

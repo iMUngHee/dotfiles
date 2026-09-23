@@ -39,6 +39,7 @@ brew "python"   # versionless alias → always latest stable (python@3.14 now)
 # ── macOS only ───────────────────────────────────────────────
 if OS.mac?
   tap "morantron/tmux-fingers"
+  tap "nikitabobko/tap"
   brew "coreutils"        # GNU userland (BSD userland on macOS only)
   brew "swift-format"
   brew "bdw-gc"            # tmux-fingers runtime dylib
@@ -49,5 +50,6 @@ if OS.mac?
   cask "codex"
   cask "aldente"          # battery limiter — macOS only
   cask "bettertouchtool"  # trackpad/gestures — macOS only
+  cask "nikitabobko/tap/aerospace"  # i3-like tiling WM, no SIP change — config: aerospace/
 end
 
