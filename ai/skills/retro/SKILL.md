@@ -130,6 +130,13 @@ pm memory <KEY> add "<note title>" --note "<one-line decision>" --date <YYYY-MM-
 ```
 This upserts (by title) `.agents/tasks/<KEY>/memory.md` through ops (lock+CAS) — **never hand-edit it**. Surfaced in `pm next` prompts and item context.
 
+**Harvest review lessons → repo lessons file**: task memory is scoped to one task, but a critique about *how code is written* outlives it. Hand those to the `review-lessons` skill, which owns `.agents/review-lessons.md`:
+
+- **LOCAL entries** — anything the user critiqued about the code this session that would change how future code is written (a naming rule, a missed guard, a util that should have been reused). Record the reasoning they gave, not just the instruction. Skip one-off corrections tied to a line that will never recur.
+- **Collection refresh** — if the file is missing, or its `Collected` date is over 30 days old, run a full collection: PRs from this work have since been reviewed, and the skill re-evaluates existing entries in the same pass.
+
+Skip entirely when the session produced neither code nor critique.
+
 After applying, if either close transaction ran, run the invariant checker once (`pm validate`) and report its output — a read-only self-check of the just-written plan/task state.
 
 ## Rules
