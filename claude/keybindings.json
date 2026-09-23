@@ -1,0 +1,20 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    {
+      "context": "Chat",
+      "bindings": {
+        "ctrl+shift+k": "chat:clearScreen",
+        "ctrl+x s": "chat:sendNow",
+        "ctrl+x z": "chat:stash"
+      }
+    },
+    {
+      "context": "HistorySearch",
+      "bindings": {
+        "ctrl+x s": "historySearch:cycleScope"
+      }
+    }
+  ]
+}

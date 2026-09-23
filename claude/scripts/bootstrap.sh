@@ -40,6 +40,16 @@ ln -sfn "$REPO_DIR/DEVGUARD.md" "$CLAUDE_DIR/DEVGUARD.md"
 rm -f "$CLAUDE_DIR/CLAUDE.md"   # drop any prior symlink so cp writes a real file
 cp -f "$REPO_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
 ln -sfn "$REPO_DIR/extensions/statusline.sh" "$CLAUDE_DIR/statusline.sh"
+# keybindings.json holds only overrides of the built-in defaults, so a new
+# default is never shadowed by a stale copy. The ctrl+x chords are there
+# because tmux's prefix (C-s) swallows ctrl+s: stash, sendNow and cycleScope
+# are unreachable inside tmux on their default keys. clearScreen moves off
+# cmd+k, which Ghostty now delivers to tmux as M-k pane nav. A real file left
+# by an earlier machine setup is moved aside, never deleted.
+if [ -e "$CLAUDE_DIR/keybindings.json" ] && [ ! -L "$CLAUDE_DIR/keybindings.json" ]; then
+    mv "$CLAUDE_DIR/keybindings.json" "$CLAUDE_DIR/keybindings.json.bak.$(date +%Y%m%d%H%M%S)"
+fi
+ln -sfn "$REPO_DIR/keybindings.json" "$CLAUDE_DIR/keybindings.json"
 
 # ── 2. Symlink: hooks/, commands/, agents/ (Claude-only) ──
 echo "Linking hooks/commands/agents..."
