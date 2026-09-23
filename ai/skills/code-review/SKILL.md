@@ -79,7 +79,7 @@ Convention source inventory
 - <source-id>: locator=<repository path> content=<compact relevant convention excerpt>
 ```
 
-Read available user scope, PR/Jira requirements, active-plan criteria, repository-local AGENTS/rules, and relevant project patterns. Add no network authority; record unavailable remote context instead. Use code-graph support when available, falling back to repository search and language-native tools. Keep discovery relevant to the unique changed surfaces rather than auditing the whole repository.
+Read available user scope, PR/Jira requirements, active-plan criteria, repository-local AGENTS/rules, and relevant project patterns. Add no network authority; record unavailable remote context instead. If `.agents/review-lessons.md` exists, read it as past review evidence, NOT as convention: its `Adopted` entries rank below every written project rule and never override one, `Candidates` are context only, and `Rejected points` must not be re-raised as findings. Its absence is recorded as absent — never a reason to collect, which is `/review-lessons`, the only network-touching step in that loop. Use code-graph support when available, falling back to repository search and language-native tools. Keep discovery relevant to the unique changed surfaces rather than auditing the whole repository.
 
 Present the result before findings:
 
@@ -90,6 +90,7 @@ Context Preflight
 - Impact: [seed:<unique-sha>:<changed-path>:<changed-symbol|@file>] <impacted target>, or none
 - Tests: [seed:<unique-sha>:<changed-path>:<changed-symbol|@file>] <test path or observable>, or none
 - Unknowns: [source:<source-id> status:unavailable|conflict] <detail>, or none
+- Past lessons: [lesson:<id> state:adopted|candidate type:correctness|convention|preference] <point>, or none
 ```
 
 Use canonical `@file` for config, documentation, assets, deletions, or any file-level change without a language symbol. Impacted targets and related tests may be outside the diff, but every seed must be in the unique-commit inventory. Never seed discovery from a branch-wide diff or sync-merged surface. Surface conflicting requirements without resolving them silently.
