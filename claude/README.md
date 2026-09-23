@@ -20,6 +20,7 @@ claude/
 ├── agents/                     # Subagent definitions (pre-commit-verifier, reviewer, verifier)
 ├── workflows/                   # Reusable dynamic-workflow scripts — see Measuring a rule
 ├── commands/                   # Slash command definitions
+├── keybindings.json            # Overrides of default keybindings only (tmux-safe ctrl+x chords)
 ├── extensions/
 │   └── statusline.sh           # Status line (model, context, cost, quota/proxy status, plan widget)
 └── scripts/
