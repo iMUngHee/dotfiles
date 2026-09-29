@@ -130,6 +130,24 @@ Node.js (listed in system dependencies above) covers everything. `typescript-too
 npm install -g typescript
 ```
 
+## Inline Review
+
+Review comments anchored to code, sent to an AI agent as one prompt, with the agent's response shown back at each location (`lua/inline_review/`; design decisions in its `design-contract.md`).
+
+| Key | Action |
+|---|---|
+| `<leader>aa` | Comment on the current line / visual selection |
+| `<leader>ay` | Copy every unsent comment as one prompt and mark them sent (`<leader>aY` re-copies ones still waiting) |
+| `<leader>ao` | Open the thread at the cursor (`r` reply, `x` resolve, `e` edit, `d` delete, `]r` next, `q` close) |
+| `<leader>ar` / `ax` / `ad` / `ae` | Reply / resolve / delete / edit an unsent draft |
+| `<leader>al` | Telescope list of every thread, including resolved and missing-file ones |
+| `<leader>ah` | Toggle resolved threads inline |
+| `]r` / `[r` | Next / previous thread in the buffer |
+
+Threads live in `<repo>/.agents/state/review/comments.jsonl`, an append-only log with its own `.gitignore`; each git worktree keeps its own log. Agents follow the `inline-review` skill (`~/.config/ai/skills/inline-review/`) and record responses through `lua/inline_review/cli.lua` rather than writing the log. `:InlineReviewUnlock` removes a lock left behind by a crashed writer.
+
+Checks: `nvim --headless -u NONE --cmd "set rtp^=nvim" -l nvim/tests/inline_review_spec.lua` from the repository root.
+
 ## Private Config
 
 `lua/private/` is git-ignored. See [`lua/private/README.md`](lua/private/README.md) for required local files (e.g. AI completion API keys).
@@ -144,6 +162,7 @@ lua/
     options.lua           -- vim.opt / vim.g settings, ephemeral buffer autocmds
     mappings.lua          -- Global keymaps, LspAttach keymaps
     diagnostic.lua        -- vim.diagnostic.config()
+  inline_review/          -- In-editor review threads for AI agents (see Inline Review)
   plugins/
     00_core.lua           -- plenary.nvim
     10_colorscheme.lua    -- catppuccin
@@ -159,6 +178,7 @@ lua/
   utils/
     root.lua              -- Project root detection (project.nvim -> vim.fs.root -> cwd)
     buffer_stack.lua      -- Closed-buffer stack for bufferline reopen (<leader>bu)
+    file_ref.lua          -- @path references for <leader>l/L and inline_review
   private/                -- git-ignored; local secrets (see private/README.md)
 after/
   lsp/                    -- Neovim 0.11+ native per-server LSP config
@@ -166,6 +186,8 @@ after/
     sourcekit.lua         -- swift/objc only (clangd handles c/cpp), shares .build scratch path
     cspell_ls.lua         -- Custom root_dir to avoid attaching to non-project buffers
     jdtls.lua             -- JDK 17+ required; lombok support, jdt:// classfile handler
+tests/
+  inline_review_spec.lua  -- Headless checks for inline_review
 queries/
   dockerfile/
     injections.scm        -- Shell injection for Dockerfile heredoc blocks

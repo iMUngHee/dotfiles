@@ -322,6 +322,7 @@ return {
         "TelescopePrompt",
         "alpha",
         "netrw",
+        "inline_review",
       },
       mappings = {
         set = "m",

@@ -91,21 +91,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
 })
 
 -- Copy file reference for AI tools (<leader>l = project root, <leader>L = home)
-local function file_ref_path(scope)
-  local abs = vim.fn.expand("%:p")
-  if abs == "" or vim.bo.buftype ~= "" then
-    return nil
-  end
-  if scope == "home" then
-    return vim.fn.fnamemodify(abs, ":~")
-  end
-  local root = vim.fs.root(0, ".git") or vim.fn.getcwd()
-  local resolved = vim.fn.resolve(abs)
-  if resolved:sub(1, #root) == root then
-    return resolved:sub(#root + 2)
-  end
-  return vim.fn.expand("%:.")
-end
+local file_ref_path = require("utils.file_ref").path
 
 local function copy_file_ref(scope)
   local path = file_ref_path(scope)
