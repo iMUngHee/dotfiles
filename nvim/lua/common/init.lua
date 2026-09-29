@@ -50,3 +50,4 @@ end
 require("common.options")
 require("common.mappings")
 require("common.diagnostic")
+require("inline_review").setup()
