@@ -463,7 +463,8 @@ local function diff_rows(before, now, width, rows)
   if width >= SIDE_BY_SIDE_MIN then
     local half = math.floor((width - 5) / 2)
     table.insert(rows, {
-      { string.format("%-" .. half .. "s", "at comment"), "Comment" },
+      -- string.format caps field widths at 99, which a wide modal exceeds.
+      { "at comment" .. string.rep(" ", half - W("at comment")), "Comment" },
       { " | ", "NonText" },
       { "now", "Comment" },
     })

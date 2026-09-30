@@ -1256,6 +1256,16 @@ case("lens: truncation keeps whole eojeol and drops a trailing sentence mark", f
   eq(view.truncate("짧음", 20), "짧음", "short text untouched")
 end)
 
+case("modal: side-by-side diff renders at widths past format's 99-column limit", function()
+  local t = { id = "c1", state = "sent", msgs = { { who = "you", body = "x" } }, snippet = { "old" } }
+  for _, width in ipairs({ 110, 208, 420 }) do
+    local ok, rows = pcall(view.thread_rows, t, width, { "new" })
+    truthy(ok, "width " .. width .. ": " .. tostring(rows))
+    local header = rows[#rows - 1][1][1]
+    eq(vim.fn.strdisplaywidth(header), math.floor((width - 5) / 2), "header padded at " .. width)
+  end
+end)
+
 -- ── end to end ──────────────────────────────────────────────────────────────
 
 local ir = require("inline_review")
@@ -1951,6 +1961,7 @@ local REQUIRED = {
   "sync: CRLF, noeol, empty, single newline, BOM and latin1 files read as in sync",
   "sync: an external rewrite that was not reloaded is out of sync, even with preserved mtime",
   "lens: truncation keeps whole eojeol and drops a trailing sentence mark",
+  "modal: side-by-side diff renders at widths past format's 99-column limit",
   "e2e: comment → copy → agent edits and responds → re-anchored after reload → restart",
   "e2e: a thread on line 1 gets its header drawn as top filler",
   "e2e: ]r / [r cycle through threads and resolved threads hide until toggled",
