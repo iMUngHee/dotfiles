@@ -65,13 +65,14 @@ shown inline next to the code, so lead with the change, not with filler.
 
 ## Rules
 
-- Never write, edit or truncate `.agents/state/review/comments.jsonl` directly, and never emit
+- Never write, edit or truncate the review logs under `.agents/state/review/` directly, and never emit
   comment, reply, sent, edit or move events — only `cli.lua respond` writes on your behalf.
 - One `respond` per token. A token you could not handle still gets a `question` response saying why.
 - Never derive `--log` from `git rev-parse` or your working directory; only the prompt head is right.
 - Exit code 2 means the arguments were rejected. For a flag error, fix the flags and run it again.
   "log id mismatch" means the log rotated or the prompt came from another checkout — do not
-  retry with another id; tell the user to re-copy the prompt (`<leader>aY`).
+  retry with another id; tell the user to re-copy the prompt (`<leader>aY`). "was deleted"
+  means the user deleted that thread in the editor — do not retry; mention it in your final answer.
 - Exit code 1: "log not found" means the branch was archived — report it; "locked" means another
   writer is active — wait a moment and retry once, then report it. Any other failure: report the
   message verbatim.

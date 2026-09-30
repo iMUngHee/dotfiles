@@ -122,8 +122,11 @@ end
 local note
 local written, err, reason = store.transact(o.log, function(_, threads)
   local t = threads[id]
-  if not t or t.state == "deleted" then
+  if not t then
     return nil, "unknown id " .. o.id
+  end
+  if t.state == "deleted" then
+    return nil, o.id .. " was deleted in the editor; skip this token"
   end
   if seq ~= t.seq or (t.state ~= "sent" and t.state ~= "answered") then
     note = string.format("%s is not waiting for this response (state %s); kept as history", o.id, t.state)
