@@ -931,6 +931,20 @@ case("cli: stale token is kept as history with a note", function()
   eq(fold_file(log).c1.state, "draft", "state unchanged")
 end)
 
+case("cli: a deleted thread is refused with its own message and no write", function()
+  local root = tmpdir()
+  local log, id = sent_thread(root)
+  write(log, jl({ ev = "delete", id = "c1" }), "ab")
+  local before = read(log)
+  local r = cli(log, id, "--id", "c1", "--status", "addressed", "--summary", "x")
+  eq(r.code, 2, "exit")
+  truthy(r.stderr:match("c1 was deleted"), "deleted message: " .. (r.stderr or ""))
+  r = cli(log, id, "--id", "c9", "--status", "addressed", "--summary", "x")
+  eq(r.code, 2, "unknown exit")
+  truthy(r.stderr:match("unknown id c9"), "unknown message: " .. (r.stderr or ""))
+  eq(read(log), before, "log unchanged")
+end)
+
 case("cli: 64KB records from CLI and nvim writers interleave under the lock without loss", function()
   local root = tmpdir()
   local log, id = sent_thread(root)
@@ -1925,6 +1939,7 @@ local REQUIRED = {
   "cli: a response from another checkout lands in the prompt's log only",
   "cli: records response, removed and moved-file anchors",
   "cli: stale token is kept as history with a note",
+  "cli: a deleted thread is refused with its own message and no write",
   "cli: 64KB records from CLI and nvim writers interleave under the lock without loss",
   "file_ref: <leader>l / <leader>L produce the same references as before",
   "file_ref: relative() refuses paths outside the root, including sibling prefixes",
