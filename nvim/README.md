@@ -140,11 +140,14 @@ Review comments anchored to code, sent to an AI agent as one prompt, with the ag
 | `<leader>ay` | Copy every unsent comment as one prompt and mark them sent (`<leader>aY` re-copies ones still waiting) |
 | `<leader>ao` | Open the thread at the cursor (`r` reply, `x` resolve, `e` edit, `d` delete, `]r` next, `q` close) |
 | `<leader>ar` / `ax` / `ad` / `ae` | Reply / resolve / delete / edit an unsent draft |
-| `<leader>al` | Telescope list of every thread, including resolved and missing-file ones |
+| `<leader>aX` | Resolve every answered thread of the current branch (asks first) |
+| `<leader>al` | Telescope list of the current branch's threads, including resolved and missing-file ones (`<C-a>` adds other branches and the archive, `<Tab>` + `<C-x>` resolves the selection) |
 | `<leader>ah` | Toggle resolved threads inline |
 | `]r` / `[r` | Next / previous thread in the buffer |
 
-Threads live in `<repo>/.agents/state/review/comments.jsonl`, an append-only log with its own `.gitignore`; each git worktree keeps its own log. Agents follow the `inline-review` skill (`~/.config/ai/skills/inline-review/`) and record responses through `lua/inline_review/cli.lua` rather than writing the log. `:InlineReviewUnlock` removes a lock left behind by a crashed writer.
+Threads belong to the branch they were written on: each branch has its own append-only log in `<repo>/.agents/state/review/<branch>.jsonl` (`.detached.jsonl` for a detached HEAD, e.g. during a rebase), next to a `.gitignore`, and each git worktree keeps its own. Only the current branch's threads show inline and are sent. When a branch no longer exists locally (and is not checked out in any worktree), its log moves to `archive/` and is deleted 30 days later. A log over 512KB rotates: open threads continue in a fresh log and the old file goes to the archive — only resolved or deleted threads can leave, so a log full of open threads keeps growing. A pre-branch `comments.jsonl` is moved to the current branch's log on first use.
+
+Agents follow the `inline-review` skill (`~/.config/ai/skills/inline-review/`) and record responses through `lua/inline_review/cli.lua` with the log path and id from the prompt head, never by writing the log; a prompt copied before a rotation or from another checkout is refused, so re-copy it with `<leader>aY`. `:InlineReviewUnlock` removes a lock left behind by a crashed writer.
 
 Checks: `nvim --headless -u NONE --cmd "set rtp^=nvim" -l nvim/tests/inline_review_spec.lua` from the repository root.
 
