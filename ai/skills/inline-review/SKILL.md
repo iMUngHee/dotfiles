@@ -15,7 +15,7 @@ concerns. Handle every token, then record a response for it — an unrecorded to
 ## Input
 
 ```text
-Review comments — handle each with the inline-review skill, then record one response per token with its respond command (log: .agents/state/review/comments.jsonl)
+Review comments — handle each with the inline-review skill, then record one response per token with its respond command (log: /Users/me/project/.agents/state/review/main.jsonl, id: 3f9a2c71b0de)
 [c3] @nvim/lua/utils/root.lua#L13-20 이거 좀 이상한데, 다른 방법 없어?
 [c5.2] @nvim/lua/common/init.lua#L6 (follow-up; your last: "pcall 제거") 이것도 결국 같은 문제 아냐?
 ```
@@ -23,11 +23,12 @@ Review comments — handle each with the inline-review skill, then record one re
 - `[token]` — `c3` is thread c3's first message; `c5.2` is the user's second message on c5. Copy the token exactly into `--id`.
 - `@path#L<s>-<e>` — repository-relative file and line range as it is **now**.
 - `(follow-up; your last: "...")` — the user is answering your previous response on that thread.
-- Paths are relative to the repository root, the directory that holds `.agents/state/review/`.
+- `(log: <path>, id: <id>)` — the exact log this prompt came from. Copy both verbatim into `--log` and `--log-id`.
+- The **repository root is the part of that path before `/.agents/state/review/`**, and every `@path` is relative to it. Read and edit files under that root — even when your working directory is another checkout or worktree of the same repository, because that is the code the user is looking at.
 
 ## For each token
 
-1. Read the range and enough surrounding code to judge the note.
+1. Read the range under the prompt's root and enough surrounding code to judge the note.
 2. Decide the outcome:
    - `addressed` — you changed the code (or the note needed no change and you explain why it already holds).
    - `declined` — you are deliberately not changing it; the summary gives the reason.
@@ -38,7 +39,7 @@ Review comments — handle each with the inline-review skill, then record one re
 
 ```bash
 nvim -u NONE --headless -l "${XDG_CONFIG_HOME:-$HOME/.config}/nvim/lua/inline_review/cli.lua" respond \
-  --root "$(git rev-parse --show-toplevel)" \
+  --log /Users/me/project/.agents/state/review/main.jsonl --log-id 3f9a2c71b0de \
   --id c3 --status addressed \
   --summary "project_nvim 분기를 제거하고 vim.fs.root 단일 경로로 정리" \
   --l 13,20 --anchor "function M.get()"
@@ -67,9 +68,13 @@ shown inline next to the code, so lead with the change, not with filler.
 - Never write, edit or truncate `.agents/state/review/comments.jsonl` directly, and never emit
   comment, reply, sent, edit or move events — only `cli.lua respond` writes on your behalf.
 - One `respond` per token. A token you could not handle still gets a `question` response saying why.
-- Exit code 2 means the arguments were rejected: read the message, fix the flags, run it again.
-  Exit code 1 with "locked" means another writer is active: wait a moment and retry once, then
-  report it. Any other failure: report the message verbatim.
+- Never derive `--log` from `git rev-parse` or your working directory; only the prompt head is right.
+- Exit code 2 means the arguments were rejected. For a flag error, fix the flags and run it again.
+  "log id mismatch" means the log rotated or the prompt came from another checkout — do not
+  retry with another id; tell the user to re-copy the prompt (`<leader>aY`).
+- Exit code 1: "log not found" means the branch was archived — report it; "locked" means another
+  writer is active — wait a moment and retry once, then report it. Any other failure: report the
+  message verbatim.
 - A stderr note that the token "is not waiting for this response" means the user already moved
   on (replied or resolved); the response is kept as history. Mention it in your final answer.
 

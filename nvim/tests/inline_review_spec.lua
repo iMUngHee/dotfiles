@@ -4,11 +4,12 @@
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 local LUA_DIR = vim.fn.fnamemodify(here .. "/../lua", ":p")
+local NVIM_DIR = vim.fn.fnamemodify(here .. "/..", ":p")
 -- Absolute, so tests that :cd elsewhere still resolve the modules.
 vim.opt.rtp:prepend(vim.fn.fnamemodify(here .. "/..", ":p"))
 local store = require("inline_review.store")
 
-local results = { pass = 0, fail = {} }
+local results = { pass = 0, fail = {}, ran = {} }
 local only = arg and arg[1]
 
 local function case(name, fn)
@@ -16,8 +17,10 @@ local function case(name, fn)
     return
   end
   local ok, err = xpcall(fn, debug.traceback)
+  results.ran[name] = true
   if ok then
     results.pass = results.pass + 1
+    print("ok " .. name)
   else
     table.insert(results.fail, name .. "\n" .. tostring(err))
   end
@@ -85,7 +88,7 @@ end
 
 -- A standalone writer process, used to race real OS processes on the log.
 local WRITER = [[
-package.path = %q .. "?.lua;" .. %q .. "?/init.lua;" .. package.path
+vim.opt.rtp:prepend(%q) -- rtp wins over package.path in nvim; %q
 local store = require("inline_review.store")
 local log, count, tag = arg[1], tonumber(arg[2]), arg[3]
 local mine = {}
@@ -103,7 +106,7 @@ io.stdout:write(table.concat(mine, ","))
 
 local function writer_script()
   local path = vim.fn.tempname() .. ".lua"
-  write(path, string.format(WRITER, LUA_DIR, LUA_DIR))
+  write(path, string.format(WRITER, NVIM_DIR, LUA_DIR))
   return path
 end
 
@@ -276,6 +279,9 @@ end)
 
 case("integrity: short write is reported as incomplete", function()
   local _, log = new_log()
+  assert(store.transact(log, function(events)
+    return comment(store.next_id(events))
+  end))
   local real = store.write_once
   store.write_once = function(path, data)
     if #data > 1 then
@@ -293,7 +299,7 @@ case("integrity: short write is reported as incomplete", function()
   local nxt = assert(store.transact(log, function(events)
     return comment(store.next_id(events))
   end))
-  eq(nxt.id, "c2", "ids stay unique after a short write")
+  eq(nxt.id, "c3", "ids stay unique after a short write")
 end)
 
 case("integrity: two processes racing comments get unique ids and keep their replies", function()
@@ -357,31 +363,417 @@ case("prompt: tokens, ranges and follow-ups", function()
       .. jl({ ev = "reply", id = "c4", body = "not enough" })
   )
   local threads = fold_file(log)
-  local text = store.prompt({ { thread = threads.c3, l = { 13, 20 } }, { thread = threads.c4, l = { 8, 8 } } })
+  local text = store.prompt(
+    { { thread = threads.c3, l = { 13, 20 } }, { thread = threads.c4, l = { 8, 8 } } },
+    "/r/.agents/state/review/main.jsonl",
+    "abc123"
+  )
   local lines = vim.split(text, "\n")
-  eq(lines[1], store.PROMPT_HEAD, "head")
+  eq(
+    lines[1],
+    "Review comments — handle each with the inline-review skill, then record one response per token with its respond command (log: /r/.agents/state/review/main.jsonl, id: abc123)",
+    "head"
+  )
   eq(lines[2], "[c3] @nvim/lua/utils/root.lua#L13-20 다른 방법 없어?", "first comment")
   eq(lines[3], '[c4.2] @a.lua#L8 (follow-up; your last: "renamed") not enough', "follow-up")
+end)
+
+-- ── branch logs (follow-up plan) ─────────────────────────────────────────────
+
+local function header_of(log)
+  return store.header(store.read(log))
+end
+
+local function add_comment(log, extra, opts)
+  return store.transact(log, function(events)
+    return comment(store.next_id(events), extra)
+  end, opts)
+end
+
+case("name: branch names encode to collision-free file names", function()
+  eq(store.encode("agent/x"), "agent%2Fx", "slash")
+  eq(store.encode("Feat"), "%46eat", "upper case")
+  truthy(store.encode("Feat") ~= store.encode("feat"), "case-insensitive FS safe")
+  eq(store.encode("a%2Fb"), "a%252%46b", "percent itself")
+  eq(store.encode("feat/로그"), "feat%2F%EB%A1%9C%EA%B7%B8", "hangul bytes")
+  local long_a, long_b = string.rep("a", 200) .. "47208", string.rep("a", 200) .. "79382"
+  local ea, eb = store.encode(long_a), store.encode(long_b)
+  truthy(#ea <= 200 and #eb <= 200, "shortened")
+  truthy(ea ~= eb, "same 150-byte prefix still distinct")
+  eq(store.encode(long_a), ea, "deterministic")
+  eq(vim.fs.basename(store.log_path("/r", nil)), ".detached.jsonl", "detached")
+  eq(store.root_of("/r/x/.agents/state/review/main.jsonl"), "/r/x", "root of live log")
+  eq(store.root_of("/r/x/.agents/state/review/archive/main.abc.jsonl"), nil, "archive is not a live log")
+  eq(store.root_of("rel/.agents/state/review/main.jsonl"), nil, "relative path refused")
+end)
+
+case("header: first write adds a log header; floor survives in id allocation", function()
+  local root = tmpdir()
+  local log = store.log_path(root, "main")
+  local ev = assert(add_comment(log, nil, { branch = "main" }))
+  local events = store.read(log)
+  eq(events[1].ev, "log", "header first")
+  truthy(events[1].id:match("^%x+$") and #events[1].id == 12, "12 hex id")
+  eq({ events[1].branch, ev.id }, { "main", "c1" }, "branch and first id")
+  write(log, jl({ ev = "log", id = "zzz", branch = "main", floor = 40 }), "ab")
+  eq(header_of(log).id, events[1].id, "first header wins")
+  eq(store.next_id(store.read(log)), "c41", "floor raises the next id")
+end)
+
+case("header: a log naming another branch refuses writes", function()
+  local root = tmpdir()
+  local log = store.log_path(root, "main")
+  assert(add_comment(log, nil, { branch = "main" }))
+  local before = read(log)
+  local ev, err = add_comment(log, nil, { branch = "Main" })
+  eq({ ev, err }, { nil, "collision" }, "collision")
+  eq(read(log), before, "bytes unchanged")
+end)
+
+case("transact: expect_id and create=false refuse before touching any byte", function()
+  local root = tmpdir()
+  local log = store.log_path(root, "main")
+  assert(add_comment(log, nil, { branch = "main" }))
+  write(log, '{"ev":', "ab")
+  local before = read(log)
+  local ev, err = add_comment(log, nil, { expect_id = "nope" })
+  eq({ ev, err }, { nil, "changed" }, "wrong id")
+  eq(read(log), before, "tail not repaired on refusal")
+  local other = store.log_path(root, "gone")
+  ev, err = add_comment(other, nil, { expect_id = "x", create = false })
+  eq({ ev, err }, { nil, "missing" }, "missing log")
+  eq(vim.uv.fs_stat(other), nil, "not created")
+  local elsewhere = tmpdir() .. "/.agents/state/review/main.jsonl"
+  ev, err = add_comment(elsewhere, nil, { create = false })
+  eq({ ev, err }, { nil, "missing" }, "missing directory")
+  eq(vim.fn.isdirectory(vim.fs.dirname(elsewhere)), 0, "directory not created")
+  ev, err = add_comment(log, nil, {
+    check = function()
+      return "branch switched"
+    end,
+  })
+  eq({ ev, err }, { nil, "changed" }, "check refuses")
+  eq(read(log), before, "unchanged after check refusal")
+end)
+
+case("fold: resolve{ids} resolves several threads in one event", function()
+  local root = tmpdir()
+  local log = store.log_path(root, "main")
+  for _ = 1, 3 do
+    assert(add_comment(log, nil, { branch = "main" }))
+  end
+  assert(store.transact(log, function()
+    return { ev = "resolve", ids = { "c1", "c3" } }
+  end))
+  local threads = fold_file(log)
+  eq({ threads.c1.state, threads.c2.state, threads.c3.state }, { "resolved", "draft", "resolved" }, "states")
+  eq(#vim.tbl_filter(function(e)
+    return e.ev == "resolve"
+  end, store.read(log)), 1, "one event")
+end)
+
+case("legacy: headerless comments.jsonl moves to the branch log and is adopted", function()
+  local root = tmpdir()
+  local dir = store.dir(root)
+  vim.fn.mkdir(dir, "p")
+  write(dir .. "/comments.jsonl", jl(comment("c1")) .. '{"ev":"sent"')
+  local target = store.log_path(root, "main")
+  eq(store.migrate_legacy(root, target), "moved", "moved")
+  eq(vim.uv.fs_stat(dir .. "/comments.jsonl"), nil, "legacy gone")
+  local ev = assert(add_comment(target, nil, { branch = "main" }))
+  eq(ev.id, "c2", "history kept")
+  eq(header_of(target).branch, "main", "adopted with a header")
+  -- A branch literally named "comments" adopts the file in place.
+  local r2 = tmpdir()
+  vim.fn.mkdir(store.dir(r2), "p")
+  write(store.dir(r2) .. "/comments.jsonl", jl(comment("c1")))
+  local same = store.log_path(r2, "comments")
+  eq(store.migrate_legacy(r2, same), "none", "source is the target")
+  assert(add_comment(same, nil, { branch = "comments" }))
+  eq(header_of(same).branch, "comments", "adopted in place")
+  -- Target already exists: both kept, reported.
+  local r3 = tmpdir()
+  local t3 = store.log_path(r3, "main")
+  assert(add_comment(t3, nil, { branch = "main" }))
+  write(store.dir(r3) .. "/comments.jsonl", jl(comment("c1")))
+  eq(store.migrate_legacy(r3, t3), "both", "both reported")
+  truthy(vim.uv.fs_stat(store.dir(r3) .. "/comments.jsonl"), "legacy kept")
+end)
+
+case("legacy: migration waits for a writer holding the legacy lock", function()
+  local root = tmpdir()
+  local dir = store.dir(root)
+  vim.fn.mkdir(dir, "p")
+  local legacy = dir .. "/comments.jsonl"
+  write(legacy, jl(comment("c1")))
+  vim.fn.mkdir(legacy .. ".lock", "p")
+  local target = store.log_path(root, "main")
+  eq(store.migrate_legacy(root, target), "locked", "not moved while the legacy lock is held")
+  truthy(vim.uv.fs_stat(legacy) and not vim.uv.fs_stat(target), "nothing moved")
+  vim.uv.fs_rmdir(legacy .. ".lock")
+  eq(store.migrate_legacy(root, target), "moved", "moved after release")
+end)
+
+-- ── rotation ────────────────────────────────────────────────────────────────
+
+local function rotation_fixture()
+  local root = tmpdir()
+  local log = store.log_path(root, "main")
+  for i = 1, 4 do
+    assert(add_comment(log, { l = { i, i }, snippet = { "line " .. i } }, { branch = "main" }))
+  end
+  assert(store.transact(log, function()
+    return { ev = "sent", ids = { "c1", "c2", "c3", "c4" } }
+  end))
+  assert(store.transact(log, function()
+    return { ev = "response", id = "c2", status = "addressed", summary = "s", l = { 9, 9 }, anchor = "line 2" }
+  end))
+  local latest = fold_file(log).c2.evidence
+  assert(store.transact(log, function()
+    return { ev = "move", id = "c2", l = { 10, 10 }, snippet = { "line 2" }, base = latest[#latest].n }
+  end))
+  assert(store.transact(log, function()
+    return { ev = "resolve", ids = { "c1", "c3" } }
+  end))
+  return root, log
+end
+
+local function sha(path)
+  return vim.fn.sha256(read(path))
+end
+
+case("rotate: open threads continue under a new id; the old file is archived byte for byte", function()
+  local root, log = rotation_fixture()
+  local old = read(log)
+  local old_head = header_of(log)
+  local before = fold_file(log)
+  local ev, _, _, info = store.transact(log, function()
+    return { ev = "reply", id = "c4", body = "more" }
+  end, { rotate_bytes = 10 })
+  truthy(ev and info.rotated, "rotated")
+  local head = header_of(log)
+  truthy(head.id ~= old_head.id and info.id == head.id, "new identity reported")
+  eq(head.floor, 4, "floor")
+  local archived = store.archive_dir(root) .. "/main." .. old_head.id .. ".jsonl"
+  truthy(read(archived):sub(1, #old) == old, "old bytes preserved")
+  local threads, order = fold_file(log)
+  eq(order, { "c2", "c4" }, "only open threads")
+  eq(threads.c2.evidence[#threads.c2.evidence].l, { 10, 10 }, "move kept with a remapped base")
+  eq(
+    threads.c2.evidence[#threads.c2.evidence].origin,
+    before.c2.evidence[#before.c2.evidence].origin,
+    "origin preserved"
+  )
+  for _, e in ipairs(store.read(log)) do
+    if e.ids then
+      for _, id in ipairs(e.ids) do
+        truthy(id ~= "c1" and id ~= "c3", "closed ids filtered from " .. e.ev)
+      end
+    end
+  end
+  eq(select(1, add_comment(log, nil, { branch = "main" })).id, "c5", "next id above floor")
+  local st = vim.uv.fs_stat(archived)
+  eq(st.nlink, 1, "archive no longer shares the live inode")
+end)
+
+case("rotate: repeated rotation never lowers the floor; all-resolved leaves only a header", function()
+  local _, log = rotation_fixture()
+  assert(store.transact(log, function()
+    return { ev = "resolve", ids = { "c2" } }
+  end, { rotate_bytes = 10 }))
+  assert(store.transact(log, function()
+    return { ev = "resolve", id = "c4" }
+  end, { rotate_bytes = 10 }))
+  local events = store.read(log)
+  eq(#events, 1, "header only")
+  eq(events[1].floor, 4, "floor kept")
+end)
+
+case("rotate: nothing closed means no rotation", function()
+  local root = tmpdir()
+  local log = store.log_path(root, "main")
+  assert(add_comment(log, nil, { branch = "main" }))
+  local _, _, _, info = add_comment(log, nil, { branch = "main", rotate_bytes = 10 })
+  eq(info.rotated, false, "not rotated")
+end)
+
+case("rotate: failures keep the append, warn, and leave no duplicates", function()
+  for _, step in ipairs({ "tmp", "link" }) do
+    local root, log = rotation_fixture()
+    store.on_rotate = function(s)
+      if s == step then
+        error("injected " .. s)
+      end
+    end
+    local ev, _, _, info = store.transact(log, function()
+      return { ev = "reply", id = "c4", body = "x" }
+    end, { rotate_bytes = 10 })
+    store.on_rotate = nil
+    truthy(ev and info.rotate_error and not info.rotated, step .. ": append kept, error reported")
+    local n = 0
+    for _, e in ipairs(store.read(log)) do
+      if e.ev == "reply" then
+        n = n + 1
+      end
+    end
+    eq(n, 1, step .. ": reply written once")
+    -- The next transact recovers: no tmp, no archive link sharing the inode.
+    assert(add_comment(log, nil, { branch = "main" }))
+    eq(vim.uv.fs_stat(log .. ".tmp"), nil, step .. ": tmp removed")
+    eq(vim.uv.fs_stat(log).nlink, 1, step .. ": no shared archive link")
+    for name in vim.fs.dir(store.archive_dir(root)) do
+      if name ~= ".gitignore" then
+        error(step .. ": unpublished archive left behind: " .. name)
+      end
+    end
+  end
+end)
+
+local CRASH = [[
+vim.opt.rtp:prepend(%q) -- rtp wins over package.path in nvim; %q
+local store = require("inline_review.store")
+store.on_rotate = function(s) if s == arg[2] then os.exit(3) end end
+store.transact(arg[1], function() return { ev = "reply", id = "c4", body = "crash" } end, { rotate_bytes = 10 })
+]]
+
+case("rotate: a real crash after each step is recovered after an explicit unlock", function()
+  local script = vim.fn.tempname() .. ".lua"
+  write(script, string.format(CRASH, NVIM_DIR, LUA_DIR))
+  for _, step in ipairs({ "tmp", "link" }) do
+    local root, log = rotation_fixture()
+    local r = vim.system({ NVIM, "-u", "NONE", "--headless", "-l", script, log, step }):wait(20000)
+    eq(r.code, 3, step .. ": crashed (" .. (r.stderr or "") .. (r.stdout or "") .. ")")
+    truthy(vim.uv.fs_stat(log .. ".lock"), step .. ": lock left behind")
+    local live_before = sha(log)
+    -- A refused transact must not touch the live bytes.
+    store.unlock(log)
+    local ev, err = add_comment(log, nil, { expect_id = "wrong" })
+    eq({ ev, err }, { nil, "changed" }, step .. ": refused")
+    eq(sha(log), live_before, step .. ": live bytes untouched by recovery")
+    eq(#store.prune(root, 0, os.time() + 10), 0, step .. ": prune skips nothing it should keep")
+    assert(add_comment(log, nil, { branch = "main" }))
+    local replies = 0
+    for _, e in ipairs(store.read(log)) do
+      replies = replies + (e.ev == "reply" and 1 or 0)
+    end
+    eq(replies, 1, step .. ": crashed append kept once")
+    eq(vim.uv.fs_stat(log).nlink, 1, step .. ": shared link removed")
+  end
+end)
+
+local READER = [[
+vim.opt.rtp:prepend(%q) -- rtp wins over package.path in nvim; %q
+local store = require("inline_review.store")
+local events = store.read(arg[1])
+io.stdout:write(store.header(events).id .. " " .. #events)
+]]
+
+case("rotate: a reader between link and replace sees the whole old file", function()
+  local _, log = rotation_fixture()
+  local reader = vim.fn.tempname() .. ".lua"
+  write(reader, string.format(READER, NVIM_DIR, LUA_DIR))
+  local old_id = header_of(log).id
+  local seen
+  store.on_rotate = function(s)
+    if s == "link" then
+      seen = vim.system({ NVIM, "-u", "NONE", "--headless", "-l", reader, log }):wait(20000).stdout
+    end
+  end
+  assert(store.transact(log, function()
+    return { ev = "reply", id = "c4", body = "x" }
+  end, { rotate_bytes = 10 }))
+  store.on_rotate = nil
+  truthy(seen and seen:match("^" .. old_id .. " "), "old identity mid-rotation: " .. tostring(seen))
+  local n = tonumber(seen:match(" (%d+)$"))
+  truthy(n and n > 8, "complete old file (" .. tostring(n) .. " events)")
+end)
+
+-- ── ended branches and prune ────────────────────────────────────────────────
+
+case("ended: logs of vanished branches move to the archive; live, detached and failed git stay", function()
+  local root = tmpdir()
+  local keep, gone = store.log_path(root, "main"), store.log_path(root, "old/x")
+  local det = store.log_path(root, nil)
+  assert(add_comment(keep, nil, { branch = "main" }))
+  assert(add_comment(gone, nil, { branch = "old/x" }))
+  assert(add_comment(det, nil, {}))
+  local old_time = os.time() - 40 * 86400
+  vim.uv.fs_utime(gone, old_time, old_time)
+  local gone_id = header_of(gone).id
+  eq(
+    store.archive_ended(root, function()
+      return nil
+    end),
+    {},
+    "git failure archives nothing"
+  )
+  truthy(vim.uv.fs_stat(gone), "kept on git failure")
+  eq(
+    store.archive_ended(root, function()
+      return { main = true }
+    end),
+    { "old/x" },
+    "archived"
+  )
+  local archived = store.archive_dir(root) .. "/old%2Fx." .. gone_id .. ".jsonl"
+  truthy(vim.uv.fs_stat(archived) and not vim.uv.fs_stat(gone), "renamed into archive")
+  truthy(vim.uv.fs_stat(keep) and vim.uv.fs_stat(det), "live and detached kept")
+  eq(store.prune(root), {}, "fresh archive entry survives prune even though the log was idle 40 days")
+  -- Retention counts from archive entry.
+  local t29, t31 = os.time() - 29 * 86400, os.time() - 31 * 86400
+  vim.uv.fs_utime(archived, t31, t31)
+  local young = store.archive_dir(root) .. "/young.aaa.jsonl"
+  write(young, jl({ ev = "log", id = "aaa", branch = "young", floor = 0 }))
+  vim.uv.fs_utime(young, t29, t29)
+  eq(store.prune(root), { "old%2Fx." .. gone_id .. ".jsonl" }, "31 days removed, 29 kept")
+end)
+
+case("ended: identity is re-read under the lock and name clashes get a suffix", function()
+  local root = tmpdir()
+  local gone = store.log_path(root, "gone")
+  assert(add_comment(gone, nil, { branch = "gone" }))
+  local id = header_of(gone).id
+  vim.fn.mkdir(store.archive_dir(root), "p")
+  write(store.archive_dir(root) .. "/gone." .. id .. ".jsonl", "occupied\n")
+  local calls = 0
+  eq(
+    store.archive_ended(root, function()
+      calls = calls + 1
+      return {}
+    end),
+    { "gone" },
+    "archived"
+  )
+  eq(calls, 2, "git re-checked under the lock")
+  truthy(vim.uv.fs_stat(store.archive_dir(root) .. "/gone." .. id .. ".1.jsonl"), "suffixed")
+  eq(read(store.archive_dir(root) .. "/gone." .. id .. ".jsonl"), "occupied\n", "existing archive untouched")
 end)
 
 -- ── cli ─────────────────────────────────────────────────────────────────────
 
 local CLI = LUA_DIR .. "inline_review/cli.lua"
 
-local function cli(root, ...)
-  return vim.system({ NVIM, "-u", "NONE", "--headless", "-l", CLI, "respond", "--root", root, ... }):wait(30000)
+local function cli(log, id, ...)
+  return vim
+    .system({ NVIM, "-u", "NONE", "--headless", "-l", CLI, "respond", "--log", log, "--log-id", id, ... })
+    :wait(30000)
 end
 
+-- A log on branch "main" whose c1 was sent; returns log, log id.
 local function sent_thread(root)
-  local log = store.log_path(root)
-  vim.fn.mkdir(vim.fs.dirname(log), "p")
-  write(log, jl(comment("c1")) .. jl({ ev = "sent", ids = { "c1" } }))
-  return log
+  local log = store.log_path(root, "main")
+  assert(store.transact(log, function()
+    return comment("c1")
+  end, { branch = "main" }))
+  assert(store.transact(log, function()
+    return { ev = "sent", ids = { "c1" } }
+  end))
+  return log, store.header(store.read(log)).id
 end
 
 case("cli: rejects invalid arguments with exit 2 and leaves the log unchanged", function()
   local root = tmpdir()
-  local log = sent_thread(root)
+  local log, id = sent_thread(root)
   local before = read(log)
   local bad = {
     { "--id", "c1", "--status", "done", "--summary", "x" },
@@ -394,17 +786,79 @@ case("cli: rejects invalid arguments with exit 2 and leaves the log unchanged", 
     { "--id", "c9", "--status", "addressed", "--summary", "x" },
   }
   for _, args in ipairs(bad) do
-    local r = cli(root, unpack(args))
+    local r = cli(log, id, unpack(args))
     eq(r.code, 2, "exit for " .. table.concat(args, " ") .. " (" .. (r.stderr or "") .. ")")
   end
   eq(read(log), before, "log unchanged")
 end)
 
+case("cli: refuses a missing log, a wrong id and non-live paths without writing", function()
+  local root = tmpdir()
+  local log, id = sent_thread(root)
+  write(log, '{"ev":', "ab")
+  local before = read(log)
+  local r = cli(log, "000000000000", "--id", "c1", "--status", "addressed", "--summary", "x")
+  eq(r.code, 2, "wrong id (" .. r.stderr .. ")")
+  truthy(r.stderr:match("log id mismatch"), "mismatch message")
+  eq(read(log), before, "bytes unchanged, tail not repaired")
+  local gone = store.log_path(root, "gone")
+  r = cli(gone, id, "--id", "c1", "--status", "addressed", "--summary", "x")
+  eq(r.code, 1, "missing log")
+  truthy(r.stderr:match("log not found"), "missing message")
+  eq(vim.uv.fs_stat(gone), nil, "not created")
+  local elsewhere = tmpdir() .. "/.agents/state/review/main.jsonl"
+  r = cli(elsewhere, id, "--id", "c1", "--status", "addressed", "--summary", "x")
+  eq({ r.code, vim.fn.isdirectory(vim.fs.dirname(elsewhere)) }, { 1, 0 }, "missing directory not created")
+  for _, bad in ipairs({ store.archive_dir(root) .. "/main." .. id .. ".jsonl", "rel/.agents/state/review/main.jsonl" }) do
+    r = cli(bad, id, "--id", "c1", "--status", "addressed", "--summary", "x")
+    eq(r.code, 2, "not a live log: " .. bad)
+  end
+  eq(read(log), before, "still unchanged")
+end)
+
+case("cli: a response from another checkout lands in the prompt's log only", function()
+  local root = tmpdir()
+  vim.system({ "git", "init", "-q", root }):wait()
+  write(root .. "/f.lua", "x\n")
+  vim.system({ "git", "-C", root, "-c", "user.email=t@t", "-c", "user.name=t", "add", "." }):wait()
+  vim.system({ "git", "-C", root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "i" }):wait()
+  local wt = root .. "/.agents/worktrees/wt"
+  vim.system({ "git", "-C", root, "worktree", "add", "-q", wt, "-b", "wt" }):wait()
+  local main_log, main_id = sent_thread(root)
+  local wt_log = sent_thread(wt)
+  local wt_before = read(wt_log)
+  local r = vim
+    .system({
+      NVIM,
+      "-u",
+      "NONE",
+      "--headless",
+      "-l",
+      CLI,
+      "respond",
+      "--log",
+      main_log,
+      "--log-id",
+      main_id,
+      "--id",
+      "c1",
+      "--status",
+      "addressed",
+      "--summary",
+      "from the worktree",
+    }, { cwd = wt })
+    :wait(30000)
+  eq(r.code, 0, "respond (" .. r.stderr .. ")")
+  eq(fold_file(main_log).c1.state, "answered", "main thread answered")
+  eq(read(wt_log), wt_before, "worktree log untouched")
+end)
+
 case("cli: records response, removed and moved-file anchors", function()
   local root = tmpdir()
-  local log = sent_thread(root)
+  local log, id = sent_thread(root)
   local r = cli(
-    root,
+    log,
+    id,
     "--id",
     "c1",
     "--status",
@@ -426,7 +880,8 @@ case("cli: records response, removed and moved-file anchors", function()
   )
 
   r = cli(
-    root,
+    log,
+    id,
     "--id",
     "c1",
     "--status",
@@ -447,7 +902,8 @@ case("cli: records response, removed and moved-file anchors", function()
 
   vim.fn.mkdir(root .. "/sub", "p")
   r = cli(
-    root,
+    log,
+    id,
     "--id",
     "c1",
     "--status",
@@ -467,9 +923,9 @@ end)
 
 case("cli: stale token is kept as history with a note", function()
   local root = tmpdir()
-  local log = sent_thread(root)
+  local log, id = sent_thread(root)
   write(log, jl({ ev = "reply", id = "c1", body = "more" }), "ab")
-  local r = cli(root, "--id", "c1", "--status", "addressed", "--summary", "late")
+  local r = cli(log, id, "--id", "c1", "--status", "addressed", "--summary", "late")
   eq(r.code, 0, "exit")
   truthy(r.stderr:match("not waiting"), "note on stderr")
   eq(fold_file(log).c1.state, "draft", "state unchanged")
@@ -477,13 +933,13 @@ end)
 
 case("cli: 64KB records from CLI and nvim writers interleave under the lock without loss", function()
   local root = tmpdir()
-  local log = sent_thread(root)
+  local log, id = sent_thread(root)
   local hold = vim.fn.tempname() .. ".lua"
   write(
     hold,
     string.format(
       [[
-package.path = %q .. "?.lua;" .. %q .. "?/init.lua;" .. package.path
+vim.opt.rtp:prepend(%q) -- rtp wins over package.path in nvim; %q
 local store = require("inline_review.store")
 store.on_locked = function() vim.uv.sleep(40) end
 local big = string.rep("가", 22000)
@@ -493,7 +949,7 @@ for i = 1, 8 do
   end))
 end
 ]],
-      LUA_DIR,
+      NVIM_DIR,
       LUA_DIR
     )
   )
@@ -510,8 +966,10 @@ end
         "-l",
         CLI,
         "respond",
-        "--root",
-        root,
+        "--log",
+        log,
+        "--log-id",
+        id,
         "--id",
         "c1",
         "--status",
@@ -789,6 +1247,17 @@ end)
 local ir = require("inline_review")
 ir.setup()
 
+-- Branch log of a test repository and its id.
+local function blog(root)
+  local b =
+    vim.trim(vim.system({ "git", "-C", root, "symbolic-ref", "--short", "HEAD" }, { text = true }):wait().stdout)
+  return store.log_path(root, b)
+end
+
+local function lid(root)
+  return store.header(store.read(blog(root))).id
+end
+
 local notes = {}
 local real_notify = vim.notify
 vim.notify = function(msg, level)
@@ -834,14 +1303,18 @@ case("e2e: comment → copy → agent edits and responds → re-anchored after r
   vim.cmd("normal! Vjj")
   input("다른 방법 없어?")
   ir.add(true)
-  local log = store.log_path(root)
+  local log = blog(root)
   local threads = fold_file(log)
   eq({ threads.c1.l, threads.c1.snippet[1] }, { { 3, 5 }, "function M.get()" }, "comment recorded")
   truthy(decor_text(buf):match("c1  DRAFT  you: 다른 방법 없어%?"), "draft lens: " .. decor_text(buf))
 
   notes = {}
   ir.yank()
-  eq(vim.fn.getreg("+"), store.PROMPT_HEAD .. "\n[c1] @sub/a.lua#L3-5 다른 방법 없어?", "prompt copied")
+  eq(
+    vim.fn.getreg("+"),
+    store.prompt_head(log, lid(root)) .. "\n[c1] @sub/a.lua#L3-5 다른 방법 없어?",
+    "prompt copied"
+  )
   eq(notes[#notes], "Copied 1 comments (c1)", "copy notice")
   eq(fold_file(log).c1.state, "sent", "marked sent")
   ir.yank()
@@ -852,7 +1325,8 @@ case("e2e: comment → copy → agent edits and responds → re-anchored after r
   edited[7] = "  local a = 2"
   write(path, table.concat(edited, "\n") .. "\n")
   local r = cli(
-    root,
+    blog(root),
+    lid(root),
     "--id",
     "c1",
     "--status",
@@ -947,6 +1421,314 @@ case("e2e: ]r / [r cycle through threads and resolved threads hide until toggled
   vim.cmd("silent! %bwipeout!")
 end)
 
+local function sh(root, ...)
+  local r = vim.system({ "git", "-C", root, "-c", "user.email=t@t", "-c", "user.name=t", ... }, { text = true }):wait()
+  assert(r.code == 0, table.concat({ ... }, " ") .. ": " .. (r.stderr or ""))
+  return r.stdout
+end
+
+local function committed_repo()
+  local root = e2e_repo()
+  sh(root, "add", ".")
+  sh(root, "commit", "-qm", "init")
+  return root, vim.trim(sh(root, "symbolic-ref", "--short", "HEAD"))
+end
+
+local function events_in(log, kind)
+  return vim.tbl_filter(function(e)
+    return e.ev == kind
+  end, store.read(log))
+end
+
+case("e2e: threads follow the branch; a switch without log changes is picked up and announced once", function()
+  local root, main = committed_repo()
+  local buf = load(root .. "/sub/a.lua")
+  vim.api.nvim_win_set_cursor(0, { 3, 0 })
+  input("on main")
+  ir.add(false)
+  truthy(decor_text(buf):match("on main"), "shown on " .. main)
+  sh(root, "switch", "-q", "-c", "other")
+  notes = {}
+  ir._poll(buf)
+  ir._poll(buf)
+  eq(
+    vim.tbl_filter(function(n)
+      return n == "Review threads: other"
+    end, notes),
+    { "Review threads: other" },
+    "announced once"
+  )
+  eq(decor_text(buf), "", "hidden on other")
+  ir.yank()
+  eq(notes[#notes], "No draft comments to send", "not sent from other")
+  ir.jump(1)
+  eq(notes[#notes], "No review threads in this buffer", "]r skips it")
+  sh(root, "switch", "-q", main)
+  ir._poll(buf)
+  truthy(decor_text(buf):match("on main"), "back on " .. main)
+  truthy(
+    vim.uv.fs_stat(store.log_path(root, main)) and not vim.uv.fs_stat(store.log_path(root, "other")),
+    "one log per branch"
+  )
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
+case("e2e: linked worktrees keep their own branch logs; a worktree's branch is never archived", function()
+  local root, main = committed_repo()
+  local wt = root .. "/.agents/worktrees/wt"
+  sh(root, "worktree", "add", "-q", wt, "-b", "wtb")
+  -- A stale log for wtb in the main checkout must survive cleanup: wtb is checked out in wt.
+  assert(store.transact(store.log_path(root, "wtb"), function()
+    return comment("c1")
+  end, { branch = "wtb" }))
+  local buf = load(wt .. "/sub/a.lua")
+  input("in worktree")
+  ir.add(false)
+  truthy(vim.uv.fs_stat(store.log_path(wt, "wtb")), "worktree log on its branch")
+  eq(vim.uv.fs_stat(store.log_path(root, main)), nil, "main log untouched")
+  truthy(decor_text(buf):match("in worktree"), "shown in worktree")
+  load(root .. "/sub/a.lua")
+  ir._poll(vim.api.nvim_get_current_buf(), true)
+  truthy(vim.uv.fs_stat(store.log_path(root, "wtb")), "worktree branch log kept")
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
+case("e2e: detached HEAD uses .detached and comes back; unreadable HEAD refuses writes", function()
+  local root, main = committed_repo()
+  local buf = load(root .. "/sub/a.lua")
+  input("on main")
+  ir.add(false)
+  local head = root .. "/.git/HEAD"
+  local saved = read(head)
+  write(head, vim.trim(sh(root, "rev-parse", "HEAD")) .. "\n")
+  notes = {}
+  ir._poll(buf)
+  eq(notes[#notes], "Review threads: detached", "rebase-like detached")
+  eq(decor_text(buf), "", "main threads hidden")
+  input("while detached")
+  ir.add(false)
+  truthy(vim.uv.fs_stat(store.log_path(root, nil)), ".detached log")
+  write(head, saved)
+  ir._poll(buf)
+  truthy(decor_text(buf):match("on main") and not decor_text(buf):match("while detached"), "back on " .. main)
+  vim.uv.fs_rename(head, head .. ".off")
+  local before = read(store.log_path(root, main))
+  notes = {}
+  input("blind")
+  ir.add(false)
+  vim.uv.fs_rename(head .. ".off", head)
+  eq(read(store.log_path(root, main)), before, "nothing written with HEAD unreadable")
+  truthy(notes[#notes]:match("could not read HEAD"), "refusal notice: " .. tostring(notes[#notes]))
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
+case("e2e: a branch switch while the input is open writes nowhere and keeps the text", function()
+  local root, main = committed_repo()
+  load(root .. "/sub/a.lua")
+  input("seed")
+  ir.add(false)
+  local main_before = read(store.log_path(root, main))
+  vim.ui.input = function(_, cb)
+    sh(root, "switch", "-q", "-c", "elsewhere")
+    cb("typed while switching")
+  end
+  ir.add(false)
+  eq(read(store.log_path(root, main)), main_before, "main log unchanged")
+  eq(vim.uv.fs_stat(store.log_path(root, "elsewhere")), nil, "no log created on the new branch")
+  eq(vim.fn.getreg('"'), "typed while switching", "text kept")
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
+-- Rotation from another writer: add and resolve a throwaway thread, then force rotation.
+local function external_rotation(log)
+  local ev = assert(store.transact(log, function(events)
+    return comment(store.next_id(events), { file = "other.lua" })
+  end))
+  local _, _, _, info = assert(store.transact(log, function()
+    return { ev = "resolve", id = ev.id }
+  end, { rotate_bytes = 10 }))
+  assert(info.rotated, "rotated")
+end
+
+local REPEATED = { "x = 1", "y = 2", "x = 1", "z = 3", "x = 1", "w = 4" }
+
+local function rotation_repo()
+  local root, main = committed_repo()
+  write(root .. "/sub/a.lua", table.concat(REPEATED, "\n") .. "\n")
+  sh(root, "commit", "-qam", "repeated")
+  local buf = load(root .. "/sub/a.lua")
+  vim.api.nvim_win_set_cursor(0, { 5, 0 })
+  input("the third x")
+  ir.add(false)
+  return root, store.log_path(root, main), buf
+end
+
+case(
+  "e2e: rotation keeps the tracked line in a dirty buffer and records it under the new generation on save",
+  function()
+    for _, rotations in ipairs({ 1, 2 }) do
+      local root, log, buf = rotation_repo()
+      vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "-- a", "-- b" })
+      eq(view.position(buf, "c1"), 7, "followed the unsaved insert")
+      for _ = 1, rotations do
+        external_rotation(log)
+      end
+      truthy(
+        vim.wait(3000, function()
+          return ir.refresh(root).log_id == header_of(log).id
+        end, 50),
+        "refreshed"
+      )
+      ir.render_root(root)
+      eq(view.position(buf, "c1"), 7, rotations .. " rotation(s): extmark kept, not re-resolved to another x")
+      eq(#events_in(log, "move"), 0, "no move while dirty")
+      vim.cmd("silent write")
+      truthy(
+        vim.wait(3000, function()
+          return #events_in(log, "move") == 1
+        end, 50),
+        "one move after save"
+      )
+      local mv = events_in(log, "move")[1]
+      eq(mv.l, { 7, 7 }, "recorded at the kept line")
+      eq(fold_file(log).c1.evidence[#fold_file(log).c1.evidence].kind, "move", "accepted in the new generation")
+      ir._stop()
+      vim.cmd("silent! %bwipeout!")
+    end
+  end
+)
+
+case("e2e: after a rotation a new response is still pending until the buffer syncs", function()
+  local root, log, buf = rotation_repo()
+  ir.yank()
+  vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "-- a" })
+  external_rotation(log)
+  local r = cli(
+    log,
+    header_of(log).id,
+    "--id",
+    "c1",
+    "--status",
+    "addressed",
+    "--summary",
+    "moved",
+    "--l",
+    "4",
+    "--anchor",
+    "z = 3"
+  )
+  eq(r.code, 0, "respond (" .. r.stderr .. ")")
+  truthy(
+    vim.wait(3000, function()
+      return decor_text(buf):match("%(pending reload%)") ~= nil
+    end, 50),
+    "pending: " .. decor_text(buf)
+  )
+  eq(view.position(buf, "c1"), 6, "kept meanwhile")
+  vim.cmd("silent write")
+  truthy(
+    vim.wait(3000, function()
+      return view.position(buf, "c1") == 5
+    end, 50),
+    "re-resolved to the response anchor (z = 3 is line 5 now): " .. tostring(view.position(buf, "c1"))
+  )
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
+local function answered_repo()
+  local root, main = committed_repo()
+  load(root .. "/sub/a.lua")
+  for _, row in ipairs({ 1, 3, 5 }) do
+    vim.api.nvim_win_set_cursor(0, { row, 0 })
+    input("at " .. row)
+    ir.add(false)
+  end
+  ir.yank()
+  local log = store.log_path(root, main)
+  for _, id in ipairs({ "c1", "c2" }) do
+    local r = cli(log, header_of(log).id, "--id", id, "--status", "addressed", "--summary", "done " .. id)
+    assert(r.code == 0, r.stderr)
+  end
+  ir.refresh(root)
+  return root, main, log
+end
+
+local real_confirm = vim.fn.confirm
+
+case("bulk: <leader>aX resolves answered threads in one event after confirmation", function()
+  local root, _, log = answered_repo()
+  notes = {}
+  vim.fn.confirm = function(q)
+    table.insert(notes, q)
+    return 2
+  end
+  ir.resolve_answered()
+  eq(notes[#notes], "Resolve 2 answered threads (c1, c2)?", "question")
+  eq(#events_in(log, "resolve"), 0, "No leaves it")
+  vim.fn.confirm = function()
+    -- another writer replies to c2 while the dialog is open
+    assert(store.transact(log, function()
+      return { ev = "reply", id = "c2", body = "wait" }
+    end))
+    return 1
+  end
+  ir.resolve_answered()
+  vim.fn.confirm = real_confirm
+  local ev = events_in(log, "resolve")
+  eq(#ev, 1, "one event")
+  eq(ev[1].ids, { "c1" }, "c2 excluded after its reply")
+  eq(notes[#notes], "Resolved 1 threads (c1)", "notice")
+  local threads = fold_file(log)
+  eq({ threads.c1.state, threads.c2.state, threads.c3.state }, { "resolved", "draft", "sent" }, "states")
+  ir.resolve_answered()
+  eq(notes[#notes], "No answered threads to resolve", "nothing left")
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
+case("picker: entries tag other branches and the archive; resolving skips archived ones", function()
+  local root, main, log = answered_repo()
+  local other = store.log_path(root, "feat/x")
+  assert(store.transact(other, function()
+    return comment("c1", { body = "on feat" })
+  end, { branch = "feat/x" }))
+  local old = store.log_path(root, "old")
+  assert(store.transact(old, function()
+    return comment("c1", { body = "gone branch" })
+  end, { branch = "old" }))
+  store.archive_ended(root, function()
+    return { [main] = true, ["feat/x"] = true }
+  end)
+  local current = ir.entries(root, false)
+  eq(#current, 3, "current branch only by default")
+  for _, e in ipairs(current) do
+    truthy(not e.display:match("%["), "no tag on current: " .. e.display)
+  end
+  local all = ir.entries(root, true)
+  truthy(all[1].current and not all[#all].current and all[#all].archived, "current first, archive last")
+  local tags = {}
+  for _, e in ipairs(all) do
+    local tag = e.display:match("(%[[^%]]+%])")
+    if tag then
+      tags[tag] = e
+    end
+  end
+  truthy(tags["[feat/x]"] and tags["[archived: old]"], "tags: " .. vim.inspect(vim.tbl_keys(tags)))
+  notes = {}
+  local done = ir.resolve_entries(root, { current[1], tags["[feat/x]"], tags["[archived: old]"] })
+  eq(done, { "c1", "c1" }, "current and other branch resolved")
+  truthy(vim.tbl_contains(notes, "Archived threads are read-only"), "archive refused")
+  eq(fold_file(other).c1.state, "resolved", "written to the other branch's log")
+  eq(fold_file(log).c1.state, "resolved", "and the current one")
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
 case("e2e: a modified buffer shows (pending reload) and applies the response after saving", function()
   local root = e2e_repo()
   local path = root .. "/sub/a.lua"
@@ -956,8 +1738,20 @@ case("e2e: a modified buffer shows (pending reload) and applies the response aft
   ir.add(false)
   ir.yank()
   vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "-- local edit" })
-  local r =
-    cli(root, "--id", "c1", "--status", "addressed", "--summary", "done", "--l", "3", "--anchor", "function M.get()")
+  local r = cli(
+    blog(root),
+    lid(root),
+    "--id",
+    "c1",
+    "--status",
+    "addressed",
+    "--summary",
+    "done",
+    "--l",
+    "3",
+    "--anchor",
+    "function M.get()"
+  )
   eq(r.code, 0, "respond")
   truthy(
     vim.wait(3000, function()
@@ -984,10 +1778,22 @@ case("e2e: watcher's own move does not loop", function()
   input("x")
   ir.add(false)
   ir.yank()
-  local r =
-    cli(root, "--id", "c1", "--status", "addressed", "--summary", "ok", "--l", "3", "--anchor", "function M.get()")
+  local r = cli(
+    blog(root),
+    lid(root),
+    "--id",
+    "c1",
+    "--status",
+    "addressed",
+    "--summary",
+    "ok",
+    "--l",
+    "3",
+    "--anchor",
+    "function M.get()"
+  )
   eq(r.code, 0, "respond")
-  local log = store.log_path(root)
+  local log = blog(root)
   vim.wait(1500, function()
     return false
   end, 50)
@@ -1015,13 +1821,13 @@ case("e2e: edit is refused when the draft moved on, text kept in a register", fu
   ir.add(false)
   -- Another writer sends it while our edit prompt is open.
   vim.ui.input = function(_, cb)
-    assert(store.transact(store.log_path(root), function()
+    assert(store.transact(blog(root), function()
       return { ev = "sent", ids = { "c1" } }
     end))
     cb("edited late")
   end
   ir.edit()
-  eq(fold_file(store.log_path(root)).c1.msgs[1].body, "first", "edit not applied")
+  eq(fold_file(blog(root)).c1.msgs[1].body, "first", "edit not applied")
   eq(vim.fn.getreg('"'), "edited late", "text preserved")
   ir._stop()
   vim.cmd("silent! %bwipeout!")
@@ -1051,12 +1857,13 @@ io.stdout:write(vim.fn.getreg('"') .. "\n--\n" .. tostring(seen))
     )
   )
   -- No clipboard tool on PATH: the provider has no executable.
-  local out = vim
-    .system({ NVIM, "-u", "NONE", "--headless", "-l", probe }, { env = { PATH = "/nonexistent" } })
-    :wait(20000)
+  local only_git = tmpdir()
+  vim.uv.fs_symlink(vim.fn.exepath("git"), only_git .. "/git")
+  local out = vim.system({ NVIM, "-u", "NONE", "--headless", "-l", probe }, { env = { PATH = only_git } }):wait(20000)
   eq(
     out.stdout,
-    store.PROMPT_HEAD .. "\n[c1] @sub/a.lua#L1 hi\n--\nCopied 1 comments (c1) to the unnamed register (no clipboard)",
+    store.prompt_head(blog(root), lid(root))
+      .. "\n[c1] @sub/a.lua#L1 hi\n--\nCopied 1 comments (c1) to the unnamed register (no clipboard)",
     "fallback (" .. (out.stderr or "") .. ")"
   )
 end)
@@ -1077,10 +1884,83 @@ case("e2e: missing file is listed, outside-repo file refused", function()
   write(root .. "/sub/b.lua", "x\n")
   load(root .. "/sub/b.lua")
   eq(vim.uv.fs_stat(root .. "/sub/a.lua"), nil, "file gone")
-  eq(fold_file(store.log_path(root)).c1.file, "sub/a.lua", "thread kept for the picker")
+  eq(fold_file(blog(root)).c1.file, "sub/a.lua", "thread kept for the picker")
   ir._stop()
   vim.cmd("silent! %bwipeout!")
 end)
+
+-- Every case below must have run; a skipped or renamed case fails the run.
+local REQUIRED = {
+  "fold: draft → sent → answered → reply → sent → answered → resolved",
+  "fold: edit applies only to the current draft message",
+  "fold: delete hides thread and later responses stay history only",
+  "fold: earlier-round, after-reply and after-resolve responses do not change state or anchor",
+  "fold: duplicate current-round response — last wins, anchor only when it carries one",
+  "fold: move applies only when its base is still the latest evidence",
+  "fold: unknown id and malformed lines are reported",
+  "integrity: unterminated tail is ignored until terminated",
+  "integrity: every truncation point of an abandoned write keeps the next record",
+  "integrity: short write is reported as incomplete",
+  "integrity: two processes racing comments get unique ids and keep their replies",
+  "integrity: a held lock is never stolen; a crash lock needs explicit unlock",
+  "integrity: .gitignore is created beside the log",
+  "prompt: tokens, ranges and follow-ups",
+  "name: branch names encode to collision-free file names",
+  "header: first write adds a log header; floor survives in id allocation",
+  "header: a log naming another branch refuses writes",
+  "transact: expect_id and create=false refuse before touching any byte",
+  "fold: resolve{ids} resolves several threads in one event",
+  "legacy: headerless comments.jsonl moves to the branch log and is adopted",
+  "legacy: migration waits for a writer holding the legacy lock",
+  "rotate: open threads continue under a new id; the old file is archived byte for byte",
+  "rotate: repeated rotation never lowers the floor; all-resolved leaves only a header",
+  "rotate: nothing closed means no rotation",
+  "rotate: failures keep the append, warn, and leave no duplicates",
+  "rotate: a real crash after each step is recovered after an explicit unlock",
+  "rotate: a reader between link and replace sees the whole old file",
+  "ended: logs of vanished branches move to the archive; live, detached and failed git stay",
+  "ended: identity is re-read under the lock and name clashes get a suffix",
+  "cli: rejects invalid arguments with exit 2 and leaves the log unchanged",
+  "cli: refuses a missing log, a wrong id and non-live paths without writing",
+  "cli: a response from another checkout lands in the prompt's log only",
+  "cli: records response, removed and moved-file anchors",
+  "cli: stale token is kept as history with a note",
+  "cli: 64KB records from CLI and nvim writers interleave under the lock without loss",
+  "file_ref: <leader>l / <leader>L produce the same references as before",
+  "file_ref: relative() refuses paths outside the root, including sibling prefixes",
+  "anchor: response anchor accepted at its line",
+  "anchor: lines inserted above before the response is read are followed by search",
+  "anchor: falls back to the comment snippet, then estimates without a match",
+  "anchor: duplicate text resolves to the occurrence nearest the recorded line",
+  "anchor: removed ranges keep a point in the middle, at the end and at the top",
+  "sync: CRLF, noeol, empty, single newline, BOM and latin1 files read as in sync",
+  "sync: an external rewrite that was not reloaded is out of sync, even with preserved mtime",
+  "lens: truncation keeps whole eojeol and drops a trailing sentence mark",
+  "e2e: comment → copy → agent edits and responds → re-anchored after reload → restart",
+  "e2e: a thread on line 1 gets its header drawn as top filler",
+  "e2e: ]r / [r cycle through threads and resolved threads hide until toggled",
+  "e2e: threads follow the branch; a switch without log changes is picked up and announced once",
+  "e2e: linked worktrees keep their own branch logs; a worktree's branch is never archived",
+  "e2e: detached HEAD uses .detached and comes back; unreadable HEAD refuses writes",
+  "e2e: a branch switch while the input is open writes nowhere and keeps the text",
+  "e2e: rotation keeps the tracked line in a dirty buffer and records it under the new generation on save",
+  "e2e: after a rotation a new response is still pending until the buffer syncs",
+  "bulk: <leader>aX resolves answered threads in one event after confirmation",
+  "picker: entries tag other branches and the archive; resolving skips archived ones",
+  "e2e: a modified buffer shows (pending reload) and applies the response after saving",
+  "e2e: watcher's own move does not loop",
+  "e2e: edit is refused when the draft moved on, text kept in a register",
+  "e2e: without a clipboard the prompt goes to the unnamed register",
+  "e2e: missing file is listed, outside-repo file refused",
+}
+
+if not only then
+  for _, name in ipairs(REQUIRED) do
+    if not results.ran[name] then
+      table.insert(results.fail, "not run: " .. name)
+    end
+  end
+end
 
 -- ── report ──────────────────────────────────────────────────────────────────
 

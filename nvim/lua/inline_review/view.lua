@@ -236,7 +236,8 @@ end
 
 -- ── tracking ────────────────────────────────────────────────────────────────
 
--- tracked[buf][id] = { mark, n (latest evidence seen), removed, estimated, eof }
+-- tracked[buf][id] = { mark, n (latest evidence seen), origin (its identity),
+--                      gen (log id it was read from), removed, estimated, eof }
 local tracked = {}
 
 function M.forget(buf)
@@ -342,13 +343,26 @@ function M.render(buf, repo, rel, opts)
     else
       local latest = t.evidence[#t.evidence]
       local pending = false
+      -- A rotation renumbers evidence but keeps its origin: same evidence,
+      -- so keep the extmark and just adopt the new generation.
+      if tr and tr.gen ~= opts.gen and tr.origin == latest.origin then
+        tr.gen, tr.n = opts.gen, latest.n
+      end
       if not tr or (tr.n ~= latest.n and sync == true) then
         if tr then
           api.nvim_buf_del_extmark(buf, ns_track, tr.mark)
         end
         local r = M.resolve(t, lines)
         local mark, eof = place(buf, r, count)
-        tr = { mark = mark, n = latest.n, removed = r.removed, estimated = r.estimated, eof = eof }
+        tr = {
+          mark = mark,
+          n = latest.n,
+          origin = latest.origin,
+          gen = opts.gen,
+          removed = r.removed,
+          estimated = r.estimated,
+          eof = eof,
+        }
         tracked[buf][id] = tr
         if sync == true and not r.estimated and opts.on_move then
           local same = r.via == latest and latest.kind ~= "response" and r.s == latest.l[1]

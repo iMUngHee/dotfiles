@@ -27,10 +27,13 @@
 - Thread states: `draft` (my message not sent yet) → `sent` (waiting for the agent) → `answered` (waiting for me) → `resolved`. A reply returns a thread to `draft`.
 - Screens: code buffer with lens headers; thread modal; history picker.
 - History picker lists every thread including resolved and missing-file ones, filterable by state, jumping to the location on select.
+- Threads belong to the branch they were written on. Headers, `]r`/`[r`, sending and bulk resolve cover the current branch only; switching branches switches the visible threads (`Review threads: <branch>` once per switch).
+- A branch that no longer exists locally has its threads moved to the archive; archives untouched for 30 days are deleted. A live log over 512KB rotates: open threads continue in a fresh log and the old file, with its resolved and deleted threads, moves to the same archive.
+- The picker shows the current branch by default; `<C-a>` adds other branches and the archive, each entry tagged `[<branch>]` or `[archived: <branch>]`.
 
 ## Data & State Model
 
-Event log: `<git root or cwd>/.agents/state/review/comments.jsonl`, append-only; a `.gitignore` containing `*` is created beside it.
+Event logs: `<git root or cwd>/.agents/state/review/<branch>.jsonl`, one per branch (`.detached.jsonl` for a detached HEAD), plus `archive/<branch>.jsonl`; a `.gitignore` containing `*` is created beside them. File names, the log header and archive rules live in the technical plan's Log Protocol.
 
 | ev | writer | fields |
 | --- | --- | --- |
@@ -39,7 +42,9 @@ Event log: `<git root or cwd>/.agents/state/review/comments.jsonl`, append-only;
 | `sent` | nvim | `ids, ts` |
 | `response` | agent via `cli.lua respond` | `id` (prompt token, e.g. `c3` or `c3.2`), `status: addressed\|declined\|question, summary, l?, anchor?, anchor_side?, removed?, file?, ts` (`anchor` = post-edit text of line `l[1]`; for removed ranges the line before the deletion point, `anchor_side` before\|after\|empty) |
 | `reply` | nvim | `id, body, ts` |
-| `resolve` / `delete` | nvim | `id, ts` |
+| `log` | nvim | `id, branch, floor` (log identity; first one in the file wins) |
+| `resolve` | nvim | `id` or `ids`, `ts` |
+| `delete` | nvim | `id, ts` |
 | `move` | nvim | `id, l, snippet, base, anchor_side?, removed?, file?, ts` (confirmed anchor) |
 
 A response changes state only when its token matches the thread's latest user message and the thread is `sent` (or already `answered` for that same message, in which case the latest duplicate wins); otherwise it stays in history as `earlier round`. Full write/read/anchor rules live in the technical plan's Log Protocol.
@@ -55,6 +60,11 @@ A response changes state only when its token matches the thread's latest user me
 | anchor | range deleted | header at deletion point, `code removed`; modal shows the original snippet | resolve |
 | file | file missing | picker only, `FILE MISSING`; modal opens with snippet | agent `file` re-targets |
 | view | resolved | hidden inline by default; toggle shows them | `<leader>ah` |
+| view | other branch | not shown inline, not sent; picker shows it with `<C-a>` | switch branch |
+| bulk | no answered threads | `No answered threads to resolve` | — |
+| picker | archived entry acted on | `Archived threads are read-only` | — |
+| agent | log missing (branch archived) | CLI refuses (exit 1); nothing written | re-copy the prompt |
+| agent | log id mismatch (rotated or another checkout) | CLI refuses (exit 2); nothing written | re-copy the prompt from the right checkout |
 
 ## Interaction Model
 
@@ -69,6 +79,9 @@ A response changes state only when its token matches the thread's latest user me
 | `<leader>al` | n | history picker |
 | `<leader>ah` | n | toggle resolved threads inline |
 | `]r` / `[r` | n | next / previous thread in buffer |
+| `<leader>aX` | n | resolve every answered thread of the current branch after `Resolve <n> answered threads (<ids>)?` |
+
+Inside the picker: `<Tab>` selects, `<C-x>` resolves the selection (`Resolved <n> threads (<ids>)`), `<C-a>` toggles other branches and the archive.
 
 Inside the modal: `r` reply, `x` resolve, `e` edit, `d` delete, `]r` next, `q` / `<Esc>` close and return focus to the code window. `<leader>l` / `<leader>L` keep their existing behavior.
 
@@ -106,6 +119,8 @@ Art direction: review lens — a header line above the range tells what is there
 ## Microcopy
 
 English UI copy to match existing notifications (`Copied: @path`); comment bodies stay as typed.
+Prompt head: `Review comments — handle each with the inline-review skill, then record one response per token with its respond command (log: <absolute log path>, id: <log id>)`.
+`Review threads: <branch>`, `Resolve <n> answered threads (<ids>)?`, `Resolved <n> threads (<ids>)`, `No answered threads to resolve`, `Archived threads are read-only`.
 `No draft comments to send`, `Copied <n> comments (<ids>)`, `Re-copied <n> sent comments (<ids>)`, `code removed`, `(location estimated)`, `FILE MISSING`, `Delete <id> and its agent responses?`.
 
 ## Do / Don't
@@ -167,6 +182,39 @@ Surface Obligations:
 
 Craft findings found and fixed during implementation: line-1 header invisible without topfill (degrades the task — also present in ART-006, missed at selection); preview diff cut to unreadable at 160 columns because the switch used the editor width (degrades the task); `...` after a sentence mark and misaligned `FILE MISSING` column (polish).
 
+
+### Follow-up: branch logs, rotation, bulk resolve (plan `2026-09-29-inline-review-followups`)
+
+Build authorized 2026-09-30 ("ㅇㅇ ㄱㄱ").
+
+| Contract rule | Existing primitive / new code | Where |
+| --- | --- | --- |
+| Branch logs | percent-encoded names (upper case too), `.detached`, full-hash shortening — `vim.fn.sha256` because Neovim has no sha1 (plan said sha1) | `store.lua` `M.encode` |
+| Log identity and writes | header event, `expect_id` / `check` / `create=false` checked under the lock before any byte changes; header written only together with an event | `store.lua` `M.transact` |
+| Rotation | tmp → hard link (`vim.uv.fs_link`) → atomic rename; recovery drops tmp and unpublished links; `origin` kept on copied events | `store.lua` `rotate`, `recover` |
+| Ended branches, prune | refs ∪ worktree branches, re-checked under the lock; mtime set before rename; prune skips shared inodes | `store.lua` `M.archive_ended`, `M.prune` |
+| Current branch | `git rev-parse --absolute-git-dir` once, then the HEAD file; unreadable HEAD refuses writes | `init.lua` `current_branch` |
+| Deferred actions | (log, id, branch) captured at start, verified under the lock; typed text kept in `"` on refusal | `init.lua` `commit` |
+| Position across rotation | tracked entries keep `gen` and `origin`; same origin adopts the new generation without re-resolving | `view.lua` `M.render` |
+| Bulk resolve | `vim.fn.confirm` then one `resolve{ids}`, re-filtered under the lock | `init.lua` `M.resolve_answered` |
+| Picker | telescope multi-select, `<C-x>` / `<C-a>` mappings, tag placed before the path so it survives 80 columns | `init.lua` `M.entries`, `M.list` |
+| Agent CLI | `--log` / `--log-id`, never creates files; rtp prepended so a checkout runs its own modules | `cli.lua` |
+
+Deviation from the plan's wording: when a rotation only renumbers the same evidence, the lens shows no `(pending reload)` — there is nothing pending; the label stays for a genuinely new response on a dirty buffer (spec covers both).
+
+Verification: spec `ALL PASS (61)` with every name in `REQUIRED` run; stylua exit 0; lua-language-server no problems; render `.agents/plans/artifacts/nvim-review-comments/followups-render.html` (revision a36a7ac54562).
+
+| ID | Stage | Obligation | Derives from | Evidence | Status |
+| --- | --- | --- | --- | --- | --- |
+| OBL-210 | implementation | Branch-scoped logs, switch detection and announcement, detached/unreadable HEAD, linked worktrees | OBL-015 | code:nvim/lua/inline_review/init.lua:48, test:e2e threads follow the branch, e2e linked worktrees, e2e detached HEAD | PASS |
+| OBL-211 | implementation | Rotation at 512KB, recovery, ended-branch archive, 30-day prune, legacy migration | OBL-016 | code:nvim/lua/inline_review/store.lua:491, code:nvim/lua/inline_review/store.lua:724, test:rotate:*, ended:*, legacy:* | PASS |
+| OBL-212 | implementation | `<leader>aX` with confirmation and re-filtering; picker multi-select `<C-x>`; archived read-only | OBL-017 | code:nvim/lua/inline_review/init.lua:581, test:bulk, picker | PASS |
+| OBL-213 | implementation | Prompt head with absolute log path and id; CLI refuses missing log (exit 1) and id mismatch (exit 2) without writing; cross-checkout response lands in the prompt's log | OBL-018 | code:nvim/lua/inline_review/cli.lua:132, code:nvim/lua/inline_review/init.lua:666, test:cli refuses, cli another checkout | PASS |
+| OBL-214 | implementation | Picker tags `[<branch>]` / `[archived: <branch>]`, current branch first, `<C-a>` toggle, columns kept | OBL-111 | code:nvim/lua/inline_review/init.lua:797, render:followups-render.html#picker@80,@160,#picker-all@80,@160 | PASS |
+| OBL-215 | implementation | Tracked positions survive rotations (one or two before refresh) in dirty buffers; stale moves refused | OBL-015, OBL-009 | code:nvim/lua/inline_review/view.lua:348, test:e2e rotation keeps the tracked line, e2e new response pending | PASS |
+
+Craft findings (follow-up): `<C-a>` listed another branch first and put the cursor on it (degrades the task — fixed by ordering current, other, archive); archive tag cut at 80 columns (polish — moved before the path).
+
 ## Decision Log & Open Questions
 
 - 2026-09-29 — Storage: append-only JSONL event log (chosen over single JSON / chat-only replies). Plugin lives in dotfiles as a local module.
@@ -174,6 +222,7 @@ Craft findings found and fixed during implementation: line-1 header invisible wi
 - 2026-09-29 — Direction ART-006 over ART-004 (margin note) and ART-005 (interleaved). First pick at revision 588a01b11c17 was refused as ARTIFACT DRIFT after regeneration; re-selected at 6e0b107a23ae.
 - 2026-09-29 — Plan review R1 (technical): prompt tokens gain a message sequence (`c3.2`), nvim records confirmed anchors as `move` events, stale responses stay in history only. No user-visible flow change beyond `earlier round` labelling in the thread history.
 - 2026-09-29 — OBL-014 (code-removed handling) and build approved: "승인 ㄱㄱ".
+- 2026-09-29 — Focused Delta (follow-up plan inline-review-followups), approved section by section ("ㅇㅇ"): threads scoped to branch-specific logs, ended branches archived (30-day retention), 512KB rotation, bulk resolve via `<leader>aX` and picker multi-select, prompt carries the absolute log path and log id. Branch names are percent-encoded into file names.
 - 2026-09-29 — Implementation rows OBL-201–OBL-209 are recorded under Implementation Bridge (the planning-time PENDING placeholder was removed).
 
 Surface Obligations:
@@ -204,9 +253,16 @@ Surface Obligations:
 | OBL-108 | interface | Input through `vim.ui.input` with `Comment @<path>#L<s>-<e>: ` / `Edit <id>: ` / `Reply <id>: ` | OBL-001, OBL-002 | captured:nvim/lua/plugins/20_ui.lua:230 | PASS |
 | OBL-109 | interface | Telescope picker `<STATE>  <id>  <path>:<s>-<e>  <summary>`, `FILE MISSING`, modal-layout preview | OBL-008 | captured:nvim/lua/plugins/40_telescope.lua | PASS |
 | OBL-110 | interface | `vim.notify` feedback strings per Microcopy | OBL-003, OBL-011 | captured:nvim/lua/common/mappings.lua:118 | PASS |
+| OBL-015 | experience | Threads belong to their branch: headers, `]r`/`[r`, send and bulk resolve cover the current branch only; a branch switch swaps the visible threads and notifies `Review threads: <branch>` once | OBL-005, OBL-003 | captured:conversation section A1 ("ㅇㅇ") | PASS |
+| OBL-016 | experience | Ended branches' threads move to the archive, deleted after 30 days untouched; a live log over 512KB rotates, archiving its resolved/deleted threads | OBL-008 | captured:conversation section A1, B3, B4 | PASS |
+| OBL-017 | experience | `<leader>aX` resolves every answered thread of the current branch after `Resolve <n> answered threads (<ids>)?`; picker `<Tab>` + `<C-x>` resolves the selection; archived entries are read-only | OBL-006 | captured:conversation section A2, A3 | PASS |
+| OBL-018 | experience | The prompt head carries the absolute log path and log id; the agent CLI refuses a missing log or mismatched id and writes nothing | OBL-003 | captured:conversation section A4, repro 2026-09-29 | PASS |
+| OBL-111 | interface | Picker keeps its columns and adds a `[<branch>]` / `[archived: <branch>]` tag; `<C-a>` toggles other branches and the archive; selection uses telescope's multi-select marker | OBL-015, OBL-016, OBL-109 | captured:nvim/lua/plugins/40_telescope.lua, contract Component Rules picker | PASS |
 
 Approvals:
 
 - experience_approved: ART-001 — "코드 중점으로 보는게 흐름 파악이 수월해보임"
 - direction_selected: ART-006 — "난 계속봐도 모달열리는게 나은디"
 - build_authorized: plan nvim-review-comments — "승인 ㄱㄱ" (2026-09-29; also approves OBL-014)
+- experience_approved (Focused Delta, plan inline-review-followups): sections A1–A4 — "ㅇㅇ"
+- build_authorized (plan inline-review-followups): "ㅇㅇ ㄱㄱ" (2026-09-30)

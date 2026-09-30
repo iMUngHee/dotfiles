@@ -1,16 +1,21 @@
 -- Agent-side writer for the inline-review log. Agents record responses
 -- through this instead of writing the log, so every writer shares the same
 -- lock, tail repair, single write and field validation (store.transact).
+-- The log path and id come from the prompt head, so a response can only land
+-- in the exact log (and log generation) the prompt was copied from.
 --
 --   nvim -u NONE --headless -l <nvim config>/lua/inline_review/cli.lua respond \
---     --root <repo> --id <token> --status addressed|declined|question \
+--     --log <absolute log path> --log-id <id> \
+--     --id <token> --status addressed|declined|question \
 --     --summary <text> [--l <s>[,<e>] --anchor <text>] \
 --     [--removed --anchor-side before|after|empty] [--file <repo-relative path>]
 --
--- Exit 0 on success; 2 on invalid arguments; 1 on lock or write failure.
+-- Exit 0 on success; 2 on invalid arguments or a log id mismatch; 1 when the
+-- log is missing, locked or could not be written. Nothing is written on refusal.
 
 local lua_dir = debug.getinfo(1, "S").source:sub(2):match("^(.*)/inline_review/[^/]+$")
-package.path = lua_dir .. "/?.lua;" .. lua_dir .. "/?/init.lua;" .. package.path
+-- rtp is searched before package.path, so put this checkout first.
+vim.opt.rtp:prepend(vim.fs.dirname(lua_dir))
 local store = require("inline_review.store")
 
 local function fail(code, msg)
@@ -19,7 +24,8 @@ local function fail(code, msg)
 end
 
 local FLAGS = {
-  root = true,
+  log = true,
+  ["log-id"] = true,
   id = true,
   status = true,
   summary = true,
@@ -54,18 +60,21 @@ end
 
 local argv = _G.arg or {}
 if argv[1] ~= "respond" then
-  fail(2, "usage: cli.lua respond --root <repo> --id <token> --status <status> --summary <text> ...")
+  fail(2, "usage: cli.lua respond --log <path> --log-id <id> --id <token> --status <status> --summary <text> ...")
 end
 local o = parse(argv)
 
-for _, need in ipairs({ "root", "id", "status", "summary" }) do
+for _, need in ipairs({ "log", "log-id", "id", "status", "summary" }) do
   if not o[need] or o[need] == "" then
     fail(2, "--" .. need .. " is required")
   end
 end
-local root = vim.fn.resolve(vim.fn.fnamemodify(o.root, ":p")):gsub("/$", "")
-if vim.fn.isdirectory(root) == 0 then
-  fail(2, "root is not a directory: " .. o.root)
+local root = store.root_of(o.log)
+if not root then
+  fail(
+    2,
+    "--log must be the absolute path of a live review log (…/.agents/state/review/<branch>.jsonl), got " .. o.log
+  )
 end
 local id, seq = store.parse_token(o.id)
 if not id then
@@ -111,7 +120,7 @@ if not store.valid(ev) then
 end
 
 local note
-local written, err, reason = store.transact(store.log_path(root), function(_, threads)
+local written, err, reason = store.transact(o.log, function(_, threads)
   local t = threads[id]
   if not t or t.state == "deleted" then
     return nil, "unknown id " .. o.id
@@ -120,17 +129,21 @@ local written, err, reason = store.transact(store.log_path(root), function(_, th
     note = string.format("%s is not waiting for this response (state %s); kept as history", o.id, t.state)
   end
   return ev
-end)
+end, { expect_id = o["log-id"], create = false })
 
 if not written then
   if err == "aborted" then
     fail(2, reason)
+  elseif err == "missing" then
+    fail(1, "log not found — branch archived? re-copy the prompt: " .. o.log)
+  elseif err == "changed" then
+    fail(2, "log id mismatch — the log rotated or this prompt is from another checkout; re-copy it")
   elseif err == "locked" then
     fail(1, "log is locked; retry in a moment, or run :InlineReviewUnlock in Neovim if no writer is running")
   elseif err == "incomplete" then
-    fail(1, "write may be incomplete; check " .. store.REL_LOG)
+    fail(1, "write may be incomplete; check " .. o.log)
   end
-  fail(1, "could not write " .. store.REL_LOG .. ": " .. tostring(err))
+  fail(1, "could not write " .. o.log .. ": " .. tostring(err))
 end
 if note then
   io.stderr:write("inline-review: " .. note .. "\n")
