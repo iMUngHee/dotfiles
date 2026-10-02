@@ -69,12 +69,19 @@ export async function describeNode(path: string): Promise<NodeDescriptor> {
   return { type: "regular", content: content.toString("base64"), mode: info.mode & 0o777, sha256: hash(content) };
 }
 
+// Windows keeps only a read-only bit, so chmod(0o644) reads back as 0o666 and
+// 0o444 stays 0o444. Compare writability there; full permission bits elsewhere.
+function comparableMode(mode: number): number {
+  if (process.platform !== "win32") return mode;
+  return mode & 0o200 ? 0o666 : 0o444;
+}
+
 export function sameDescriptor(a: NodeDescriptor, b: NodeDescriptor): boolean {
   if (a.type !== b.type) return false;
   if (a.type === "absent") return true;
   if (a.type === "symlink" && b.type === "symlink") return a.target === b.target;
   return a.type === "regular" && b.type === "regular"
-    && a.sha256 === b.sha256 && a.content === b.content && a.mode === b.mode;
+    && a.sha256 === b.sha256 && a.content === b.content && comparableMode(a.mode) === comparableMode(b.mode);
 }
 
 function isWithin(root: string, path: string): boolean {
