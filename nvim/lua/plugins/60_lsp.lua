@@ -12,6 +12,21 @@ return {
     "williamboman/mason.nvim",
     lazy = false,
     build = ":MasonUpdate",
+    opts = {
+      registries = {
+        "github:mason-org/mason-registry",
+        -- Ships `roslyn` at the version vscode-csharp uses; the mason-org
+        -- roslyn-language-server comes from nuget.org and lags behind.
+        "github:Crashdummyy/mason-registry",
+      },
+    },
+  },
+  {
+    -- C# LSP. The `roslyn` mason package has no lspconfig mapping, so
+    -- mason-lspconfig never enables it; this plugin starts it instead.
+    -- Installed by mason-tool-installer (80_formatter.lua) when a dotnet SDK exists.
+    "seblyng/roslyn.nvim",
+    ft = "cs",
     opts = {},
   },
   {

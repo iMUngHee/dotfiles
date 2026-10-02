@@ -38,6 +38,7 @@ return {
         "kotlin",
         -- Neovim 0.12 already maps .fs/.fsx/.fsi to the fsharp filetype.
         "fsharp",
+        "c_sharp",
       })
 
       vim.treesitter.language.register("bash", "sh")

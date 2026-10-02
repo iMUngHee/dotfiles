@@ -31,6 +31,11 @@ return {
       end
       if has_sdk then
         table.insert(ensure, "fantomas")
+        -- csharpier is a dotnet tool like fantomas. roslyn is the C# LSP
+        -- (roslyn.nvim, 60_lsp.lua); mason-lspconfig cannot install it, and
+        -- it needs the SDK to run.
+        table.insert(ensure, "csharpier")
+        table.insert(ensure, "roslyn")
       end
 
       return { ensure_installed = ensure }
@@ -68,6 +73,7 @@ return {
         bash = { "beautysh" },
         java = { "palantir-java-format" },
         fsharp = { "fantomas" },
+        cs = { "csharpier" },
       },
       format_on_save = {
         lsp_format = "fallback",
