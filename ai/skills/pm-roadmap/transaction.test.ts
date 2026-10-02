@@ -10,6 +10,7 @@ import {
   recoverTransactions,
   regularDescriptor,
   runTransaction,
+  sameDescriptor,
 } from "./transaction.ts";
 import { acquireOwnerLock, releaseOwnerLock } from "../../lib/owner-lock.mjs";
 
@@ -290,6 +291,14 @@ async function main() {
       await assert.rejects(recoverTransactions(unknownRoot), /manual_recovery_required/);
       assert.deepEqual(await listTransactions(unknownRoot), ["unknown.json"]);
     } finally { await rm(unknownRoot, { recursive: true, force: true }); }
+
+    const writable = regularDescriptor("same\n", 0o644);
+    assert.equal(
+      sameDescriptor(writable, regularDescriptor("same\n", 0o666)),
+      process.platform === "win32",
+      "Windows reads chmod 0o644 back as 0o666, so only writability is comparable there",
+    );
+    assert.equal(sameDescriptor(writable, regularDescriptor("same\n", 0o444)), false, "a read-only node never matches a writable one");
 
     console.log("transaction.test.ts OK");
   } finally {
