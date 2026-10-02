@@ -122,6 +122,18 @@ Go toolchain must be installed. `gopls`, `gofumpt`, `goimports` are mason-manage
 brew install go   # or https://go.dev/dl/
 ```
 
+### C# / F#
+
+**.NET SDK** required (runtime alone is not enough). Without it, `csharpier`, `fantomas`, and `roslyn` are skipped by mason-tool-installer.
+
+```bash
+winget install Microsoft.DotNet.SDK.8   # Windows
+brew install dotnet-sdk                 # macOS
+sudo pacman -S dotnet-sdk               # Arch / Omarchy
+```
+
+C# uses the Roslyn server through `roslyn.nvim`; the `roslyn` package comes from the `Crashdummyy/mason-registry` registry (same version as vscode-csharp). Use `:Roslyn target` to switch solutions.
+
 ### JavaScript / TypeScript
 
 Node.js (listed in system dependencies above) covers everything. `typescript-tools.nvim` uses the project-local `typescript` package (`node_modules`). For projects without it:
@@ -173,7 +185,7 @@ lua/
     30_files.lua          -- neo-tree, oil, project.nvim, auto-session
     40_telescope.lua      -- telescope, fzf-native (with runtime case-sensitivity toggle)
     50_treesitter.lua     -- treesitter, treesitter-context, rainbow-delimiters
-    60_lsp.lua            -- mason, mason-lspconfig, nvim-lspconfig, typescript-tools, nvim-cmp
+    60_lsp.lua            -- mason, mason-lspconfig, nvim-lspconfig, roslyn.nvim, typescript-tools, nvim-cmp
     70_git.lua            -- gitsigns, diffview
     80_formatter.lua      -- mason-tool-installer, nvim-lint, conform.nvim
     90_misc.lua           -- trouble, todo-comments, zen-mode
