@@ -38,6 +38,8 @@ type GraphState = {
   size: Size
   /** The space the layout runs in: the region, or more for a big graph. */
   world: Size
+  /** The world the region and node count call for, before any drag grew it. */
+  base: Size
   layout: Layout
   camera: Point
   zoom: number
@@ -101,6 +103,29 @@ function worldOf(region: Size, graph: Graph): Size {
   }
 }
 
+/**
+ * The world after a resize or new props: the base for the new region and node
+ * count, every node not dragged scaled into it, every dragged node kept where it
+ * was put and the world grown to hold it.
+ */
+function rebased(state: GraphState, graph: GraphProps, region: Size): { world: Size; base: Size; pos: Positions } {
+  const base = worldOf(region, graph)
+  const pinned = new Set(state.pinned)
+  const scaled = rescaled(state.layout.pos, state.base, base)
+  const pos: Positions = {}
+  let world = base
+  for (const [id, p] of Object.entries(state.layout.pos)) {
+    pos[id] = pinned.has(id) ? p : scaled[id]!
+    if (pinned.has(id)) {
+      world = {
+        columns: Math.max(world.columns, Math.ceil(p.x) + 1),
+        rows: Math.max(world.rows, Math.ceil(p.y) + 1),
+      }
+    }
+  }
+  return { world, base, pos }
+}
+
 /** The camera that shows the middle of `world` in `region` at `zoom`. */
 function centred(world: Size, region: Size, zoom: number): Point {
   return {
@@ -117,17 +142,40 @@ function viewed(pos: Positions, camera: Point, zoom: number): Positions {
 }
 
 const toWorld = (state: GraphState, x: number, y: number): Point => ({
-  x: Math.min(Math.max(0, x / state.zoom + state.camera.x), Math.max(0, state.world.columns - 1)),
-  y: Math.min(Math.max(0, y / state.zoom + state.camera.y), Math.max(0, state.world.rows - 1)),
+  x: x / state.zoom + state.camera.x,
+  y: y / state.zoom + state.camera.y,
 })
 
-/** A fresh or re-fitted layout for `graph` in `world`, keeping what it can of `prev`. */
-function fitted(graph: Graph, world: Size, prev?: GraphState): Layout {
-  const from = prev && !isEmpty(prev.world) ? rescaled(prev.layout.pos, prev.world, world) : {}
-  return {
-    pos: placed(graph.nodes, graph.edges, world, from),
-    temperature: startTemperature(world),
+/**
+ * `state` with `id` at world point `at`, the world grown to hold it: past the
+ * right or bottom edge the world widens; past the left or top every position
+ * and the camera shift with it, so nothing moves on screen.
+ */
+function draggedTo(state: GraphState, id: string, at: Point): GraphState {
+  const shift = { x: Math.max(0, Math.ceil(-at.x)), y: Math.max(0, Math.ceil(-at.y)) }
+  const moved = (p: Point) => ({ x: p.x + shift.x, y: p.y + shift.y })
+  const pos: Positions = Object.fromEntries(Object.entries(state.layout.pos).map(([key, p]) => [key, moved(p)]))
+  const point = moved(at)
+  pos[id] = point
+  const world = {
+    columns: Math.max(state.world.columns + shift.x, Math.ceil(point.x) + 1),
+    rows: Math.max(state.world.rows + shift.y, Math.ceil(point.y) + 1),
   }
+  return {
+    ...state,
+    world,
+    // The base moves with the shift, so a later resize scales the shifted
+    // positions from the space they now live in.
+    base: { columns: state.base.columns + shift.x, rows: state.base.rows + shift.y },
+    camera: moved(state.camera),
+    layout: { pos, temperature: Math.max(state.layout.temperature, startTemperature(world) / 4) },
+    isRunning: true,
+  }
+}
+
+/** A fresh layout for `graph` in `world`. */
+function fitted(graph: Graph, world: Size): Layout {
+  return { pos: placed(graph.nodes, graph.edges, world), temperature: startTemperature(world) }
 }
 
 /** Zoom by `by` levels (0 keeps it), keeping the region's middle where it is. */
@@ -173,13 +221,20 @@ function frame(box: GraphState['box']): void {
   const isResized = size.columns !== state.size.columns || size.rows !== state.size.rows
   if (isResized) {
     if (isEmpty(size)) return
-    const world = worldOf(size, state.graph)
     const wasEmpty = isEmpty(state.size)
+    const next = wasEmpty
+      ? { world: worldOf(size, state.graph), base: worldOf(size, state.graph), pos: {} }
+      : rebased(state, state.graph, size)
+    const world = next.world
     surface.setState({
       ...state,
       size,
       world,
-      layout: fitted(state.graph, world, state),
+      base: next.base,
+      layout: {
+        pos: placed(state.graph.nodes, state.graph.edges, world, next.pos),
+        temperature: startTemperature(world),
+      },
       camera: wasEmpty ? centred(world, size, state.zoom) : state.camera,
       isRunning: true,
     })
@@ -216,6 +271,7 @@ function started(graph: GraphProps, surface: ClientSurface<GraphState>): GraphSt
     shape: shapeOf(graph),
     size: isEmpty(size) ? { columns: 0, rows: 0 } : size,
     world,
+    base: world,
     layout: isEmpty(size) ? { pos: {}, temperature: 0 } : fitted(graph, world),
     camera: isEmpty(size) ? { x: 0, y: 0 } : centred(world, size, 1),
     zoom: 1,
@@ -242,14 +298,7 @@ function started(graph: GraphProps, surface: ClientSurface<GraphState>): GraphSt
       return
     }
     if (event.type === 'move' && now.drag !== null) {
-      box.surface.setState({
-        ...now,
-        layout: {
-          pos: { ...now.layout.pos, [now.drag]: toWorld(now, event.x, event.y) },
-          temperature: Math.max(now.layout.temperature, startTemperature(now.world) / 4),
-        },
-        isRunning: true,
-      })
+      box.surface.setState(draggedTo(now, now.drag, toWorld(now, event.x, event.y)))
       return
     }
     if (event.type === 'move' && now.pan !== null) {
@@ -304,18 +353,17 @@ const GraphView: ClientModule<GraphProps, GraphState> = (graph, surface) => {
     state.box.surface = surface
     const shape = shapeOf(graph)
     if (shape !== state.shape) {
-      const world = isEmpty(state.size) ? state.world : worldOf(state.size, graph)
+      const kept = isEmpty(state.size) ? null : rebased(state, graph, state.size)
+      const world = kept ? kept.world : state.world
       const next: GraphState = {
         ...state,
         graph,
         shape,
         world,
-        layout: isEmpty(state.size)
-          ? state.layout
-          : {
-              pos: placed(graph.nodes, graph.edges, world, rescaled(state.layout.pos, state.world, world)),
-              temperature: startTemperature(world),
-            },
+        base: kept ? kept.base : state.base,
+        layout: kept
+          ? { pos: placed(graph.nodes, graph.edges, world, kept.pos), temperature: startTemperature(world) }
+          : state.layout,
         isRunning: !isEmpty(state.size),
         pinned: state.pinned.filter(id => graph.nodes.some(node => node.id === id)),
         selected: graph.nodes.some(node => node.id === state!.selected) ? state.selected : null,
