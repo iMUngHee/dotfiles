@@ -18,7 +18,8 @@ import {
   resolvedOf,
   stepsOf,
 } from './plan'
-import type { Listing, Run } from './plan'
+import type { Graph, Listing, Run } from './plan'
+import { altOf, svgOf } from './svg'
 
 export const PANE = 'pm'
 const REFRESH_DEBOUNCE_MS = 300
@@ -156,6 +157,17 @@ function soon($: Engine): void {
   })
 }
 
+/** /pm and the band's controls: open the pane (on `shown`, when given) and read the backlog. */
+async function openPane($: Engine, shown?: Tab): Promise<void> {
+  if (shown !== undefined) await update($, tab, () => shown)
+  await $.ui.open({ id: PANE, title: 'pm', focus: true })
+  soon($)
+}
+
+async function pickNode($: Engine, id: string): Promise<void> {
+  await update($, selected, prev => (prev === id ? null : id))
+}
+
 async function switched($: Engine): Promise<void> {
   generation += 1
   await update($, band, () => ({ sessionId: '', view: null, error: null }))
@@ -202,8 +214,7 @@ export function register(on: On): void {
   })
 
   on('command.run', { command: PANE }, async $ => {
-    await $.ui.open({ id: PANE, title: 'pm', focus: true })
-    soon($)
+    await openPane($)
     return {}
   }).catch(($, e, next) => next(e))
 
@@ -262,7 +273,10 @@ function bandLine($: Engine, e: RenderInput<'AbovePrompt'>, state: BandState): R
     view.steps.length > 0 && view.steps.length <= DOTS_MAX
       ? `${'●'.repeat(done)}${'○'.repeat(view.steps.length - done)} `
       : ''
+  const { Box, Button } = $.ui.resolve(e)
   return (
+    <Box flexDirection="row">
+      <Box flexShrink={1}>
     <Text wrap="truncate-end">
       <Text color={view.status === 'active' ? 'warning' : 'inactive'}>
         {view.status === 'active' ? '▶' : '⚙'} {view.id}
@@ -275,6 +289,13 @@ function bandLine($: Engine, e: RenderInput<'AbovePrompt'>, state: BandState): R
       {current ? `  ${current.text}` : ''}
       {state.error !== null ? <Text dimColor> ⚠</Text> : ''}
     </Text>
+      </Box>
+      {/* The way into /pm from the band: each opens the pane on its tab. */}
+      <Box flexDirection="row" flexShrink={0} columnGap={2} marginLeft={2}>
+        <Button key="band-steps" label="steps" plain dimColor onPress={() => openPane($, 'steps')} />
+        <Button key="band-graph" label="graph" plain dimColor onPress={() => openPane($, 'graph')} />
+      </Box>
+    </Box>
   )
 }
 
@@ -307,7 +328,7 @@ function paneOf(
   const body =
     shown === 'steps'
       ? stepsBody($, e, state)
-      : shown === 'backlog' || !hasClient(e)
+      : shown === 'backlog'
         ? backlogBody($, e, list, state)
         : graphBody($, e, list, state, pick)
   return (
@@ -316,10 +337,6 @@ function paneOf(
       {body}
     </Box>
   )
-}
-
-function hasClient(e: RenderInput<'Pane'>): boolean {
-  return e.surface === 'terminal' || e.surface === 'desktop'
 }
 
 function stepsBody($: Engine, e: RenderInput<'Pane'>, state: BandState): RenderElement {
@@ -332,9 +349,19 @@ function stepsBody($: Engine, e: RenderInput<'Pane'>, state: BandState): RenderE
   const current = currentOf(view.steps)
   return (
     <Box flexDirection="column">
-      <Text bold wrap="truncate-end">
-        {view.id} · {view.status} · {done}/{view.steps.length}
+      <Text wrap="truncate-end">
+        <Text bold color="claude">
+          {view.id}
+        </Text>
+        <Text dimColor>
+          {' · '}
+          {view.status} · {done}/{view.steps.length}
+        </Text>
       </Text>
+      <Text dimColor wrap="truncate-end">
+        {view.title}
+      </Text>
+      <Text> </Text>
       {view.steps.map(step => (
         <Text
           wrap="truncate-end"
@@ -364,12 +391,17 @@ function backlogBody($: Engine, e: RenderInput<'Pane'>, list: BacklogState, stat
     <Box flexDirection="column">
       {groups.map(group => (
         <Box flexDirection="column">
-          <Text bold color="claude">
-            {group.key}
+          <Text>
+            <Text bold color="claude">
+              {group.key}
+            </Text>
+            <Text dimColor> · {group.rows.length}</Text>
           </Text>
           {group.rows.map(row => (
             <Text wrap="truncate-end" bold={row.isCurrent} dimColor={row.isBlocked && !row.isCurrent}>
-              {row.isCurrent ? '▶' : row.isBlocked ? '◌' : '·'} [{row.priority}] {row.id} — {row.title}
+              {' '}
+              {row.isCurrent ? '▶' : row.isBlocked ? '◌' : '·'} [{row.priority}] {row.id}
+              <Text dimColor> — {row.title}</Text>
               {row.blockedBy !== undefined ? (
                 <Text color="warning">
                   {row.blockedByReason === 'order' ? `  ⤷ after ${row.blockedBy}` : `  ⤷ needs ${row.blockedBy}`}
@@ -387,6 +419,15 @@ function backlogBody($: Engine, e: RenderInput<'Pane'>, list: BacklogState, stat
   )
 }
 
+/** The picked node's detail line: the item's task, priority, title and needs, or the task. */
+function detailOf(list: BacklogState, pick: string | null): string | null {
+  if (pick === null || list.listing === null) return null
+  const chosen = [...list.listing.eligible, ...list.listing.blocked].find(item => item.id === pick)
+  if (!chosen) return `task ${pick.replace(/^#/, '')}`
+  const needs = chosen.dependsOn.length > 0 ? ` · needs ${chosen.dependsOn.join(', ')}` : ''
+  return `${chosen.key}/${chosen.id} · [${chosen.priority}] ${chosen.title}${needs}`
+}
+
 function graphBody(
   $: Engine,
   e: RenderInput<'Pane'>,
@@ -394,25 +435,76 @@ function graphBody(
   state: BandState,
   pick: string | null,
 ): RenderElement {
-  const { Box, Text, Client } = $.ui.resolve(e as RenderInput<'Pane'> & { surface: 'terminal' })
+  const { Text } = $.ui.resolve(e)
   if (list.listing === null) {
     return <Text dimColor>{list.error !== null ? `⚠ backlog: ${list.error}` : 'loading…'}</Text>
   }
   const graph: GraphProps = graphOf(list.listing, currentPlanOf(state))
-  const all = [...list.listing.eligible, ...list.listing.blocked]
-  const chosen = pick === null ? undefined : all.find(item => item.id === pick)
+  const detail = detailOf(list, pick)
+  return e.surface === 'terminal'
+    ? cellGraph($, e as RenderInput<'Pane'> & { surface: 'terminal' }, graph, detail)
+    : drawnGraph($, e as RenderInput<'Pane'> & { surface: 'desktop' }, graph, detail, pick)
+}
+
+/** The terminal's graph: the Client's cell drawing, which takes drags, clicks and arrows. */
+function cellGraph(
+  $: Engine,
+  e: RenderInput<'Pane'> & { surface: 'terminal' },
+  graph: GraphProps,
+  detail: string | null,
+): RenderElement {
+  const { Box, Text, Client } = $.ui.resolve(e)
   const height = Math.max(5, e.props.scroll.bodyRows - 3)
   return (
     <Box flexDirection="column">
       <Client key="graph" module="./graph.tsx" props={graph} width="100%" height={height} />
       <Text dimColor wrap="truncate-end">
-        {chosen
-          ? `${chosen.key}/${chosen.id} · [${chosen.priority}] ${chosen.title}${
-              chosen.dependsOn.length > 0 ? ` · needs ${chosen.dependsOn.join(', ')}` : ''
-            }`
-          : pick !== null
-            ? `task ${pick.replace(/^#/, '')}`
-            : 'click a node, or focus the graph and use the arrows'}
+        {detail ?? 'click a node · drag to move · arrows to step'}
+      </Text>
+    </Box>
+  )
+}
+
+/**
+ * Every other surface's graph: an Svg (its text is not a cell grid, and a
+ * Client there has no Svg to draw with), then the nodes as Buttons by task,
+ * which is how a node is picked, then the pick's detail.
+ */
+function drawnGraph(
+  $: Engine,
+  e: RenderInput<'Pane'> & { surface: 'desktop' },
+  graph: Graph,
+  detail: string | null,
+  pick: string | null,
+): RenderElement {
+  const { Box, Text, Button, Svg } = $.ui.resolve(e)
+  const hubs = graph.nodes.filter(node => node.state === 'task')
+  return (
+    <Box flexDirection="column" rowGap={1}>
+      <Svg source={svgOf(graph, pick)} alt={altOf(graph)} isInteractive />
+      {hubs.map(hub => (
+        <Box flexDirection="column">
+          <Text bold color="claude">
+            {hub.task}
+          </Text>
+          <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+            {graph.nodes
+              .filter(node => node.state !== 'task' && node.task === hub.task)
+              .map(node => (
+                <Button
+                  key={`node-${node.id}`}
+                  label={node.label}
+                  plain
+                  dimColor={node.id !== pick}
+                  onPress={() => pickNode($, node.id)}
+                />
+              ))}
+          </Box>
+        </Box>
+      ))}
+      {graph.more > 0 ? <Text dimColor>+{graph.more} more not drawn</Text> : ''}
+      <Text dimColor wrap="wrap">
+        {detail ?? 'pick a node below the drawing'}
       </Text>
     </Box>
   )

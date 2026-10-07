@@ -31,18 +31,48 @@ describe('raster', () => {
     expect(rows[2]?.find(run => run.tone === 'selected')?.text).toBe('◉ a-1')
   })
 
-  test('labels past the right edge are cut, not wrapped', () => {
+  test('a label with no room on the right goes left of its marker', () => {
     const rows = rasterOf(NODES, [], { '#A': { x: 10, y: 0 }, 'a-1': { x: 0, y: 2 } }, SIZE)
 
     expect(textOf(rows).every(line => line.length === 12)).toBe(true)
-    expect(textOf(rows)[0]).toBe('          ◆ ')
+    expect(textOf(rows)[0]).toBe('        A ◆ ')
+  })
+
+  test('neighbouring labels never overwrite each other: left, else cut with …', () => {
+    const nodes: GraphNode[] = [
+      { id: 'one', label: 'session-binding', title: '', task: 'P', state: 'eligible' },
+      { id: 'two', label: 'label-overlap', title: '', task: 'P', state: 'eligible' },
+      { id: 'three', label: 'omarchy', title: '', task: 'P', state: 'eligible' },
+    ]
+    const pos = { one: { x: 0, y: 0 }, two: { x: 6, y: 0 }, three: { x: 20, y: 1 } }
+    const lines = textOf(rasterOf(nodes, [], pos, { columns: 30, rows: 2 }))
+
+    // `two`'s marker blocks the room right of `one`, and the left edge leaves none
+    // on its left: `one` is cut with … and keeps a blank cell before `two`.
+    expect(lines[0]).toBe('● se… ● label-overlap         ')
+    // `three` has room on the right of its marker.
+    expect(lines[1]).toContain('● omarchy')
+  })
+
+  test('two labels on one row, too close for both on the right, split left and right', () => {
+    const nodes: GraphNode[] = [
+      { id: 'a', label: 'alpha', title: '', task: 'P', state: 'eligible' },
+      { id: 'b', label: 'beta', title: '', task: 'P', state: 'eligible' },
+    ]
+    const pos = { a: { x: 10, y: 0 }, b: { x: 13, y: 0 } }
+    const line = textOf(rasterOf(nodes, [], pos, { columns: 24, rows: 1 }))[0]!
+
+    expect(line).toBe('    alpha ●  ● beta     ')
+    expect(nodeAt(nodes, pos, { columns: 24, rows: 1 }, 4, 0)).toBe('a')
+    expect(nodeAt(nodes, pos, { columns: 24, rows: 1 }, 17, 0)).toBe('b')
+    expect(nodeAt(nodes, pos, { columns: 24, rows: 1 }, 12, 0)).toBe(undefined)
   })
 
   test('a cell on a marker or label hits that node; elsewhere nothing', () => {
-    expect(nodeAt(NODES, POS, 6, 2)).toBe('a-1')
-    expect(nodeAt(NODES, POS, 10, 2)).toBe('a-1')
-    expect(nodeAt(NODES, POS, 11, 2)).toBe(undefined)
-    expect(nodeAt(NODES, POS, 2, 0)).toBe('#A')
-    expect(nodeAt(NODES, POS, 3, 1)).toBe(undefined)
+    expect(nodeAt(NODES, POS, SIZE, 6, 2)).toBe('a-1')
+    expect(nodeAt(NODES, POS, SIZE, 10, 2)).toBe('a-1')
+    expect(nodeAt(NODES, POS, SIZE, 11, 2)).toBe(undefined)
+    expect(nodeAt(NODES, POS, SIZE, 2, 0)).toBe('#A')
+    expect(nodeAt(NODES, POS, SIZE, 3, 1)).toBe(undefined)
   })
 })
