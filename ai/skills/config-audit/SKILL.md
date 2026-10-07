@@ -44,6 +44,7 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 - `~/.claude/MEMORY.md` index entries reference files that exist under `~/.claude/memory/` (or its `private/` subdir) → FAIL on missing entry target, WARN on file-without-entry.
 - Plain files under `~/.claude/memory/` that are not generated, not symlinks to `ai/memory/` or `claude/memory/`, and not indexed by `~/.claude/MEMORY.md` → WARN (runtime-only memory drift).
 - `~/.claude/skills/<name>` symlinks resolve to a real directory under `ai/skills/` or `claude/skills/` → FAIL on broken symlink.
+- `~/.claude/mods` is a symlink to `claude/mods/`, and every path in `~/.claude/settings.json` `env.CLAUDE_CODE_PLUGIN_DIRS` is a folder under it holding `.claude-plugin/plugin.json` → FAIL on a missing or non-symlinked target (a mod that does not load fails silently).
 
 ### Codex
 - `~/.codex/config.toml` parses as valid TOML → FAIL on parse error.

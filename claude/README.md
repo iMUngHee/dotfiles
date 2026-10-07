@@ -18,11 +18,12 @@ claude/
 ├── hooks/                      # PreToolUse, PostToolUse, UserPromptSubmit, Stop, etc. — see Hooks section
 │   └── lib/                    # Shared helpers
 ├── agents/                     # Subagent definitions (pre-commit-verifier, reviewer, verifier)
+├── mods/                       # Function-hook mods (pm-band, pager-view) — see Mods section
 ├── workflows/                   # Reusable dynamic-workflow scripts — see Measuring a rule
 ├── commands/                   # Slash command definitions
 ├── keybindings.json            # Overrides of default keybindings only (tmux-safe ctrl+x chords)
 ├── extensions/
-│   └── statusline.sh           # Status line (model, context, cost, quota/proxy status, plan widget)
+│   └── statusline.sh           # Status line (model, context, cost, quota/proxy status)
 └── scripts/
     ├── bootstrap.sh            # Deploy ai/ + claude/ → ~/.claude/
     └── sync-back.sh            # Pull repo-tracked keys back from ~/.claude/settings.json
@@ -47,7 +48,7 @@ git clone <repo> ~/.config
 Bootstrap will:
 
 1. Symlink `ai/PERSONAL.md`, `ai/guardrails.md` and `claude/{CLAUDE,DEVGUARD}.md` into `~/.claude/`
-2. Symlink `hooks/`, `commands/`, `agents/` (wholesale dir symlinks, Claude-only) into `~/.claude/`
+2. Symlink `hooks/`, `commands/`, `agents/`, `mods/` (wholesale dir symlinks, Claude-only) into `~/.claude/`
 3. Per-file symlinks for `rules/` (merged ai/ + claude/) and `memory/` (merged ai/ + claude/ + ai/private)
 4. Auto-generate `~/.claude/MEMORY.md` (Shared / Claude-only / Private sections, with `AUTO-GENERATED` header)
 5. Per-skill symlinks in `~/.claude/skills/` from `ai/skills/`, `ai/skills/private/`, `claude/skills/`
@@ -115,6 +116,47 @@ Both gates run the same stages, and both are scoped to `$HOME/.config` so other 
 | `ai/skills/config-audit/**` | `go test ./...` | 2s |
 
 Instruction files are asserted by exact string match in `ai/lib/*.test.mjs`, and a doc-only change reaches no type checker — so without the first stage a rule can be edited out while its suite goes red unnoticed. That happened once (`6f9b845`).
+
+## Mods
+
+Mods are Claude Code plugins built on function hooks (2.1.287+, early access: the
+API moves between releases). Each folder under `mods/` is one plugin; bootstrap
+links `~/.claude/mods` to this directory, and `settings.json`
+`env.CLAUDE_CODE_PLUGIN_DIRS` loads them in every session, the desktop app's
+Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
+
+| Mod | Draws | Reads |
+|-----|-------|-------|
+| `pm-band` | One band line above the prompt — the bound plan's id, progress dots and current step (`○ no plan` when unbound). `/pm` opens a pane with three tabs: steps, backlog (by task, `⤷ needs X` / `⤷ after X`), and a force-directed dependency graph (drag a node, arrows to pick). | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
+| `pager-view` | `✉ <name> · N new` under the pm line — mail since this session last opened `/pager`. `/pager` opens the session's conversation (`←` in, `→` out) and the peers table. | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
+
+- **Band order** is the `CLAUDE_CODE_PLUGIN_DIRS` order: the first entry is the
+  outer hook and draws on top, so pm-band comes first.
+- **I/O never runs while drawing.** Events and timers refresh `$.state`;
+  `ui.render` only reads it. A refresh is single-flight and tagged with the
+  session id, so a `/clear` or `/resume` never shows the previous session's data.
+- **The pager badge's baseline** is in `$.store` per session id: a reload keeps
+  it, a new session starts its own, and mail from before the first look is not
+  new. It is the badge's own notion of "seen"; pager's delivery state is untouched.
+- **The step grammar** is pm's: `ai/skills/pm-roadmap/ops.ts` `planStep`. Change
+  both together.
+- **The graph** draws at most 120 nodes (the current plan's task when one is
+  bound, every task otherwise) and keeps its Client props under 60,000 characters.
+  It needs a `Client` surface (terminal, desktop); elsewhere the tab shows the list.
+
+Develop in a worktree, never in main: a `CLAUDE_CODE_PLUGIN_DIRS` folder is
+watched, so saving into main reloads every live session at once.
+
+```bash
+claude plugin validate claude/mods/pm-band      # what the engine would refuse
+claude plugin test claude/mods/pm-band          # *.test.ts against the engine
+tsc -p claude/mods/pm-band                      # after one load lays .claude-plugin/types/
+claude --plugin-dir claude/mods/pm-band --plugin-dir claude/mods/pager-view
+```
+
+`.claude-plugin/types/` is written by the engine on every load and is git-ignored.
+The Stop gate does not type-check mods (no tsconfig at the repo root), so run
+`tsc -p` yourself.
 
 ## Measuring a rule
 
