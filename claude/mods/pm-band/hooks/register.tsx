@@ -453,7 +453,7 @@ function graphBody(
     <Box flexDirection="column">
       <Client key="graph" module="./graph.tsx" props={props} width="100%" height={height} />
       <Text dimColor wrap="truncate-end">
-        {detail ?? 'click a node · drag to move · arrows to step'}
+        {detail ?? 'click a node · drag it to move · drag empty space or shift+arrows to pan · + − zoom · 0 fit'}
       </Text>
     </Box>
   )

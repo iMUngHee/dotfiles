@@ -353,6 +353,61 @@ describe('register', () => {
     expect(textOf(await ui.drawn())).not.toContain('CFG/demo · [P2] The demo plan')
   })
 
+  test('a graph bigger than the region pans by dragging empty space or shift+arrows, zooms, and fits on 0', async ($, on) => {
+    const w = world(on)
+    w.resolver = () => ({ status: 'unbound', main_root: MAIN })
+    w.listing = () => ({
+      eligible: Array.from({ length: 40 }, (_, i) => item({ key: 'BIG', id: `n${i}` })),
+      blocked: [],
+      inbox: 0,
+    })
+    await started($, w)
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-graph' })
+    await ui.resize({ columns: 60, rows: 12, in: 'graph' })
+    await ui.advance(10_000)
+    const shown = async () => rowsOf(await ui.drawn({ in: 'graph' })).join('\n')
+    const markers = (text: string) => (text.match(/[●◆◉]/g) ?? []).length
+    const first = await shown()
+    // The world outgrows the region: only part of the graph is on screen.
+    expect(markers(first)).toBeLessThan(41)
+    expect(markers(first)).toBeGreaterThan(0)
+
+    // Drag from a cell no node covers: the camera moves, so the drawing moves.
+    const rows = first.split('\n')
+    let empty = { x: 0, y: 0 }
+    search: for (let y = 0; y < rows.length; y++) {
+      for (let x = 20; x < rows[y]!.length; x++) {
+        if (!/[●◆◉]/.test(rows[y]!.slice(Math.max(0, x - 12), x + 2))) {
+          empty = { x, y }
+          break search
+        }
+      }
+    }
+    await ui.pointer({ type: 'down', ...empty, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'move', x: empty.x - 12, y: empty.y, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'up', x: empty.x - 12, y: empty.y, button: 'left', in: 'graph' })
+    await ui.advance(100)
+    const panned = await shown()
+    expect(panned).not.toBe(first)
+
+    await ui.key({ key: 'right', shift: true, in: 'graph' })
+    await ui.advance(100)
+    const before = await shown()
+    expect(before).not.toBe(panned)
+
+    // 0 fits every node: all 40 items and their hub are on screen.
+    await ui.key({ key: '0', in: 'graph' })
+    await ui.advance(100)
+    const fitted = await shown()
+    expect(markers(before)).toBeLessThan(41)
+    expect(markers(fitted)).toBe(41)
+
+    await ui.key({ key: '+', in: 'graph' })
+    await ui.advance(100)
+    expect(await shown()).not.toBe(fitted)
+  })
+
   test('new props keep placed nodes, add new ones, drop gone ones, and start the layout again', async ($, on) => {
     const w = world(on)
     await started($, w)
