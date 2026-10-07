@@ -14,6 +14,8 @@ const ASPECT = 2
 const COOLING = 0.9
 const COLD = 0.15
 const QUIET_PER_NODE = 0.02
+/** The ideal distance between linked nodes, in square cells, when unbounded. */
+const SPACING = 12
 
 /** mulberry32: a small seeded generator, so placement never depends on Math.random. */
 export function seeded(seed: number): () => number {
@@ -47,15 +49,6 @@ export function startTemperature(size: Size): number {
   return Math.max(size.columns, size.rows * ASPECT) / 6
 }
 
-/** Positions scaled from one region size to another, as a resize asks. */
-export function rescaled(pos: Positions, from: Size, to: Size): Positions {
-  const sx = from.columns > 1 ? (to.columns - 1) / (from.columns - 1) : 1
-  const sy = from.rows > 1 ? (to.rows - 1) / (from.rows - 1) : 1
-  return Object.fromEntries(
-    Object.entries(pos).map(([id, p]) => [id, inside({ x: p.x * sx, y: p.y * sy }, to)]),
-  )
-}
-
 /**
  * Where each node starts: where it already was, else beside a neighbour that
  * has a place, else a spot its id seeds. Nodes no longer in the graph drop out.
@@ -65,11 +58,12 @@ export function placed(
   edges: readonly GraphEdge[],
   size: Size,
   prev: Positions = {},
+  isBounded = true,
 ): Positions {
   const pos: Positions = {}
   for (const node of nodes) {
     const kept = prev[node.id]
-    if (kept) pos[node.id] = inside(kept, size)
+    if (kept) pos[node.id] = isBounded ? inside(kept, size) : kept
   }
   for (const node of nodes) {
     if (pos[node.id]) continue
@@ -88,6 +82,13 @@ export function placed(
   return pos
 }
 
+/**
+ * How a tick may move nodes. `active`: only these move (the rest hold still,
+ * though they still push and pull), absent all do. `isBounded` false: nodes may
+ * leave `size`, which then only sets the spacing and the centre.
+ */
+export type TickOptions = { active?: ReadonlySet<string>; isBounded?: boolean }
+
 /** One step of the simulation; pinned nodes (being dragged) hold still. */
 export function tick(
   nodes: readonly GraphNode[],
@@ -95,11 +96,14 @@ export function tick(
   layout: Layout,
   size: Size,
   pinned: ReadonlySet<string> = new Set(),
+  { active, isBounded = true }: TickOptions = {},
 ): { layout: Layout; energy: number } {
   const n = nodes.length
   if (n === 0) return { layout: { ...layout, temperature: 0 }, energy: 0 }
   const area = size.columns * size.rows * ASPECT
-  const k = 0.75 * Math.sqrt(area / n)
+  // Unbounded, the spacing is fixed: the graph's size follows its node count,
+  // never the region it happens to be seen through.
+  const k = isBounded ? 0.75 * Math.sqrt(area / n) : SPACING
   const disp = new Map(nodes.map(node => [node.id, { x: 0, y: 0 }]))
   const at = (id: string) => {
     const p = layout.pos[id] ?? { x: 0, y: 0 }
@@ -149,17 +153,20 @@ export function tick(
   let energy = 0
   for (const node of nodes) {
     const p = at(node.id)
-    if (pinned.has(node.id)) {
+    if (pinned.has(node.id) || (active !== undefined && !active.has(node.id))) {
       pos[node.id] = layout.pos[node.id] ?? inside({ x: 0, y: 0 }, size)
       continue
     }
     const d = disp.get(node.id)!
-    // A weak pull to the centre keeps separate components on screen.
-    d.x += (centre.x - p.x) * 0.05 * k
-    d.y += (centre.y - p.y) * 0.05 * k
+    // A weak pull to the centre keeps separate components together; weaker
+    // when unbounded, so the graph takes the room it needs.
+    const pull = isBounded ? 0.05 : 0.015
+    d.x += (centre.x - p.x) * pull * k
+    d.y += (centre.y - p.y) * pull * k
     const length = Math.hypot(d.x, d.y)
     const step = length > 0 ? Math.min(length, layout.temperature) / length : 0
-    const next = inside({ x: p.x + d.x * step, y: (p.y + d.y * step) / ASPECT }, size)
+    const moved = { x: p.x + d.x * step, y: (p.y + d.y * step) / ASPECT }
+    const next = isBounded ? inside(moved, size) : moved
     const old = layout.pos[node.id] ?? next
     energy += Math.hypot(next.x - old.x, next.y - old.y)
     pos[node.id] = next

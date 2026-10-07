@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { placed, rescaled, settle, startTemperature, tick } from './layout'
+import { placed, settle, startTemperature, tick } from './layout'
 import type { GraphEdge, GraphNode } from './plan'
 
 const node = (id: string, task = 'A'): GraphNode => ({
@@ -61,6 +61,32 @@ describe('layout', () => {
     expect(NODES.some(n => n.id !== 'a-1' && after.pos[n.id]!.x !== pos[n.id]!.x)).toBe(true)
   })
 
+  test('with an active set, only those nodes move; the rest keep their exact places', () => {
+    const pos = settle(NODES, EDGES, SIZE).layout.pos
+    const layout = { pos, temperature: startTemperature(SIZE) / 8 }
+    const moved = { ...pos, 'a-1': { x: pos['a-1']!.x + 15, y: pos['a-1']!.y } }
+    // a-1 is dragged (pinned); its links are #A and b-1.
+    const after = tick(NODES, EDGES, { ...layout, pos: moved }, SIZE, new Set(['a-1']), {
+      active: new Set(['#A', 'b-1']),
+    }).layout
+
+    for (const id of ['a-2', 'a-3', '#B']) expect(after.pos[id]).toEqual(pos[id])
+    expect(after.pos['#A']).not.toEqual(pos['#A'])
+  })
+
+  test('unbounded, nodes may leave the region; bounded, they never do', () => {
+    const tiny = { columns: 12, rows: 3 }
+    const start = { pos: placed(NODES, EDGES, tiny), temperature: startTemperature(tiny) * 4 }
+    let free = start
+    let kept = start
+    for (let i = 0; i < 200; i++) {
+      free = tick(NODES, EDGES, free, tiny, new Set(), { isBounded: false }).layout
+      kept = tick(NODES, EDGES, kept, tiny).layout
+    }
+    expect(Object.values(free.pos).some(p => !isInside(p, tiny))).toBe(true)
+    expect(Object.values(kept.pos).every(p => isInside(p, tiny))).toBe(true)
+  })
+
   test('kept places survive a new graph; new nodes land near a placed neighbour', () => {
     const pos = settle(NODES, EDGES, SIZE).layout.pos
     const grown = [...NODES.filter(n => n.id !== 'a-2'), node('a-4')]
@@ -70,14 +96,5 @@ describe('layout', () => {
     expect(next['a-1']).toEqual(pos['a-1'])
     expect(next['a-2']).toBe(undefined)
     expect(Math.abs(next['a-4']!.x - pos['#A']!.x)).toBeLessThanOrEqual(3)
-  })
-
-  test('a resize scales places into the new grid', () => {
-    const pos = settle(NODES, EDGES, SIZE).layout.pos
-    const small = { columns: 30, rows: 10 }
-    const scaled = rescaled(pos, SIZE, small)
-
-    expect(Object.values(scaled).every(p => isInside(p, small))).toBe(true)
-    expect(Math.abs(scaled['#A']!.x - (pos['#A']!.x * 29) / 59) < 1e-9).toBe(true)
   })
 })
