@@ -61,7 +61,11 @@ function runStatusline({ root, home, storeRoot, sessionId }) {
   return result.stdout;
 }
 
-test("statusline uses the exact raw session binding and ignores launcher changes", async (t) => {
+// The plan line moved from the statusline to the pm-band mod (claude/mods/pm-band), which
+// resolves the exact session the same way; its own register.test.ts drives that behaviour.
+// What stays here: the statusline no longer shows a plan, and neither consumer rediscovers
+// the checkout's current.txt.
+test("the statusline shows no plan; the session-bound plan line is the pm-band mod's", async (t) => {
   const { root, planA, planB } = await fixture();
   const home = await mkdtemp(join(tmpdir(), "session-consumers-home-"));
   const storeRoot = await mkdtemp(join(tmpdir(), "session-consumers-bindings-"));
@@ -72,24 +76,25 @@ test("statusline uses the exact raw session binding and ignores launcher changes
   ]));
   await bindSession({ root, tool: "claude", sessionId: "same/a", plan: planA.plan, storeRoot });
   await bindSession({ root, tool: "claude", sessionId: "same?a", plan: planB.plan, storeRoot });
-
-  await writeFile(join(root, ".agents", "state", "current.txt"), `${planA.plan}\n`);
-  assert.match(runStatusline({ root, home, storeRoot, sessionId: "same/a" }), /draft/);
   await writeFile(join(root, ".agents", "state", "current.txt"), `${planB.plan}\n`);
-  const sessionA = runStatusline({ root, home, storeRoot, sessionId: "same/a" });
-  const sessionB = runStatusline({ root, home, storeRoot, sessionId: "same?a" });
-  assert.match(sessionA, /draft/);
-  assert.doesNotMatch(sessionA, /active/);
-  assert.match(sessionB, /active/);
+
+  for (const sessionId of ["same/a", "same?a"]) {
+    const line = runStatusline({ root, home, storeRoot, sessionId });
+    assert.match(line, /Test/, "the statusline still renders (model name)");
+    assert.doesNotMatch(line, /\b(?:draft|active)\b/, `${sessionId}: no plan status in the statusline`);
+  }
 });
 
-test("statusline and pre-commit contracts contain no checkout-current rediscovery", async () => {
+test("statusline, pm-band and pre-commit contracts contain no checkout-current rediscovery", async () => {
   const statuslineSource = await readFile(statusline, "utf8");
+  const band = await readFile(join(repo, "claude", "mods", "pm-band", "hooks", "register.tsx"), "utf8");
   const verifier = await readFile(join(repo, "claude", "agents", "pre-commit-verifier.md"), "utf8");
   const invocation = await readFile(join(repo, "claude", "memory", "claude-feedback_pre_commit_scan_invoke.md"), "utf8");
-  assert.match(statuslineSource, /session_id_raw/);
-  assert.match(statuslineSource, /resolve-session/);
-  assert.doesNotMatch(statuslineSource, /\.agents\/state\/current\.txt/);
+  assert.doesNotMatch(statuslineSource, /resolve-session|\.agents\/state\/current\.txt/);
+  assert.match(band, /'resolve-session'/);
+  assert.match(band, /PM_SESSION_ID: sessionId/);
+  assert.match(band, /await \$\.session\.id\(\)/);
+  assert.doesNotMatch(band, /current\.txt/);
   assert.match(verifier, /validated_plan_path/);
   assert.match(verifier, /validated_plan_status/);
   assert.doesNotMatch(verifier, /current\.txt/);
