@@ -69,8 +69,13 @@ status: draft
   return { root, planA, planB, ensured, plan };
 }
 
-function runHook(kind, projectDir, { configRoot = repo, sessionId = "session-a", storeRoot } = {}) {
-  const input = JSON.stringify({ project_dir: projectDir, cwd: projectDir, session_id: sessionId });
+function runHook(kind, projectDir, { configRoot = repo, sessionId = "session-a", storeRoot, transcriptPath } = {}) {
+  const input = JSON.stringify({
+    project_dir: projectDir,
+    cwd: projectDir,
+    session_id: sessionId,
+    ...(transcriptPath ? { transcript_path: transcriptPath } : {}),
+  });
   const env = {
     ...process.env,
     AI_CONFIG_ROOT: configRoot,
@@ -202,6 +207,13 @@ test("hook adapters contain no topology or lifecycle mutation commands", async (
     assert.doesNotMatch(source, /ensure-current --root/);
     assert.doesNotMatch(source, /(?:\bdefault\b|\$PPID)/);
   }
+  // The one session-state write an adapter may make: Claude's continued-in carry-over binds
+  // the new id to the plan the conversation already held. It is a binding, not a lifecycle
+  // step, and Codex has no equivalent row to follow.
+  const claude = await readFile(hooks.claude, "utf8");
+  assert.equal(claude.match(/\bbind-session\b/g)?.length, 1, "claude binds in exactly one place");
+  assert.match(claude, /continued-in/);
+  assert.doesNotMatch(await readFile(hooks.codex, "utf8"), /\bbind-session\b/);
 });
 
 test("paired injection configurations allow exactly thirty seconds", async () => {
@@ -229,4 +241,90 @@ test("no retired token-saving integration survives in the deployed contract", as
       `${rel} still references a retired integration`,
     );
   }
+});
+
+// Claude Code moves a conversation reopened from the agents view to a new session id and
+// records it only as the old transcript's last row. Measured on 2.1.292: /clear, /branch and
+// --resume write no such row, so only this row may carry a binding forward.
+const continuedIn = (from, to) => JSON.stringify({ type: "continued-in", timestamp: "2026-10-07T07:32:12.722Z", sessionId: from, continuedInSessionId: to });
+const turnRow = (sessionId) => JSON.stringify({ type: "assistant", sessionId, message: { role: "assistant", content: "hi" } });
+
+async function transcripts(rows) {
+  const dir = await mkdtemp(join(tmpdir(), "inject-context-transcripts-"));
+  for (const [sessionId, lines] of Object.entries(rows)) {
+    await writeFile(join(dir, `${sessionId}.jsonl`), `${lines.join("\n")}\n`);
+  }
+  return dir;
+}
+
+test("claude adapter carries a binding across a continued-in move", async (t) => {
+  const { root, planA } = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "inject-context-store-"));
+  const dir = await transcripts({ "old-a": [turnRow("old-a"), continuedIn("old-a", "new-c")], "new-c": [turnRow("new-c")] });
+  t.after(() => Promise.all([root, storeRoot, dir].map((path) => rm(path, { recursive: true, force: true }))));
+  assert.equal((await bindSession({ root, tool: "claude", sessionId: "old-a", plan: planA.plan, storeRoot })).binding_status, "bound");
+
+  const context = runHook("claude", root, { sessionId: "new-c", storeRoot, transcriptPath: join(dir, "new-c.jsonl") });
+  assert.match(context, /binding: bound \(inherited from old-a\)/);
+  assert.ok(context.includes(planA.title), "the inherited plan is the one the conversation held");
+  assert.ok(!context.includes(UNBOUND_GUARD), "a carried binding lifts the unbound guard");
+
+  const again = runHook("claude", root, { sessionId: "new-c", storeRoot, transcriptPath: join(dir, "new-c.jsonl") });
+  assert.match(again, /binding: bound$/m, "once carried, the binding is the session's own");
+});
+
+test("claude adapter follows a chain of continued-in moves back to the bound session", async (t) => {
+  const { root, planA } = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "inject-context-store-"));
+  const dir = await transcripts({
+    "old-a": [turnRow("old-a"), continuedIn("old-a", "mid-b")],
+    "mid-b": [turnRow("mid-b"), continuedIn("mid-b", "new-c")],
+    "new-c": [turnRow("new-c")],
+  });
+  t.after(() => Promise.all([root, storeRoot, dir].map((path) => rm(path, { recursive: true, force: true }))));
+  await bindSession({ root, tool: "claude", sessionId: "old-a", plan: planA.plan, storeRoot });
+
+  const context = runHook("claude", root, { sessionId: "new-c", storeRoot, transcriptPath: join(dir, "new-c.jsonl") });
+  assert.match(context, /binding: bound \(inherited from old-a\)/);
+  assert.ok(context.includes(planA.title));
+});
+
+test("claude adapter inherits nothing without a continued-in row, from a done plan, or over its own binding", async (t) => {
+  const { root, planA, planB } = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "inject-context-store-"));
+  // /clear and /branch shape: a new id, the old transcript ends on an ordinary row, and a
+  // branch's rows name their origin with forkedFrom instead.
+  const forked = JSON.stringify({ type: "user", sessionId: "branch-d", forkedFrom: { sessionId: "old-a" } });
+  const dir = await transcripts({
+    "old-a": [turnRow("old-a")],
+    "branch-d": [forked],
+    "done-e": [turnRow("done-e"), continuedIn("done-e", "after-done")],
+    "old-f": [turnRow("old-f"), continuedIn("old-f", "own-g")],
+  });
+  t.after(() => Promise.all([root, storeRoot, dir].map((path) => rm(path, { recursive: true, force: true }))));
+  await bindSession({ root, tool: "claude", sessionId: "old-a", plan: planA.plan, storeRoot });
+
+  for (const sessionId of ["cleared-x", "branch-d"]) {
+    const context = runHook("claude", root, { sessionId, storeRoot, transcriptPath: join(dir, `${sessionId}.jsonl`) });
+    assert.match(context, /binding: unbound/, `${sessionId} has no continued-in row naming it`);
+    assertCanonicalGuard(context, sessionId);
+  }
+
+  // A session that already holds a binding keeps it, even when a predecessor held another.
+  await bindSession({ root, tool: "claude", sessionId: "old-f", plan: planA.plan, storeRoot });
+  await bindSession({ root, tool: "claude", sessionId: "own-g", plan: planB.plan, storeRoot });
+  const own = runHook("claude", root, { sessionId: "own-g", storeRoot, transcriptPath: join(dir, "own-g.jsonl") });
+  assert.ok(own.includes(planB.title), "its own plan stays");
+  assert.match(own, /binding: bound$/m, "and is not marked inherited");
+
+  await bindSession({ root, tool: "claude", sessionId: "done-e", plan: planB.plan, storeRoot });
+  const planBPath = join(root, planB.plan);
+  await writeFile(planBPath, (await readFile(planBPath, "utf8")).replace("status: active", "status: done"));
+  const afterDone = runHook("claude", root, { sessionId: "after-done", storeRoot, transcriptPath: join(dir, "after-done.jsonl") });
+  assert.doesNotMatch(afterDone, /inherited/, "a finished plan is not carried forward");
+  assertCanonicalGuard(afterDone, "after-done");
+
+  const bare = runHook("claude", root, { sessionId: "no-transcript", storeRoot });
+  assert.match(bare, /binding: unbound/);
+  assertCanonicalGuard(bare, "no transcript_path");
 });
