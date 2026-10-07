@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { runCli, SESSION_BINDING_FAILURES, SESSION_BINDING_PARTIAL_EXIT } from "./pm-roadmap.ts";
+import type { Candidate } from "./join.ts";
 
 async function makePlan(root: string, rel: string, status = "draft", id = "p"): Promise<void> {
   await mkdir(join(root, ".agents", "plans"), { recursive: true });
@@ -61,6 +62,22 @@ async function main() {
     assert.match(ordList, /ord-2 — blocked by ord-1 \(earlier Order/, "an Order chain names itself");
     assert.match(ordList, /ord-3 — blocked by ord-1 \(dependency\)/, "a real dep names itself");
     assert.match(ordList, /reorder ORDT ord-2 -/, "the message names the exit command");
+
+    // list --json: the same partition as the text, with dependsOn/order/plan on every item and
+    // blockedBy/blockedByReason only on blocked ones.
+    const listed: { eligible: Candidate[]; blocked: Candidate[]; inbox: number } = JSON.parse((await cli("list", "--json")).out);
+    assert.deepEqual(Object.keys(listed).sort(), ["blocked", "eligible", "inbox"], "list --json has the three keys");
+    const byId = (xs: Candidate[], id: string): Candidate => {
+      const found = xs.find((x) => x.id === id);
+      assert.ok(found, `${id} is where the text list puts it`);
+      return found;
+    };
+    const ord1 = byId(listed.eligible, "ord-1"), ord2 = byId(listed.blocked, "ord-2"), ord3 = byId(listed.blocked, "ord-3");
+    assert.equal(ord1.blockedBy, undefined, "an eligible item carries no blockedBy");
+    assert.deepEqual([ord1.order, ord1.plan, ord1.key], [1, null, "ORDT"], "order, plan and key are present");
+    assert.deepEqual([ord2.blockedBy, ord2.blockedByReason], ["ord-1", "order"], "an Order block names its reason");
+    assert.deepEqual([ord3.blockedBy, ord3.blockedByReason, ord3.dependsOn], ["ord-1", "dependency", ["ord-1"]], "a dependency block carries dependsOn");
+    assert.equal(typeof listed.inbox, "number", "inbox is a count");
 
     const cleared = await cli("reorder", "ORDT", "ord-2", "-");
     assert.equal(cleared.code, 0);
