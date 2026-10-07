@@ -139,6 +139,9 @@ function world(on: On) {
 
 const SETTLE = 400
 
+/** The `demo` node's label, and not `needs-demo`'s. */
+const DEMO = /(?<![\w-])demo(?![\w-])/
+
 function exited(exitCode: number, stdout: string, stderr = '') {
   return { value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } }
 }
@@ -406,6 +409,62 @@ describe('register', () => {
     await ui.key({ key: '+', in: 'graph' })
     await ui.advance(100)
     expect(await shown()).not.toBe(fitted)
+  })
+
+  test('a node dragged past the edge of the first view stays out there, and 0 brings it back', async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-graph' })
+    await ui.resize({ columns: 60, rows: 12, in: 'graph' })
+    await ui.advance(5_000)
+    const shown = async () => rowsOf(await ui.drawn({ in: 'graph' }))
+    const rows = await shown()
+    const y = rows.findIndex(row => row.includes('● demo'))
+    const x = rows[y]!.indexOf('● demo')
+    // The pointer is held past the region's left edge: the node goes with it.
+    await ui.pointer({ type: 'down', x, y, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'move', x: -20, y: 5, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'up', x: -20, y: 5, button: 'left', in: 'graph' })
+    await ui.advance(2_000)
+    expect((await shown()).join('\n')).not.toMatch(DEMO)
+
+    await ui.key({ key: '0', in: 'graph' })
+    await ui.advance(100)
+    const fitted = (await shown()).join('\n')
+    expect(fitted).toMatch(DEMO)
+    expect(fitted).toContain('CFG')
+  })
+
+  test('a node dragged out to the right stays out through a resize', async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-graph' })
+    await ui.resize({ columns: 60, rows: 12, in: 'graph' })
+    await ui.advance(5_000)
+    const shown = async () => rowsOf(await ui.drawn({ in: 'graph' })).join('\n')
+    const rows = rowsOf(await ui.drawn({ in: 'graph' }))
+    const y = rows.findIndex(row => row.includes('● demo'))
+    const x = rows[y]!.indexOf('● demo')
+    await ui.pointer({ type: 'down', x, y, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'move', x: 90, y: 5, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'up', x: 90, y: 5, button: 'left', in: 'graph' })
+    await ui.advance(2_000)
+    expect(await shown()).not.toMatch(DEMO)
+
+    // The region narrows and widens again: the world must not squeeze the
+    // dragged node back into view.
+    await ui.resize({ columns: 50, rows: 12, in: 'graph' })
+    await ui.advance(2_000)
+    expect(await shown()).not.toMatch(DEMO)
+    await ui.resize({ columns: 60, rows: 12, in: 'graph' })
+    await ui.advance(2_000)
+    expect(await shown()).not.toMatch(DEMO)
+
+    await ui.key({ key: '0', in: 'graph' })
+    await ui.advance(100)
+    expect(await shown()).toMatch(DEMO)
   })
 
   test('new props keep placed nodes, add new ones, drop gone ones, and start the layout again', async ($, on) => {
