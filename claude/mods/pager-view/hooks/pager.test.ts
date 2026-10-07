@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import {
+  agoOf,
   conversationOf,
   exportedOf,
   inboundOf,
   isMissing,
+  liveOf,
   nameOf,
   newCountOf,
   newestOf,
@@ -93,6 +95,23 @@ describe('pager', () => {
     expect(newestOf(new Set())).toBe(0)
     expect(newCountOf(inbound, 150)).toBe(2)
     expect(newCountOf(inbound, 160)).toBe(0)
+  })
+
+  test('ages read now, minutes, hours and days; a bad time reads null', () => {
+    const at = Date.parse('2026-10-07T06:00:00.000Z')
+    expect(agoOf('2026-10-07T05:59:30.000Z', at)).toBe('now')
+    expect(agoOf('2026-10-07T06:00:30.000Z', at)).toBe('now')
+    expect(agoOf('2026-10-07T05:48:00.000Z', at)).toBe('12m')
+    expect(agoOf('2026-10-07T03:00:00.000Z', at)).toBe('3h')
+    expect(agoOf('2026-10-05T06:00:00.000Z', at)).toBe('2d')
+    expect(agoOf('not a time', at)).toBe(null)
+  })
+
+  test('live peers leave out this session and hosts that are gone or unknown', () => {
+    const peers = peersOf(ok(`${WHO}zola  claude  /z  unknown  1h ago\nkiwi  codex   /k  live  now\n`))
+    if ('error' in peers) throw new Error(peers.error)
+    expect(liveOf(peers, 'wogi')).toBe(1)
+    expect(liveOf(peers, 'nobody')).toBe(2)
   })
 
   test('a pager that is not installed is told apart from one that failed', () => {

@@ -145,3 +145,19 @@ export function stampOf(iso: string): string {
   const two = (n: number) => String(n).padStart(2, '0')
   return `${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`
 }
+
+/** Peers other than `self` whose host pager judges live. */
+export function liveOf(peers: readonly Peer[], self: string): number {
+  return peers.filter(peer => peer.host === 'live' && peer.name !== self).length
+}
+
+/** How long before `nowMs` an ISO time was: `now`, `12m`, `3h`, `2d`. */
+export function agoOf(iso: string, nowMs: number): string | null {
+  const then = Date.parse(iso)
+  if (Number.isNaN(then)) return null
+  const minutes = Math.floor(Math.max(0, nowMs - then) / 60_000)
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return `${minutes}m`
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h`
+  return `${Math.floor(minutes / (24 * 60))}d`
+}

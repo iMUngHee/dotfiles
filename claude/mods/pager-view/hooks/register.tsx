@@ -9,10 +9,12 @@ import type { EngineInterface as Engine, On, RenderElement, RenderInput } from '
 
 import type { PagerState, Tab } from '../types'
 import {
+  agoOf,
   conversationOf,
   exportedOf,
   inboundOf,
   isMissing,
+  liveOf,
   nameOf,
   newCountOf,
   newestOf,
@@ -26,7 +28,16 @@ const POLL_MS = 5_000
 const REFRESH_DEBOUNCE_MS = 300
 const SHOWN_ENTRIES = 200
 
-const EMPTY: PagerState = { sessionId: '', name: null, entries: [], peers: [], newCount: 0, error: null }
+const EMPTY: PagerState = {
+  sessionId: '',
+  name: null,
+  entries: [],
+  peers: [],
+  newCount: 0,
+  live: 0,
+  lastAgo: null,
+  error: null,
+}
 
 const pager = atom({ plugin: 'pager-view', key: 'pager' } as const, EMPTY)
 const tab = atom({ plugin: 'pager-view', key: 'tab' } as const, 'messages')
@@ -86,18 +97,23 @@ async function refreshOnce($: Engine): Promise<void> {
   const rows = exportedOf(await run($, ['pager', 'export']))
   if ('error' in rows) return failed(rows.error)
   const isSeen = await isPaneOpen($)
-  const who = isSeen ? peersOf(await run($, ['pager', 'who'])) : null
-  if (who !== null && 'error' in who) return failed(who.error)
+  // The band counts live peers too, so `who` runs on every refresh (~13 ms measured).
+  const who = peersOf(await run($, ['pager', 'who']))
+  if ('error' in who) return failed(who.error)
+  const now = await $.clock.now()
   if (await isStale()) return
 
   const baseline = await baselineAt($, sessionId, newestOf(inbound), isSeen)
   const entries = conversationOf(rows, inbound, sessionId).slice(-SHOWN_ENTRIES)
-  await settle(prev => ({
+  const last = entries.at(-1)
+  await settle(() => ({
     sessionId,
     name,
     entries,
-    peers: who ?? (prev.sessionId === sessionId ? prev.peers : []),
+    peers: who,
     newCount: newCountOf(inbound, baseline),
+    live: liveOf(who, name),
+    lastAgo: last ? agoOf(last.at, now) : null,
     error: null,
   }))
 }
@@ -124,6 +140,18 @@ function soon($: Engine): void {
     pending = null
     void refresh($)
   })
+}
+
+/** /pager and a click on the band's name: open the pane, and count the look as seen. */
+async function openPane($: Engine): Promise<void> {
+  await $.ui.open({ id: PANE, title: 'pager', focus: true })
+  // Clear the badge now; the next refresh moves the stored baseline (the pane is open).
+  const state = await read($, pager)
+  const sessionId = await $.session.id()
+  if (state.sessionId === sessionId && state.newCount > 0) {
+    await update($, pager, prev => ({ ...prev, newCount: 0 }))
+  }
+  soon($)
 }
 
 async function switched($: Engine): Promise<void> {
@@ -159,14 +187,7 @@ export function register(on: On): void {
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: PANE }, async $ => {
-    await $.ui.open({ id: PANE, title: 'pager', focus: true })
-    // Opening the pane is the look that clears the badge, before the next poll.
-    const state = await read($, pager)
-    const sessionId = await $.session.id()
-    if (state.sessionId === sessionId && state.newCount > 0) {
-      await update($, pager, prev => ({ ...prev, newCount: 0 }))
-    }
-    soon($)
+    await openPane($)
     return {}
   }).catch(($, e, next) => next(e))
 
@@ -192,15 +213,47 @@ export function register(on: On): void {
   })
 }
 
+const PREVIEW_CHARS = 60
+
 function bandLine($: Engine, e: RenderInput<'AbovePrompt'>, state: PagerState): RenderElement | null {
   if (state.name === null) return null
-  const { Text } = $.ui.resolve(e)
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const last = state.entries.at(-1)
+  const preview = last
+    ? last.body.length > PREVIEW_CHARS
+      ? `${last.body.slice(0, PREVIEW_CHARS - 1)}…`
+      : last.body
+    : ''
   return (
-    <Text wrap="truncate-end">
-      <Text dimColor={state.newCount === 0}>✉ {state.name}</Text>
-      {state.newCount > 0 ? <Text color="warning"> · {state.newCount} new</Text> : ''}
-      {state.error !== null ? <Text dimColor> ?</Text> : ''}
-    </Text>
+    <Box flexDirection="row">
+      {/* The name is the way into /pager: a click (or ctrl+x tab, Enter) opens it. */}
+      <Button
+        key="open-pager"
+        label={`✉ ${state.name}`}
+        plain
+        onPress={() => openPane($)}
+      />
+      <Text wrap="truncate-end">
+        {state.newCount > 0 ? <Text color="warning" bold>{`  ● ${state.newCount} new`}</Text> : ''}
+        {last ? (
+          <Text>
+            {'  '}
+            <Text color={last.direction === 'in' ? 'suggestion' : 'success'}>
+              {last.direction === 'in' ? '←' : '→'} {last.peer}
+            </Text>
+            <Text dimColor>
+              {state.lastAgo !== null ? ` ${state.lastAgo}` : ''}
+              {'  '}
+              {preview}
+            </Text>
+          </Text>
+        ) : (
+          ''
+        )}
+        {state.live > 0 ? <Text dimColor>{`  · ${state.live} live`}</Text> : ''}
+        {state.error !== null ? <Text dimColor> ?</Text> : ''}
+      </Text>
+    </Box>
   )
 }
 

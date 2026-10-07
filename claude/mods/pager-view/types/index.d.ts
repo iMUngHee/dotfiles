@@ -21,6 +21,10 @@ export type PagerState = {
   entries: Entry[]
   peers: Peer[]
   newCount: number
+  /** Peers other than this session whose host is live. */
+  live: number
+  /** How long ago the last entry was, as of the refresh that read it (`3m`). */
+  lastAgo: string | null
   error: string | null
 }
 
