@@ -20,8 +20,6 @@ RESET=$'\033[0m'  BOLD=$'\033[1m'  DIM=$'\033[2m'
 CYAN=$'\033[36m'  GREEN=$'\033[32m'  YELLOW=$'\033[33m'  RED=$'\033[31m'
 _BARS="||||||||||" _DOTS=".........."
 _CACHE_TTL_DEFAULT=300
-_CONFIG_ROOT="${AI_CONFIG_ROOT:-$HOME/.config}"
-_ROUTING_ENGINE="$_CONFIG_ROOT/ai/lib/worktree.mjs"
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -128,7 +126,6 @@ parse_stdin() {
       "model_id=" + (.model.id // "" | @sh),
       "used_pct=" + (.context_window.used_percentage // "" | tostring | @sh),
       "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh),
-      "session_id_raw=" + (.session_id // "" | @sh),
       "cache_read=" + (.context_window.current_usage.cache_read_input_tokens // 0 | tostring),
       "cache_create=" + (.context_window.current_usage.cache_creation_input_tokens // 0 | tostring),
       "input_tk=" + (.context_window.current_usage.input_tokens // 0 | tostring)
@@ -250,49 +247,6 @@ render_fresh() {
     printf ' 🌱 %s%d%%%s' "$color" "$fresh_pct" "$RESET"
 }
 
-# pager names every session automatically; this is where a person reads that
-# name, which is what makes "send that to foo" possible at all.
-#
-# Silent when there is no name. A nameless session means pager's hooks have not
-# run yet or host detection failed, and the status line is not where that gets
-# diagnosed — `pager whoami` says so in full. Printing "none" here would spend a
-# permanent slot on a transient state.
-#
-# The session id comes from stdin, so this never pays for host detection. The
-# lookup costs ~18ms against the ~88ms render_plan below already spends, so it
-# adds no new class of cost and needs no cache.
-# Identity only. Waiting-mail counts belong in the tmux status bar, not here:
-# this script runs on turn boundaries, and the Stop hook delivers on the same
-# boundary, so a count read here is almost always already zero. tmux redraws on
-# status-interval instead, which is the cadence a notification needs.
-render_pager() {
-    local name
-    [ -n "$session_id_raw" ] || return
-    command -v pager >/dev/null 2>&1 || return
-    name=$(pager whoami --session "$session_id_raw" 2>/dev/null | awk '/^name:/{print $2; exit}')
-    # "none" is whoami's own placeholder for an unnamed session, not a name.
-    [ -n "$name" ] && [ "$name" != "none" ] || return
-    printf ' 📟 %s%s%s' "$CYAN" "$name" "$RESET"
-}
-
-render_plan() {
-    local resolved status color icon
-    [ -n "$session_id_raw" ] || return
-    [ -f "$_ROUTING_ENGINE" ] || return
-    resolved=$(PM_SESSION_TOOL=claude PM_SESSION_ID="$session_id_raw" \
-        node "$_ROUTING_ENGINE" resolve-session --root "$PWD" --tool claude 2>/dev/null) || return
-    [ "$(printf '%s' "$resolved" | jq -r '.status // empty')" = "ok" ] || return
-    status=$(printf '%s' "$resolved" | jq -r '.plan_status // empty')
-
-    case "$status" in
-        draft)  color="$DIM";    icon="⚙️" ;;
-        active) color="$YELLOW"; icon="▶️" ;;
-        *)      return ;;  # done | dropped | empty | unknown → no widget
-    esac
-
-    printf ' %s %s%s%s' "$icon" "$color" "$status" "$RESET"
-}
-
 render_quota() {
     [ -n "$sub_type" ] || return
     local plan_label sep=""
@@ -331,4 +285,4 @@ parse_stdin
 refresh_and_parse_cache
 
 render_model; printf '\n'
-render_context; render_cost; render_fresh; render_pager; render_plan; render_quota; printf '\n'
+render_context; render_cost; render_fresh; render_quota; printf '\n'
