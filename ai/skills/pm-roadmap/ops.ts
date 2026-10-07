@@ -1087,6 +1087,8 @@ export const standaloneComplete = (root: string, planPath: string, status: "done
   }, o);
 };
 
+// The step grammar `- [ ] N.` is also read by claude/mods/pm-band/hooks/plan.ts (stepsOf),
+// which draws the steps above the prompt. Change the two together.
 export const planStep = (root: string, planPath: string, step: number, checked: boolean, o: LockOpts = {}) =>
   withLock(root, "planStep", async () => {
     if (!Number.isInteger(step) || step < 1) throw new OpError("plan step must be a positive integer");
