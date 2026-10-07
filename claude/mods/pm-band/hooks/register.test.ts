@@ -401,38 +401,68 @@ describe('register', () => {
       viewport: VIEWPORT,
     })
     await vscode.press({ key: 'tab-graph' })
-    const svg = await vscode.find({ type: 'Svg' })
-    expect(String(svg?.props?.source ?? '').length).toBeLessThan(131_072)
-    expect(textOf(await vscode.drawn())).toMatch(/\+\d+ more not drawn/)
+    expect(textOf(await vscode.drawn())).toContain('BIG')
+    expect(await vscode.find({ type: 'Client' })).toBeUndefined()
+    // Titles are cut at 200 characters, so 300 long ones stay a drawable list.
+    const list = textOf(await vscode.drawn())
+    expect(list).toContain(`${'x'.repeat(199)}…`)
+    expect(list).not.toContain('x'.repeat(200))
   })
 
-  test('desktop, vscode and mobile draw the graph as an Svg with a node list; a press shows the detail', async ($, on) => {
+  test('the desktop places every run at its cell, and a click or hover there hits the node', async ($, on) => {
     const w = world(on)
     await started($, w)
     await openPane($, w)
-    for (const surface of ['desktop', 'vscode', 'mobile'] as const) {
-      const ui = await $.ui.mount({
-        plugin: 'pm-band',
-        surface,
-        component: 'Pane',
-        props: PANE_PROPS,
-        requestId: PANE,
-        viewport: VIEWPORT,
-      })
-      await ui.press({ key: 'tab-graph' })
-      const svg = await ui.find({ type: 'Svg' })
-      expect(String(svg?.props?.alt)).toBe('Backlog graph: 1 task, 3 items, 1 dependency link')
-      expect(String(svg?.props?.source)).toContain('<title>demo — The demo plan</title>')
-      expect(await ui.find({ type: 'Client' })).toBeUndefined()
-      expect(await ui.find({ key: 'node-later' })).toBeDefined()
-      expect(textOf(await ui.drawn())).toContain('pick a node below the drawing')
-      await ui.press({ key: 'node-demo' })
-      expect(textOf(await ui.drawn())).toContain('CFG/demo · [P2] The demo plan')
-      expect(String((await ui.find({ type: 'Svg' }))?.props?.source)).toContain('class="label picked"')
-      await ui.press({ key: 'node-demo' })
-      expect(textOf(await ui.drawn())).toContain('pick a node below the drawing')
-      await ui.unmount()
-    }
+    const ui = await $.ui.mount({
+      plugin: 'pm-band',
+      surface: 'desktop',
+      component: 'Pane',
+      props: PANE_PROPS,
+      requestId: PANE,
+      viewport: VIEWPORT,
+    })
+    await ui.press({ key: 'tab-graph' })
+    await ui.resize({ columns: 60, rows: 12, in: 'graph' })
+    await ui.advance(5_000)
+    const drawn = (await ui.drawn({ in: 'graph' })) as { children?: unknown[] }
+    // One Box sized to the region, holding one absolute Box per run of glyphs.
+    const field = drawn.children?.[0] as { props?: Record<string, unknown>; children?: unknown[] }
+    expect(field.props).toMatchObject({ position: 'relative', width: 60, height: 12 })
+    const runs = (field.children ?? []) as { props?: { position?: string; left?: number; top?: number }; children?: unknown[] }[]
+    expect(runs.length).toBeGreaterThan(3)
+    expect(runs.every(run => run.props?.position === 'absolute')).toBe(true)
+    const demo = runs.find(run => textOf(run).startsWith('● demo'))!
+    expect(demo).toBeDefined()
+    const x = demo.props!.left!
+    const y = demo.props!.top!
+
+    await ui.pointer({ type: 'move', x: x + 3, y, in: 'graph' })
+    await ui.advance(100)
+    const hovered = ((await ui.drawn({ in: 'graph' })) as { children?: unknown[] }).children?.[0] as { children?: unknown[] }
+    const hit = (hovered.children ?? []).find(run => textOf(run).startsWith('● demo')) as { children?: { props?: Record<string, unknown> }[] }
+    expect(hit.children?.[0]?.props).toMatchObject({ underline: true })
+
+    await ui.pointer({ type: 'leave', x: x + 3, y, in: 'graph' })
+    await ui.advance(100)
+    const left = ((await ui.drawn({ in: 'graph' })) as { children?: unknown[] }).children?.[0] as { children?: unknown[] }
+    const rested = (left.children ?? []).find(run => textOf(run).startsWith('● demo')) as { children?: { props?: Record<string, unknown> }[] }
+    expect(rested.children?.[0]?.props?.underline).toBeUndefined()
+
+    await ui.pointer({ type: 'down', x, y, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'up', x, y, button: 'left', in: 'graph' })
+    await ui.advance(100)
+    expect(textOf(await ui.drawn())).toContain('CFG/demo · [P2] The demo plan')
+
+    const mobile = await $.ui.mount({
+      plugin: 'pm-band',
+      surface: 'mobile',
+      component: 'Pane',
+      props: PANE_PROPS,
+      requestId: PANE,
+      viewport: VIEWPORT,
+    })
+    await mobile.press({ key: 'tab-graph' })
+    expect(textOf(await mobile.drawn())).toContain('▶ [P2] demo')
   })
 
   test("the band's steps and graph controls open /pm on that tab", async ($, on) => {
