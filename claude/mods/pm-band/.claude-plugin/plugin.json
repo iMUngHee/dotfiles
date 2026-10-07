@@ -1,0 +1,9 @@
+{
+  "name": "pm-band",
+  "version": "0.1.0",
+  "description": "pm plan steps above the prompt; steps, backlog and dependency graph in a pane",
+  "author": {
+    "name": "대협"
+  },
+  "types": "./types/index.d.ts"
+}
