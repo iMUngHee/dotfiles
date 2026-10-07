@@ -40,8 +40,11 @@ function exited(exitCode: number, stdout: string, stderr = '') {
 }
 
 /** The pager CLI beneath pager-view, scripted: names per session, the store, the roster. */
+// Fixture mail is stamped 05:<id % 60> on 2026-10-07; the clock starts at 06:00.
+const NOW = Date.parse('2026-10-07T06:00:00.000Z')
+
 function world(on: On, store: Record<string, unknown> = {}) {
-  const clock = mock.clock(on)
+  const clock = mock.clock(on, { now: NOW })
   mock.store(on, store)
   const w = {
     clock,
@@ -54,6 +57,7 @@ function world(on: On, store: Record<string, unknown> = {}) {
     /** Set to hold the next export until the test lets it go. */
     hold: null as null | Promise<void>,
     beneath: null as null | string,
+    who: 'NAME  TOOL    ROOT       HOST  LAST\nwogi  claude  /work      live  just now\nbuni  codex   /other     gone  3m ago\n',
   }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -104,7 +108,7 @@ function world(on: On, store: Record<string, unknown> = {}) {
       return exited(0, lines.join('\n'))
     }
     if (sub === 'who') {
-      return exited(0, 'NAME  TOOL    ROOT       HOST  LAST\nwogi  claude  /work      live  just now\nbuni  codex   /other     gone  3m ago\n')
+      return exited(0, w.who)
     }
     return exited(2, '', 'unexpected')
   })
@@ -138,11 +142,11 @@ describe('register', () => {
     const w = world(on)
     w.messages = [MAIL(10), MAIL(11)]
     await started($, w)
-    expect(await bandText($)).toBe('✉ wogi')
+    expect(await bandText($)).toBe('✉ wogi  ← buni 49m  mail 11')
 
     w.messages.push(MAIL(12), MAIL(13))
     await w.clock.advance(POLL)
-    expect(await bandText($)).toBe('✉ wogi · 2 new')
+    expect(await bandText($)).toBe('✉ wogi  ● 2 new  ← buni 47m  mail 13')
   })
 
   test('/pager clears the badge, and mail arriving while it is open stays read', async ($, on) => {
@@ -150,15 +154,15 @@ describe('register', () => {
     await started($, w)
     w.messages.push(MAIL(20))
     await w.clock.advance(POLL)
-    expect(await bandText($)).toBe('✉ wogi · 1 new')
+    expect(await bandText($)).toBe('✉ wogi  ● 1 new  ← buni 40m  mail 20')
 
     await $.command.run(COMMAND)
-    expect(await bandText($)).toBe('✉ wogi')
+    expect(await bandText($)).not.toContain('new')
     await w.clock.advance(400)
 
     w.messages.push(MAIL(21))
     await w.clock.advance(POLL)
-    expect(await bandText($)).toBe('✉ wogi')
+    expect(await bandText($)).toBe('✉ wogi  ← buni 39m  mail 21')
   })
 
   test('the baseline is the store\'s: a reload under the same session keeps it', async ($, on) => {
@@ -166,19 +170,19 @@ describe('register', () => {
     w.messages = [MAIL(30), MAIL(31), MAIL(32)]
     await started($, w)
 
-    expect(await bandText($)).toBe('✉ wogi · 2 new')
+    expect(await bandText($)).toBe('✉ wogi  ● 2 new  ← buni 28m  mail 32')
   })
 
   test('a new session id starts its own baseline and drops the old one\'s view', async ($, on) => {
     const w = world(on, { 'baseline:sid-a': 0 })
     w.messages = [MAIL(40), MAIL(41, 'nuro')]
     await started($, w)
-    expect(await bandText($)).toBe('✉ wogi · 1 new')
+    expect(await bandText($)).toBe('✉ wogi  ● 1 new  ← buni 20m  mail 40')
 
     w.sessionId = 'sid-b'
     await $.classic.SessionStart({ source: 'clear' })
     await w.clock.advance(400)
-    expect(await bandText($)).toBe('✉ nuro')
+    expect(await bandText($)).toBe('✉ nuro  ← buni 19m  mail 41  · 1 live')
   })
 
   test('a refresh still running when the session changes never lands in the new one', async ($, on) => {
@@ -241,8 +245,30 @@ describe('register', () => {
 
     w.names['sid-a'] = 'wogi'
     await w.clock.advance(POLL)
-    expect(await bandText($)).toBe('✉ wogi▶ demo')
+    expect(await bandText($)).toBe('✉ wogi\n▶ demo')
     expect(await bandText($, { ...BAND, hasSurvey: true })).toBe('▶ demo')
+  })
+
+  test('the band shows the last message, live peers, and opens /pager from the name', async ($, on) => {
+    const w = world(on)
+    w.who = 'NAME  TOOL    ROOT    HOST  LAST\nwogi  claude  /work   live  just now\nbuni  codex   /other  live  1m ago\nzola  claude  /z      live  2m ago\n'
+    w.messages = [
+      MAIL(10),
+      { id: 15, to: 'buni', from: 'wogi', fromSession: 'sid-a', body: `long ${'x'.repeat(80)}` },
+    ]
+    await started($, w)
+    const text = await bandText($)
+    expect(text).toContain('✉ wogi  → buni 45m  long ')
+    expect(text).toContain('…  · 2 live')
+    expect(text.length).toBeLessThan(120)
+
+    w.messages.push(MAIL(16))
+    await w.clock.advance(POLL)
+    expect(await bandText($)).toContain('● 1 new')
+    const band = await $.ui.mount({ plugin: 'pager-view', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+    await band.press({ key: 'open-pager' })
+    expect(w.panes).toEqual([PANE])
+    expect(await bandText($)).not.toContain('new')
   })
 
   test('drawing runs no process', async ($, on) => {
