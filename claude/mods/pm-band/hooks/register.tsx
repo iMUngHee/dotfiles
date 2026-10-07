@@ -18,12 +18,14 @@ import {
   resolvedOf,
   stepsOf,
 } from './plan'
-import type { Graph, Listing, Run } from './plan'
-import { altOf, svgOf } from './svg'
+import type { Listing, Run } from './plan'
 
 export const PANE = 'pm'
 const REFRESH_DEBOUNCE_MS = 300
 const DOTS_MAX = 20
+// A row is cut at the pane edge anyway; the cap keeps a big backlog inside the
+// engine's 100,000 characters of text per drawing.
+const TITLE_CHARS = 200
 
 const band = atom({ plugin: 'pm-band', key: 'band' } as const, {
   sessionId: '',
@@ -162,10 +164,6 @@ async function openPane($: Engine, shown?: Tab): Promise<void> {
   if (shown !== undefined) await update($, tab, () => shown)
   await $.ui.open({ id: PANE, title: 'pm', focus: true })
   soon($)
-}
-
-async function pickNode($: Engine, id: string): Promise<void> {
-  await update($, selected, prev => (prev === id ? null : id))
 }
 
 async function switched($: Engine): Promise<void> {
@@ -328,7 +326,7 @@ function paneOf(
   const body =
     shown === 'steps'
       ? stepsBody($, e, state)
-      : shown === 'backlog'
+      : shown === 'backlog' || !hasClient(e)
         ? backlogBody($, e, list, state)
         : graphBody($, e, list, state, pick)
   return (
@@ -337,6 +335,11 @@ function paneOf(
       {body}
     </Box>
   )
+}
+
+/** The graph is a Client; VS Code and mobile have none, so they get the list. */
+function hasClient(e: RenderInput<'Pane'>): boolean {
+  return e.surface === 'terminal' || e.surface === 'desktop'
 }
 
 function stepsBody($: Engine, e: RenderInput<'Pane'>, state: BandState): RenderElement {
@@ -401,7 +404,7 @@ function backlogBody($: Engine, e: RenderInput<'Pane'>, list: BacklogState, stat
             <Text wrap="truncate-end" bold={row.isCurrent} dimColor={row.isBlocked && !row.isCurrent}>
               {' '}
               {row.isCurrent ? '▶' : row.isBlocked ? '◌' : '·'} [{row.priority}] {row.id}
-              <Text dimColor> — {row.title}</Text>
+              <Text dimColor> — {row.title.length > TITLE_CHARS ? `${row.title.slice(0, TITLE_CHARS - 1)}…` : row.title}</Text>
               {row.blockedBy !== undefined ? (
                 <Text color="warning">
                   {row.blockedByReason === 'order' ? `  ⤷ after ${row.blockedBy}` : `  ⤷ needs ${row.blockedBy}`}
@@ -441,70 +444,16 @@ function graphBody(
   }
   const graph: GraphProps = graphOf(list.listing, currentPlanOf(state))
   const detail = detailOf(list, pick)
-  return e.surface === 'terminal'
-    ? cellGraph($, e as RenderInput<'Pane'> & { surface: 'terminal' }, graph, detail)
-    : drawnGraph($, e as RenderInput<'Pane'> & { surface: 'desktop' }, graph, detail, pick)
-}
-
-/** The terminal's graph: the Client's cell drawing, which takes drags, clicks and arrows. */
-function cellGraph(
-  $: Engine,
-  e: RenderInput<'Pane'> & { surface: 'terminal' },
-  graph: GraphProps,
-  detail: string | null,
-): RenderElement {
-  const { Box, Text, Client } = $.ui.resolve(e)
+  const { Box, Client } = $.ui.resolve(e as RenderInput<'Pane'> & { surface: 'terminal' })
   const height = Math.max(5, e.props.scroll.bodyRows - 3)
+  // The desktop sets text in a proportional face: the Client places each run at
+  // its cell instead of drawing rows of spaced text (see graph.tsx).
+  const props: GraphProps = e.surface === 'terminal' ? graph : { ...graph, isPlaced: true }
   return (
     <Box flexDirection="column">
-      <Client key="graph" module="./graph.tsx" props={graph} width="100%" height={height} />
+      <Client key="graph" module="./graph.tsx" props={props} width="100%" height={height} />
       <Text dimColor wrap="truncate-end">
         {detail ?? 'click a node · drag to move · arrows to step'}
-      </Text>
-    </Box>
-  )
-}
-
-/**
- * Every other surface's graph: an Svg (its text is not a cell grid, and a
- * Client there has no Svg to draw with), then the nodes as Buttons by task,
- * which is how a node is picked, then the pick's detail.
- */
-function drawnGraph(
-  $: Engine,
-  e: RenderInput<'Pane'> & { surface: 'desktop' },
-  graph: Graph,
-  detail: string | null,
-  pick: string | null,
-): RenderElement {
-  const { Box, Text, Button, Svg } = $.ui.resolve(e)
-  const hubs = graph.nodes.filter(node => node.state === 'task')
-  return (
-    <Box flexDirection="column" rowGap={1}>
-      <Svg source={svgOf(graph, pick)} alt={altOf(graph)} isInteractive />
-      {hubs.map(hub => (
-        <Box flexDirection="column">
-          <Text bold color="claude">
-            {hub.task}
-          </Text>
-          <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-            {graph.nodes
-              .filter(node => node.state !== 'task' && node.task === hub.task)
-              .map(node => (
-                <Button
-                  key={`node-${node.id}`}
-                  label={node.label}
-                  plain
-                  dimColor={node.id !== pick}
-                  onPress={() => pickNode($, node.id)}
-                />
-              ))}
-          </Box>
-        </Box>
-      ))}
-      {graph.more > 0 ? <Text dimColor>+{graph.more} more not drawn</Text> : ''}
-      <Text dimColor wrap="wrap">
-        {detail ?? 'pick a node below the drawing'}
       </Text>
     </Box>
   )

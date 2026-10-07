@@ -12,7 +12,7 @@
 ## Surface Type & Craft Profile
 
 - **Surface:** a status line above the prompt and two side panes inside Claude Code: a glanceable product-app workflow surface, not a dashboard.
-- **Media:** TUI (Ink, cell grid, the person's terminal theme) and desktop GUI (the Code tab draws Box as a flex div, Text as a span in a proportional face, Svg as an isolated image). vscode and mobile follow the desktop rules with the elements they have.
+- **Media:** TUI (Ink, cell grid, the person's terminal theme) and desktop GUI (the Code tab draws Box as a flex div and Text as a span in a proportional face; it has no pixel or canvas element, and Svg is an isolated image that takes no input). vscode and mobile have no Client and fall back to lists.
 - **Direction:** **Ledger** — a mail-reader index over a reading pane (aerc, neomutt) and a list ledger of glyph-led rows (Linear, GitHub Primer). Structure comes from rules, whitespace and aligned columns; a single accent per meaning; selection by glyph and weight; a key-hint line closes each tab.
 - **Density:** one item per row in lists; the reader and the drawing take the rest of the pane.
 - **Anti-patterns:** boxed panels inside the pane (the frame is the engine's), color-only state, a message or step cut to one line with no way to read the rest, a character-grid drawing on a surface whose text is not monospace.
@@ -35,7 +35,7 @@
 - **`/pm` pane:** tabs `1 steps`, `2 backlog`, `3 graph`.
   - steps: plan id · status · done/total, the plan title, then every step.
   - backlog: one group per task (name and item count), then rows of marker, priority, id and title, with `⤷ needs X` / `⤷ after X`; the current plan's item marked; inbox count last.
-  - graph: the drawing (task hubs, items, task/dependency/order links), then on surfaces without a cell grid a node list grouped by task, then the detail line of the picked node.
+  - graph: the drawing (task hubs, items, task/dependency/order links), then the detail line of the picked node. VS Code and mobile show the backlog list instead.
 - **`/pager` pane:** tabs `1 messages`, `2 peers`.
   - messages: an index of recent messages (time, direction, peer, `(human)`, first line), then the reader for the selected message (header rule with id, direction, peer, `(human)`, time, age; the whole body), then the key hints.
   - peers: a column header, then one row per peer — live hosts first, then by last activity; this session marked `(this)`.
@@ -68,13 +68,13 @@
 - **Pane tabs:** digit hotkeys `1`–`3` (pm) and `1`–`2` (pager), or a click; the shown tab persists for the session.
 - **Band controls:** `steps` and `graph` set the tab and open `/pm` with focus; the pager name opens `/pager` and clears the badge.
 - **Picking a message:** `j` older, `k` newer (hotkey Buttons in the hint line), or a click on / Enter over a message's time. The arrows and page keys scroll the pane body (the engine's). The pick holds until the person moves it; with no pick the newest message is shown and follows new mail.
-- **Picking a graph node:** terminal — click a node, drag to move it, focus the drawing and use the arrows; other surfaces — a Button per node in the node list. The pick shows the node's detail line; a task hub's detail names the task.
+- **Picking a graph node:** terminal and desktop — click a node, drag to move it, focus the drawing and use the arrows; a resting pointer underlines the node under it. The pick shows the node's detail line; a task hub's detail names the task.
 - **Feedback:** every pick redraws at once; nothing waits on I/O.
 
 ## Microcopy
 
 - Tabs: `steps`, `backlog`, `graph`; `messages`, `peers`. Band controls: `steps`, `graph`.
-- Hints: pm graph terminal `click a node · drag to move · arrows to step`; pm graph other surfaces `pick a node below`; pager messages terminal `j older · k newer · 1 2 tabs · ↑↓ scroll`; pager messages other surfaces `click a time to read it`.
+- Hints: pm graph terminal `click a node · drag to move · arrows to step`; pager messages terminal `j older · k newer · 1 2 tabs · ↑↓ scroll`; pager messages other surfaces `click a time to read it`.
 - Reader header: `#<id> · ← <peer> (human) · MM-DD HH:MM · <age> ago` (`→` for sent).
 - Truncation: `… <N> more characters · full text: pager export (#<id>)`.
 - State lines as in Data & State Model.
@@ -82,19 +82,7 @@
 ## Visual System
 
 - **Color roles (ThemeKey only; the palette is the person's):** `claude` accent for task names and the plan id; `suggestion` incoming `←`; `success` outgoing `→` and progress dots; `warning` current step, new mail, blocking reason; `subtle` rules and task links; `inactive` draft status and order links; dim for metadata; `error` is not used (failures are quiet, recoverable).
-- **Svg palette** (Svg cannot read ThemeKeys): CSS custom properties, dark default and `@media (prefers-color-scheme: light)`:
-
-  | Role | dark | light |
-  | --- | --- | --- |
-  | text | `#e6e6e6` | `#1f1f1f` |
-  | muted | `#8a8a8a` | `#6b6b6b` |
-  | rule / task link | `#4a4a4a` | `#c8c8c8` |
-  | accent (task hub) | `#d77757` | `#b8532f` |
-  | eligible | `#4eba65` | `#2c7a3f` |
-  | blocked / dependency | `#e5b143` | `#9a6a00` |
-  | current | `#b1b9f9` | `#4752c4` |
-
-- **Type:** terminal — one monospace size; hierarchy by bold, dim and position. Desktop and Svg — the surface's system face; Svg labels 12px, hub labels 13px semibold.
+- **Type:** terminal — one monospace size; hierarchy by bold, dim and position. Desktop — the surface's system face at its body size; hierarchy as on the terminal.
 - **Spacing:** one blank row between regions; group headers sit flush left, rows indent one cell.
 - **Rules:** a `─` line in `subtle`, carrying a label at its left end (`── #157 · … ──`), sized to the pane's `bodyColumns`.
 - **Motion:** none beyond the terminal graph settling.
@@ -110,29 +98,27 @@
 | Reader | rule header, then the body as one Text per line, wrapped; blank lines kept | truncated: closing dim line | /pager messages |
 | Peer row | fixed columns name 6 · tool 7 · host 8 · last 10 · root (start-truncated, `~` for home) | live: `●` normal; other: `○` dim; this session: bold + `(this)` | /pager peers |
 | Backlog row | marker (`▶` current, `◌` blocked, `·` other) · `[P#]` · id · `—` title (dim) · reason in `warning` | current: bold; blocked: dim | /pm backlog |
-| Graph (terminal) | Client cell drawing; labels placed right, else left, else cut with `…` into free cells | picked: inverse; current: `suggestion` bold | /pm graph |
-| Graph (other surfaces) | Svg: hubs in a row, each hub's items on a circle around it at even angles, labels pointing outward, links behind nodes; `<title>` per node | current: ring; picked: ring + bold label | /pm graph |
-| Node list | per task: the task name in accent, then one plain Button per item, wrapping | picked: full strength; other: dim | /pm graph, non-terminal |
+| Graph | Client cell drawing; labels placed right, else left, else cut with `…` into free cells. Terminal: one Text per row. Desktop (`isPlaced`): every run of glyphs in its own Box at its cell, `position: absolute`, inside a Box the size of the region | picked: inverse; hovered: bold + underline; current: `suggestion` bold | /pm graph |
 | Hint line | dim Text; on terminal it carries the `j`/`k` Buttons | — | /pager messages, /pm graph |
 
 ## Responsive & Accessibility
 
 - **Terminal:** every row ends at `bodyColumns` (`truncate-end`); rules are drawn to `bodyColumns`; the index window keeps the picked row visible and takes `max(3, ⌊bodyRows × 0.35⌋)` rows; the graph Client takes the rows left after the hint and detail lines.
-- **Other surfaces:** the Svg has a viewBox and scales to the slot's width; the node list wraps.
+- **Desktop:** the graph keeps cell positions whatever the face, because each run is placed at its cell; a run is never wider than the cells it took on the terminal, so runs cannot collide.
 - **Focus and state are never color alone:** picked rows carry `▌`, the current step `▶`, blocked `◌`, live `●` versus `○`.
-- **Every action has a key:** tabs by digit, message pick by `j`/`k`, Buttons by Tab+Enter; the Svg carries `alt` naming the counts and every node has a `<title>`.
+- **Every action has a key:** tabs by digit, message pick by `j`/`k`, Buttons by Tab+Enter.
 - **Korean text:** bodies wrap through the surface (`wrap`); the terminal counts a Hangul syllable as two cells (Ink).
 
 ## Performance & Formatting
 
 - Times as `MM-DD HH:MM` local; ages `just now`, `<n>s`, `<n>m`, `<n>h`, `<n>d` from the refresh's `now`.
-- The index draws only the rows in its window; the reader body is capped at 6,000 characters; the graph at 120 nodes (`+N more`), Svg source under 131,072 characters.
+- The index draws only the rows in its window; the reader body is capped at 6,000 characters; the graph at 120 nodes (`+N more`); backlog titles at 200 characters (the engine refuses a drawing over 100,000 characters of text).
 
 ## Do / Don't
 
 - Do keep one accent per meaning; don't color whole rows.
 - Do let the engine's pane frame be the only box; don't draw nested borders.
-- Do draw the graph with Svg wherever the text is not a cell grid; don't send the cell drawing to desktop.
+- Do place the graph's runs at their cells wherever the text is not a cell grid; don't draw rows of space-aligned text there, and don't fall back to an Svg image (it takes no input — rejected by 대협 on sight).
 - Don't hide a message body behind a single truncated line.
 
 ## Artifact Ledger
@@ -159,14 +145,14 @@ Surface Obligations:
 | ID | Stage | Obligation | Derives from | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | OBL-001 | experience | /pm graph tab is readable on desktop: nodes and labels do not collapse into one line | — | captured:대협 screenshot (defu #157) | PASS |
-| OBL-002 | experience | On desktop a node is picked from a node list under the drawing and its detail line is shown | — | artifact:ART-001#default@pane-96col | PASS |
+| OBL-002 | experience | On desktop a node is picked in the drawing itself and its detail line is shown | — | captured:대협 "svg는 너무 별로임"; chose A (real elements in a Client) | PASS |
 | OBL-003 | experience | Terminal graph labels never overwrite one another | — | captured:.agents/plans/2026-10-07-claude-mods-pm-pager.md Deferred | PASS |
 | OBL-004 | experience | The pm band line carries steps and graph controls that open /pm on that tab | — | captured:pm-band-open-buttons backlog item | PASS |
 | OBL-005 | experience | /pager messages: the selected message (default newest) is read in full below the index; long bodies keep a route to the full text | — | captured:대협 screenshot "이렇게 축약되어서 보이면 무슨 의미일까" | PASS |
 | OBL-006 | experience | The badge clears when /pager opens (unchanged); (human) stays | — | artifact:ART-001#default@pane-96col | PASS |
 | OBL-007 | experience | Peers read as aligned columns with live sessions first and this session marked | — | artifact:ART-001#default@pane-96col | PASS |
 | OBL-008 | interface | Ledger system: rules/whitespace, aligned columns, ThemeKey roles as in Decisions, selection by glyph+bold, key-hint footer | OBL-001,OBL-002,OBL-005,OBL-007 | missing | PENDING |
-| OBL-009 | interface | Remote surfaces draw the graph as Svg (radial per task hub, outward labels, title tooltips, light/dark CSS) plus a node Button list | OBL-001,OBL-002 | missing | PENDING |
+| OBL-009 | interface | The desktop draws the same Client graph with every run placed at its cell (absolute Boxes); click, drag, arrows and hover work in the drawing | OBL-001,OBL-002 | missing | PENDING |
 | OBL-010 | interface | Terminal raster places each label right, else left, else truncated with … in free cells; nodeAt follows placed labels | OBL-003 | missing | PENDING |
 | OBL-011 | interface | Message reader: header rule with #id, direction, peer, (human), time, age; body wraps with line breaks kept; cap 6,000 chars with a pager export route | OBL-005,OBL-006 | missing | PENDING |
 
@@ -175,4 +161,6 @@ Approvals:
 - direction_selected: none (no interface artifact). The Ledger direction was chosen by Claude under 대협's delegation: "디자인 시스템도 적당한거 찾아 골라서 좀 고급지게 해봐 ㅇㅇ", "묻지말고 알아서 끝까지 해놓으셈 ㅇㅇ". Recorded as a delegated direction, not as 대협's selection.
 - build_authorized: "묻지말고 알아서 끝까지 해놓으셈 ㅇㅇ" (and the earlier "전체 진행 (추천)" answer)
 
-Open: whether the desktop Svg follows `prefers-color-scheme` and how wide the Code tab draws it — answered by the desktop render (plan step 7/9).
+- 2026-10-07 — Interface/Experience delta: the desktop Svg + node list shipped in `5fc5ead` was rejected by 대협 on the live render ("너무 구린데, 저게 최선임?", "svg는 너무 별로임"). Of three options (real elements in a Client, a task board, a polished Svg) 대협 chose real elements in a Client. Canvas-like elements (`Raster`, `Image`) exist on the terminal only in this engine build.
+
+Open: how the desktop Code tab sizes a cell for absolute positions — answered by the desktop render (plan step 9).

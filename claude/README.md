@@ -127,7 +127,7 @@ Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
 
 | Mod | Draws | Reads |
 |-----|-------|-------|
-| `pm-band` | One band line above the prompt — the bound plan's id, progress dots and current step (`○ no plan` when unbound), with `steps` and `graph` controls that open `/pm` on that tab. `/pm` opens a pane with three tabs: steps, backlog (by task, `⤷ needs X` / `⤷ after X`), and the dependency graph — on the terminal a force-directed cell drawing (drag a node, arrows to pick), on desktop, VS Code and mobile an Svg with a node list to pick from. | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
+| `pm-band` | One band line above the prompt — the bound plan's id, progress dots and current step (`○ no plan` when unbound), with `steps` and `graph` controls that open `/pm` on that tab. `/pm` opens a pane with three tabs: steps, backlog (by task, `⤷ needs X` / `⤷ after X`), and a force-directed dependency graph (drag a node, click or arrows to pick; the desktop places each run of the drawing at its cell; VS Code and mobile get the backlog list). | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
 | `pager-view` | `✉ <name> · N new` under the pm line — mail since this session last opened `/pager`. `/pager` opens the session's conversation: an index of messages (`←` in, `→` out; `j`/`k` or a click on the time picks one) over the picked message in full; and the peers table (live first, this session marked). | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
 
 - **What they show and how** is `mods/design-contract.md` (experience and the

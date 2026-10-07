@@ -1,6 +1,12 @@
 // The /pm graph tab's surface module: lays the backlog graph out on the drawing
 // thread, frame by frame, and takes the pointer and keys. It has no `$`; a pick
 // reaches the hooks module as `ui.message` data ({ selected }).
+//
+// Two ways to put the cells on screen. The terminal's text is a cell grid, so
+// each row is one Text. Elsewhere (the desktop) text is set in a proportional
+// face and a row of spaces does not line up; there `isPlaced` puts every run of
+// glyphs in its own Box at its cell (`position: absolute`), so positions hold
+// whatever the face.
 
 import type { ClientModule, ClientSurface, Color } from 'claude-code'
 
@@ -10,7 +16,7 @@ import type { Graph, GraphNode } from './plan'
 import { nodeAt, rasterOf } from './raster'
 import type { Tone } from './raster'
 
-export type GraphProps = Graph
+export type GraphProps = Graph & { isPlaced?: boolean }
 
 type GraphState = {
   /** The graph as last handed in, and a key of its shape to spot a new one. */
@@ -23,13 +29,15 @@ type GraphState = {
   pinned: string[]
   drag: string | null
   selected: string | null
+  /** The node under a resting pointer, drawn underlined. */
+  hovered: string | null
   /** The surface the last call was handed, for the frame timer to read. */
   box: { surface: ClientSurface<GraphState> }
 }
 
 const FRAME_MS = 50
 
-const TONE: Record<Tone, { color?: Color; dimColor?: boolean; bold?: boolean; inverse?: boolean }> = {
+const TONE: Record<Tone, { color?: Color; dimColor?: boolean; bold?: boolean; inverse?: boolean; underline?: boolean }> = {
   blank: {},
   'task-edge': { color: 'subtle', dimColor: true },
   'dependency-edge': { color: 'warning' },
@@ -38,6 +46,7 @@ const TONE: Record<Tone, { color?: Color; dimColor?: boolean; bold?: boolean; in
   eligible: { color: 'success' },
   blocked: { color: 'warning' },
   current: { color: 'suggestion', bold: true },
+  hovered: { bold: true, underline: true },
   selected: { inverse: true, bold: true },
 }
 
@@ -103,6 +112,7 @@ function started(graph: Graph, surface: ClientSurface<GraphState>): GraphState {
     pinned: [],
     drag: null,
     selected: null,
+    hovered: null,
     box,
   }
   surface.every(FRAME_MS, () => frame(box))
@@ -132,7 +142,15 @@ function started(graph: Graph, surface: ClientSurface<GraphState>): GraphState {
       })
       return
     }
-    if (event.type === 'up' && now.drag !== null) box.surface.setState({ ...now, drag: null })
+    if (event.type === 'up' && now.drag !== null) {
+      box.surface.setState({ ...now, drag: null })
+      return
+    }
+    const hovered =
+      event.type === 'leave' ? null : event.type === 'move' && now.drag === null && event.button === undefined
+        ? (nodeAt(now.graph.nodes, now.layout.pos, now.size, event.x, event.y) ?? null)
+        : now.hovered
+    if (hovered !== now.hovered) box.surface.setState({ ...now, hovered })
   })
   surface.onKey(event => {
     const now = box.surface.state
@@ -164,13 +182,47 @@ const GraphView: ClientModule<GraphProps, GraphState> = (graph, surface) => {
         isRunning: !isEmpty(size),
         pinned: state.pinned.filter(id => graph.nodes.some(node => node.id === id)),
         selected: graph.nodes.some(node => node.id === state!.selected) ? state.selected : null,
+        hovered: null,
       }
       surface.setState(next)
       state = next
     }
   }
   if (isEmpty(state.size)) return <Text dimColor>loading…</Text>
-  const rows = rasterOf(state.graph.nodes, state.graph.edges, state.layout.pos, state.size, state.selected)
+  const rows = rasterOf(
+    state.graph.nodes,
+    state.graph.edges,
+    state.layout.pos,
+    state.size,
+    state.selected,
+    state.hovered,
+  )
+  if (graph.isPlaced) {
+    const runs = rows.flatMap((line, y) => {
+      let x = 0
+      return line.map(run => {
+        const at = x
+        x += run.text.length
+        return { run, x: at, y }
+      })
+    })
+    return (
+      <Box flexDirection="column">
+        <Box position="relative" width={state.size.columns} height={state.size.rows}>
+          {runs
+            .filter(({ run }) => run.tone !== 'blank')
+            .map(({ run, x, y }) => (
+              <Box position="absolute" left={x} top={y}>
+                <Text wrap="truncate-end" {...TONE[run.tone]}>
+                  {run.text}
+                </Text>
+              </Box>
+            ))}
+        </Box>
+        {state.graph.more > 0 && <Text dimColor>+{state.graph.more} more</Text>}
+      </Box>
+    )
+  }
   return (
     <Box flexDirection="column">
       {rows.map(runs => (

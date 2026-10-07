@@ -13,6 +13,7 @@ export type Tone =
   | 'eligible'
   | 'blocked'
   | 'current'
+  | 'hovered'
   | 'selected'
 
 export type Run = { text: string; tone: Tone }
@@ -96,6 +97,7 @@ export function rasterOf(
   pos: Positions,
   size: Size,
   selected: string | null = null,
+  hovered: string | null = null,
 ): Run[][] {
   const { columns, rows } = size
   const ch: string[][] = Array.from({ length: rows }, () => Array(columns).fill(' '))
@@ -135,7 +137,7 @@ export function rasterOf(
   for (const node of nodes) {
     const place = placed.get(node.id)
     if (!place) continue
-    const t: Tone = node.id === selected ? 'selected' : node.state
+    const t: Tone = node.id === selected ? 'selected' : node.id === hovered ? 'hovered' : node.state
     put(place.x, place.y, markerOf(node, node.id === selected), t)
     if (place.text === '') continue
     // The gap cell between marker and label takes the node's tone, so a picked
