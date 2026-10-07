@@ -69,12 +69,13 @@
 - **Band controls:** `steps` and `graph` set the tab and open `/pm` with focus; the pager name opens `/pager` and clears the badge.
 - **Picking a message:** `j` older, `k` newer (hotkey Buttons in the hint line), or a click on / Enter over a message's time. The arrows and page keys scroll the pane body (the engine's). The pick holds until the person moves it; with no pick the newest message is shown and follows new mail.
 - **Picking a graph node:** terminal and desktop — click a node, drag to move it, focus the drawing and use the arrows; a resting pointer underlines the node under it. The pick shows the node's detail line; a task hub's detail names the task.
+- **Moving around the graph:** the graph lives on a canvas larger than the pane when the backlog is big (it grows with the node count). Drag empty space or shift+arrows to pan; `+` / `-` change the spacing (zoom levels 0.25–2; text keeps its size); `0` fits every node. The wheel scrolls the pane, not the canvas: a Client receives no wheel events.
 - **Feedback:** every pick redraws at once; nothing waits on I/O.
 
 ## Microcopy
 
 - Tabs: `steps`, `backlog`, `graph`; `messages`, `peers`. Band controls: `steps`, `graph`.
-- Hints: pm graph terminal `click a node · drag to move · arrows to step`; pager messages terminal `j older · k newer · 1 2 tabs · ↑↓ scroll`; pager messages other surfaces `click a time to read it`.
+- Hints: pm graph `click a node · drag it to move · drag empty space or shift+arrows to pan · + − zoom · 0 fit`; pager messages terminal `j older · k newer · 1 2 tabs · ↑↓ scroll`; pager messages other surfaces `click a time to read it`.
 - Reader header: `#<id> · ← <peer> (human) · MM-DD HH:MM · <age> ago` (`→` for sent).
 - Truncation: `… <N> more characters · full text: pager export (#<id>)`.
 - State lines as in Data & State Model.
@@ -161,6 +162,7 @@ Approvals:
 - direction_selected: none (no interface artifact). The Ledger direction was chosen by Claude under 대협's delegation: "디자인 시스템도 적당한거 찾아 골라서 좀 고급지게 해봐 ㅇㅇ", "묻지말고 알아서 끝까지 해놓으셈 ㅇㅇ". Recorded as a delegated direction, not as 대협's selection.
 - build_authorized: "묻지말고 알아서 끝까지 해놓으셈 ㅇㅇ" (and the earlier "전체 진행 (추천)" answer)
 
+- 2026-10-07 — Experience delta at 대협's ask ("무한 캔버스는 불가? 지금은 화면 크기 안에서만 노는데"): the graph became a pannable, zoomable canvas.
 - 2026-10-07 — Interface/Experience delta: the desktop Svg + node list shipped in `5fc5ead` was rejected by 대협 on the live render ("너무 구린데, 저게 최선임?", "svg는 너무 별로임"). Of three options (real elements in a Client, a task board, a polished Svg) 대협 chose real elements in a Client. Canvas-like elements (`Raster`, `Image`) exist on the terminal only in this engine build.
 
 Open: how the desktop Code tab sizes a cell for absolute positions — answered by the desktop render (plan step 9).
