@@ -4,7 +4,10 @@ export type Entry = {
   at: string
   direction: 'in' | 'out'
   peer: string
+  /** The body as sent, line breaks kept, cut at BODY_CAP characters. */
   body: string
+  /** The body's full length, so a cut one can say how much is left. */
+  length: number
   isHuman: boolean
 }
 
@@ -25,6 +28,8 @@ export type PagerState = {
   live: number
   /** How long ago the last entry was, as of the refresh that read it (`3m`). */
   lastAgo: string | null
+  /** When that refresh ran (ms since the epoch): the ages the pane draws count from it. */
+  now: number
   error: string | null
 }
 
@@ -35,6 +40,8 @@ declare module 'claude-code' {
     'pager-view': {
       pager: PagerState
       tab: Tab
+      /** The message the reader shows; null follows the newest. */
+      pick: number | null
     }
   }
 }

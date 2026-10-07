@@ -2,8 +2,10 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import {
   agoOf,
+  BODY_CAP,
   conversationOf,
   exportedOf,
+  flatOf,
   inboundOf,
   isMissing,
   liveOf,
@@ -11,6 +13,7 @@ import {
   newCountOf,
   newestOf,
   peersOf,
+  rosterOf,
 } from './pager'
 
 const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '' })
@@ -72,9 +75,32 @@ describe('pager', () => {
       [152, 'in', 'buni'],
       [160, 'in', 'gola'],
     ])
-    expect(entries[1]?.body).toBe('my reply ⏎ with two lines')
+    expect(entries[1]?.body).toBe('my reply\nwith two lines')
+    expect(entries[1]?.length).toBe('my reply\nwith two lines'.length)
+    expect(flatOf(entries[1]!.body)).toBe('my reply ⏎ with two lines')
     expect(entries[3]?.isHuman).toBe(true)
     expect(rows.some(r => r.id === 999)).toBe(false)
+  })
+
+  test('a body past the cap is kept up to the cap, its full length remembered', () => {
+    const long = 'ㄱ'.repeat(BODY_CAP + 500)
+    const rows = exportedOf(ok(row({ id: 149, created_at: '2026-10-07T05:00:00.000Z', alias: 'wogi', sender_session: 'sid-buni', sender_label: 'buni', body: long })))
+    if ('error' in rows) throw new Error(rows.error)
+    const [entry] = conversationOf(rows, new Set([149]), 'sid-a')
+    expect(entry?.body.length).toBe(BODY_CAP)
+    expect(entry?.length).toBe(BODY_CAP + 500)
+  })
+
+  test('the roster puts live hosts first and shows the home folder as ~', () => {
+    const peers = peersOf(ok(`${WHO}kiwi  codex   /Users/u  live  now
+`))
+    if ('error' in peers) throw new Error(peers.error)
+    expect(rosterOf(peers, '/Users/u').map(peer => [peer.name, peer.root])).toEqual([
+      ['wogi', '~/.config'],
+      ['kiwi', '~'],
+      ['boje', '~/Documents/Codex/x'],
+    ])
+    expect(rosterOf(peers, '/Users/uu')[0]?.root).toBe('/Users/u/.config')
   })
 
   test('a broken export line is an error, not a partial conversation', () => {

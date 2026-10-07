@@ -7,11 +7,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, On, RenderElement, RenderInput } from 'claude-code'
 
-import type { PagerState, Tab } from '../types'
+import type { Entry, PagerState, Tab } from '../types'
 import {
   agoOf,
   conversationOf,
   exportedOf,
+  flatOf,
   inboundOf,
   isMissing,
   liveOf,
@@ -19,6 +20,7 @@ import {
   newCountOf,
   newestOf,
   peersOf,
+  rosterOf,
   stampOf,
 } from './pager'
 import type { Run } from './pager'
@@ -36,11 +38,13 @@ const EMPTY: PagerState = {
   newCount: 0,
   live: 0,
   lastAgo: null,
+  now: 0,
   error: null,
 }
 
 const pager = atom({ plugin: 'pager-view', key: 'pager' } as const, EMPTY)
 const tab = atom({ plugin: 'pager-view', key: 'tab' } as const, 'messages')
+const pick = atom({ plugin: 'pager-view', key: 'pick' } as const, null)
 
 const baselineKey = (sessionId: string) => `baseline:${sessionId}`
 
@@ -101,6 +105,7 @@ async function refreshOnce($: Engine): Promise<void> {
   const who = peersOf(await run($, ['pager', 'who']))
   if ('error' in who) return failed(who.error)
   const now = await $.clock.now()
+  const home = (await $.env.get('HOME')) ?? ''
   if (await isStale()) return
 
   const baseline = await baselineAt($, sessionId, newestOf(inbound), isSeen)
@@ -110,10 +115,11 @@ async function refreshOnce($: Engine): Promise<void> {
     sessionId,
     name,
     entries,
-    peers: who,
+    peers: rosterOf(who, home),
     newCount: newCountOf(inbound, baseline),
     live: liveOf(who, name),
     lastAgo: last ? agoOf(last.at, now) : null,
+    now,
     error: null,
   }))
 }
@@ -157,6 +163,12 @@ async function openPane($: Engine): Promise<void> {
 async function switched($: Engine): Promise<void> {
   generation += 1
   await update($, pager, () => EMPTY)
+  await update($, pick, () => null)
+}
+
+/** `j`, `k` and a press on a message's time: which message the reader shows. */
+async function pickMessage($: Engine, id: number | null): Promise<void> {
+  await update($, pick, () => id)
 }
 
 export function register(on: On): void {
@@ -209,7 +221,8 @@ export function register(on: On): void {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const state = await read($, pager)
     const shown = await read($, tab)
-    return paneOf($, e, state, shown)
+    const picked = await read($, pick)
+    return paneOf($, e, state, shown, picked)
   })
 }
 
@@ -219,11 +232,8 @@ function bandLine($: Engine, e: RenderInput<'AbovePrompt'>, state: PagerState): 
   if (state.name === null) return null
   const { Box, Text, Button } = $.ui.resolve(e)
   const last = state.entries.at(-1)
-  const preview = last
-    ? last.body.length > PREVIEW_CHARS
-      ? `${last.body.slice(0, PREVIEW_CHARS - 1)}…`
-      : last.body
-    : ''
+  const flat = last ? flatOf(last.body) : ''
+  const preview = flat.length > PREVIEW_CHARS ? `${flat.slice(0, PREVIEW_CHARS - 1)}…` : flat
   return (
     <Box flexDirection="row">
       {/* The name is the way into /pager: a click (or ctrl+x tab, Enter) opens it. */}
@@ -262,7 +272,13 @@ const TABS: { tab: Tab; label: string; hotkey: string }[] = [
   { tab: 'peers', label: 'peers', hotkey: '2' },
 ]
 
-function paneOf($: Engine, e: RenderInput<'Pane'>, state: PagerState, shown: Tab): RenderElement {
+function paneOf(
+  $: Engine,
+  e: RenderInput<'Pane'>,
+  state: PagerState,
+  shown: Tab,
+  picked: number | null,
+): RenderElement {
   const { Box, Text, Button } = $.ui.resolve(e)
   const tabs = (
     <Box flexDirection="row" columnGap={3}>
@@ -278,8 +294,7 @@ function paneOf($: Engine, e: RenderInput<'Pane'>, state: PagerState, shown: Tab
       ))}
     </Box>
   )
-  const status =
-    state.error !== null ? <Text dimColor>⚠ pager: {state.error}</Text> : ''
+  const status = state.error !== null ? <Text dimColor>⚠ pager: {state.error}</Text> : ''
   if (state.name === null) {
     return (
       <Box flexDirection="column">
@@ -289,40 +304,166 @@ function paneOf($: Engine, e: RenderInput<'Pane'>, state: PagerState, shown: Tab
       </Box>
     )
   }
-  const rows = Math.max(1, e.props.scroll.bodyRows - 2)
   const body =
-    shown === 'messages' ? (
-      state.entries.length === 0 ? (
-        <Text dimColor>No messages to or from {state.name} yet.</Text>
-      ) : (
-        <Box flexDirection="column">
-          {state.entries.slice(-rows).map(entry => (
-            <Text wrap="truncate-end">
-              <Text dimColor>{stampOf(entry.at)} </Text>
-              <Text color={entry.direction === 'in' ? 'suggestion' : 'success'}>
-                {entry.direction === 'in' ? '←' : '→'} {entry.peer.padEnd(5)}
-              </Text>
-              {entry.isHuman ? <Text color="claude"> (human)</Text> : ''} {entry.body}
-            </Text>
-          ))}
-        </Box>
-      )
-    ) : state.peers.length === 0 ? (
-      <Text dimColor>loading…</Text>
-    ) : (
-      <Box flexDirection="column">
-        {state.peers.map(peer => (
-          <Text wrap="truncate-end" dimColor={peer.host !== 'live'} bold={peer.name === state.name}>
-            {peer.host === 'live' ? '●' : '○'} {peer.name.padEnd(5)} {peer.tool.padEnd(6)} {peer.last.padEnd(9)} {peer.root}
-          </Text>
-        ))}
-      </Box>
-    )
+    shown === 'messages'
+      ? state.entries.length === 0
+        ? <Text dimColor>No messages to or from {state.name} yet.</Text>
+        : messagesBody($, e, state, picked)
+      : peersBody($, e, state)
   return (
     <Box flexDirection="column">
       {tabs}
       {body}
       {status}
+    </Box>
+  )
+}
+
+const arrowOf = (entry: Entry) => (entry.direction === 'in' ? '←' : '→')
+const toneOf = (entry: Entry) => (entry.direction === 'in' ? 'suggestion' : 'success')
+
+/**
+ * The messages tab: an index of recent messages over a reader that shows the
+ * picked one (the newest when none is picked) in full.
+ */
+function messagesBody($: Engine, e: RenderInput<'Pane'>, state: PagerState, picked: number | null): RenderElement {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const entries = state.entries
+  const found = picked === null ? -1 : entries.findIndex(entry => entry.id === picked)
+  const at = found < 0 ? entries.length - 1 : found
+  const entry = entries[at]!
+  // The index keeps the picked row in its window, the newest at the bottom.
+  const size = Math.min(entries.length, Math.max(3, Math.floor(e.props.scroll.bodyRows * 0.35)))
+  const first = Math.max(0, Math.min(entries.length - size, at - Math.floor(size / 2)))
+  const windowed = entries.slice(first, first + size)
+  const older = at > 0 ? entries[at - 1]!.id : null
+  // Stepping onto the newest returns to following new mail.
+  const newer = at < entries.length - 1 ? (at + 1 === entries.length - 1 ? null : entries[at + 1]!.id) : undefined
+  const age = agoOf(entry.at, state.now)
+  const header = `── #${entry.id} · ${arrowOf(entry)} ${entry.peer}${entry.isHuman ? ' (human)' : ''} · ${stampOf(entry.at)}${
+    age === null ? '' : age === 'now' ? ' · just now' : ` · ${age} ago`
+  } `
+  const isTerminal = e.surface === 'terminal'
+  const rule = isTerminal ? '─'.repeat(Math.max(2, e.props.bodyColumns - header.length)) : '──'
+  const left = entry.length - entry.body.length
+  return (
+    <Box flexDirection="column">
+      {windowed.map(one => {
+        const isPicked = one === entry
+        return (
+          <Box flexDirection="row">
+            <Text color="claude">{isPicked ? '▌' : ' '}</Text>
+            <Button
+              key={`msg-${one.id}`}
+              label={stampOf(one.at)}
+              plain
+              dimColor={!isPicked}
+              onPress={() => pickMessage($, one === entries.at(-1) ? null : one.id)}
+            />
+            <Box flexShrink={1}>
+              <Text wrap="truncate-end">
+                {' '}
+                <Text color={toneOf(one)}>
+                  {arrowOf(one)} {one.peer.padEnd(5)}
+                </Text>
+                {one.isHuman ? <Text color="claude"> (human)</Text> : ''}
+                <Text bold={isPicked}> {flatOf(one.body)}</Text>
+              </Text>
+            </Box>
+          </Box>
+        )
+      })}
+      <Text> </Text>
+      <Text color="subtle" wrap="truncate-end">
+        {header}
+        {rule}
+      </Text>
+      {entry.body.split('\n').map(line => (
+        <Text wrap="wrap">{line === '' ? ' ' : line}</Text>
+      ))}
+      {left > 0 ? (
+        <Text dimColor wrap="wrap">
+          … {left.toLocaleString('en-US')} more characters · full text: pager export (#{entry.id})
+        </Text>
+      ) : (
+        ''
+      )}
+      <Text> </Text>
+      <Box flexDirection="row" columnGap={2}>
+        <Button
+          key="older"
+          label="older"
+          hotkey="j"
+          plain
+          dimColor={older === null}
+          onPress={() => (older === null ? undefined : pickMessage($, older))}
+        />
+        <Button
+          key="newer"
+          label="newer"
+          hotkey="k"
+          plain
+          dimColor={newer === undefined}
+          onPress={() => (newer === undefined ? undefined : pickMessage($, newer))}
+        />
+        <Text dimColor wrap="truncate-end">
+          {isTerminal ? '· 1 2 tabs · ↑↓ scroll' : '· click a time to read it'}
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+const COLUMNS = { name: 6, tool: 7, host: 8, last: 10 }
+
+const startCut = (text: string, room: number) => (text.length > room ? `…${text.slice(text.length - room + 1)}` : text)
+
+/** The peers tab: aligned columns, live hosts first, this session marked. */
+function peersBody($: Engine, e: RenderInput<'Pane'>, state: PagerState): RenderElement {
+  const { Box, Text } = $.ui.resolve(e)
+  if (state.peers.length === 0) return <Text dimColor>loading…</Text>
+  const cell = (width: number, text: string, extra: Record<string, boolean> = {}) => (
+    <Box width={width + 1} flexShrink={0}>
+      <Text wrap="truncate-end" {...extra}>
+        {text}
+      </Text>
+    </Box>
+  )
+  // The root takes what the fixed columns leave; cut from its start, it keeps
+  // the folder that tells two sessions apart.
+  const fixed = 2 + COLUMNS.name + COLUMNS.tool + COLUMNS.host + COLUMNS.last + 4
+  const room = Math.max(8, e.props.bodyColumns - fixed)
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row">
+        <Text dimColor>{'  '}</Text>
+        {cell(COLUMNS.name, 'name', { dimColor: true })}
+        {cell(COLUMNS.tool, 'tool', { dimColor: true })}
+        {cell(COLUMNS.host, 'host', { dimColor: true })}
+        {cell(COLUMNS.last, 'last', { dimColor: true })}
+        <Text dimColor>root</Text>
+      </Box>
+      {state.peers.map(peer => {
+        const isLive = peer.host === 'live'
+        const isSelf = peer.name === state.name
+        const tone = { dimColor: !isLive, bold: isSelf }
+        return (
+          <Box flexDirection="row">
+            <Box width={2} flexShrink={0}>
+              <Text color={isLive ? 'success' : undefined} dimColor={!isLive}>
+                {isLive ? '●' : '○'}
+              </Text>
+            </Box>
+            {cell(COLUMNS.name, peer.name, tone)}
+            {cell(COLUMNS.tool, peer.tool, tone)}
+            {cell(COLUMNS.host, peer.host, tone)}
+            {cell(COLUMNS.last, peer.last, tone)}
+            <Text dimColor={!isLive} bold={isSelf}>
+              {startCut(`${peer.root}${isSelf ? ' (this)' : ''}`, room)}
+            </Text>
+          </Box>
+        )
+      })}
     </Box>
   )
 }

@@ -86,6 +86,14 @@ export function exportedOf(run: Run): Exported[] | Failure {
   return rows
 }
 
+/** The most of a body kept and drawn; the rest is named, with the way to read it. */
+export const BODY_CAP = 6_000
+
+/** A body on one line, as the band and the message index show it. */
+export function flatOf(body: string): string {
+  return body.trim().replace(/\s*\n\s*/g, ' ⏎ ')
+}
+
 /** This session's conversation: what it received (by id) and what it sent. */
 export function conversationOf(
   rows: readonly Exported[],
@@ -103,7 +111,8 @@ export function conversationOf(
       at: row.created_at ?? '',
       direction: isIn ? 'in' : 'out',
       peer: isIn ? row.sender_label || 'unknown' : row.alias || 'unknown',
-      body: (row.body ?? '').replace(/\s*\n\s*/g, ' ⏎ '),
+      body: (row.body ?? '').slice(0, BODY_CAP),
+      length: (row.body ?? '').length,
       isHuman: row.origin === 'human',
     })
   }
@@ -123,6 +132,18 @@ export function peersOf(run: Run): Peer[] | Failure {
     if (m) peers.push({ name: m[1]!, tool: m[2]!, root: m[3]!, host: m[4]!, last: m[5]!.trim() })
   }
   return peers
+}
+
+/**
+ * The peers as the pane lists them: live hosts first, then the order pager gave
+ * (latest activity first), the home folder shown as `~`.
+ */
+export function rosterOf(peers: readonly Peer[], home: string): Peer[] {
+  const tilde = (root: string) =>
+    home !== '' && (root === home || root.startsWith(`${home}/`)) ? `~${root.slice(home.length)}` : root
+  const live = peers.filter(peer => peer.host === 'live')
+  const rest = peers.filter(peer => peer.host !== 'live')
+  return [...live, ...rest].map(peer => ({ ...peer, root: tilde(peer.root) }))
 }
 
 /** The highest inbound id, the baseline a look at the pane moves to. */
