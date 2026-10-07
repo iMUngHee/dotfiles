@@ -46,6 +46,7 @@ const NOW = Date.parse('2026-10-07T06:00:00.000Z')
 function world(on: On, store: Record<string, unknown> = {}) {
   const clock = mock.clock(on, { now: NOW })
   mock.store(on, store)
+  mock.env(on, { HOME: '/Users/u' })
   const w = {
     clock,
     sessionId: 'sid-a',
@@ -227,8 +228,74 @@ describe('register', () => {
 
     await ui.press({ key: 'tab-peers' })
     const peers = textOf(await ui.drawn())
-    expect(peers).toContain('● wogi  claude just now  /work')
-    expect(peers).toContain('○ buni  codex  3m ago    /other')
+    // Each column is its own Box (one line apiece in this flattening).
+    expect(peers).toContain('●\nwogi\nclaude\nlive\njust now\n/work (this)')
+    expect(peers).toContain('○\nbuni\ncodex\ngone\n3m ago\n/other')
+    expect(peers.indexOf('wogi')).toBeLessThan(peers.indexOf('buni'))
+
+    // A root too long for the room is cut from its start and keeps its end.
+    w.who = `NAME  TOOL    ROOT  HOST  LAST\nwogi  claude  /work  live  just now\nvuba  claude  /Users/u/Library/${'x'.repeat(80)}/scratch-end  live  1m ago\n`
+    await w.clock.advance(POLL)
+    const cut = textOf(await ui.drawn())
+    expect(cut).toContain('…')
+    expect(cut).toContain('xxx/scratch-end\n')
+    expect(cut.split('\n').find(line => line.endsWith('scratch-end'))!.length).toBeLessThanOrEqual(80 - 35)
+  })
+
+  test('the reader shows the newest message whole; j and k step through, a press on a time picks', async ($, on) => {
+    const w = world(on)
+    const long = ['대협 지시: claude/mods/pm-band 의 /pm pane 이 데스크톱 앱에서 깨집니다.', '', '증상: graph 탭이 무너짐.', '꼭 지킬 것: worktree 에서만.'].join('\n')
+    w.messages = [
+      MAIL(30),
+      { id: 31, to: 'buni', from: 'wogi', fromSession: 'sid-a', body: 'ack' },
+      { id: 32, to: 'wogi', from: 'defu', fromSession: 'sid-d', body: long, human: true },
+    ]
+    await started($, w)
+    await $.command.run(COMMAND)
+    await w.clock.advance(400)
+    const ui = await $.ui.mount({ plugin: 'pager-view', surface: 'terminal', component: 'Pane', props: PANE_PROPS, requestId: PANE })
+    let text = textOf(await ui.drawn())
+
+    expect(text).toContain('── #32 · ← defu (human) · ')
+    expect(text).toContain(' · 28m ago ─')
+    for (const line of long.split('\n').filter(Boolean)) expect(text).toContain(line)
+    expect(text).toContain('older')
+    expect(text).toContain('· 1 2 tabs · ↑↓ scroll')
+
+    await ui.press({ key: 'older' })
+    text = textOf(await ui.drawn())
+    expect(text).toContain('── #31 · → buni · ')
+    expect(text).toContain('older')
+    await ui.press({ key: 'older' })
+    expect(textOf(await ui.drawn())).toContain('── #30 · ← buni · ')
+    await ui.press({ key: 'newer' })
+    await ui.press({ key: 'newer' })
+    expect(textOf(await ui.drawn())).toContain('── #32 · ')
+
+    await ui.press({ key: 'msg-30' })
+    expect(textOf(await ui.drawn())).toContain('── #30 · ')
+    // Picking the newest follows new mail again.
+    await ui.press({ key: 'msg-32' })
+    w.messages.push(MAIL(33))
+    await w.clock.advance(POLL)
+    expect(textOf(await ui.drawn())).toContain('── #33 · ')
+
+    const desktop = await $.ui.mount({ plugin: 'pager-view', surface: 'desktop', component: 'Pane', props: PANE_PROPS, requestId: PANE })
+    expect(textOf(await desktop.drawn())).toContain('· click a time to read it')
+  })
+
+  test('a body past the cap shows its first part and the way to the rest', async ($, on) => {
+    const w = world(on)
+    w.messages = [{ ...MAIL(40), body: 'ㄱ'.repeat(23_942) }]
+    await started($, w)
+    await $.command.run(COMMAND)
+    await w.clock.advance(400)
+    const ui = await $.ui.mount({ plugin: 'pager-view', surface: 'terminal', component: 'Pane', props: PANE_PROPS, requestId: PANE })
+    const text = textOf(await ui.drawn())
+
+    expect(text).toContain('ㄱ'.repeat(6_000))
+    expect(text).not.toContain('ㄱ'.repeat(6_001))
+    expect(text).toContain('… 17,942 more characters · full text: pager export (#40)')
   })
 
   test('without pager, or without a name, nothing is drawn; the band keeps what is beneath', async ($, on) => {
