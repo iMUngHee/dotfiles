@@ -448,7 +448,7 @@ function graphBody(
   const height = Math.max(5, e.props.scroll.bodyRows - 3)
   // The desktop sets text in a proportional face: the Client places each run at
   // its cell instead of drawing rows of spaced text (see graph.tsx).
-  const props: GraphProps = e.surface === 'terminal' ? graph : { ...graph, isPlaced: true }
+  const props: GraphProps = e.surface === 'terminal' ? graph : { ...graph, isPlaced: true, rows: height }
   return (
     <Box flexDirection="column">
       <Client key="graph" module="./graph.tsx" props={props} width="100%" height={height} />
