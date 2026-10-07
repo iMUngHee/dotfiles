@@ -161,6 +161,9 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       const actor = ownerArg ?? resolveActor(root, opts);
       const flt = (cs: Candidate[]) => (opts.all || !actor) ? cs : filterForActor(cs, actor);
       const elig = flt(nc.eligible), blk = flt(nc.blocked);
+      // --json: the same filtered partition as the text below, for machine readers (the
+      // claude/mods/pm-band backlog tab and graph). Additive: the text output does not move.
+      if (opts.json) return { out: JSON.stringify({ eligible: elig, blocked: blk, inbox: nc.inbox }, null, 2), code: 0 };
       const out = ["## Eligible (next candidates)", fmtCandidates(elig),
         blk.length ? "\n## Blocked (dependency or earlier-Order sibling)" : "",
         // Name the cause: an Order chain and a DependsOn otherwise look identical here, which is
