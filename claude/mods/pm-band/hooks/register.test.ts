@@ -138,6 +138,7 @@ function world(on: On) {
 }
 
 const SETTLE = 400
+const markersIn = (text: string) => (text.match(/[●◆◉]/g) ?? []).length
 
 /** The `demo` node's label, and not `needs-demo`'s. */
 const DEMO = /(?<![\w-])demo(?![\w-])/
@@ -371,8 +372,12 @@ describe('register', () => {
     await ui.advance(10_000)
     const shown = async () => rowsOf(await ui.drawn({ in: 'graph' })).join('\n')
     const markers = (text: string) => (text.match(/[●◆◉]/g) ?? []).length
+    // Untouched, the camera fits the settled graph: every node is on screen.
+    expect(markers(await shown())).toBe(41)
+    // Zoomed in, only part of it is.
+    for (let i = 0; i < 3; i++) await ui.key({ key: '+', in: 'graph' })
+    await ui.advance(100)
     const first = await shown()
-    // The world outgrows the region: only part of the graph is on screen.
     expect(markers(first)).toBeLessThan(41)
     expect(markers(first)).toBeGreaterThan(0)
 
@@ -429,11 +434,13 @@ describe('register', () => {
     await ui.advance(2_000)
     expect((await shown()).join('\n')).not.toMatch(DEMO)
 
+    // As a person does: click the drawing (an empty cell) to give it the keys.
+    await ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'up', x: 0, y: 0, button: 'left', in: 'graph' })
     await ui.key({ key: '0', in: 'graph' })
     await ui.advance(100)
-    const fitted = (await shown()).join('\n')
-    expect(fitted).toMatch(DEMO)
-    expect(fitted).toContain('CFG')
+    // Fitted far out, labels may be cut; every node's marker is drawn.
+    expect(markersIn((await shown()).join('\n'))).toBe(4)
   })
 
   test('a node dragged out to the right stays out through a resize', async ($, on) => {
@@ -462,9 +469,12 @@ describe('register', () => {
     await ui.advance(2_000)
     expect(await shown()).not.toMatch(DEMO)
 
+    // As a person does: click the drawing (an empty cell) to give it the keys.
+    await ui.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'graph' })
+    await ui.pointer({ type: 'up', x: 0, y: 0, button: 'left', in: 'graph' })
     await ui.key({ key: '0', in: 'graph' })
     await ui.advance(100)
-    expect(await shown()).toMatch(DEMO)
+    expect(markersIn(await shown())).toBe(4)
   })
 
   test('new props keep placed nodes, add new ones, drop gone ones, and start the layout again', async ($, on) => {

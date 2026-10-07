@@ -2,11 +2,13 @@
 // thread, frame by frame, and takes the pointer and keys. It has no `$`; a pick
 // reaches the hooks module as `ui.message` data ({ selected }).
 //
-// The layout lives in a world at least as big as the region and grown with the
-// node count; the region is a camera over it (`camera` is the world point at its
-// top-left, `zoom` the spacing scale), so a big graph is panned, not squeezed.
+// The layout is unbounded: nodes take the room their forces give them, and the
+// region is a camera over it (`camera` is the world point at its top-left,
+// `zoom` the spacing scale). `world` only sets the spacing and the centre.
+// Until the person moves the camera it fits the settled graph (zoom at most 1).
 // Drag a node to move it, drag empty space to pan, shift+arrows pan, + and -
-// zoom, 0 fits everything.
+// zoom, 0 fits everything. A drag moves the node's neighbours only, so the rest
+// of the graph holds still.
 //
 // Two ways to put the cells on screen. The terminal's text is a cell grid, so
 // each row is one Text. Elsewhere (the desktop) text is set in a proportional
@@ -16,7 +18,7 @@
 
 import type { ClientModule, ClientSurface, Color } from 'claude-code'
 
-import { isSettled, placed, rescaled, startTemperature, tick } from './layout'
+import { isSettled, placed, startTemperature, tick } from './layout'
 import type { Layout, Point, Positions, Size } from './layout'
 import type { Graph, GraphNode } from './plan'
 import { nodeAt, rasterOf } from './raster'
@@ -38,12 +40,14 @@ type GraphState = {
   size: Size
   /** The space the layout runs in: the region, or more for a big graph. */
   world: Size
-  /** The world the region and node count call for, before any drag grew it. */
-  base: Size
   layout: Layout
   camera: Point
   zoom: number
   isRunning: boolean
+  /** The nodes the running layout may move; null: all of them. */
+  active: string[] | null
+  /** Whether the person has moved the camera; until then it follows the graph. */
+  isCameraSet: boolean
   pinned: string[]
   drag: string | null
   /** Where a pan began: the pointer's cell and the camera then. */
@@ -55,7 +59,7 @@ type GraphState = {
   box: { surface: ClientSurface<GraphState> }
 }
 
-const FRAME_MS = 50
+const FRAME_MS = 33
 const ZOOMS = [0.25, 0.5, 0.75, 1, 1.5, 2] as const
 /** Cells of world each node asks for, across and down, before the world outgrows the region. */
 const ROOM_ACROSS = 24
@@ -103,29 +107,6 @@ function worldOf(region: Size, graph: Graph): Size {
   }
 }
 
-/**
- * The world after a resize or new props: the base for the new region and node
- * count, every node not dragged scaled into it, every dragged node kept where it
- * was put and the world grown to hold it.
- */
-function rebased(state: GraphState, graph: GraphProps, region: Size): { world: Size; base: Size; pos: Positions } {
-  const base = worldOf(region, graph)
-  const pinned = new Set(state.pinned)
-  const scaled = rescaled(state.layout.pos, state.base, base)
-  const pos: Positions = {}
-  let world = base
-  for (const [id, p] of Object.entries(state.layout.pos)) {
-    pos[id] = pinned.has(id) ? p : scaled[id]!
-    if (pinned.has(id)) {
-      world = {
-        columns: Math.max(world.columns, Math.ceil(p.x) + 1),
-        rows: Math.max(world.rows, Math.ceil(p.y) + 1),
-      }
-    }
-  }
-  return { world, base, pos }
-}
-
 /** The camera that shows the middle of `world` in `region` at `zoom`. */
 function centred(world: Size, region: Size, zoom: number): Point {
   return {
@@ -146,36 +127,29 @@ const toWorld = (state: GraphState, x: number, y: number): Point => ({
   y: y / state.zoom + state.camera.y,
 })
 
-/**
- * `state` with `id` at world point `at`, the world grown to hold it: past the
- * right or bottom edge the world widens; past the left or top every position
- * and the camera shift with it, so nothing moves on screen.
- */
+/** `state` with `id` at world point `at`, its neighbours free to follow. */
 function draggedTo(state: GraphState, id: string, at: Point): GraphState {
-  const shift = { x: Math.max(0, Math.ceil(-at.x)), y: Math.max(0, Math.ceil(-at.y)) }
-  const moved = (p: Point) => ({ x: p.x + shift.x, y: p.y + shift.y })
-  const pos: Positions = Object.fromEntries(Object.entries(state.layout.pos).map(([key, p]) => [key, moved(p)]))
-  const point = moved(at)
-  pos[id] = point
-  const world = {
-    columns: Math.max(state.world.columns + shift.x, Math.ceil(point.x) + 1),
-    rows: Math.max(state.world.rows + shift.y, Math.ceil(point.y) + 1),
-  }
   return {
     ...state,
-    world,
-    // The base moves with the shift, so a later resize scales the shifted
-    // positions from the space they now live in.
-    base: { columns: state.base.columns + shift.x, rows: state.base.rows + shift.y },
-    camera: moved(state.camera),
-    layout: { pos, temperature: Math.max(state.layout.temperature, startTemperature(world) / 4) },
+    // A node the person moved is theirs: the camera stops following the graph.
+    isCameraSet: true,
+    layout: {
+      pos: { ...state.layout.pos, [id]: at },
+      temperature: Math.max(state.layout.temperature, startTemperature(state.world) / 8),
+    },
     isRunning: true,
   }
 }
 
+/** The nodes linked to `id`: what a drag of it lets move. */
+function neighboursOf(graph: Graph, id: string): string[] {
+  const linked = graph.edges.flatMap(edge => (edge.from === id ? [edge.to] : edge.to === id ? [edge.from] : []))
+  return [...new Set(linked)]
+}
+
 /** A fresh layout for `graph` in `world`. */
 function fitted(graph: Graph, world: Size): Layout {
-  return { pos: placed(graph.nodes, graph.edges, world), temperature: startTemperature(world) }
+  return { pos: placed(graph.nodes, graph.edges, world, {}, false), temperature: startTemperature(world) }
 }
 
 /** Zoom by `by` levels (0 keeps it), keeping the region's middle where it is. */
@@ -193,8 +167,8 @@ function zoomed(state: GraphState, by: number): GraphState {
   }
 }
 
-/** The largest zoom level at which every node fits the region, centred on them. */
-function fit(state: GraphState): GraphState {
+/** The largest zoom level (at most `cap`) at which every node fits the region, centred on them. */
+function fit(state: GraphState, cap = 2): GraphState {
   const points = Object.values(state.layout.pos)
   if (points.length === 0) return state
   const left = Math.min(...points.map(p => p.x))
@@ -202,7 +176,7 @@ function fit(state: GraphState): GraphState {
   const top = Math.min(...points.map(p => p.y))
   const bottom = Math.max(...points.map(p => p.y)) + 1
   const room = Math.min(state.size.columns / Math.max(1, right - left), state.size.rows / Math.max(1, bottom - top))
-  const zoom = [...ZOOMS].reverse().find(level => level <= room) ?? ZOOMS[0]
+  const zoom = [...ZOOMS].reverse().find(level => level <= Math.min(room, cap)) ?? ZOOMS[0]
   return {
     ...state,
     zoom,
@@ -221,29 +195,31 @@ function frame(box: GraphState['box']): void {
   const isResized = size.columns !== state.size.columns || size.rows !== state.size.rows
   if (isResized) {
     if (isEmpty(size)) return
-    const wasEmpty = isEmpty(state.size)
-    const next = wasEmpty
-      ? { world: worldOf(size, state.graph), base: worldOf(size, state.graph), pos: {} }
-      : rebased(state, state.graph, size)
-    const world = next.world
+    // A resize moves the camera's view, never the nodes.
+    if (!isEmpty(state.size)) {
+      surface.setState(state.isCameraSet ? { ...state, size } : fit({ ...state, size }, 1))
+      return
+    }
+    const world = worldOf(size, state.graph)
     surface.setState({
       ...state,
       size,
       world,
-      base: next.base,
-      layout: {
-        pos: placed(state.graph.nodes, state.graph.edges, world, next.pos),
-        temperature: startTemperature(world),
-      },
-      camera: wasEmpty ? centred(world, size, state.zoom) : state.camera,
+      layout: fitted(state.graph, world),
+      camera: centred(world, size, state.zoom),
+      active: null,
       isRunning: true,
     })
     return
   }
   if (!state.isRunning || isEmpty(size)) return
-  const result = tick(state.graph.nodes, state.graph.edges, state.layout, state.world, new Set(state.pinned))
+  const result = tick(state.graph.nodes, state.graph.edges, state.layout, state.world, new Set(state.pinned), {
+    active: state.active === null ? undefined : new Set(state.active),
+    isBounded: false,
+  })
   const isDone = state.drag === null && isSettled(result.layout, result.energy, state.graph.nodes.length)
-  surface.setState({ ...state, layout: result.layout, isRunning: !isDone })
+  const next = { ...state, layout: result.layout, isRunning: !isDone, active: isDone ? null : state.active }
+  surface.setState(isDone && !state.isCameraSet ? fit(next, 1) : next)
 }
 
 function pick(surface: ClientSurface<GraphState>, state: GraphState, id: string | null): GraphState {
@@ -271,11 +247,12 @@ function started(graph: GraphProps, surface: ClientSurface<GraphState>): GraphSt
     shape: shapeOf(graph),
     size: isEmpty(size) ? { columns: 0, rows: 0 } : size,
     world,
-    base: world,
     layout: isEmpty(size) ? { pos: {}, temperature: 0 } : fitted(graph, world),
     camera: isEmpty(size) ? { x: 0, y: 0 } : centred(world, size, 1),
     zoom: 1,
     isRunning: !isEmpty(size),
+    active: null,
+    isCameraSet: false,
     pinned: [],
     drag: null,
     pan: null,
@@ -293,7 +270,13 @@ function started(graph: GraphProps, surface: ClientSurface<GraphState>): GraphSt
       box.surface.setState(
         id === null
           ? { ...picked, pan: { from: { x: event.x, y: event.y }, camera: now.camera } }
-          : { ...picked, drag: id, pinned: [...new Set([...now.pinned, id])], isRunning: true },
+          : {
+              ...picked,
+              drag: id,
+              pinned: [...new Set([...now.pinned, id])],
+              active: neighboursOf(now.graph, id).filter(one => !now.pinned.includes(one)),
+              isRunning: true,
+            },
       )
       return
     }
@@ -304,6 +287,7 @@ function started(graph: GraphProps, surface: ClientSurface<GraphState>): GraphSt
     if (event.type === 'move' && now.pan !== null) {
       box.surface.setState({
         ...now,
+        isCameraSet: true,
         camera: {
           x: now.pan.camera.x - (event.x - now.pan.from.x) / now.zoom,
           y: now.pan.camera.y - (event.y - now.pan.from.y) / now.zoom,
@@ -327,6 +311,7 @@ function started(graph: GraphProps, surface: ClientSurface<GraphState>): GraphSt
     if (event.shift && (dx !== 0 || dy !== 0)) {
       box.surface.setState({
         ...now,
+        isCameraSet: true,
         camera: {
           x: now.camera.x + (dx * PAN_STEP.x) / now.zoom,
           y: now.camera.y + (dy * PAN_STEP.y) / now.zoom,
@@ -334,9 +319,9 @@ function started(graph: GraphProps, surface: ClientSurface<GraphState>): GraphSt
       })
       return
     }
-    if (event.key === '+' || event.key === '=') return box.surface.setState(zoomed(now, 1))
-    if (event.key === '-' || event.key === '_') return box.surface.setState(zoomed(now, -1))
-    if (event.key === '0') return box.surface.setState(fit(now))
+    if (event.key === '+' || event.key === '=') return box.surface.setState({ ...zoomed(now, 1), isCameraSet: true })
+    if (event.key === '-' || event.key === '_') return box.surface.setState({ ...zoomed(now, -1), isCameraSet: true })
+    if (event.key === '0') return box.surface.setState({ ...fit(now), isCameraSet: true })
     const by = dx + dy
     if (by !== 0) box.surface.setState(pick(box.surface, now, step(now.graph.nodes, now.selected, by)))
   })
@@ -353,17 +338,19 @@ const GraphView: ClientModule<GraphProps, GraphState> = (graph, surface) => {
     state.box.surface = surface
     const shape = shapeOf(graph)
     if (shape !== state.shape) {
-      const kept = isEmpty(state.size) ? null : rebased(state, graph, state.size)
-      const world = kept ? kept.world : state.world
+      const world = isEmpty(state.size) ? state.world : worldOf(state.size, graph)
       const next: GraphState = {
         ...state,
         graph,
         shape,
         world,
-        base: kept ? kept.base : state.base,
-        layout: kept
-          ? { pos: placed(graph.nodes, graph.edges, world, kept.pos), temperature: startTemperature(world) }
-          : state.layout,
+        layout: isEmpty(state.size)
+          ? state.layout
+          : {
+              pos: placed(graph.nodes, graph.edges, world, state.layout.pos, false),
+              temperature: startTemperature(world),
+            },
+        active: null,
         isRunning: !isEmpty(state.size),
         pinned: state.pinned.filter(id => graph.nodes.some(node => node.id === id)),
         selected: graph.nodes.some(node => node.id === state!.selected) ? state.selected : null,
