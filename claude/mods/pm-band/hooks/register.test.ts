@@ -198,7 +198,7 @@ describe('register', () => {
     const w = world(on)
     await started($, w)
 
-    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts')
+    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts\nstepsgraph')
     expect(w.reads).toEqual([`${MAIN}/${PLAN_REL}`])
     const resolver = w.runs.find(r => r.argv.includes('resolve-session'))
     expect(resolver?.argv[1]).toBe(`${HOME}/.config/ai/lib/worktree.mjs`)
@@ -229,7 +229,7 @@ describe('register', () => {
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     await w.clock.advance(SETTLE)
 
-    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts ⚠')
+    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts ⚠\nstepsgraph')
   })
 
   test('the band yields to a survey and keeps what the mods beneath draw', async ($, on) => {
@@ -237,7 +237,7 @@ describe('register', () => {
     w.beneath = '✉ wogi · 2 new'
     await started($, w)
 
-    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts✉ wogi · 2 new')
+    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts\nstepsgraph\n\n✉ wogi · 2 new')
     expect(await bandText($, { ...BAND, hasSurvey: true })).toBe('✉ wogi · 2 new')
   })
 
@@ -401,7 +401,65 @@ describe('register', () => {
       viewport: VIEWPORT,
     })
     await vscode.press({ key: 'tab-graph' })
-    expect(textOf(await vscode.drawn())).toContain('BIG')
+    const svg = await vscode.find({ type: 'Svg' })
+    expect(String(svg?.props?.source ?? '').length).toBeLessThan(131_072)
+    expect(textOf(await vscode.drawn())).toMatch(/\+\d+ more not drawn/)
+  })
+
+  test('desktop, vscode and mobile draw the graph as an Svg with a node list; a press shows the detail', async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    await openPane($, w)
+    for (const surface of ['desktop', 'vscode', 'mobile'] as const) {
+      const ui = await $.ui.mount({
+        plugin: 'pm-band',
+        surface,
+        component: 'Pane',
+        props: PANE_PROPS,
+        requestId: PANE,
+        viewport: VIEWPORT,
+      })
+      await ui.press({ key: 'tab-graph' })
+      const svg = await ui.find({ type: 'Svg' })
+      expect(String(svg?.props?.alt)).toBe('Backlog graph: 1 task, 3 items, 1 dependency link')
+      expect(String(svg?.props?.source)).toContain('<title>demo — The demo plan</title>')
+      expect(await ui.find({ type: 'Client' })).toBeUndefined()
+      expect(await ui.find({ key: 'node-later' })).toBeDefined()
+      expect(textOf(await ui.drawn())).toContain('pick a node below the drawing')
+      await ui.press({ key: 'node-demo' })
+      expect(textOf(await ui.drawn())).toContain('CFG/demo · [P2] The demo plan')
+      expect(String((await ui.find({ type: 'Svg' }))?.props?.source)).toContain('class="label picked"')
+      await ui.press({ key: 'node-demo' })
+      expect(textOf(await ui.drawn())).toContain('pick a node below the drawing')
+      await ui.unmount()
+    }
+  })
+
+  test("the band's steps and graph controls open /pm on that tab", async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    const band = await $.ui.mount({
+      plugin: 'pm-band',
+      surface: 'terminal',
+      component: 'AbovePrompt',
+      props: BAND,
+      requestId: 'band',
+      viewport: VIEWPORT,
+    })
+    await band.press({ key: 'band-graph' })
+    expect(w.opened.at(-1)).toMatchObject({ id: PANE, focus: true })
+    await w.clock.advance(SETTLE)
+    const pane = await $.ui.mount({
+      plugin: 'pm-band',
+      surface: 'terminal',
+      component: 'Pane',
+      props: PANE_PROPS,
+      requestId: PANE,
+      viewport: VIEWPORT,
+    })
+    expect(await pane.find({ type: 'Client' })).toBeDefined()
+    await band.press({ key: 'band-steps' })
+    expect(textOf(await pane.drawn())).toContain('▶ 3. pm-band plan.ts')
   })
 
   test('drawing runs no process', async ($, on) => {

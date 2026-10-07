@@ -110,7 +110,7 @@ function started(graph: Graph, surface: ClientSurface<GraphState>): GraphState {
     const now = box.surface.state
     if (!now) return
     if (event.type === 'down' && event.button === 'left') {
-      const id = nodeAt(now.graph.nodes, now.layout.pos, event.x, event.y) ?? null
+      const id = nodeAt(now.graph.nodes, now.layout.pos, now.size, event.x, event.y) ?? null
       const picked = pick(box.surface, now, id)
       box.surface.setState(
         id === null
