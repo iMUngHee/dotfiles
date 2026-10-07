@@ -16,11 +16,17 @@ import type { Graph, GraphNode } from './plan'
 import { nodeAt, rasterOf } from './raster'
 import type { Tone } from './raster'
 
-export type GraphProps = Graph & { isPlaced?: boolean }
+/**
+ * `rows`, with `isPlaced`: the rows to lay out in. The desktop sizes a Client's
+ * region to what it draws rather than to its `height`, so the region it reports
+ * starts at the one row of `loading…` and stays there; the hooks module names
+ * the rows instead.
+ */
+export type GraphProps = Graph & { isPlaced?: boolean; rows?: number }
 
 type GraphState = {
   /** The graph as last handed in, and a key of its shape to spot a new one. */
-  graph: Graph
+  graph: GraphProps
   shape: string
   /** The region the layout was made for; 0 by 0 until the first layout. */
   size: Size
@@ -55,9 +61,15 @@ const shapeOf = (graph: Graph) =>
     .map(edge => `${edge.from}>${edge.to}:${edge.kind}`)
     .join(',')}`
 
-const sizeOf = (surface: ClientSurface<GraphState>, graph: Graph): Size => ({
+// Named rows apply once the region has columns: an unmeasured (0 by 0) mount
+// still waits on `loading…` rather than laying out in no width.
+const sizeOf = (surface: ClientSurface<GraphState>, graph: GraphProps): Size => ({
   columns: surface.columns,
-  rows: Math.max(0, surface.rows - (graph.more > 0 ? 1 : 0)),
+  rows: Math.max(
+    0,
+    (graph.isPlaced && graph.rows !== undefined && surface.columns > 0 ? graph.rows : surface.rows) -
+      (graph.more > 0 ? 1 : 0),
+  ),
 })
 
 const isEmpty = (size: Size) => size.columns <= 0 || size.rows <= 0

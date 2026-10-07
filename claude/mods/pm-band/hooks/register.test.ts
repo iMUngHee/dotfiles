@@ -422,15 +422,19 @@ describe('register', () => {
       viewport: VIEWPORT,
     })
     await ui.press({ key: 'tab-graph' })
-    await ui.resize({ columns: 60, rows: 12, in: 'graph' })
+    // The desktop sizes the region to what is drawn: it reports the one row of
+    // `loading…`. The layout must still use the rows the hooks asked for
+    // (bodyRows 20 − 3), or every node lands on one line.
+    await ui.resize({ columns: 60, rows: 1, in: 'graph' })
     await ui.advance(5_000)
     const drawn = (await ui.drawn({ in: 'graph' })) as { children?: unknown[] }
-    // One Box sized to the region, holding one absolute Box per run of glyphs.
+    // One Box sized to the rows asked for, holding one absolute Box per run of glyphs.
     const field = drawn.children?.[0] as { props?: Record<string, unknown>; children?: unknown[] }
-    expect(field.props).toMatchObject({ position: 'relative', width: 60, height: 12 })
+    expect(field.props).toMatchObject({ position: 'relative', width: 60, height: 17 })
     const runs = (field.children ?? []) as { props?: { position?: string; left?: number; top?: number }; children?: unknown[] }[]
     expect(runs.length).toBeGreaterThan(3)
     expect(runs.every(run => run.props?.position === 'absolute')).toBe(true)
+    expect(new Set(runs.map(run => run.props?.top)).size).toBeGreaterThan(2)
     const demo = runs.find(run => textOf(run).startsWith('● demo'))!
     expect(demo).toBeDefined()
     const x = demo.props!.left!
