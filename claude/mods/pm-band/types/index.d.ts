@@ -27,8 +27,11 @@ export type PlanView =
  */
 export type BandState = { sessionId: string; view: PlanView | null; error: string | null }
 
-/** The backlog tab's state, read only while the /pm pane is open. */
-export type BacklogState = { sessionId: string; listing: Listing | null; error: string | null }
+/**
+ * The backlog tab's state, read only while the /pm pane is open. `isOutside`: the
+ * session runs outside any git repository, so there is no backlog to read.
+ */
+export type BacklogState = { sessionId: string; listing: Listing | null; error: string | null; isOutside: boolean }
 
 export type Tab = 'steps' | 'backlog' | 'graph'
 

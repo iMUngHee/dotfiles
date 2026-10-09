@@ -37,6 +37,7 @@ const backlog = atom({ plugin: 'pm-band', key: 'backlog' } as const, {
   sessionId: '',
   listing: null,
   error: null,
+  isOutside: false,
 })
 const tab = atom({ plugin: 'pm-band', key: 'tab' } as const, 'steps')
 const selected = atom({ plugin: 'pm-band', key: 'selected' } as const, null)
@@ -93,6 +94,8 @@ async function refreshOnce($: Engine): Promise<void> {
   let error: string | null = null
   let mainRoot = ''
   if (resolved.kind === 'error') error = resolved.reason
+  // A finished plan hides the band, but its repository's backlog is still the pane's to show.
+  if (resolved.kind === 'hidden') mainRoot = resolved.mainRoot
   if (resolved.kind === 'none') {
     view = { kind: 'none' }
     mainRoot = resolved.mainRoot
@@ -114,7 +117,9 @@ async function refreshOnce($: Engine): Promise<void> {
     }
   }
   const isPaneOpen = (await $.ui.panes()).some(one => one.id === PANE)
-  let listing: Listing | { error: string } | null = null
+  // `outside`: no repository, so no backlog: said at once rather than left `loading…`.
+  let listing: Listing | { error: string } | 'outside' | null = null
+  if (isPaneOpen && !mainRoot) listing = resolved.kind === 'error' ? { error: resolved.reason } : 'outside'
   if (isPaneOpen && mainRoot) {
     listing = listingOf(
       await run($, ['node', paths.tsx, paths.pm, 'list', '--json', '--all'], {
@@ -133,9 +138,11 @@ async function refreshOnce($: Engine): Promise<void> {
   if (listing !== null) {
     const next = listing
     await update($, backlog, (prev): BacklogState =>
-      'error' in next
-        ? { sessionId, listing: prev.sessionId === sessionId ? prev.listing : null, error: next.error }
-        : { sessionId, listing: next, error: null },
+      next === 'outside'
+        ? { sessionId, listing: null, error: null, isOutside: true }
+        : 'error' in next
+          ? { sessionId, listing: prev.sessionId === sessionId ? prev.listing : null, error: next.error, isOutside: false }
+          : { sessionId, listing: next, error: null, isOutside: false },
     )
   }
 }
@@ -174,7 +181,7 @@ async function openPane($: Engine, shown?: Tab): Promise<void> {
 async function switched($: Engine): Promise<void> {
   generation += 1
   await update($, band, () => ({ sessionId: '', view: null, error: null }))
-  await update($, backlog, () => ({ sessionId: '', listing: null, error: null }))
+  await update($, backlog, () => ({ sessionId: '', listing: null, error: null, isOutside: false }))
   await update($, selected, () => null)
 }
 
@@ -492,6 +499,31 @@ function currentPlanOf(state: BandState): string | undefined {
   return state.view?.kind === 'plan' ? state.view.plan : undefined
 }
 
+/** A tab with nothing to list: what is missing in bold, and what would fill it, dim. */
+function emptyOf($: Engine, e: RenderInput<'Pane'>, title: string, hint: string): RenderElement {
+  const { Box, Text } = $.ui.resolve(e)
+  return (
+    <Box flexDirection="column">
+      <Text bold>{title}</Text>
+      <Text dimColor wrap="wrap">
+        {hint}
+      </Text>
+    </Box>
+  )
+}
+
+const EMPTY_HINT = 'Items show up here once pm adds them (/pm-roadmap); untriaged ones wait in the inbox.'
+
+/** The backlog and graph tabs before or without a listing: outside a repository, failed, or still reading. */
+function unlistedOf($: Engine, e: RenderInput<'Pane'>, list: BacklogState): RenderElement {
+  const { Text } = $.ui.resolve(e)
+  if (list.isOutside) {
+    return emptyOf($, e, 'No pm backlog here.', '/pm reads the backlog of the git repository this session runs in; this one runs outside any.')
+  }
+  if (list.error !== null) return <Text dimColor>⚠ backlog: {list.error}</Text>
+  return <Text dimColor>loading…</Text>
+}
+
 function backlogBody(
   $: Engine,
   e: RenderInput<'Pane'>,
@@ -501,10 +533,17 @@ function backlogBody(
 ): RenderElement {
   const { Box, Text } = $.ui.resolve(e)
   if (list.listing === null) {
-    return <Text dimColor>{list.error !== null ? `⚠ backlog: ${list.error}` : 'loading…'}</Text>
+    return unlistedOf($, e, list)
   }
   const groups = groupsOf(list.listing, currentPlanOf(state))
-  if (groups.length === 0) return <Text dimColor>The backlog is empty.</Text>
+  if (groups.length === 0) {
+    return (
+      <Box flexDirection="column">
+        {emptyOf($, e, 'The backlog is empty.', EMPTY_HINT)}
+        {list.listing.inbox > 0 ? <Text dimColor>inbox · {list.listing.inbox} awaiting triage</Text> : ''}
+      </Box>
+    )
+  }
   // P0 and P1 stand out on the warning fill; P2 is the plain middle; the rest step back.
   const chipOf = (priority: string) =>
     /^P[01]$/.test(priority) ? (
@@ -581,9 +620,11 @@ function graphBody(
 ): RenderElement {
   const { Text } = $.ui.resolve(e)
   if (list.listing === null) {
-    return <Text dimColor>{list.error !== null ? `⚠ backlog: ${list.error}` : 'loading…'}</Text>
+    return unlistedOf($, e, list)
   }
   const graph: GraphProps = graphOf(list.listing, currentPlanOf(state))
+  // Nothing to draw: say so in words, not with an empty canvas.
+  if (graph.nodes.length === 0) return emptyOf($, e, 'The backlog is empty.', EMPTY_HINT)
   const detail = detailOf(list, pick)
   const { Box, Client } = $.ui.resolve(e as RenderInput<'Pane'> & { surface: 'terminal' })
   // What the tab strip and the line under the drawing leave of the body.

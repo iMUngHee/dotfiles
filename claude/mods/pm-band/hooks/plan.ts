@@ -66,7 +66,8 @@ export type Resolved =
       mainRoot: string
     }
   | { kind: 'none'; mainRoot: string }
-  | { kind: 'hidden' }
+  /** No plan to show; `mainRoot` still names the repository when there is one ('' outside git). */
+  | { kind: 'hidden'; mainRoot: string }
   | { kind: 'error'; reason: string }
 
 function failureOf(run: Run): string | undefined {
@@ -81,7 +82,7 @@ function failureOf(run: Run): string | undefined {
 /** `worktree.mjs resolve-session`: ok → plan, unbound → none, terminal or outside git → hidden. */
 export function resolvedOf(run: Run): Resolved {
   if (run.exitCode !== 0 && /not a git repository/.test(run.stderr)) {
-    return { kind: 'hidden' }
+    return { kind: 'hidden', mainRoot: '' }
   }
   const failure = failureOf(run)
   if (failure) return { kind: 'error', reason: failure }
@@ -95,11 +96,11 @@ export function resolvedOf(run: Run): Resolved {
     typeof json[key] === 'string' ? (json[key] as string) : ''
   const status = text('status')
   if (status === 'unbound') return { kind: 'none', mainRoot: text('main_root') }
-  if (status === 'terminal') return { kind: 'hidden' }
+  if (status === 'terminal') return { kind: 'hidden', mainRoot: text('main_root') }
   if (status !== 'ok') return { kind: 'error', reason: status || 'no status' }
   const planStatus = text('plan_status')
   if (planStatus !== 'draft' && planStatus !== 'active') {
-    return { kind: 'hidden' }
+    return { kind: 'hidden', mainRoot: text('main_root') }
   }
   return {
     kind: 'plan',

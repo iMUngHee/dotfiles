@@ -50,9 +50,11 @@
 | pm band | refresh failed, no last value | dim `⚠ plan: <reason>` | next refresh |
 | pm band | refresh failed, last value kept | the line plus a dim `⚠` | next refresh |
 | /pm steps | no plan | `No plan is bound to this session.` | — |
-| /pm backlog, graph | before the first read | `loading…` | the open pane's refresh |
-| /pm backlog, graph | read failed | `⚠ backlog: <reason>` | next refresh |
-| /pm backlog | empty | `The backlog is empty.` | — |
+| /pm backlog, graph | before the first read | `loading…` (only until the open pane's first refresh lands) | the open pane's refresh |
+| /pm backlog, graph | the session runs outside any git repository | bold `No pm backlog here.`, then dim `/pm reads the backlog of the git repository this session runs in; this one runs outside any.` | open /pm in a repository |
+| /pm backlog, graph | read failed (or the resolver failed) | `⚠ backlog: <reason>`; a last good listing stays above it | next refresh |
+| /pm backlog, graph | empty | bold `The backlog is empty.`, then dim `Items show up here once pm adds them (/pm-roadmap); untriaged ones wait in the inbox.`; the graph draws no empty canvas | pm adds an item |
+| /pm backlog, graph | the session's plan is done | the backlog of its repository, as for any session there | — |
 | /pm graph | over the node cap | the drawing plus `+N more` | — |
 | /pm graph | nothing picked | the key bar naming how to pick | pick a node |
 | pager band | no pager or no name | nothing | — |

@@ -108,12 +108,14 @@ describe('plan', () => {
       kind: 'none',
       mainRoot: '/r',
     })
-    expect(resolvedOf(ok('{"status":"terminal","plan_status":"done"}'))).toEqual({
+    // A finished plan hides the band but keeps the repository, whose backlog /pm still reads.
+    expect(resolvedOf(ok('{"status":"terminal","plan_status":"done","main_root":"/r"}'))).toEqual({
       kind: 'hidden',
+      mainRoot: '/r',
     })
     expect(
       resolvedOf({ exitCode: 1, stdout: '', stderr: 'fatal: not a git repository' }),
-    ).toEqual({ kind: 'hidden' })
+    ).toEqual({ kind: 'hidden', mainRoot: '' })
     expect(resolvedOf(ok('{"status":"missing_worktree"}'))).toEqual({
       kind: 'error',
       reason: 'missing_worktree',
