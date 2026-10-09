@@ -31,17 +31,20 @@ export type PagerState = {
   /** When that refresh ran (ms since the epoch): the ages the pane draws count from it. */
   now: number
   error: string | null
+  /** Per peer, what it sent since its room was last opened; rooms with none are absent. */
+  unread: Record<string, number>
 }
-
-export type Tab = 'messages' | 'peers'
 
 declare module 'claude-code' {
   interface PluginState {
     'pager-view': {
       pager: PagerState
-      tab: Tab
-      /** The message the reader shows; null follows the newest. */
-      pick: number | null
+      /** The room the pane shows, by the peer's name; null shows the chats. */
+      room: string | null
+      /** The chat the cursor bar is on; null (or a name gone from the list) puts it on the first. */
+      cursor: string | null
+      /** The ids of the bubbles unfolded past the fold. */
+      expanded: number[]
     }
   }
 }

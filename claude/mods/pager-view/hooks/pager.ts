@@ -162,12 +162,176 @@ export function newCountOf(inbound: ReadonlySet<number>, baseline: number): numb
   return count
 }
 
-/** `2026-10-07T05:48:19.655Z` → `10-07 14:48` in the host's time zone. */
-export function stampOf(iso: string): string {
+const two = (n: number) => String(n).padStart(2, '0')
+
+/** `2026-10-07T05:48:19.655Z` → `14:48` in the host's time zone; `--:--` for a bad time. */
+export function clockOf(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return '--:--'
-  const two = (n: number) => String(n).padStart(2, '0')
-  return `${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`
+  return `${two(date.getHours())}:${two(date.getMinutes())}`
+}
+
+/** `2026-10-07T05:48:19.655Z` → `10-07` in the host's time zone; `--` for a bad time. */
+export function dayOf(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '--'
+  return `${two(date.getMonth() + 1)}-${two(date.getDate())}`
+}
+
+/** One chat of the /pager list: a peer this session has messages with, or one pager lists. */
+export type Room = {
+  name: string
+  /** pager's roster row for the peer; null once the peer left the roster. */
+  peer: Peer | null
+  /** The newest message with the peer; null when there is none yet. */
+  last: Entry | null
+}
+
+/**
+ * The chats: the conversations by their newest message, newest first, then the
+ * peers without messages in the roster's order (live first). `self` is this
+ * session's name, which is the pane's header and never a room.
+ */
+export function roomsOf(entries: readonly Entry[], peers: readonly Peer[], self: string): Room[] {
+  const lastOf = new Map<string, Entry>()
+  // Oldest first, so the last write per peer is its newest message.
+  for (const entry of entries) if (entry.peer !== self) lastOf.set(entry.peer, entry)
+  const peerOf = new Map(peers.map(peer => [peer.name, peer]))
+  const talked = [...lastOf.values()]
+    .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
+    .map(last => ({ name: last.peer, peer: peerOf.get(last.peer) ?? null, last }))
+  const quiet = peers
+    .filter(peer => peer.name !== self && !lastOf.has(peer.name))
+    .map(peer => ({ name: peer.name, peer, last: null }))
+  return [...talked, ...quiet]
+}
+
+/** The highest id of what `peer` sent this session; 0 when nothing. */
+export function newestInOf(entries: readonly Entry[], peer: string): number {
+  let max = 0
+  for (const entry of entries) if (entry.direction === 'in' && entry.peer === peer && entry.id > max) max = entry.id
+  return max
+}
+
+/**
+ * The per-room seen map after a refresh: the last inbound id counted as read,
+ * per peer. A room met for the first time starts at `prior`, the session's
+ * baseline before this refresh moved it, so mail from before the session's
+ * first look is not unread; the room `open` in the pane moves to its newest.
+ */
+export function seenOf(
+  stored: Readonly<Record<string, number>>,
+  entries: readonly Entry[],
+  prior: number,
+  open: string | null,
+): Record<string, number> {
+  const seen: Record<string, number> = { ...stored }
+  for (const entry of entries) {
+    if (entry.direction === 'in' && seen[entry.peer] === undefined) seen[entry.peer] = prior
+  }
+  if (open !== null) {
+    const newest = newestInOf(entries, open)
+    if (newest > (seen[open] ?? 0)) seen[open] = newest
+  }
+  return seen
+}
+
+/** Unread per room: what each peer sent past its seen id. Rooms with none are left out. */
+export function unreadOf(entries: readonly Entry[], seen: Readonly<Record<string, number>>): Record<string, number> {
+  const unread: Record<string, number> = {}
+  for (const entry of entries) {
+    if (entry.direction !== 'in') continue
+    const mark = seen[entry.peer]
+    if (mark !== undefined && entry.id > mark) unread[entry.peer] = (unread[entry.peer] ?? 0) + 1
+  }
+  return unread
+}
+
+/** Whether a code point takes two terminal cells (East Asian Wide and Fullwidth, emoji). */
+function isWide(code: number): boolean {
+  return (
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0x303e) ||
+    (code >= 0x3041 && code <= 0x33ff) ||
+    (code >= 0x3400 && code <= 0x4dbf) ||
+    (code >= 0x4e00 && code <= 0x9fff) ||
+    (code >= 0xa000 && code <= 0xa4cf) ||
+    (code >= 0xa960 && code <= 0xa97f) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe30 && code <= 0xfe4f) ||
+    (code >= 0xff00 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x1f300 && code <= 0x1f64f) ||
+    (code >= 0x1f680 && code <= 0x1f6ff) ||
+    (code >= 0x1f900 && code <= 0x1f9ff) ||
+    (code >= 0x1fa70 && code <= 0x1faff) ||
+    (code >= 0x20000 && code <= 0x3fffd)
+  )
+}
+
+/** Combining marks, zero-width spaces and joiners, variation selectors: no cell of their own. */
+function isZeroWidth(code: number): boolean {
+  return (
+    (code >= 0x0300 && code <= 0x036f) ||
+    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x20d0 && code <= 0x20ff) ||
+    (code >= 0xfe00 && code <= 0xfe0f)
+  )
+}
+
+const cellOf = (char: string) => {
+  const code = char.codePointAt(0) ?? 0
+  return isZeroWidth(code) ? 0 : isWide(code) ? 2 : 1
+}
+
+/** The terminal cells a string takes: a Hangul syllable two, a Latin letter one. */
+export function cellsOf(text: string): number {
+  let cells = 0
+  for (const char of text) cells += cellOf(char)
+  return cells
+}
+
+/** A bubble folds past this many visual lines. */
+export const FOLD_LINES = 8
+
+/** What a folded bubble draws: `text`, and how many visual lines it leaves out (0 when whole). */
+export type Fold = { text: string; hidden: number }
+
+/**
+ * The first `limit` visual lines of `body` at `width` cells a line. A line of
+ * the body takes ceil(cells / width) rows, one when empty; a line cut at the
+ * fold keeps the cells that fit.
+ */
+export function foldOf(body: string, width: number, limit = FOLD_LINES): Fold {
+  const room = Math.max(1, width)
+  const lines = body.split('\n')
+  const rowsOf = (line: string) => Math.max(1, Math.ceil(cellsOf(line) / room))
+  const total = lines.reduce((sum, line) => sum + rowsOf(line), 0)
+  if (total <= limit) return { text: body, hidden: 0 }
+  const kept: string[] = []
+  let used = 0
+  for (const line of lines) {
+    const rows = rowsOf(line)
+    if (used + rows <= limit) {
+      kept.push(line)
+      used += rows
+      continue
+    }
+    const left = (limit - used) * room
+    if (left > 0) {
+      let cut = ''
+      let cells = 0
+      for (const char of line) {
+        if (cells + cellOf(char) > left) break
+        cut += char
+        cells += cellOf(char)
+      }
+      kept.push(cut)
+    }
+    break
+  }
+  return { text: kept.join('\n'), hidden: total - limit }
 }
 
 /** Peers other than `self` whose host pager judges live. */

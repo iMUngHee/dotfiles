@@ -3,18 +3,27 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   agoOf,
   BODY_CAP,
+  cellsOf,
+  clockOf,
   conversationOf,
+  dayOf,
   exportedOf,
   flatOf,
+  foldOf,
   inboundOf,
   isMissing,
   liveOf,
   nameOf,
   newCountOf,
+  newestInOf,
   newestOf,
   peersOf,
+  roomsOf,
   rosterOf,
+  seenOf,
+  unreadOf,
 } from './pager'
+import type { Entry, Peer } from './pager'
 
 const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '' })
 
@@ -152,5 +161,82 @@ vatu  claude  C:\\Users\\uu\\x           gone  2m ago
   test('a pager that is not installed is told apart from one that failed', () => {
     expect(isMissing({ exitCode: -1, stdout: '', stderr: 'spawn pager ENOENT' })).toBe(true)
     expect(isMissing({ exitCode: 1, stdout: '', stderr: 'boom' })).toBe(false)
+  })
+})
+
+const entry = (id: number, direction: 'in' | 'out', peer: string): Entry => ({
+  id,
+  at: `2026-10-07T05:${String(id % 60).padStart(2, '0')}:00.000Z`,
+  direction,
+  peer,
+  body: `m${id}`,
+  length: `m${id}`.length,
+  isHuman: false,
+})
+
+const peer = (name: string, host = 'live'): Peer => ({ name, tool: 'claude', root: `/w/${name}`, host, last: 'now' })
+
+describe('chats', () => {
+  test('the conversations come first, newest first, then the quiet peers in roster order; self is never a room', () => {
+    const entries = [entry(1, 'in', 'buni'), entry(2, 'out', 'lopu'), entry(3, 'in', 'buni'), entry(4, 'in', 'gone')]
+    const rooms = roomsOf(entries, [peer('wogi'), peer('lopu'), peer('kiwi'), peer('buni'), peer('zola', 'gone')], 'wogi')
+
+    expect(rooms.map(room => [room.name, room.last?.id ?? null, room.peer?.host ?? null])).toEqual([
+      ['gone', 4, null],
+      ['buni', 3, 'live'],
+      ['lopu', 2, 'live'],
+      ['kiwi', null, 'live'],
+      ['zola', null, 'gone'],
+    ])
+    expect(roomsOf([], [peer('wogi')], 'wogi')).toEqual([])
+  })
+
+  test('a room met first counts nothing before the prior baseline; the open room is read up to its newest', () => {
+    const entries = [entry(10, 'in', 'buni'), entry(11, 'out', 'buni'), entry(12, 'in', 'buni'), entry(13, 'in', 'lopu')]
+
+    const first = seenOf({}, entries, 10, null)
+    expect(first).toEqual({ buni: 10, lopu: 10 })
+    expect(unreadOf(entries, first)).toEqual({ buni: 1, lopu: 1 })
+
+    const opened = seenOf(first, entries, 13, 'buni')
+    expect(opened).toEqual({ buni: 12, lopu: 10 })
+    expect(unreadOf(entries, opened)).toEqual({ lopu: 1 })
+    expect(newestInOf(entries, 'buni')).toBe(12)
+    expect(newestInOf(entries, 'nobody')).toBe(0)
+    // A stored mark is kept, and sent messages never count.
+    expect(seenOf({ buni: 12 }, entries, 0, null)).toEqual({ buni: 12, lopu: 0 })
+  })
+
+  test('cells count a Hangul syllable or jamo as two and a Latin letter as one', () => {
+    expect(cellsOf('abc')).toBe(3)
+    expect(cellsOf('대협')).toBe(4)
+    expect(cellsOf('ㄱ')).toBe(2)
+    expect(cellsOf('pm 대협 ok')).toBe(10)
+    // A combining accent or a variation selector takes no cell; a transport emoji two.
+    expect(cellsOf('é')).toBe(1)
+    expect(cellsOf('❤️')).toBe(1)
+    expect(cellsOf('\u{1f680}')).toBe(2)
+  })
+
+  test('a body folds at eight visual lines, counting wrapped rows and blank lines', () => {
+    const short = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n')
+    expect(foldOf(short, 30)).toEqual({ text: short.split('\n').slice(0, 8).join('\n'), hidden: 12 })
+
+    expect(foldOf('x'.repeat(100), 30)).toEqual({ text: 'x'.repeat(100), hidden: 0 })
+    expect(foldOf('a\n\n\n\n\n\n\nb', 30).hidden).toBe(0)
+    expect(foldOf('a\n\n\n\n\n\n\n\nb', 30)).toEqual({ text: 'a\n\n\n\n\n\n\n', hidden: 1 })
+
+    // 100 syllables are 200 cells: ten rows at 20 a row; the cut keeps 8 rows' worth.
+    const folded = foldOf('가'.repeat(100), 20)
+    expect(folded.hidden).toBe(2)
+    expect(folded.text).toBe('가'.repeat(80))
+  })
+
+  test('bubble times read the host clock and the day; a bad time reads dashes', () => {
+    const at = new Date(2026, 9, 7, 14, 48).toISOString()
+    expect(clockOf(at)).toBe('14:48')
+    expect(dayOf(at)).toBe('10-07')
+    expect(clockOf('nope')).toBe('--:--')
+    expect(dayOf('nope')).toBe('--')
   })
 })

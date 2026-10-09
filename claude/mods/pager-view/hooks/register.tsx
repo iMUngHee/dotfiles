@@ -1,34 +1,50 @@
 // pager-view: this session's pager name and its new mail as one line above the
-// prompt, and a /pager pane with the session's conversation and its peers.
-// Read-only: it lists and exports; it never sends, marks or delivers anything.
+// prompt, and a /pager pane: the session's chats, and each chat a room of
+// bubbles. Read-only: it lists and exports; it never sends, marks or delivers.
 //
-// I/O happens in events and timers only; ui.render reads $.state and nothing else.
+// I/O happens in events, handlers and timers only; ui.render reads $.state and nothing else.
 
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, On, RenderElement, RenderInput } from 'claude-code'
 
-import type { Entry, PagerState, Tab } from '../types'
+import type { Entry, PagerState } from '../types'
 import {
   agoOf,
+  clockOf,
   conversationOf,
+  dayOf,
   exportedOf,
   flatOf,
+  foldOf,
   inboundOf,
   isMissing,
   liveOf,
   nameOf,
   newCountOf,
+  newestInOf,
   newestOf,
   peersOf,
+  roomsOf,
   rosterOf,
-  stampOf,
+  seenOf,
+  unreadOf,
 } from './pager'
-import type { Run } from './pager'
+import type { Room, Run } from './pager'
 
 export const PANE = 'pager'
 const POLL_MS = 5_000
 const REFRESH_DEBOUNCE_MS = 300
 const SHOWN_ENTRIES = 200
+/** The newest messages a room draws: the engine refuses a drawing over 100,000 characters. */
+const ROOM_MESSAGES = 60
+/**
+ * The body text a room's bubbles may draw together, leaving the rest of the
+ * 100,000 to the chrome: unfolded bubbles cost their whole bodies, and past it
+ * the oldest give way so the newest and the controls under them stay drawn.
+ */
+const ROOM_TEXT = 80_000
+/** The share of the content width a bubble may take; the rest stays empty on the far side. */
+const BUBBLE_SHARE = 0.8
 
 const EMPTY: PagerState = {
   sessionId: '',
@@ -40,13 +56,16 @@ const EMPTY: PagerState = {
   lastAgo: null,
   now: 0,
   error: null,
+  unread: {},
 }
 
 const pager = atom({ plugin: 'pager-view', key: 'pager' } as const, EMPTY)
-const tab = atom({ plugin: 'pager-view', key: 'tab' } as const, 'messages')
-const pick = atom({ plugin: 'pager-view', key: 'pick' } as const, null)
+const room = atom({ plugin: 'pager-view', key: 'room' } as const, null)
+const cursor = atom({ plugin: 'pager-view', key: 'cursor' } as const, null)
+const expanded = atom({ plugin: 'pager-view', key: 'expanded' } as const, [])
 
 const baselineKey = (sessionId: string) => `baseline:${sessionId}`
+const seenKey = (sessionId: string) => `seen:${sessionId}`
 
 async function run($: Engine, argv: string[]): Promise<Run> {
   try {
@@ -58,8 +77,9 @@ async function run($: Engine, argv: string[]): Promise<Run> {
 
 // Module state: a reload starts it over, as it does $.clock timers. `generation`
 // moves when the session id changes under the process (/clear, /resume, /branch);
-// a refresh begun under an older one is dropped. The baseline lives in $.store,
-// keyed by session id, so a reload keeps it and a new session starts its own.
+// a refresh begun under an older one is dropped. The baseline and the per-room
+// seen map live in $.store, keyed by session id, so a reload keeps them and a new
+// session starts its own.
 let generation = 0
 let isRefreshing = false
 let isDirty = false
@@ -69,14 +89,37 @@ async function isPaneOpen($: Engine): Promise<boolean> {
   return (await $.ui.panes()).some(one => one.id === PANE)
 }
 
-/** Moves the baseline to `newest` when that is later; answers the baseline in force. */
-async function baselineAt($: Engine, sessionId: string, newest: number, isSeen: boolean): Promise<number> {
+/**
+ * Moves the baseline to `newest` when that is later. Answers the baseline in
+ * force (`next`) and the one before this refresh (`prior`), from which a room
+ * met for the first time starts counting.
+ */
+async function baselineAt(
+  $: Engine,
+  sessionId: string,
+  newest: number,
+  isSeen: boolean,
+): Promise<{ prior: number; next: number }> {
   const stored = await $.store.get(baselineKey(sessionId))
   const current = typeof stored === 'number' ? stored : null
   // No baseline yet: what arrived before this session's first look is not new.
   const next = current === null || (isSeen && newest > current) ? newest : current
   if (next !== current) await $.store.set(baselineKey(sessionId), next)
-  return next
+  return { prior: current ?? newest, next }
+}
+
+function isSeenMap(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(mark => typeof mark === 'number')
+  )
+}
+
+async function storedSeen($: Engine, sessionId: string): Promise<Record<string, number>> {
+  const stored = await $.store.get(seenKey(sessionId))
+  return isSeenMap(stored) ? stored : {}
 }
 
 async function refreshOnce($: Engine): Promise<void> {
@@ -101,6 +144,8 @@ async function refreshOnce($: Engine): Promise<void> {
   const rows = exportedOf(await run($, ['pager', 'export']))
   if ('error' in rows) return failed(rows.error)
   const isSeen = await isPaneOpen($)
+  // A room on screen reads its mail as it lands.
+  const shownRoom = isSeen ? await read($, room) : null
   // The band counts live peers too, so `who` runs on every refresh (~13 ms measured).
   const who = peersOf(await run($, ['pager', 'who']))
   if ('error' in who) return failed(who.error)
@@ -109,8 +154,11 @@ async function refreshOnce($: Engine): Promise<void> {
   const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
   if (await isStale()) return
 
-  const baseline = await baselineAt($, sessionId, newestOf(inbound), isSeen)
+  const { prior, next: baseline } = await baselineAt($, sessionId, newestOf(inbound), isSeen)
   const entries = conversationOf(rows, inbound, sessionId).slice(-SHOWN_ENTRIES)
+  const before = await storedSeen($, sessionId)
+  const seen = seenOf(before, entries, prior, shownRoom)
+  if (JSON.stringify(seen) !== JSON.stringify(before)) await $.store.set(seenKey(sessionId), seen)
   const last = entries.at(-1)
   await settle(() => ({
     sessionId,
@@ -122,6 +170,7 @@ async function refreshOnce($: Engine): Promise<void> {
     lastAgo: last ? agoOf(last.at, now) : null,
     now,
     error: null,
+    unread: unreadOf(entries, seen),
   }))
 }
 
@@ -149,8 +198,10 @@ function soon($: Engine): void {
   })
 }
 
-/** /pager and a click on the band's name: open the pane, and count the look as seen. */
+/** /pager and a click on the band's name: open the pane on the chats, and count the look as seen. */
 async function openPane($: Engine): Promise<void> {
+  // A pane opened anew starts on the chats; one already up stays in its room.
+  if (!(await isPaneOpen($))) await update($, room, () => null)
   await $.ui.open({ id: PANE, title: 'pager', focus: true })
   // Clear the badge now; the next refresh moves the stored baseline (the pane is open).
   const state = await read($, pager)
@@ -161,22 +212,67 @@ async function openPane($: Engine): Promise<void> {
   soon($)
 }
 
+/** Moves the pane's window; a move the surface refuses changes nothing worth telling. */
+async function scrollTo($: Engine, to: 'start' | 'end'): Promise<void> {
+  await $.ui.scroll({ in: PANE, to }).catch((error: unknown) => ({ deny: String(error) }))
+}
+
+/** A press on a chat (or `o` on the cursor's): show its room at the newest bubble, and read it. */
+async function openRoom($: Engine, name: string): Promise<void> {
+  await update($, room, () => name)
+  await update($, cursor, () => name)
+  const state = await read($, pager)
+  const sessionId = await $.session.id()
+  if (state.sessionId === sessionId) {
+    const newest = newestInOf(state.entries, name)
+    const seen = await storedSeen($, sessionId)
+    if (newest > (seen[name] ?? 0)) await $.store.set(seenKey(sessionId), { ...seen, [name]: newest })
+    if ((state.unread[name] ?? 0) > 0) {
+      const rest = (unread: Record<string, number>) =>
+        Object.fromEntries(Object.entries(unread).filter(([peer]) => peer !== name))
+      await update($, pager, prev => ({ ...prev, unread: rest(prev.unread) }))
+    }
+  }
+  await scrollTo($, 'end')
+}
+
+/** `b` and `‹ chats`: back to the chat list. */
+async function leaveRoom($: Engine): Promise<void> {
+  await update($, room, () => null)
+  await scrollTo($, 'start')
+}
+
+/** `j` and `k`: the cursor bar onto the chat at `at`, held inside the list. */
+async function moveCursor($: Engine, names: readonly string[], at: number): Promise<void> {
+  const name = names[Math.max(0, Math.min(names.length - 1, at))]
+  if (name !== undefined) await update($, cursor, () => name)
+}
+
+/** A bubble's fold control: unfold it past the fold, or fold it back. */
+async function toggleFold($: Engine, id: number): Promise<void> {
+  await update($, expanded, prev => (prev.includes(id) ? prev.filter(one => one !== id) : [...prev, id]))
+}
+
+/** `e`: unfold every folded bubble of the room; when none is folded, fold them all again. */
+async function toggleFolds($: Engine, ids: readonly number[]): Promise<void> {
+  await update($, expanded, prev =>
+    ids.every(id => prev.includes(id)) ? prev.filter(id => !ids.includes(id)) : [...new Set([...prev, ...ids])],
+  )
+}
+
 async function switched($: Engine): Promise<void> {
   generation += 1
   await update($, pager, () => EMPTY)
-  await update($, pick, () => null)
-}
-
-/** `j`, `k` and a press on a message's time: which message the reader shows. */
-async function pickMessage($: Engine, id: number | null): Promise<void> {
-  await update($, pick, () => id)
+  await update($, room, () => null)
+  await update($, cursor, () => null)
+  await update($, expanded, () => [])
 }
 
 export function register(on: On): void {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: PANE,
-      description: "Show this session's pager conversation and peers",
+      description: "Show this session's pager chats",
       immediate: true,
     })
     const result = await next(e)
@@ -221,250 +317,408 @@ export function register(on: On): void {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const state = await read($, pager)
-    const shown = await read($, tab)
-    const picked = await read($, pick)
-    return paneOf($, e, state, shown, picked)
+    const shown = await read($, room)
+    const at = await read($, cursor)
+    const open = await read($, expanded)
+    return paneOf($, e, { state, shown, at, open })
   })
 }
 
 const PREVIEW_CHARS = 60
 
+const previewOf = (body: string) => {
+  const flat = flatOf(body)
+  return flat.length > PREVIEW_CHARS ? `${flat.slice(0, PREVIEW_CHARS - 1)}…` : flat
+}
+
+/** A root cut from its start: the end is the folder that tells two sessions apart. */
+const startCut = (text: string, cells: number) =>
+  text.length > cells ? `…${text.slice(text.length - Math.max(1, cells - 1))}` : text
+
+/** The band line: the way into /pager, new mail, the last message; live peers at the right edge. */
 function bandLine($: Engine, e: RenderInput<'AbovePrompt'>, state: PagerState): RenderElement | null {
   if (state.name === null) return null
   const { Box, Text, Button } = $.ui.resolve(e)
   const last = state.entries.at(-1)
-  const flat = last ? flatOf(last.body) : ''
-  const preview = flat.length > PREVIEW_CHARS ? `${flat.slice(0, PREVIEW_CHARS - 1)}…` : flat
   return (
     <Box flexDirection="row">
-      {/* The name is the way into /pager: a click (or ctrl+x tab, Enter) opens it. */}
-      <Button
-        key="open-pager"
-        label={`✉ ${state.name}`}
-        plain
-        onPress={() => openPane($)}
-      />
-      <Text wrap="truncate-end">
-        {state.newCount > 0 ? <Text color="warning" bold>{`  ● ${state.newCount} new`}</Text> : ''}
-        {last ? (
-          <Text>
-            {'  '}
-            <Text color={last.direction === 'in' ? 'suggestion' : 'success'}>
-              {last.direction === 'in' ? '←' : '→'} {last.peer}
-            </Text>
-            <Text dimColor>
-              {state.lastAgo !== null ? ` ${state.lastAgo}` : ''}
+      <Box flexDirection="row" flexShrink={1}>
+        {/* The name is the way into /pager: a click (or ctrl+x tab, Enter) opens it. */}
+        <Button key="open-pager" label={`✉ ${state.name}`} plain onPress={() => openPane($)} />
+        <Text wrap="truncate-end">
+          {state.newCount > 0 ? (
+            <Text>
               {'  '}
-              {preview}
+              <Text backgroundColor="warning" color="inverseText" bold>{` ${state.newCount} new `}</Text>
             </Text>
+          ) : (
+            ''
+          )}
+          {last ? (
+            <Text>
+              {'  '}
+              <Text bold color={last.direction === 'out' ? 'claude' : undefined}>
+                {last.direction === 'in' ? '←' : '→'} {last.peer}
+              </Text>
+              <Text dimColor>
+                {state.lastAgo !== null ? ` ${state.lastAgo}` : ''}
+                {'  '}
+                {previewOf(last.body)}
+              </Text>
+            </Text>
+          ) : (
+            ''
+          )}
+          {state.error !== null ? <Text dimColor> ?</Text> : ''}
+        </Text>
+      </Box>
+      <Box flexGrow={1} />
+      {state.live > 0 ? (
+        <Box flexShrink={0} marginLeft={2}>
+          <Text>
+            <Text color="success">●</Text>
+            <Text dimColor> {state.live} live</Text>
           </Text>
-        ) : (
-          ''
-        )}
-        {state.live > 0 ? <Text dimColor>{`  · ${state.live} live`}</Text> : ''}
-        {state.error !== null ? <Text dimColor> ?</Text> : ''}
-      </Text>
+        </Box>
+      ) : (
+        ''
+      )}
     </Box>
   )
 }
 
-const TABS: { tab: Tab; label: string; hotkey: string }[] = [
-  { tab: 'messages', label: 'messages', hotkey: '1' },
-  { tab: 'peers', label: 'peers', hotkey: '2' },
-]
+type View = { state: PagerState; shown: string | null; at: string | null; open: number[] }
 
-function paneOf(
-  $: Engine,
-  e: RenderInput<'Pane'>,
-  state: PagerState,
-  shown: Tab,
-  picked: number | null,
-): RenderElement {
-  const { Box, Text, Button } = $.ui.resolve(e)
-  const tabs = (
-    <Box flexDirection="row" columnGap={3}>
-      {TABS.map(one => (
-        <Button
-          key={`tab-${one.tab}`}
-          label={one.label}
-          hotkey={one.hotkey}
-          plain
-          dimColor={one.tab !== shown}
-          onPress={() => update($, tab, () => one.tab)}
-        />
-      ))}
-    </Box>
-  )
-  const status = state.error !== null ? <Text dimColor>⚠ pager: {state.error}</Text> : ''
+function paneOf($: Engine, e: RenderInput<'Pane'>, view: View): RenderElement {
+  const { Box, Text } = $.ui.resolve(e)
+  const { state } = view
+  // The pane frame is the engine's; the content keeps a column clear on each side.
+  const width = Math.max(20, e.props.bodyColumns - 2)
+  const status = state.error !== null ? <Text dimColor wrap="truncate-end">⚠ pager: {state.error}</Text> : ''
   if (state.name === null) {
     return (
-      <Box flexDirection="column">
-        {tabs}
+      <Box flexDirection="column" paddingX={1}>
         <Text dimColor>This session has no pager name yet.</Text>
         {status}
       </Box>
     )
   }
-  const body =
-    shown === 'messages'
-      ? state.entries.length === 0
-        ? <Text dimColor>No messages to or from {state.name} yet.</Text>
-        : messagesBody($, e, state, picked)
-      : peersBody($, e, state)
   return (
-    <Box flexDirection="column">
-      {tabs}
-      {body}
+    <Box flexDirection="column" paddingX={1}>
+      {view.shown === null ? chatsBody($, e, view, state.name, width) : roomBody($, e, view, view.shown, width)}
       {status}
     </Box>
   )
 }
 
-const arrowOf = (entry: Entry) => (entry.direction === 'in' ? '←' : '→')
-const toneOf = (entry: Entry) => (entry.direction === 'in' ? 'suggestion' : 'success')
-
-/**
- * The messages tab: an index of recent messages over a reader that shows the
- * picked one (the newest when none is picked) in full.
- */
-function messagesBody($: Engine, e: RenderInput<'Pane'>, state: PagerState, picked: number | null): RenderElement {
+/** The chats: this session's name over one two-line row per room, the cursor's marked. */
+function chatsBody($: Engine, e: RenderInput<'Pane'>, view: View, self: string, width: number): RenderElement {
   const { Box, Text, Button } = $.ui.resolve(e)
-  const entries = state.entries
-  const found = picked === null ? -1 : entries.findIndex(entry => entry.id === picked)
-  const at = found < 0 ? entries.length - 1 : found
-  const entry = entries[at]!
-  // The index keeps the picked row in its window, the newest at the bottom.
-  const size = Math.min(entries.length, Math.max(3, Math.floor(e.props.scroll.bodyRows * 0.35)))
-  const first = Math.max(0, Math.min(entries.length - size, at - Math.floor(size / 2)))
-  const windowed = entries.slice(first, first + size)
-  const older = at > 0 ? entries[at - 1]!.id : null
-  // Stepping onto the newest returns to following new mail.
-  const newer = at < entries.length - 1 ? (at + 1 === entries.length - 1 ? null : entries[at + 1]!.id) : undefined
-  const age = agoOf(entry.at, state.now)
-  const header = `── #${entry.id} · ${arrowOf(entry)} ${entry.peer}${entry.isHuman ? ' (human)' : ''} · ${stampOf(entry.at)}${
-    age === null ? '' : age === 'now' ? ' · just now' : ` · ${age} ago`
-  } `
+  const { state } = view
+  const rooms = roomsOf(state.entries, state.peers, self)
+  const total = Object.values(state.unread).reduce((sum, count) => sum + count, 0)
+  const header = (
+    <Text wrap="truncate-end">
+      <Text backgroundColor="claude" color="inverseText" bold>{` ${self} `}</Text>
+      {state.live > 0 ? (
+        <Text>
+          {'  '}
+          <Text color="success">●</Text>
+          <Text dimColor> {state.live} live</Text>
+        </Text>
+      ) : (
+        ''
+      )}
+      {total > 0 ? <Text color="warning">{` · ${total} unread`}</Text> : ''}
+    </Text>
+  )
+  if (rooms.length === 0) {
+    return (
+      <Box flexDirection="column">
+        {header}
+        <Text> </Text>
+        <Text dimColor>No messages to or from {self} yet.</Text>
+      </Box>
+    )
+  }
+  const names = rooms.map(one => one.name)
+  const at = Math.max(0, view.at === null ? 0 : names.indexOf(view.at))
   const isTerminal = e.surface === 'terminal'
-  const rule = isTerminal ? '─'.repeat(Math.max(2, e.props.bodyColumns - header.length)) : '──'
-  const left = entry.length - entry.body.length
   return (
     <Box flexDirection="column">
-      {windowed.map(one => {
-        const isPicked = one === entry
-        return (
-          <Box flexDirection="row">
-            <Text color="claude">{isPicked ? '▌' : ' '}</Text>
-            <Button
-              key={`msg-${one.id}`}
-              label={stampOf(one.at)}
-              plain
-              dimColor={!isPicked}
-              onPress={() => pickMessage($, one === entries.at(-1) ? null : one.id)}
-            />
-            <Box flexShrink={1}>
-              <Text wrap="truncate-end">
-                {' '}
-                <Text color={toneOf(one)}>
-                  {arrowOf(one)} {one.peer.padEnd(5)}
-                </Text>
-                {one.isHuman ? <Text color="claude"> (human)</Text> : ''}
-                <Text bold={isPicked}> {flatOf(one.body)}</Text>
-              </Text>
-            </Box>
+      {header}
+      <Text> </Text>
+      {rooms.map((one, index) => {
+        const row = chatRow($, e, state, one, index === at, width)
+        // The peers without messages follow the conversations under their own label.
+        const isFirstQuiet = one.last === null && index > 0 && rooms[index - 1]!.last !== null
+        return isFirstQuiet ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor bold>
+              PEERS
+            </Text>
+            {row}
           </Box>
+        ) : (
+          row
         )
       })}
       <Text> </Text>
+      {isTerminal ? (
+        <Box flexDirection="row" columnGap={2}>
+          <Button key="down" label="down" hotkey="j" plain onPress={() => moveCursor($, names, at + 1)} />
+          <Button key="up" label="up" hotkey="k" plain onPress={() => moveCursor($, names, at - 1)} />
+          <Button key="open" label="open" hotkey="o" plain onPress={() => openRoom($, names[at]!)} />
+          <Text dimColor wrap="truncate-end">
+            · click a name
+          </Text>
+        </Box>
+      ) : (
+        <Text dimColor>click a name to open its chat</Text>
+      )}
+    </Box>
+  )
+}
+
+/** One chat: presence, name and tool, the age and unread pinned right; the preview under them. */
+function chatRow(
+  $: Engine,
+  e: RenderInput<'Pane'>,
+  state: PagerState,
+  one: Room,
+  isCursor: boolean,
+  width: number,
+): RenderElement {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const isLive = one.peer?.host === 'live'
+  const unread = state.unread[one.name] ?? 0
+  const age = one.last ? agoOf(one.last.at, state.now) : null
+  const bar = (
+    <Box width={2} flexShrink={0}>
+      <Text color="claude">{isCursor ? '▌' : ' '}</Text>
+    </Box>
+  )
+  const preview = one.last ? (
+    <Text dimColor wrap="truncate-end">
+      {one.last.direction === 'out' ? 'you: ' : ''}
+      {one.last.isHuman ? <Text color="suggestion">(human) </Text> : ''}
+      {previewOf(one.last.body)}
+    </Text>
+  ) : (
+    <Text dimColor wrap="truncate-end">
+      no messages yet{one.peer ? ` · ${startCut(one.peer.root, Math.max(8, width - 22))}` : ''}
+    </Text>
+  )
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row">
+        {bar}
+        <Box width={2} flexShrink={0}>
+          <Text color={isLive ? 'success' : undefined} dimColor={!isLive}>
+            {isLive ? '●' : '○'}
+          </Text>
+        </Box>
+        <Box flexShrink={1}>
+          <Button
+            key={`chat-${one.name}`}
+            label={one.name}
+            plain
+            dimColor={!isLive && one.last === null}
+            onPress={() => openRoom($, one.name)}
+          />
+        </Box>
+        {one.peer ? (
+          <Box flexShrink={1} marginLeft={1}>
+            <Text dimColor wrap="truncate-end">
+              {one.peer.tool}
+            </Text>
+          </Box>
+        ) : (
+          ''
+        )}
+        <Box flexGrow={1} />
+        {age !== null ? (
+          <Box flexShrink={0} marginLeft={1}>
+            <Text dimColor>{age}</Text>
+          </Box>
+        ) : (
+          ''
+        )}
+        {unread > 0 ? (
+          <Box flexShrink={0} marginLeft={1}>
+            <Text backgroundColor="warning" color="inverseText" bold>{` ${unread} `}</Text>
+          </Box>
+        ) : (
+          ''
+        )}
+      </Box>
+      <Box flexDirection="row">
+        {bar}
+        <Box flexShrink={1} paddingLeft={2}>
+          {preview}
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
+/** A room: who it is with, then the conversation as bubbles, the newest at the bottom. */
+function roomBody($: Engine, e: RenderInput<'Pane'>, view: View, name: string, width: number): RenderElement {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const { state } = view
+  const peer = state.peers.find(one => one.name === name) ?? null
+  const isLive = peer?.host === 'live'
+  const all = state.entries.filter(entry => entry.peer === name)
+  const recent = all.slice(-ROOM_MESSAGES)
+  const isTerminal = e.surface === 'terminal'
+  // The text a full-width bubble wraps at: its share, less the border and padding.
+  const inner = Math.max(8, Math.floor(width * BUBBLE_SHARE) - 4)
+  // Newest first while the text budget lasts; the newest is always drawn.
+  const shown: Entry[] = []
+  let left = ROOM_TEXT
+  for (let at = recent.length - 1; at >= 0; at--) {
+    const entry = recent[at]!
+    const cost = drawnOf(entry, view.open.includes(entry.id), inner).text.length
+    if (shown.length > 0 && cost > left) break
+    left -= cost
+    shown.unshift(entry)
+  }
+  const items: RenderElement[] = []
+  if (all.length > shown.length) {
+    items.push(
+      <Box justifyContent="center">
+        <Text dimColor>{`${all.length - shown.length} earlier messages not shown`}</Text>
+      </Box>,
+    )
+  }
+  let day = ''
+  for (const entry of shown) {
+    const today = dayOf(entry.at)
+    if (today !== day) {
+      items.push(
+        <Box justifyContent="center">
+          <Text dimColor>{`── ${today} ──`}</Text>
+        </Box>,
+      )
+      day = today
+    }
+    items.push(bubbleOf($, e, entry, view.open.includes(entry.id), inner))
+  }
+  // The bubbles past the fold, which `e` unfolds together (Tab reaches `‹ chats` first).
+  // Over every recent one, not just those the budget let in: folding them all must
+  // leave none unfolded out of sight.
+  const foldable = recent.filter(entry => drawnOf(entry, false, inner).hidden > 0).map(entry => entry.id)
+  const isAllOpen = foldable.every(id => view.open.includes(id))
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row">
+        <Box flexShrink={0}>
+          <Button key="back" label="‹ chats" hotkey="b" plain onPress={() => leaveRoom($)} />
+        </Box>
+        <Box flexShrink={1} marginLeft={2}>
+          <Text wrap="truncate-end">
+            <Text bold>{name}</Text>
+            {'  '}
+            <Text color={isLive ? 'success' : undefined} dimColor={!isLive}>
+              {isLive ? '● live' : '○ gone'}
+            </Text>
+            {peer ? (
+              <Text dimColor>{` · ${peer.tool} · ${startCut(peer.root, Math.max(8, width - 26 - name.length - peer.tool.length))}`}</Text>
+            ) : (
+              ''
+            )}
+          </Text>
+        </Box>
+      </Box>
       <Text color="subtle" wrap="truncate-end">
-        {header}
-        {rule}
+        {'─'.repeat(width)}
       </Text>
-      {entry.body.split('\n').map(line => (
+      {shown.length === 0 ? <Text dimColor>No messages with {name} yet.</Text> : items}
+      <Text> </Text>
+      <Box flexDirection="row" columnGap={2}>
+        {foldable.length > 0 ? (
+          <Button
+            key="fold-all"
+            label={isAllOpen ? 'fold all' : 'unfold all'}
+            hotkey="e"
+            plain
+            onPress={() => toggleFolds($, foldable)}
+          />
+        ) : (
+          ''
+        )}
+        <Text dimColor wrap="truncate-end">
+          {isTerminal ? '↑↓ scroll' : 'click ▾ to unfold a message'}
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
+/**
+ * One message as a bubble hugging its side: received on the left in `subtle`,
+ * sent on the right in the accent, a fifth of the width left empty opposite.
+ */
+/** What a bubble's body draws: folded past FOLD_LINES unless it is open. */
+function drawnOf(entry: Entry, isOpen: boolean, inner: number): { text: string; hidden: number; isFolded: boolean } {
+  const body = entry.body.replace(/\s+$/, '')
+  const fold = foldOf(body, inner)
+  const isFolded = fold.hidden > 0 && !isOpen
+  return { text: isFolded ? fold.text : body, hidden: fold.hidden, isFolded }
+}
+
+function bubbleOf($: Engine, e: RenderInput<'Pane'>, entry: Entry, isOpen: boolean, inner: number): RenderElement {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const isOut = entry.direction === 'out'
+  const { text, hidden, isFolded } = drawnOf(entry, isOpen, inner)
+  const left = entry.length - entry.body.length
+  const spacer = <Box width={`${Math.round((1 - BUBBLE_SHARE) * 100)}%`} flexShrink={0} />
+  const card = (
+    <Box
+      flexDirection="column"
+      flexShrink={1}
+      borderStyle="round"
+      borderColor={isOut ? 'claude' : 'subtle'}
+      paddingX={1}
+    >
+      {text.split('\n').map(line => (
         <Text wrap="wrap">{line === '' ? ' ' : line}</Text>
       ))}
-      {left > 0 ? (
+      {!isFolded && left > 0 ? (
         <Text dimColor wrap="wrap">
           … {left.toLocaleString('en-US')} more characters · full text: pager export (#{entry.id})
         </Text>
       ) : (
         ''
       )}
-      <Text> </Text>
-      <Box flexDirection="row" columnGap={2}>
-        <Button
-          key="older"
-          label="older"
-          hotkey="j"
-          plain
-          dimColor={older === null}
-          onPress={() => (older === null ? undefined : pickMessage($, older))}
-        />
-        <Button
-          key="newer"
-          label="newer"
-          hotkey="k"
-          plain
-          dimColor={newer === undefined}
-          onPress={() => (newer === undefined ? undefined : pickMessage($, newer))}
-        />
-        <Text dimColor wrap="truncate-end">
-          {isTerminal ? '· 1 2 tabs · ↑↓ scroll' : '· click a time to read it'}
-        </Text>
+      {/* Justified rather than parted by a growing Box: a grower widens the bubble to its
+          most, where justifying leaves it as wide as its longest line. */}
+      <Box flexDirection="row" justifyContent={hidden > 0 ? 'space-between' : 'flex-end'}>
+        {hidden > 0 ? (
+          <Button
+            key={`fold-${entry.id}`}
+            label={isFolded ? `▾ ${hidden} more lines` : '▴ fold'}
+            plain
+            dimColor
+            onPress={() => toggleFold($, entry.id)}
+          />
+        ) : (
+          ''
+        )}
+        <Box flexShrink={0} marginLeft={2}>
+          <Text>
+            {entry.isHuman ? <Text color="suggestion">(human) </Text> : ''}
+            <Text dimColor>{clockOf(entry.at)}</Text>
+          </Text>
+        </Box>
       </Box>
     </Box>
   )
-}
-
-const COLUMNS = { name: 6, tool: 7, host: 8, last: 10 }
-
-const startCut = (text: string, room: number) => (text.length > room ? `…${text.slice(text.length - room + 1)}` : text)
-
-/** The peers tab: aligned columns, live hosts first, this session marked. */
-function peersBody($: Engine, e: RenderInput<'Pane'>, state: PagerState): RenderElement {
-  const { Box, Text } = $.ui.resolve(e)
-  if (state.peers.length === 0) return <Text dimColor>loading…</Text>
-  const cell = (width: number, text: string, extra: Record<string, boolean> = {}) => (
-    <Box width={width + 1} flexShrink={0}>
-      <Text wrap="truncate-end" {...extra}>
-        {text}
-      </Text>
-    </Box>
-  )
-  // The root takes what the fixed columns leave; cut from its start, it keeps
-  // the folder that tells two sessions apart.
-  const fixed = 2 + COLUMNS.name + COLUMNS.tool + COLUMNS.host + COLUMNS.last + 4
-  const room = Math.max(8, e.props.bodyColumns - fixed)
   return (
-    <Box flexDirection="column">
-      <Box flexDirection="row">
-        <Text dimColor>{'  '}</Text>
-        {cell(COLUMNS.name, 'name', { dimColor: true })}
-        {cell(COLUMNS.tool, 'tool', { dimColor: true })}
-        {cell(COLUMNS.host, 'host', { dimColor: true })}
-        {cell(COLUMNS.last, 'last', { dimColor: true })}
-        <Text dimColor>root</Text>
-      </Box>
-      {state.peers.map(peer => {
-        const isLive = peer.host === 'live'
-        const isSelf = peer.name === state.name
-        const tone = { dimColor: !isLive, bold: isSelf }
-        return (
-          <Box flexDirection="row">
-            <Box width={2} flexShrink={0}>
-              <Text color={isLive ? 'success' : undefined} dimColor={!isLive}>
-                {isLive ? '●' : '○'}
-              </Text>
-            </Box>
-            {cell(COLUMNS.name, peer.name, tone)}
-            {cell(COLUMNS.tool, peer.tool, tone)}
-            {cell(COLUMNS.host, peer.host, tone)}
-            {cell(COLUMNS.last, peer.last, tone)}
-            <Text dimColor={!isLive} bold={isSelf}>
-              {startCut(`${peer.root}${isSelf ? ' (this)' : ''}`, room)}
-            </Text>
-          </Box>
-        )
-      })}
+    <Box key={`bubble-${entry.id}`} flexDirection="row" justifyContent={isOut ? 'flex-end' : 'flex-start'}>
+      {isOut ? spacer : ''}
+      {card}
+      {isOut ? '' : spacer}
     </Box>
   )
 }
