@@ -42,8 +42,12 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
     # showed nothing. A raw CR cannot appear inside jq JSON output, which
     # escapes control characters, so dropping all of them is safe; on macOS and
     # Linux there are none to drop.
+    # bootstrap.sh rewrites CLAUDE_CODE_PLUGIN_DIRS to `;` on Windows, where Claude
+    # Code splits it there; the repo keeps `:` for macOS and Linux, so it is put
+    # back before env is copied in.
     jq -s '
       .[0] as $repo | .[1] |
+      (.env.CLAUDE_CODE_PLUGIN_DIRS | strings) |= gsub(";"; ":") |
       with_entries(select(.key | IN($repo | keys[]))) |
       .permissions.allow = ([.permissions.allow[] | select(IN($repo.permissions.allow[]))]) |
       .permissions.deny  = ([.permissions.deny[]  | select(IN($repo.permissions.deny[]))]) |

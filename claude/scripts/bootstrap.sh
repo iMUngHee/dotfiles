@@ -276,6 +276,22 @@ else
     cp "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json"
     MERGED=1
 fi
+# Windows: Claude Code splits CLAUDE_CODE_PLUGIN_DIRS on the platform's path
+# delimiter, `;` there. The repo's `:` made the whole value one path that does
+# not exist ("Plugin path does not exist: ...\pm-band:~\.claude\mods\pager-view"),
+# so no mod loaded. Every entry is ~-relative, so no drive-letter colon is cut.
+# sync-back.sh turns it back to `:` before the value can reach the repo.
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+        if jq '(.env.CLAUDE_CODE_PLUGIN_DIRS | strings) |= gsub(":"; ";")' "$CLAUDE_DIR/settings.json" \
+            | tr -d '\r' > "$CLAUDE_DIR/settings.json.tmp"; then
+            mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
+        else
+            rm -f "$CLAUDE_DIR/settings.json.tmp"
+            echo "warn: CLAUDE_CODE_PLUGIN_DIRS not converted to ';'; mods will not load" >&2
+        fi
+        ;;
+esac
 # Only after a merge that actually landed. Writing it unconditionally was worse
 # than writing it early: the manifest would describe the repo's current state
 # while settings.json still held the old one, so the entry the repo had just

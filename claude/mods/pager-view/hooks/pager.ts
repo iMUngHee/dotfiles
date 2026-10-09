@@ -140,7 +140,10 @@ export function peersOf(run: Run): Peer[] | Failure {
  */
 export function rosterOf(peers: readonly Peer[], home: string): Peer[] {
   const tilde = (root: string) =>
-    home !== '' && (root === home || root.startsWith(`${home}/`)) ? `~${root.slice(home.length)}` : root
+    // `\` too: on Windows pager prints roots as C:\Users\...
+    home !== '' && (root === home || root.startsWith(`${home}/`) || root.startsWith(`${home}\\`))
+      ? `~${root.slice(home.length)}`
+      : root
   const live = peers.filter(peer => peer.host === 'live')
   const rest = peers.filter(peer => peer.host !== 'live')
   return [...live, ...rest].map(peer => ({ ...peer, root: tilde(peer.root) }))

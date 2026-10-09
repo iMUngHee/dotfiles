@@ -105,7 +105,8 @@ async function refreshOnce($: Engine): Promise<void> {
   const who = peersOf(await run($, ['pager', 'who']))
   if ('error' in who) return failed(who.error)
   const now = await $.clock.now()
-  const home = (await $.env.get('HOME')) ?? ''
+  // Windows: HOME is only set by a shell profile; the desktop app has USERPROFILE alone.
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
   if (await isStale()) return
 
   const baseline = await baselineAt($, sessionId, newestOf(inbound), isSeen)
