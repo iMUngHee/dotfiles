@@ -77,9 +77,9 @@ const BOUND: Resolver = {
  * The world beneath pm-band, scripted per test: the session id, what the
  * resolver and `pm list --json` answer, the plan file, and which panes are open.
  */
-function world(on: On) {
+function world(on: On, env: Record<string, string> = { HOME }) {
   const clock = mock.clock(on)
-  mock.env(on, { HOME })
+  mock.env(on, env)
   const w = {
     clock,
     sessionId: 'sid-a',
@@ -209,6 +209,14 @@ describe('register', () => {
     expect(resolver?.init?.env).toEqual({ PM_SESSION_TOOL: 'claude', PM_SESSION_ID: 'sid-a' })
   })
 
+  test('without HOME the CLIs are found under USERPROFILE, as in the Windows desktop app', async ($, on) => {
+    const w = world(on, { USERPROFILE: 'C:\\Users\\u' })
+    await started($, w)
+
+    const resolver = w.runs.find(r => r.argv.includes('resolve-session'))
+    expect(resolver?.argv[1]).toBe('C:\\Users\\u/.config/ai/lib/worktree.mjs')
+  })
+
   test('no plan draws a dim line, a terminal plan nothing, a failure a warning', async ($, on) => {
     const w = world(on)
     w.resolver = () => ({ status: 'unbound', main_root: MAIN })
@@ -293,7 +301,9 @@ describe('register', () => {
     const ui = await openPane($, w)
 
     expect(w.opened.map(o => o.id)).toEqual([PANE])
-    expect(w.runs.some(r => r.argv.includes('list') && r.argv.includes('--json'))).toBe(true)
+    const list = w.runs.find(r => r.argv.includes('list') && r.argv.includes('--json'))
+    // node runs tsx's entry: Windows cannot start node_modules/.bin/tsx without a shell.
+    expect(list?.argv.slice(0, 2)).toEqual(['node', `${HOME}/.config/ai/skills/pm-roadmap/node_modules/tsx/dist/cli.mjs`])
     const text = textOf(await ui.drawn())
     expect(text).toContain('demo · active · 2/4')
     expect(text).toContain('✓ 1. probe')

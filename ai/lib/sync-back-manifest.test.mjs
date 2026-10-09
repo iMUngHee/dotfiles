@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,6 +73,23 @@ test("genuine drift still fails in strict mode, including a private entry missin
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.deepEqual(staleEntries(result.stdout).sort(), ["memory/gone.md", "memory/private/never-created.md"]);
   assert.match(result.stdout, /FAIL: --strict/);
+});
+
+test("a Windows ';' plugin-dir list syncs back to the repo as ':'", async () => {
+  const { root, home } = await fixture();
+  const settings = (dirs) =>
+    `${JSON.stringify({ env: { CLAUDE_CODE_PLUGIN_DIRS: dirs }, permissions: { allow: [], deny: [] } }, null, 2)}\n`;
+  const repoDirs = "~/.claude/mods/pm-band:~/.claude/mods/pager-view";
+  await writeFile(join(root, "claude", "settings.json"), settings(repoDirs));
+  await mkdir(join(home, ".claude"), { recursive: true });
+  // What claude/scripts/bootstrap.sh deploys on Windows.
+  await writeFile(join(home, ".claude", "settings.json"), settings(repoDirs.replace(":", ";")));
+
+  const result = run(root, home);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /Synced: settings\.json/);
+  const synced = JSON.parse(await readFile(join(root, "claude", "settings.json"), "utf8"));
+  assert.equal(synced.env.CLAUDE_CODE_PLUGIN_DIRS, repoDirs);
 });
 
 test("the main checkout is unaffected: nothing is stale and no INFO line is printed", async () => {

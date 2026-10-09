@@ -44,11 +44,15 @@ type Paths = { resolver: string; tsx: string; pm: string }
 
 async function pathsOf($: Engine): Promise<Paths> {
   // $.process.run takes argv, no shell: `~` would reach the child unexpanded.
-  const home = (await $.env.get('HOME')) ?? ''
+  // Windows: HOME is only set by a shell profile, so a session started without one
+  // (the desktop app) has USERPROFILE alone.
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
   const pm = `${home}/.config/ai/skills/pm-roadmap`
   return {
     resolver: `${home}/.config/ai/lib/worktree.mjs`,
-    tsx: `${pm}/node_modules/.bin/tsx`,
+    // tsx's own entry run by node, not node_modules/.bin/tsx: on Windows that is a
+    // shell script and its .cmd twin, and neither starts without a shell.
+    tsx: `${pm}/node_modules/tsx/dist/cli.mjs`,
     pm: `${pm}/pm-roadmap.ts`,
   }
 }
@@ -112,7 +116,7 @@ async function refreshOnce($: Engine): Promise<void> {
   let listing: Listing | { error: string } | null = null
   if (isPaneOpen && mainRoot) {
     listing = listingOf(
-      await run($, [paths.tsx, paths.pm, 'list', '--json', '--all'], {
+      await run($, ['node', paths.tsx, paths.pm, 'list', '--json', '--all'], {
         cwd: mainRoot,
         env: { PM_ROOT: mainRoot },
         timeoutMs: 15_000,

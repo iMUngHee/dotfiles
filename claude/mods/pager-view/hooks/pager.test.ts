@@ -103,6 +103,15 @@ describe('pager', () => {
     expect(rosterOf(peers, '/Users/uu')[0]?.root).toBe('/Users/u/.config')
   })
 
+  test('a Windows root under the home folder shows as ~ too', () => {
+    const peers = peersOf(ok(`NAME  TOOL    ROOT                     HOST  LAST
+wale  claude  C:\\Users\\u\\.config      live  now
+vatu  claude  C:\\Users\\uu\\x           gone  2m ago
+`))
+    if ('error' in peers) throw new Error(peers.error)
+    expect(rosterOf(peers, 'C:\\Users\\u').map(peer => peer.root)).toEqual(['~\\.config', 'C:\\Users\\uu\\x'])
+  })
+
   test('a broken export line is an error, not a partial conversation', () => {
     expect(exportedOf(ok(`${EXPORT}\n{not json`))).toEqual({ error: 'unreadable export line' })
   })
