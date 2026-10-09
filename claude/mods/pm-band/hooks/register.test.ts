@@ -338,6 +338,8 @@ ${'━'.repeat(8)}${'─'.repeat(70)}
     expect(text).toContain('✓ 1. probe')
     expect(text).toContain('NOW▶ 3. pm-band plan.ts')
     expect(text).toContain('○ 4. graph')
+    // The key bar closes the view, after the last step.
+    expect(text.indexOf('1 2 3 tabs · ↑↓ scroll')).toBeGreaterThan(text.lastIndexOf('○ 4. graph'))
     const texts = await ui.findAll({ type: 'Text' })
     expect(texts.find(one => one.text === ' active ')?.props).toMatchObject({ backgroundColor: 'success', color: 'inverseText' })
     const card = (await ui.findAll({ type: 'Box' })).find(box => box.props.borderStyle === 'round')
@@ -377,8 +379,11 @@ ${'━'.repeat(8)}${'─'.repeat(70)}
 
     expect((await desktop.find({ key: 'tab-steps' }))?.props).toMatchObject({ variant: 'primary' })
     expect((await desktop.find({ key: 'tab-backlog' }))?.props).toMatchObject({ variant: 'secondary' })
-    // The labels are not followed by the terminal's rule (the gauge further down is its own).
-    expect(textOf(await desktop.drawn())).not.toContain('stepsbackloggraph\n━')
+    // The labels are not followed by the terminal's rule (the gauge further down is its own),
+    // and the native Buttons need no key bar.
+    const drawn = textOf(await desktop.drawn())
+    expect(drawn).not.toContain('stepsbackloggraph\n━')
+    expect(drawn).not.toContain('1 2 3 tabs')
   })
 
   test('the backlog tab groups by task, names dependencies, and marks the current plan', async ($, on) => {
@@ -394,6 +399,7 @@ ${'━'.repeat(8)}${'─'.repeat(70)}
     expect(text).toContain('◌  P2  needs-demo  ⤷ needs demo  needs-demo')
     expect(text).toContain('   P3  later  After the demo')
     expect(text).toContain('inbox · 1 awaiting triage')
+    expect(text.indexOf('1 2 3 tabs · ↑↓ scroll')).toBeGreaterThan(text.indexOf('inbox · 1 awaiting triage'))
     const texts = await ui.findAll({ type: 'Text' })
     expect(texts.find(one => one.text === ' P2 ')?.props).toMatchObject({ bold: true })
     expect(texts.find(one => one.text === ' P3 ')?.props).toMatchObject({ dimColor: true })
@@ -409,6 +415,8 @@ ${'━'.repeat(8)}${'─'.repeat(70)}
     const bare = await openPane($, w, false)
     await bare.press({ key: 'tab-graph' })
     expect(textOf(await bare.drawn({ in: 'graph' }))).toContain('loading…')
+    // The line under the drawing is the graph's bar: no second one costs it rows.
+    expect(textOf(await bare.drawn())).not.toContain('1 2 3 tabs')
     await bare.unmount()
 
     const ui = await $.ui.mount({

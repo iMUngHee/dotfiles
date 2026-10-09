@@ -339,6 +339,18 @@ function paneOf(
       {/* The drawing keeps the row: its own margins already part it from the tabs. */}
       {isGraph || isTight ? '' : <Text> </Text>}
       {body}
+      {/* Steps and backlog have no keys of their own, so their bar names the tabs' and the
+          scroll's; the graph's line under the drawing is its bar. Text, not Buttons: the
+          tab strip already holds the digit hotkeys, and a second holder would clash. */}
+      {isGraph || e.surface !== 'terminal' ? (
+        ''
+      ) : (
+        <Box marginTop={1}>
+          <Text dimColor wrap="truncate-end">
+            1 2 3 tabs · ↑↓ scroll
+          </Text>
+        </Box>
+      )}
     </Box>
   )
 }
