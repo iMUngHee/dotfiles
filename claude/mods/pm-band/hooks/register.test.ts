@@ -363,6 +363,58 @@ ${'━'.repeat(8)}${'─'.repeat(70)}
     expect(text).toContain(`${'─'.repeat(39)} NOW`)
   })
 
+  test('outside a git repository the backlog and graph say so instead of loading forever', async ($, on) => {
+    const w = world(on)
+    w.resolver = () => ({ fail: 'fatal: not a git repository (or any of the parent directories): .git' })
+    await started($, w)
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-backlog' })
+    let text = textOf(await ui.drawn())
+    expect(text).toContain('No pm backlog here.')
+    expect(text).not.toContain('loading…')
+
+    await ui.press({ key: 'tab-graph' })
+    text = textOf(await ui.drawn())
+    expect(text).toContain('No pm backlog here.')
+    expect(await ui.find({ type: 'Client' })).toBeUndefined()
+  })
+
+  test('a finished plan hides the band but its repository\'s backlog still lists', async ($, on) => {
+    const w = world(on)
+    w.resolver = () => ({ status: 'terminal', plan_status: 'done', main_root: MAIN })
+    await started($, w)
+    expect(await bandText($)).toBe('')
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-backlog' })
+
+    expect(textOf(await ui.drawn())).toContain('needs-demo')
+  })
+
+  test('an empty backlog says so in both tabs, with the way to fill it, and draws no empty canvas', async ($, on) => {
+    const w = world(on)
+    w.listing = () => ({ eligible: [], blocked: [], inbox: 0 })
+    await started($, w)
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-backlog' })
+    let text = textOf(await ui.drawn())
+    expect(text).toContain('The backlog is empty.')
+    expect(text).toContain('/pm-roadmap')
+
+    await ui.press({ key: 'tab-graph' })
+    text = textOf(await ui.drawn())
+    expect(text).toContain('The backlog is empty.')
+    expect(await ui.find({ type: 'Client' })).toBeUndefined()
+
+    w.resolver = () => ({ fail: 'resolver crashed' })
+    await $.tool.call({ tool: 'Bash', command: 'true' })
+    await w.clock.advance(SETTLE)
+    await ui.press({ key: 'tab-backlog' })
+    // A failed resolve keeps the last good listing and names the failure under it.
+    text = textOf(await ui.drawn())
+    expect(text).toContain('The backlog is empty.')
+    expect(text).not.toContain('loading…')
+  })
+
   test('off the terminal the tab strip is native Buttons, the shown one primary, with no rule', async ($, on) => {
     const w = world(on)
     await started($, w)
