@@ -127,11 +127,12 @@ Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
 
 | Mod | Draws | Reads |
 |-----|-------|-------|
-| `pm-band` | One band line above the prompt — the bound plan's id, progress dots and current step (`○ no plan` when unbound), with `steps` and `graph` controls that open `/pm` on that tab. `/pm` opens a pane with three tabs: steps, backlog (by task, `⤷ needs X` / `⤷ after X`), and a force-directed dependency graph on a pannable canvas (drag a node, click or arrows to pick, drag empty space or shift+arrows to pan, `+`/`-` zoom, `0` fit; the desktop places each run of the drawing at its cell; VS Code and mobile get the backlog list). | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
-| `pager-view` | `✉ <name> · N new` under the pm line — mail since this session last opened `/pager`. `/pager` opens the session's conversation: an index of messages (`←` in, `→` out; `j`/`k` or a click on the time picks one) over the picked message in full; and the peers table (live first, this session marked). | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
+| `pm-band` | One band line above the prompt — the bound plan's id, a meter with a segment per step (`▰` done, a hollow `▱` for the current one) and the current step (`○ no plan` when unbound), with `steps` and `graph` controls pinned right that open `/pm` on that tab. `/pm` opens a pane under a tab strip: steps (status chip, gauge, a `NOW` card with the current step in full, then every step), backlog (a section per task, priority chips, `⤷ needs X` / `⤷ after X` before the title), and a force-directed dependency graph on a pannable canvas (drag a node, click or arrows to pick, drag empty space or shift+arrows to pan, `+`/`-` zoom, `0` fit; the desktop places each run of the drawing at its cell; VS Code and mobile get the backlog list). | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
+| `pager-view` | `✉ <name>`, a `N new` chip and the last message under the pm line, the live count pinned right — mail since this session last opened `/pager`. `/pager` opens the chats: a two-line row per conversation (newest first, with its unread count), then the peers without messages; `j`/`k` and `o` (or a click on a name) open a room — the conversation as bubbles, received left and sent right, folded past 8 lines (`e` unfolds them all); `b` goes back. | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
 
 - **What they show and how** is `mods/design-contract.md` (experience and the
-  Ledger interface system: rules over boxes, aligned columns, one accent per meaning).
+  Console interface system: a tab strip, chips, one focal card per view, rooms of
+  bubbles, a key bar; one accent per meaning).
 - **Band order** is the `CLAUDE_CODE_PLUGIN_DIRS` order: the first entry is the
   outer hook and draws on top, so pm-band comes first.
 - **I/O never runs while drawing.** Events and timers refresh `$.state`;
@@ -140,6 +141,8 @@ Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
 - **The pager badge's baseline** is in `$.store` per session id: a reload keeps
   it, a new session starts its own, and mail from before the first look is not
   new. It is the badge's own notion of "seen"; pager's delivery state is untouched.
+  Each room's last-read mark sits beside it (`seen:<session>`): opening a room
+  clears that room's count, while the band badge still clears on `/pager`.
 - **The step grammar** is pm's: `ai/skills/pm-roadmap/ops.ts` `planStep`. Change
   both together.
 - **The graph** draws at most 120 nodes (the current plan's task when one is
