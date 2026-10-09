@@ -2,10 +2,13 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import {
   currentOf,
+  gaugeOf,
   graphOf,
   groupsOf,
   hubOf,
   listingOf,
+  meterOf,
+  METER_MAX,
   planFile,
   resolvedOf,
   stepsOf,
@@ -55,6 +58,23 @@ describe('plan', () => {
     expect(steps[1]?.text).toBe('pm-roadmap `list --json`. PASS: npm test')
     expect(currentOf(steps)?.n).toBe(3)
     expect(currentOf(steps.map(step => ({ ...step, isDone: true })))).toBe(undefined)
+  })
+
+  test('the meter is a segment per step with the current marked, and nothing past the cap', () => {
+    const steps = stepsOf(PLAN)
+    expect(meterOf(steps)).toEqual(['done', 'done', 'current', 'todo'])
+    expect(meterOf(steps.map(step => ({ ...step, isDone: true })))).toEqual(['done', 'done', 'done', 'done'])
+    expect(meterOf([])).toEqual([])
+    const many = Array.from({ length: METER_MAX + 1 }, (_, i) => ({ n: i + 1, text: `s${i}`, isDone: false }))
+    expect(meterOf(many)).toEqual([])
+    expect(meterOf(many.slice(0, METER_MAX))).toHaveLength(METER_MAX)
+  })
+
+  test('the gauge fills its share of the width, rounded, and never past it', () => {
+    expect(gaugeOf(2, 4, 40)).toEqual({ filled: 20, rest: 20, pct: 50 })
+    expect(gaugeOf(1, 3, 10)).toEqual({ filled: 3, rest: 7, pct: 33 })
+    expect(gaugeOf(5, 4, 10)).toEqual({ filled: 10, rest: 0, pct: 100 })
+    expect(gaugeOf(0, 0, 10)).toEqual({ filled: 0, rest: 10, pct: 0 })
   })
 
   test('the plan path joins main_root to the relative plan', () => {

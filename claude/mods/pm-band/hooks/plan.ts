@@ -30,6 +30,26 @@ export function currentOf(steps: readonly Step[]): Step | undefined {
   return steps.find(step => !step.isDone)
 }
 
+/** The band draws a meter segment per step up to this many; past it, the count alone. */
+export const METER_MAX = 20
+
+export type Segment = 'done' | 'current' | 'todo'
+
+/** The band's meter: one segment per step, the current one marked; empty past METER_MAX. */
+export function meterOf(steps: readonly Step[]): Segment[] {
+  if (steps.length > METER_MAX) return []
+  const current = currentOf(steps)
+  return steps.map(step => (step.isDone ? 'done' : step === current ? 'current' : 'todo'))
+}
+
+/** The steps tab's gauge over `width` cells: how many are filled, how many left, the percent. */
+export function gaugeOf(done: number, total: number, width: number): { filled: number; rest: number; pct: number } {
+  const ratio = total > 0 ? Math.min(1, Math.max(0, done / total)) : 0
+  const room = Math.max(0, Math.floor(width))
+  const filled = Math.round(room * ratio)
+  return { filled, rest: room - filled, pct: Math.round(ratio * 100) }
+}
+
 /** The resolver's `plan` is relative to `main_root`; an absolute one is kept. */
 export function planFile(mainRoot: string, plan: string): string {
   if (plan.startsWith('/')) return plan

@@ -11,9 +11,11 @@ import type { BacklogState, BandState, PlanView, Tab } from '../types'
 import type { GraphProps } from './graph'
 import {
   currentOf,
+  gaugeOf,
   graphOf,
   groupsOf,
   listingOf,
+  meterOf,
   planFile,
   resolvedOf,
   stepsOf,
@@ -22,7 +24,6 @@ import type { Listing, Run } from './plan'
 
 export const PANE = 'pm'
 const REFRESH_DEBOUNCE_MS = 300
-const DOTS_MAX = 20
 // A row is cut at the pane edge anyway; the cap keeps a big backlog inside the
 // engine's 100,000 characters of text per drawing.
 const TITLE_CHARS = 200
@@ -252,7 +253,7 @@ export function register(on: On): void {
 }
 
 function bandLine($: Engine, e: RenderInput<'AbovePrompt'>, state: BandState): RenderElement | null {
-  const { Text } = $.ui.resolve(e)
+  const { Box, Text, Button } = $.ui.resolve(e)
   const view = state.view
   if (state.error !== null && view === null) {
     return (
@@ -271,28 +272,35 @@ function bandLine($: Engine, e: RenderInput<'AbovePrompt'>, state: BandState): R
   }
   const done = view.steps.filter(step => step.isDone).length
   const current = currentOf(view.steps)
-  const dots =
-    view.steps.length > 0 && view.steps.length <= DOTS_MAX
-      ? `${'●'.repeat(done)}${'○'.repeat(view.steps.length - done)} `
-      : ''
-  const { Box, Button } = $.ui.resolve(e)
+  const meter = meterOf(view.steps)
   return (
     <Box flexDirection="row">
       <Box flexShrink={1}>
-    <Text wrap="truncate-end">
-      <Text color={view.status === 'active' ? 'warning' : 'inactive'}>
-        {view.status === 'active' ? '▶' : '⚙'} {view.id}
-      </Text>
-      {'  '}
-      <Text color="success">{dots}</Text>
-      <Text dimColor>
-        {done}/{view.steps.length}
-      </Text>
-      {current ? `  ${current.text}` : ''}
-      {state.error !== null ? <Text dimColor> ⚠</Text> : ''}
-    </Text>
+        <Text wrap="truncate-end">
+          <Text color={view.status === 'active' ? 'warning' : 'inactive'}>{view.status === 'active' ? '▶' : '⚙'}</Text>{' '}
+          <Text bold color="claude">
+            {view.id}
+          </Text>
+          {'  '}
+          {/* The current step is hollow like the steps ahead, so the filled ones count what is done. */}
+          {meter.map(segment => (
+            <Text
+              color={segment === 'done' ? 'success' : segment === 'current' ? 'warning' : 'subtle'}
+              bold={segment === 'current'}
+            >
+              {segment === 'done' ? '▰' : '▱'}
+            </Text>
+          ))}
+          {meter.length > 0 ? ' ' : ''}
+          <Text dimColor>
+            {done}/{view.steps.length}
+          </Text>
+          {current ? `  ${current.text}` : ''}
+          {state.error !== null ? <Text dimColor> ⚠</Text> : ''}
+        </Text>
       </Box>
-      {/* The way into /pm from the band: each opens the pane on its tab. */}
+      <Box flexGrow={1} />
+      {/* The way into /pm from the band, pinned to its right edge: each opens the pane on its tab. */}
       <Box flexDirection="row" flexShrink={0} columnGap={2} marginLeft={2}>
         <Button key="band-steps" label="steps" plain dimColor onPress={() => openPane($, 'steps')} />
         <Button key="band-graph" label="graph" plain dimColor onPress={() => openPane($, 'graph')} />
@@ -306,37 +314,84 @@ const TABS: { tab: Tab; label: string; hotkey: string }[] = [
   { tab: 'backlog', label: 'backlog', hotkey: '2' },
   { tab: 'graph', label: 'graph', hotkey: '3' },
 ]
+const TAB_GAP = 3
 
 function paneOf(
   $: Engine,
   e: RenderInput<'Pane'>,
   { state, list, shown, pick }: { state: BandState; list: BacklogState; shown: Tab; pick: string | null },
 ): RenderElement {
-  const { Box, Text, Button } = $.ui.resolve(e)
-  const tabs = (
-    <Box flexDirection="row" columnGap={3}>
-      {TABS.map(one => (
-        <Button
-          key={`tab-${one.tab}`}
-          label={one.label}
-          hotkey={one.hotkey}
-          plain
-          dimColor={one.tab !== shown}
-          onPress={() => update($, tab, () => one.tab)}
-        />
-      ))}
-    </Box>
-  )
+  const { Box, Text } = $.ui.resolve(e)
+  // The pane frame is the engine's; the content keeps a column clear on each side.
+  const width = Math.max(20, e.props.bodyColumns - 2)
+  const isGraph = shown === 'graph' && hasClient(e)
+  // Seated inline above the prompt the pane shows about eleven rows: spacing goes first.
+  const isTight = e.props.placement === 'inline'
   const body =
     shown === 'steps'
-      ? stepsBody($, e, state)
-      : shown === 'backlog' || !hasClient(e)
-        ? backlogBody($, e, list, state)
-        : graphBody($, e, list, state, pick)
+      ? stepsBody($, e, state, width, isTight)
+      : isGraph
+        ? graphBody($, e, list, state, pick)
+        : backlogBody($, e, list, state, width)
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      {tabStrip($, e, shown, width)}
+      {/* The drawing keeps the row: its own margins already part it from the tabs. */}
+      {isGraph || isTight ? '' : <Text> </Text>}
+      {body}
+    </Box>
+  )
+}
+
+/**
+ * The tabs. On the terminal, plain hotkey Buttons over a rule whose segment under
+ * the shown tab is the accent's heavy line; elsewhere Buttons are native, so the
+ * shown one is the primary instead.
+ */
+function tabStrip($: Engine, e: RenderInput<'Pane'>, shown: Tab, width: number): RenderElement {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const pressed = (one: Tab) => () => update($, tab, () => one)
+  if (e.surface !== 'terminal') {
+    return (
+      <Box flexDirection="row" columnGap={1}>
+        {TABS.map(one => (
+          <Button
+            key={`tab-${one.tab}`}
+            label={one.label}
+            hotkey={one.hotkey}
+            variant={one.tab === shown ? 'primary' : 'secondary'}
+            onPress={pressed(one.tab)}
+          />
+        ))}
+      </Box>
+    )
+  }
+  // A plain Button draws `1: steps`, so that is how wide its segment of the rule is.
+  const widths = TABS.map(one => `${one.hotkey}: ${one.label}`.length)
+  const used = widths.reduce((sum, one) => sum + one, 0) + TAB_GAP * (TABS.length - 1)
   return (
     <Box flexDirection="column">
-      {tabs}
-      {body}
+      <Box flexDirection="row" columnGap={TAB_GAP}>
+        {TABS.map(one => (
+          <Button
+            key={`tab-${one.tab}`}
+            label={one.label}
+            hotkey={one.hotkey}
+            plain
+            dimColor={one.tab !== shown}
+            onPress={pressed(one.tab)}
+          />
+        ))}
+      </Box>
+      <Text wrap="truncate-end">
+        {TABS.map((one, index) => (
+          <Text>
+            <Text color={one.tab === shown ? 'claude' : 'subtle'}>{(one.tab === shown ? '━' : '─').repeat(widths[index]!)}</Text>
+            {index < TABS.length - 1 ? <Text color="subtle">{'─'.repeat(TAB_GAP)}</Text> : ''}
+          </Text>
+        ))}
+        <Text color="subtle">{'─'.repeat(Math.max(0, width - used))}</Text>
+      </Text>
     </Box>
   )
 }
@@ -346,7 +401,13 @@ function hasClient(e: RenderInput<'Pane'>): boolean {
   return e.surface === 'terminal' || e.surface === 'desktop'
 }
 
-function stepsBody($: Engine, e: RenderInput<'Pane'>, state: BandState): RenderElement {
+function stepsBody(
+  $: Engine,
+  e: RenderInput<'Pane'>,
+  state: BandState,
+  width: number,
+  isTight: boolean,
+): RenderElement {
   const { Box, Text } = $.ui.resolve(e)
   const view = state.view
   if (view === null || view.kind === 'none') {
@@ -354,30 +415,62 @@ function stepsBody($: Engine, e: RenderInput<'Pane'>, state: BandState): RenderE
   }
   const done = view.steps.filter(step => step.isDone).length
   const current = currentOf(view.steps)
+  const gauge = gaugeOf(done, view.steps.length, width)
   return (
     <Box flexDirection="column">
-      <Text wrap="truncate-end">
-        <Text bold color="claude">
-          {view.id}
-        </Text>
-        <Text dimColor>
-          {' · '}
-          {view.status} · {done}/{view.steps.length}
-        </Text>
-      </Text>
+      <Box flexDirection="row">
+        <Box flexShrink={1}>
+          <Text wrap="truncate-end">
+            <Text bold color="claude">
+              {view.id}
+            </Text>
+            {'  '}
+            <Text backgroundColor={view.status === 'active' ? 'success' : 'inactive'} color="inverseText" bold>
+              {` ${view.status} `}
+            </Text>
+          </Text>
+        </Box>
+        <Box flexGrow={1} />
+        <Box flexShrink={0} marginLeft={2}>
+          <Text dimColor>
+            {done}/{view.steps.length} · {gauge.pct}%
+          </Text>
+        </Box>
+      </Box>
       <Text dimColor wrap="truncate-end">
         {view.title}
       </Text>
-      <Text> </Text>
+      <Text wrap="truncate-end">
+        <Text color="success">{'━'.repeat(gauge.filled)}</Text>
+        <Text color="subtle">{'─'.repeat(gauge.rest)}</Text>
+      </Text>
+      {isTight ? '' : <Text> </Text>}
+      {current ? (
+        // The one focal card, above the list: an inline pane shows about eleven rows,
+        // and the step being worked on has to be among them, whole.
+        <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+          <Text dimColor bold>
+            NOW
+          </Text>
+          <Text wrap="wrap" bold color="warning">
+            ▶ {current.n}. {current.text}
+          </Text>
+        </Box>
+      ) : (
+        ''
+      )}
       {view.steps.map(step => (
-        <Text
-          wrap="truncate-end"
-          dimColor={step.isDone}
-          bold={step === current}
-          color={step === current ? 'warning' : undefined}
-        >
-          {step.isDone ? '✓' : step === current ? '▶' : '○'} {step.n}. {step.text}
-        </Text>
+        <Box paddingLeft={2}>
+          <Text
+            wrap="truncate-end"
+            dimColor={step.isDone}
+            bold={step === current}
+            color={step === current ? 'warning' : undefined}
+          >
+            <Text color={step.isDone ? 'success' : undefined}>{step.isDone ? '✓' : step === current ? '▶' : '○'}</Text>{' '}
+            {step.n}. {step.text}
+          </Text>
+        </Box>
       ))}
     </Box>
   )
@@ -387,40 +480,72 @@ function currentPlanOf(state: BandState): string | undefined {
   return state.view?.kind === 'plan' ? state.view.plan : undefined
 }
 
-function backlogBody($: Engine, e: RenderInput<'Pane'>, list: BacklogState, state: BandState): RenderElement {
+function backlogBody(
+  $: Engine,
+  e: RenderInput<'Pane'>,
+  list: BacklogState,
+  state: BandState,
+  width: number,
+): RenderElement {
   const { Box, Text } = $.ui.resolve(e)
   if (list.listing === null) {
     return <Text dimColor>{list.error !== null ? `⚠ backlog: ${list.error}` : 'loading…'}</Text>
   }
   const groups = groupsOf(list.listing, currentPlanOf(state))
   if (groups.length === 0) return <Text dimColor>The backlog is empty.</Text>
+  // P0 and P1 stand out on the warning fill; P2 is the plain middle; the rest step back.
+  const chipOf = (priority: string) =>
+    /^P[01]$/.test(priority) ? (
+      <Text backgroundColor="warning" color="inverseText" bold>{` ${priority} `}</Text>
+    ) : priority === 'P2' ? (
+      <Text bold>{` ${priority} `}</Text>
+    ) : (
+      <Text dimColor>{` ${priority} `}</Text>
+    )
   return (
     <Box flexDirection="column">
-      {groups.map(group => (
-        <Box flexDirection="column">
-          <Text>
-            <Text bold color="claude">
-              {group.key}
+      {groups.map((group, index) => {
+        const count = String(group.rows.length)
+        return (
+          <Box flexDirection="column" marginTop={index === 0 ? 0 : 1}>
+            <Text wrap="truncate-end">
+              <Text bold color="claude">
+                {group.key}
+              </Text>
+              <Text color="subtle">{` ${'─'.repeat(Math.max(2, width - group.key.length - count.length - 2))} `}</Text>
+              <Text dimColor>{count}</Text>
             </Text>
-            <Text dimColor> · {group.rows.length}</Text>
-          </Text>
-          {group.rows.map(row => (
-            <Text wrap="truncate-end" bold={row.isCurrent} dimColor={row.isBlocked && !row.isCurrent}>
-              {' '}
-              {row.isCurrent ? '▶' : row.isBlocked ? '◌' : '·'} [{row.priority}] {row.id}
-              <Text dimColor> — {row.title.length > TITLE_CHARS ? `${row.title.slice(0, TITLE_CHARS - 1)}…` : row.title}</Text>
-              {row.blockedBy !== undefined ? (
-                <Text color="warning">
-                  {row.blockedByReason === 'order' ? `  ⤷ after ${row.blockedBy}` : `  ⤷ needs ${row.blockedBy}`}
+            {group.rows.map(row => (
+              <Text wrap="truncate-end" dimColor={row.isBlocked && !row.isCurrent}>
+                {/* The accent is the cursor's alone; a blocked mark stays as dim as its row. */}
+                {row.isCurrent ? <Text color="claude">▌</Text> : row.isBlocked ? '◌' : ' '}{' '}
+                {chipOf(row.priority)}{' '}
+                <Text bold={row.isCurrent}>{row.id}</Text>
+                {/* What blocks the item before its title: the row is cut at the edge, and the
+                    reason is the short, telling part. */}
+                {row.blockedBy !== undefined ? (
+                  <Text color="warning">
+                    {row.blockedByReason === 'order' ? `  ⤷ after ${row.blockedBy}` : `  ⤷ needs ${row.blockedBy}`}
+                  </Text>
+                ) : (
+                  ''
+                )}
+                <Text dimColor>
+                  {'  '}
+                  {row.title.length > TITLE_CHARS ? `${row.title.slice(0, TITLE_CHARS - 1)}…` : row.title}
                 </Text>
-              ) : (
-                ''
-              )}
-            </Text>
-          ))}
+              </Text>
+            ))}
+          </Box>
+        )
+      })}
+      {list.listing.inbox > 0 ? (
+        <Box marginTop={1}>
+          <Text dimColor>inbox · {list.listing.inbox} awaiting triage</Text>
         </Box>
-      ))}
-      {list.listing.inbox > 0 ? <Text dimColor>inbox: {list.listing.inbox} awaiting triage</Text> : ''}
+      ) : (
+        ''
+      )}
       {list.error !== null ? <Text dimColor>⚠ {list.error}</Text> : ''}
     </Box>
   )
@@ -449,6 +574,7 @@ function graphBody(
   const graph: GraphProps = graphOf(list.listing, currentPlanOf(state))
   const detail = detailOf(list, pick)
   const { Box, Client } = $.ui.resolve(e as RenderInput<'Pane'> & { surface: 'terminal' })
+  // What the tab strip and the line under the drawing leave of the body.
   const height = Math.max(5, e.props.scroll.bodyRows - 3)
   // The desktop sets text in a proportional face: the Client places each run at
   // its cell instead of drawing rows of spaced text (see graph.tsx).
@@ -456,9 +582,16 @@ function graphBody(
   return (
     <Box flexDirection="column">
       <Client key="graph" module="./graph.tsx" props={props} width="100%" height={height} />
-      <Text dimColor wrap="truncate-end">
-        {detail ?? 'click a node · drag it to move · drag empty space or shift+arrows to pan · + − zoom · 0 fit'}
-      </Text>
+      {detail !== null ? (
+        <Text wrap="truncate-end">
+          <Text color="claude">◆ </Text>
+          <Text bold>{detail}</Text>
+        </Text>
+      ) : (
+        <Text dimColor wrap="truncate-end">
+          click a node · drag it to move · drag empty space or shift+arrows to pan · + − zoom · 0 fit
+        </Text>
+      )}
     </Box>
   )
 }

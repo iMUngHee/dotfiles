@@ -202,11 +202,33 @@ describe('register', () => {
     const w = world(on)
     await started($, w)
 
-    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts\nstepsgraph')
+    // Two of four done: two filled segments, the current one hollow in the warning color.
+    expect(await bandText($)).toBe('▶ demo  ▰▰▱▱ 2/4  pm-band plan.ts\n\nstepsgraph')
     expect(w.reads).toEqual([`${MAIN}/${PLAN_REL}`])
     const resolver = w.runs.find(r => r.argv.includes('resolve-session'))
     expect(resolver?.argv[1]).toBe(`${HOME}/.config/ai/lib/worktree.mjs`)
     expect(resolver?.init?.env).toEqual({ PM_SESSION_TOOL: 'claude', PM_SESSION_ID: 'sid-a' })
+  })
+
+  test('the band meter fills the done steps and marks the current one hollow in the warning color', async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    const band = await $.ui.mount({
+      plugin: 'pm-band',
+      surface: 'terminal',
+      component: 'AbovePrompt',
+      props: BAND,
+      requestId: 'band',
+      viewport: VIEWPORT,
+    })
+    const segments = (await band.findAll({ type: 'Text' })).filter(one => one.text === '▰' || one.text === '▱')
+
+    expect(segments.map(one => [one.text, one.props.color, one.props.bold])).toEqual([
+      ['▰', 'success', false],
+      ['▰', 'success', false],
+      ['▱', 'warning', true],
+      ['▱', 'subtle', false],
+    ])
   })
 
   test('without HOME the CLIs are found under USERPROFILE, as in the Windows desktop app', async ($, on) => {
@@ -241,7 +263,7 @@ describe('register', () => {
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     await w.clock.advance(SETTLE)
 
-    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts ⚠\nstepsgraph')
+    expect(await bandText($)).toBe('▶ demo  ▰▰▱▱ 2/4  pm-band plan.ts ⚠\n\nstepsgraph')
   })
 
   test('the band yields to a survey and keeps what the mods beneath draw', async ($, on) => {
@@ -249,7 +271,7 @@ describe('register', () => {
     w.beneath = '✉ wogi · 2 new'
     await started($, w)
 
-    expect(await bandText($)).toBe('▶ demo  ●●○○ 2/4  pm-band plan.ts\nstepsgraph\n\n✉ wogi · 2 new')
+    expect(await bandText($)).toBe('▶ demo  ▰▰▱▱ 2/4  pm-band plan.ts\n\nstepsgraph\n\n✉ wogi · 2 new')
     expect(await bandText($, { ...BAND, hasSurvey: true })).toBe('✉ wogi · 2 new')
   })
 
@@ -305,10 +327,58 @@ describe('register', () => {
     // node runs tsx's entry: Windows cannot start node_modules/.bin/tsx without a shell.
     expect(list?.argv.slice(0, 2)).toEqual(['node', `${HOME}/.config/ai/skills/pm-roadmap/node_modules/tsx/dist/cli.mjs`])
     const text = textOf(await ui.drawn())
-    expect(text).toContain('demo · active · 2/4')
+    // The tab strip: the shown tab's segment of the rule is the heavy line (`1: steps` is 8 wide).
+    expect(text).toContain(`stepsbackloggraph
+${'━'.repeat(8)}${'─'.repeat(70)}
+`)
+    expect(text).toContain('demo   active ')
+    expect(text).toContain('2/4 · 50%')
+    // The gauge over the 78 columns the pane leaves: half filled.
+    expect(text).toContain(`${'━'.repeat(39)}${'─'.repeat(39)}`)
     expect(text).toContain('✓ 1. probe')
-    expect(text).toContain('▶ 3. pm-band plan.ts')
+    expect(text).toContain('NOW▶ 3. pm-band plan.ts')
     expect(text).toContain('○ 4. graph')
+    const texts = await ui.findAll({ type: 'Text' })
+    expect(texts.find(one => one.text === ' active ')?.props).toMatchObject({ backgroundColor: 'success', color: 'inverseText' })
+    const card = (await ui.findAll({ type: 'Box' })).find(box => box.props.borderStyle === 'round')
+    expect(card?.props).toMatchObject({ borderColor: 'warning' })
+    // The NOW card comes before the list, so a short pane still shows it.
+    expect(text.indexOf('NOW▶ 3.')).toBeLessThan(text.indexOf('✓ 1. probe'))
+
+    // Inline the blank rows go: the header follows the tab strip's rule, the card the gauge.
+    await ui.unmount()
+    const inline = await $.ui.mount({
+      plugin: 'pm-band',
+      surface: 'terminal',
+      component: 'Pane',
+      props: { ...PANE_PROPS, placement: 'inline' },
+      requestId: PANE,
+      viewport: VIEWPORT,
+    })
+    const tight = textOf(await inline.drawn())
+    expect(tight).toContain(`${'─'.repeat(70)}\ndemo   active `)
+    expect(tight).toContain(`${'─'.repeat(39)}NOW`)
+    expect(text).toContain(`${'─'.repeat(39)} NOW`)
+  })
+
+  test('off the terminal the tab strip is native Buttons, the shown one primary, with no rule', async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    const terminal = await openPane($, w)
+    await terminal.unmount()
+    const desktop = await $.ui.mount({
+      plugin: 'pm-band',
+      surface: 'desktop',
+      component: 'Pane',
+      props: PANE_PROPS,
+      requestId: PANE,
+      viewport: VIEWPORT,
+    })
+
+    expect((await desktop.find({ key: 'tab-steps' }))?.props).toMatchObject({ variant: 'primary' })
+    expect((await desktop.find({ key: 'tab-backlog' }))?.props).toMatchObject({ variant: 'secondary' })
+    // The labels are not followed by the terminal's rule (the gauge further down is its own).
+    expect(textOf(await desktop.drawn())).not.toContain('stepsbackloggraph\n━')
   })
 
   test('the backlog tab groups by task, names dependencies, and marks the current plan', async ($, on) => {
@@ -318,10 +388,18 @@ describe('register', () => {
     await ui.press({ key: 'tab-backlog' })
     const text = textOf(await ui.drawn())
 
-    expect(text).toContain('CFG')
-    expect(text).toContain('▶ [P2] demo — The demo plan')
-    expect(text).toContain('◌ [P2] needs-demo — needs-demo  ⤷ needs demo')
-    expect(text).toContain('inbox: 1 awaiting triage')
+    expect(text).toContain(`${'─'.repeat(11)}${'━'.repeat(10)}─`)
+    expect(text).toMatch(/CFG ─+ 3/)
+    expect(text).toContain('▌  P2  demo  The demo plan')
+    expect(text).toContain('◌  P2  needs-demo  ⤷ needs demo  needs-demo')
+    expect(text).toContain('   P3  later  After the demo')
+    expect(text).toContain('inbox · 1 awaiting triage')
+    const texts = await ui.findAll({ type: 'Text' })
+    expect(texts.find(one => one.text === ' P2 ')?.props).toMatchObject({ bold: true })
+    expect(texts.find(one => one.text === ' P3 ')?.props).toMatchObject({ dimColor: true })
+    // The accent marks the current item alone: the bar is `claude`, a blocked mark is not.
+    expect(texts.find(one => one.text === '▌')?.props).toMatchObject({ color: 'claude' })
+    expect(texts.some(one => one.text === '◌' && one.props.color === 'claude')).toBe(false)
   })
 
   test('the graph tab mounts a Client that lays out, follows a drag, and reports a pick', async ($, on) => {
@@ -600,7 +678,7 @@ describe('register', () => {
       viewport: VIEWPORT,
     })
     await mobile.press({ key: 'tab-graph' })
-    expect(textOf(await mobile.drawn())).toContain('▶ [P2] demo')
+    expect(textOf(await mobile.drawn())).toContain('▌  P2  demo')
   })
 
   test("the band's steps and graph controls open /pm on that tab", async ($, on) => {
