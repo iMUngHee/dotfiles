@@ -114,8 +114,12 @@ Both gates run the same stages, and both are scoped to `$HOME/.config` so other 
 | `ai/skills/pm-roadmap/**` | `npm test` (tsx) | 50s |
 | `ai/skills/pm-context/**` | `npm test` (tsx) | 1s |
 | `ai/skills/config-audit/**` | `go test ./...` | 2s |
+| `claude/mods/**` | `claude plugin test` per mod | 1s |
+| `nvim/**` | `inline_review_spec.lua` (headless) | 20s |
 
 Instruction files are asserted by exact string match in `ai/lib/*.test.mjs`, and a doc-only change reaches no type checker — so without the first stage a rule can be edited out while its suite goes red unnoticed. That happened once (`6f9b845`).
+
+The last two stages were added after the same gap opened twice more: mods and the Lua are `.ts`/`.tsx`/`.lua`, which the instruction trigger's `\.(md|sh)$` does not match and no type checker below reaches, so five consecutive commits to `graph.tsx` and four to `inline_review/` ran no suite at all — `nvim/README.md` documented its command and nothing called it.
 
 ## Mods
 
@@ -157,8 +161,9 @@ claude --plugin-dir claude/mods/pm-band --plugin-dir claude/mods/pager-view
 ```
 
 `.claude-plugin/types/` is written by the engine on every load and is git-ignored.
-The Stop gate does not type-check mods (no tsconfig at the repo root), so run
-`tsc -p` yourself.
+The Stop gate runs `claude plugin test` for every mod on a `claude/mods/**`
+change, but still does not type-check them (no tsconfig at the repo root), so
+run `tsc -p <mod folder>` yourself.
 
 ## Measuring a rule
 
