@@ -54,6 +54,15 @@ describe('pager', () => {
     expect(nameOf({ exitCode: 1, stdout: '', stderr: 'no session' })).toEqual({ error: 'no session' })
   })
 
+  test("whoami's placeholder for an unnamed session is not a name", () => {
+    // Verbatim from `pager whoami --session <unnamed id>`: the placeholder is a
+    // sentence, so a reader that keeps the rest of the line draws all of it.
+    const unnamed = 'host:    claude pid=1 start=2\nsession: 0-0-0-0-0 (via flag)\nname:    none — it is assigned once a hook runs with the host detected\n'
+    expect(nameOf(ok(unnamed))).toBe(null)
+    // A real name followed by anything else still reads as the name alone.
+    expect(nameOf(ok('name:    wogi  claude  live\n'))).toBe('wogi')
+  })
+
   test('inbound ids come from the ls ID column only, across every name', () => {
     expect([...(inboundOf(ok(LS)) as Set<number>)]).toEqual([149, 152, 160])
     expect(inboundOf(ok('nothing here\n'))).toEqual(new Set())
