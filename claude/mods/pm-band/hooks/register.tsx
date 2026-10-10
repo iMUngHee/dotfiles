@@ -86,14 +86,14 @@ async function refreshOnce($: Engine): Promise<void> {
   )
   let view: PlanView | null = null
   let error: string | null = null
-  let mainRoot = ''
+  // Every variant reports it, so the backlog is reachable from all of them —
+  // a terminal plan and a resolver error included. See Resolved in plan.ts.
+  const mainRoot = resolved.mainRoot
   if (resolved.kind === 'error') error = resolved.reason
   if (resolved.kind === 'none') {
     view = { kind: 'none' }
-    mainRoot = resolved.mainRoot
   }
   if (resolved.kind === 'plan') {
-    mainRoot = resolved.mainRoot
     try {
       const content = await $.fs.read(planFile(resolved.mainRoot, resolved.plan))
       view = {

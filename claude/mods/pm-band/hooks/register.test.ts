@@ -314,6 +314,31 @@ describe('register', () => {
     expect(text).toContain('inbox: 1 awaiting triage')
   })
 
+  test('a terminal plan and a resolver error still read the backlog in the pane', async ($, on) => {
+    // Closing a plan and opening /pm to pick the next item is the normal move,
+    // and it resolves as terminal. The band goes quiet, but both pane tabs have
+    // to show the backlog rather than wait on a plan that will never come.
+    const w = world(on)
+    w.resolver = () => ({ status: 'terminal', plan_status: 'done', main_root: MAIN })
+    await started($, w)
+    expect(await bandText($)).toBe('')
+
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-backlog' })
+    const text = textOf(await ui.drawn())
+    expect(text).not.toContain('loading…')
+    expect(text).toContain('◌ [P2] needs-demo — needs-demo')
+    expect(w.runs.some(r => r.argv.includes('list'))).toBe(true)
+
+    // An error status reports a root too, so the backlog survives a bad binding
+    // instead of the pane disagreeing with the warning the band shows.
+    w.resolver = () => ({ status: 'missing_worktree', main_root: MAIN })
+    await $.tool.call({ tool: 'Bash', command: 'true' })
+    await w.clock.advance(SETTLE)
+    expect(await bandText($)).toBe('⚠ plan: missing_worktree')
+    expect(textOf(await ui.drawn())).not.toContain('loading…')
+  })
+
   test('the graph tab mounts a Client that lays out, follows a drag, and reports a pick', async ($, on) => {
     const w = world(on)
     await started($, w)
