@@ -42,6 +42,12 @@ return {
       })
 
       vim.treesitter.language.register("bash", "sh")
+      -- The parser is named c_sharp, the filetype is cs, and nothing in Neovim
+      -- 0.12 maps between them: without this get_lang("cs") answers "cs", the
+      -- FileType handler below asks for a parser/cs.so that does not exist, and
+      -- the pcall drops the buffer to foldmethod=indent with no highlighting.
+      -- fsharp needs no equivalent because its parser and filetype share a name.
+      vim.treesitter.language.register("c_sharp", "cs")
 
       vim.o.foldlevel = 99
       vim.o.foldlevelstart = 99
