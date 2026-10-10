@@ -1,5 +1,11 @@
-# Place a copy of this config to ~/.aerospace.toml
-# After that, you can edit ~/.aerospace.toml to your liking
+# This file IS the live config. Edit it here.
+#
+# The header shipped with AeroSpace says to copy this to ~/.aerospace.toml,
+# which would be actively wrong here: AeroSpace reads ~/.aerospace.toml first
+# and $XDG_CONFIG_HOME/aerospace/aerospace.toml second, so that copy would take
+# priority, auto-reload-config below would reload the copy, and every edit
+# committed to this tracked file would appear to do nothing. Nothing in
+# homebrew/bootstrap.sh copies or links this file for the same reason.
 
 # Config version for compatibility and deprecations
 # See: https://nikitabobko.github.io/AeroSpace/guide#config-version
@@ -159,7 +165,17 @@ gaps.outer.right =      10
     alt-shift-8 = 'move-node-to-workspace 8'
     alt-shift-9 = 'move-node-to-workspace 9'
 
-    alt-f = 'fullscreen'                          # zsh forward-word is alt+right
+    # Known conflict, left as-is until a replacement key is chosen. The comment
+    # here used to claim zsh takes forward-word on alt+right; measured, it does
+    # not — alt+right is undefined-key, and forward-word is on alt+f (^[f),
+    # which is exactly this binding. It is also the same collision the
+    # letter-workspace note above describes, naming alt-b/f outright.
+    #
+    # There is no easy swap: alt+shift+f (^[F) is forward-word too, and every
+    # alt+letter is reachable from a terminal because Option is Meta there,
+    # which is why only digits are bound above. A fix means a non-letter key.
+    # oh-my-zsh also binds forward-word to ctrl+right, so the loss is partial.
+    alt-f = 'fullscreen'
     alt-shift-space = 'layout floating tiling'
 
     # See: https://nikitabobko.github.io/AeroSpace/commands#workspace-back-and-forth
