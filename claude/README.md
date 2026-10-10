@@ -132,7 +132,7 @@ Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
 | Mod | Draws | Reads |
 |-----|-------|-------|
 | `pm-band` | One band line above the prompt — the bound plan's id, progress dots and current step (`○ no plan` when unbound), with `steps` and `graph` controls that open `/pm` on that tab. `/pm` opens a pane with three tabs: steps, backlog (by task, `⤷ needs X` / `⤷ after X`), and a force-directed dependency graph on a pannable canvas (drag a node, click or arrows to pick, drag empty space or shift+arrows to pan, `+`/`-` zoom, `0` fit; the desktop places each run of the drawing at its cell; VS Code and mobile get the backlog list). | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
-| `pager-view` | `✉ <name> · N new` under the pm line — mail since this session last opened `/pager`. `/pager` opens the session's conversation: an index of messages (`←` in, `→` out; `j`/`k` or a click on the time picks one) over the picked message in full; and the peers table (live first, this session marked). | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
+| `pager-view` | One line under the pm line: `✉ <name>` as a button into `/pager`, then `● N new` for mail since this session last opened it, then the newest message — `←` in or `→` out, the peer, its age, and the body flattened to 60 characters — then `· N live` for the peers pager judges live. Each part appears only when it has something to say. `/pager` opens the session's conversation: an index of messages (`←` in, `→` out; `j`/`k` or a click on the time picks one) over the picked message in full; and the peers table (live first, this session marked). | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
 
 - **What they show and how** is `mods/design-contract.md` (experience and the
   Ledger interface system: rules over boxes, aligned columns, one accent per meaning).
@@ -144,6 +144,11 @@ Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
 - **The pager badge's baseline** is in `$.store` per session id: a reload keeps
   it, a new session starts its own, and mail from before the first look is not
   new. It is the badge's own notion of "seen"; pager's delivery state is untouched.
+  Old ones are never pruned — one entry per session, forever, against `$.store`'s
+  4 MiB cap, which is tens of thousands of sessions away.
+- **`pager export` has no filter**, so the pane reads the whole database on every
+  refresh and tops out near 2,200 messages, where `$.process.run` truncates and
+  the band sticks on its last good line with a dim `?`. The pane names the reason.
 - **The step grammar** is pm's: `ai/skills/pm-roadmap/ops.ts` `planStep`. Change
   both together.
 - **The graph** draws at most 120 nodes (the current plan's task when one is

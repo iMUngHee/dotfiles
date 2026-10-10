@@ -60,6 +60,20 @@ async function run($: Engine, argv: string[]): Promise<Run> {
 // moves when the session id changes under the process (/clear, /resume, /branch);
 // a refresh begun under an older one is dropped. The baseline lives in $.store,
 // keyed by session id, so a reload keeps it and a new session starts its own.
+//
+// These are module-level, which assumes one hooks-module instance per session.
+// That is what the engine documents -- a folder is loaded "for that session
+// only" and $.session.id() takes no argument -- but it is nowhere stated
+// outright, so it is written down here as the assumption it is. Were one
+// process to share an instance across sessions, `pending?.cancel()` in soon()
+// would drop another session's scheduled refresh, `generation` would void its
+// running one, and `isRefreshing` would serialise their I/O; the fix then is
+// to key all four by session id.
+//
+// Baselines are never pruned: one `baseline:<uuid>` per session, forever, in a
+// $.store capped at 4 MiB of JSON. At ~55 bytes an entry that is tens of
+// thousands of sessions away, and $.store.keys()/delete are there if it ever
+// matters -- but it is accumulation, not a leak that stops.
 let generation = 0
 let isRefreshing = false
 let isDirty = false
@@ -98,6 +112,15 @@ async function refreshOnce($: Engine): Promise<void> {
 
   const inbound = inboundOf(await run($, ['pager', 'ls', '--session', sessionId]))
   if ('error' in inbound) return failed(inbound.error)
+  // `pager export` dumps the whole database and takes no arguments -- it says
+  // so itself, pointing at jq -- so this grows with the message count rather
+  // than with this session's share of it. Measured at ~1.9 KB a message
+  // against $.process.run's 4 MiB stdout cap, which is a ceiling somewhere
+  // near 2,200 messages. Past it `failureOf` answers 'output truncated' every
+  // refresh and the band holds its last good line with a dim `?`, for good:
+  // the database only grows back. The pane spells the reason out (`⚠ pager:
+  // output truncated`), which is the only warning there is. A real fix needs
+  // a filter on `pager export`, not a change here.
   const rows = exportedOf(await run($, ['pager', 'export']))
   if ('error' in rows) return failed(rows.error)
   const isSeen = await isPaneOpen($)
