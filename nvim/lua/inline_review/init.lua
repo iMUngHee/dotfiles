@@ -597,18 +597,22 @@ function M.resolve_answered()
   if vim.fn.confirm(question, "&Yes\n&No", 2) ~= 1 then
     return
   end
-  local done
-  commit(ctx.cap, function(_, threads)
-    done = vim.tbl_filter(function(id)
+  -- Report from commit's return, not from what build picked: build runs before
+  -- the write, so a locked log, a branch switch or a short write still leaves a
+  -- populated list behind. Reading that list announced "Resolved N threads"
+  -- next to commit's own warning, and nothing had been resolved.
+  -- M.resolve_entries gates the same way.
+  local ev = commit(ctx.cap, function(_, threads)
+    local answered = vim.tbl_filter(function(id)
       return threads[id] and threads[id].state == "answered"
     end, ids)
-    if #done == 0 then
+    if #answered == 0 then
       return nil, "none"
     end
-    return { ev = "resolve", ids = done }
+    return { ev = "resolve", ids = answered }
   end)
-  if done and #done > 0 then
-    notify(string.format("Resolved %d threads (%s)", #done, table.concat(done, ", ")))
+  if ev then
+    notify(string.format("Resolved %d threads (%s)", #ev.ids, table.concat(ev.ids, ", ")))
   end
 end
 
@@ -961,19 +965,43 @@ function M.list(all)
     :find()
 end
 
+--- Remove a lock left behind by a crashed writer.
+---
+--- Deliberately does not go through here(): the command is advertised by
+--- cli.lua when a CLI write finds the log locked, and that message is read in a
+--- terminal buffer, where here() refuses with "No file in this buffer" and the
+--- old fallback then aimed at `.detached` — so the one situation the command
+--- documents was the one it could not act on. It also only ever reached the
+--- current branch's log, while a crashed writer's lock can be on any of them.
+--- So the repo root is resolved quietly and every held lock is offered.
 function M.unlock()
-  local ctx = here()
-  local r = ctx and ctx.repo
-  local log = r and r.log or store.log_path(vim.fn.getcwd(), nil)
-  local lock = log .. ".lock"
-  if not uv.fs_stat(lock) then
-    notify("No review log lock for " .. log)
+  local root = repo_root(0)
+  local locks = store.locks(root)
+  if #locks == 0 then
+    notify("No review log lock under " .. store.dir(root))
     return
   end
-  if vim.fn.confirm("Remove " .. lock .. "? Only do this if no writer is running.", "&Yes\n&No", 2) == 1 then
-    store.unlock(log)
-    notify("Removed review log lock")
+  local function remove(log)
+    local question = "Remove " .. log .. ".lock? Only do this if no writer is running."
+    if vim.fn.confirm(question, "&Yes\n&No", 2) == 1 then
+      store.unlock(log)
+      notify("Removed review log lock for " .. vim.fn.fnamemodify(log, ":t"))
+    end
   end
+  if #locks == 1 then
+    remove(locks[1])
+    return
+  end
+  vim.ui.select(locks, {
+    prompt = "Review log lock to remove",
+    format_item = function(log)
+      return vim.fn.fnamemodify(log, ":t")
+    end,
+  }, function(log)
+    if log then
+      remove(log)
+    end
+  end)
 end
 
 -- ── setup ───────────────────────────────────────────────────────────────────
