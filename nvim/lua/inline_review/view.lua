@@ -122,11 +122,17 @@ end
 -- ── anchors ─────────────────────────────────────────────────────────────────
 
 -- Start row of `pat` in `lines`, nearest to `near`; nil when absent.
+--- Nearest exact match for `pat`, and how many matches there were.
+---
+--- The count is the caller's warning that "nearest" was a choice. One match is
+--- a relocation and can be trusted; several means the snippet is not unique in
+--- the file, and picking the closest is a guess that reads exactly like a
+--- certainty once it is written back.
 local function find(lines, pat, near)
   if #pat == 0 then
-    return nil
+    return nil, 0
   end
-  local best
+  local best, seen = nil, 0
   for i = 1, #lines - #pat + 1 do
     local ok = true
     for k = 1, #pat do
@@ -135,11 +141,14 @@ local function find(lines, pat, near)
         break
       end
     end
-    if ok and (not best or math.abs(i - near) < math.abs(best - near)) then
-      best = i
+    if ok then
+      seen = seen + 1
+      if not best or math.abs(i - near) < math.abs(best - near) then
+        best = i
+      end
     end
   end
-  return best
+  return best, seen
 end
 
 local function matches_at(lines, pat, row)
@@ -154,8 +163,10 @@ end
 --- Where thread `t` sits in `lines`. Walks the evidence chain newest first
 --- (move / response anchor / comment snippet); each is accepted at its own line
 --- when the text matches there, else at the nearest exact match. Returns
---- { s, e, removed?, estimated?, via } with 1-based rows; a removed range is a
+--- { s, e, removed?, estimated?, ambiguous?, via } with 1-based rows; a removed
+--- range is a
 --- point whose `s` may be #lines + 1 (deleted at the end of the file).
+--- `ambiguous` marks a relocation that had more than one candidate.
 function M.resolve(t, lines)
   local count = #lines
   for k = #t.evidence, 1, -1 do
@@ -169,20 +180,36 @@ function M.resolve(t, lines)
       else
         local ctx = { ev.lines[1] }
         local near = ev.side == "before" and s0 - 1 or s0
-        local row = matches_at(lines, ctx, near) and near or find(lines, ctx, near)
+        local here = matches_at(lines, ctx, near)
+        local row, seen = near, 1
+        if not here then
+          row, seen = find(lines, ctx, near)
+        end
         if row then
           local p = ev.side == "before" and row + 1 or row
-          return { s = p, e = p, removed = true, via = ev }
+          return { s = p, e = p, removed = true, ambiguous = not here and seen > 1 or nil, via = ev }
         end
       end
     else
       local len = ev.l[2] - ev.l[1] + 1
-      local row = matches_at(lines, ev.lines, s0) and s0 or find(lines, ev.lines, s0)
+      local here = matches_at(lines, ev.lines, s0)
+      local row, seen = s0, 1
+      if not here then
+        row, seen = find(lines, ev.lines, s0)
+      end
       if row then
         if ev.kind ~= "response" then
           len = #ev.lines
         end
-        return { s = row, e = math.min(row + len - 1, count), via = ev }
+        -- Matched where it was recorded: certain, however many copies exist
+        -- elsewhere. Matched somewhere else with company: the nearest one is a
+        -- guess, so say so rather than write it back as the thread's place.
+        return {
+          s = row,
+          e = math.min(row + len - 1, count),
+          ambiguous = not here and seen > 1 or nil,
+          via = ev,
+        }
       end
     end
   end
@@ -305,6 +332,9 @@ local function header_chunks(t, tr, width, pending, nth)
   if tr and tr.estimated then
     table.insert(flags, { " (location estimated)", "Comment" })
   end
+  if tr and tr.ambiguous then
+    table.insert(flags, { " (location ambiguous)", "Comment" })
+  end
   if pending then
     table.insert(flags, { " (pending reload)", "Comment" })
   end
@@ -361,10 +391,13 @@ function M.render(buf, repo, rel, opts)
           gen = opts.gen,
           removed = r.removed,
           estimated = r.estimated,
+          ambiguous = r.ambiguous,
           eof = eof,
         }
         tracked[buf][id] = tr
-        if sync == true and not r.estimated and opts.on_move then
+        -- Not on an ambiguous match either: on_move writes the position into
+        -- the log as the thread's own, and a guessed one never gets revisited.
+        if sync == true and not r.estimated and not r.ambiguous and opts.on_move then
           local same = r.via == latest and latest.kind ~= "response" and r.s == latest.l[1]
           if not same then
             opts.on_move(t, r, latest)

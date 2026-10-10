@@ -1145,6 +1145,25 @@ case("anchor: duplicate text resolves to the occurrence nearest the recorded lin
   eq(view.resolve(t, lines).s, 6, "nearest to 5")
 end)
 
+case("anchor: a relocation with more than one candidate is marked ambiguous", function()
+  -- The recorded line still holds the text: certain, whatever else matches.
+  local here = { "end", "x", "end" }
+  local sure = thread_from({ comment("c1", { l = { 3, 3 }, snippet = { "end" } }) })
+  local r1 = view.resolve(sure, here)
+  eq({ r1.s, r1.ambiguous }, { 3, nil }, "matched at its own line, so not ambiguous")
+
+  -- The original is gone and the snippet is not unique: nearest is a guess.
+  local moved = { "end", "y", "end" }
+  local guess = thread_from({ comment("c1", { l = { 9, 9 }, snippet = { "end" } }) })
+  local r2 = view.resolve(guess, moved)
+  eq(r2.ambiguous, true, "two candidates, neither at the recorded line")
+
+  -- One candidate is a plain relocation and stays trustworthy.
+  local single = thread_from({ comment("c1", { l = { 9, 9 }, snippet = { "only here" } }) })
+  local r3 = view.resolve(single, { "a", "only here", "b" })
+  eq({ r3.s, r3.ambiguous }, { 2, nil }, "single match relocates without doubt")
+end)
+
 case("anchor: removed ranges keep a point in the middle, at the end and at the top", function()
   local mid = thread_from(with({
     {
@@ -2034,6 +2053,7 @@ local REQUIRED = {
   "anchor: lines inserted above before the response is read are followed by search",
   "anchor: falls back to the comment snippet, then estimates without a match",
   "anchor: duplicate text resolves to the occurrence nearest the recorded line",
+  "anchor: a relocation with more than one candidate is marked ambiguous",
   "anchor: removed ranges keep a point in the middle, at the end and at the top",
   "sync: CRLF, noeol, empty, single newline, BOM and latin1 files read as in sync",
   "sync: an external rewrite that was not reloaded is out of sync, even with preserved mtime",
