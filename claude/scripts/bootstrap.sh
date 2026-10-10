@@ -239,6 +239,25 @@ done
 MANAGED="$CLAUDE_DIR/.settings-repo-managed.json"
 MERGED=0
 echo "Merging settings.json..."
+
+# CLAUDE_CODE_PLUGIN_DIRS is a path list, and its separator is the platform's:
+# `;` on Windows, `:` everywhere else. It cannot be stored literally, because
+# settings.json deploys verbatim to all three platforms — a `:` reaches Windows,
+# where the session finds no separator, reads both mod paths as one directory
+# that does not exist, and loads neither mod with no error anyone would connect
+# to this line. The Windows-only fragment is not the seam for it either: the jq
+# merge below is `$local * $repo`, so the repo's value overwrites a local
+# override on the next run, and ai/scripts/bootstrap.sh already notes that a
+# hand-run from a shell is a thing that happens. So the token is expanded here,
+# the same way codex/scripts/bootstrap.sh expands tmux-__UID__.
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*) PATH_LIST_SEP=';' ;;
+    *) PATH_LIST_SEP=':' ;;
+esac
+REPO_SETTINGS="$CLAUDE_DIR/.settings-repo-expanded.json"
+trap 'rm -f "$REPO_SETTINGS"' EXIT
+sed "s|__PATH_LIST_SEP__|$PATH_LIST_SEP|g" "$REPO_DIR/settings.json" > "$REPO_SETTINGS"
+
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
     # A missing, truncated or malformed manifest is reset rather than handed to
     # jq, which would error on it, abort this script, and — the orchestrator
@@ -263,7 +282,7 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
       .permissions.deny  = resolve("deny") |
       if ($local.permissions.ask // $repo.permissions.ask)
       then .permissions.ask = resolve("ask") else . end
-    ' "$CLAUDE_DIR/settings.json" "$REPO_DIR/settings.json" "$MANAGED" \
+    ' "$CLAUDE_DIR/settings.json" "$REPO_SETTINGS" "$MANAGED" \
         | tr -d '\r' > "$CLAUDE_DIR/settings.json.tmp"
     then
         mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
@@ -273,7 +292,7 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
         echo "warn: settings.json merge failed; left as-is, manifest not advanced" >&2
     fi
 else
-    cp "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json"
+    cp "$REPO_SETTINGS" "$CLAUDE_DIR/settings.json"
     MERGED=1
 fi
 # Only after a merge that actually landed. Writing it unconditionally was worse
@@ -285,7 +304,7 @@ fi
 # manifest for the next run to cope with.
 if [ "$MERGED" -eq 1 ]; then
     jq '{allow: (.permissions.allow // []), deny: (.permissions.deny // []), ask: (.permissions.ask // [])}' \
-        "$REPO_DIR/settings.json" | tr -d '\r' > "$MANAGED.tmp" \
+        "$REPO_SETTINGS" | tr -d '\r' > "$MANAGED.tmp" \
         && mv "$MANAGED.tmp" "$MANAGED"
 fi
 

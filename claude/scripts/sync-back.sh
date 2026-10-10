@@ -51,9 +51,22 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
       # permissions gets: keep only keys the repo already tracks, in one
       # canonical order. Otherwise runtime keys the CLI appends land in the
       # source unreviewed and reflow it on every sync.
+      #
+      # A repo value holding a __TOKEN__ keeps the repo value rather than the
+      # deployed one. Those are expanded at deploy time, so the deployed copy
+      # has the answer for this machine and syncing it back would write that
+      # machine into the shared source — CLAUDE_CODE_PLUGIN_DIRS carries the
+      # platform path-list separator, so a commit here would have replaced the
+      # token with a colon and a commit on Windows with a semicolon, each
+      # breaking the other two platforms. The test is on the repo value, not
+      # the key name, so a token added later is covered without touching this
+      # filter. (No apostrophes in these comments: the whole program is inside
+      # a single-quoted shell string and one would close it.)
       (if has("env")
        then .env |= (to_entries
                      | map(select(.key | IN($repo.env // {} | keys[])))
+                     | map(if ((($repo.env // {})[.key] // "") | test("__[A-Z0-9_]+__"))
+                           then .value = ($repo.env[.key]) else . end)
                      | sort_by(.key)
                      | from_entries)
        else . end)
