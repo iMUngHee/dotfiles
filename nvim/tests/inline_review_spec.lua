@@ -1715,6 +1715,83 @@ case("bulk: <leader>aX resolves answered threads in one event after confirmation
   vim.cmd("silent! %bwipeout!")
 end)
 
+case("bulk: a write that does not land reports no resolve", function()
+  -- build() runs before the write, so the list of ids exists even when the
+  -- write is refused. Reporting from that list announced a resolve that never
+  -- happened, next to the warning saying so.
+  local root, _, log = answered_repo()
+  notes = {}
+  vim.fn.mkdir(log .. ".lock", "p")
+  vim.fn.confirm = function()
+    return 1
+  end
+  ir.resolve_answered()
+  vim.fn.confirm = real_confirm
+  eq(#events_in(log, "resolve"), 0, "nothing written while locked")
+  truthy(
+    vim.tbl_filter(function(m)
+      return type(m) == "string" and m:match("log is locked")
+    end, notes)[1],
+    "the lock is reported"
+  )
+  eq(
+    vim.tbl_filter(function(m)
+      return type(m) == "string" and m:match("^Resolved ")
+    end, notes),
+    {},
+    "no success notice"
+  )
+  local threads = fold_file(log)
+  eq({ threads.c1.state, threads.c2.state }, { "answered", "answered" }, "states untouched")
+  store.unlock(log)
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+  truthy(root, "root used")
+end)
+
+case("unlock: a lock on another branch's log is removed from a buffer with no file", function()
+  -- The command is advertised by the CLI, and that message is read in a
+  -- terminal buffer. Going through here() refused there and then aimed at
+  -- .detached, so the situation it documents was the one it could not act on.
+  local root, _, log = answered_repo()
+  local other = store.log_path(root, "feat/x")
+  assert(store.transact(other, function()
+    return comment("c1", { body = "on feat" })
+  end, { branch = "feat/x" }))
+  vim.fn.mkdir(other .. ".lock", "p")
+  notes = {}
+  -- a buffer with no file at all, which is what here() rejects
+  vim.cmd("silent! %bwipeout!")
+  vim.cmd.cd(root)
+  vim.cmd("enew")
+  local asked
+  vim.fn.confirm = function(q)
+    asked = q
+    return 1
+  end
+  ir.unlock()
+  vim.fn.confirm = real_confirm
+  truthy(asked and asked:find("feat", 1, true), "asked about the locked log, not .detached")
+  eq(vim.uv.fs_stat(other .. ".lock"), nil, "lock removed")
+  eq(
+    vim.tbl_filter(function(m)
+      return type(m) == "string" and m:match("No file in this buffer")
+    end, notes),
+    {},
+    "no buffer complaint"
+  )
+  -- and with nothing held it says so against the review dir, not a guessed log
+  notes = {}
+  ir.unlock()
+  truthy(
+    notes[#notes] and notes[#notes]:match("^No review log lock under "),
+    "reports the directory it searched"
+  )
+  truthy(log, "log used")
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
 case("picker: entries tag other branches and the archive; resolving skips archived ones", function()
   local root, main, log = answered_repo()
   local other = store.log_path(root, "feat/x")

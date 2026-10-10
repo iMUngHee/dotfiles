@@ -677,6 +677,30 @@ function M.transact(log, build, opts)
   return res[2], res[3], res[4], res[5]
 end
 
+--- Logs under `root` that currently hold a lock, live ones before archived.
+---
+--- Returns log paths, not lock paths, so the result feeds M.unlock directly.
+--- A lock is a directory — mkdir is the atomic claim — so a stray file of the
+--- same name is not one and is left alone.
+---
+--- This exists because a crashed writer's lock is not always the current
+--- branch's: the picker resolves threads on other branches, and the CLI writes
+--- whichever log the prompt named. Recovery has to be able to see all of them.
+function M.locks(root)
+  local out = {}
+  for _, sub in ipairs({ "", "/archive" }) do
+    local dir = M.dir(root) .. sub
+    if vim.fn.isdirectory(dir) == 1 then
+      for name, kind in vim.fs.dir(dir) do
+        if kind == "directory" and name:match("%.jsonl%.lock$") then
+          table.insert(out, dir .. "/" .. (name:gsub("%.lock$", "")))
+        end
+      end
+    end
+  end
+  return out
+end
+
 function M.unlock(log)
   return uv.fs_rmdir(log .. ".lock")
 end
