@@ -29,13 +29,23 @@ export function isMissing(run: Run): boolean {
   return run.exitCode === -1 && /ENOENT|not found|No such file/i.test(run.stderr)
 }
 
-/** `pager whoami --session <id>`: the `name:` line, or null when it has none. */
+/**
+ * `pager whoami --session <id>`: the `name:` line, or null when it has none.
+ *
+ * Only the first whitespace-separated field is the name, and `none` is not a
+ * name. An unnamed session makes whoami print a sentence, not a blank —
+ * `name:    none — it is assigned once a hook runs with the host detected` —
+ * so taking the rest of the line draws that whole sentence where the name goes
+ * and never reaches the `null` branch the band and pane check for. Both guards
+ * were in the statusline this mod replaced; they are the same two.
+ */
 export function nameOf(run: Run): string | null | Failure {
   const failure = failureOf(run)
   if (failure) return { error: failure }
   const line = run.stdout.split('\n').find(one => /^name:/.test(one))
-  const name = line?.replace(/^name:\s*/, '').trim()
-  return name ? name : null
+  const name = line?.replace(/^name:\s*/, '').trim().split(/\s+/)[0]
+  if (!name || name === 'none') return null
+  return name
 }
 
 /**
