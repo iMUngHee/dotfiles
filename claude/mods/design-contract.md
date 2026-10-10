@@ -112,7 +112,7 @@
 
 ## Performance & Formatting
 
-- Times as `MM-DD HH:MM` local; ages `just now`, `<n>s`, `<n>m`, `<n>h`, `<n>d` from the refresh's `now`.
+- Times as `MM-DD HH:MM` local; ages `<n>m`, `<n>h`, `<n>d` from the refresh's `now`, and anything under a minute is `now`. There is no seconds form: `agoOf` counts in whole minutes. The reader spells the under-a-minute case `just now`, which it composes itself.
 - The index draws only the rows in its window; the reader body is capped at 6,000 characters; the graph at 120 nodes (`+N more`); backlog titles at 200 characters (the engine refuses a drawing over 100,000 characters of text).
 
 ## Do / Don't
