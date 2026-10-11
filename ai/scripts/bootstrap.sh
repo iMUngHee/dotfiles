@@ -48,6 +48,9 @@ echo "Root:   $ROOT_DIR"
 # tmp and .tmp are the same directory under two names across Codex versions;
 # skipping only one leaves the identical failure reachable. Neither holds
 # anything a restore would want.
+# Current Codex also holds locks in thread-writer-locks, project-metadata-locks
+# and top-level *.lock files. Windows refuses to copy the open files; these
+# coordinate running processes and must not be restored as settings.
 #
 # cp has no exclude, so the entries are enumerated instead of copying the
 # directory whole.
@@ -76,7 +79,7 @@ backup_dir() {
         # skips an unmatched glob, which is what this guard is here for.
         [ -e "$entry" ] || [ -L "$entry" ] || continue
         case "${entry##*/}" in
-            tmp | .tmp) continue ;;
+            tmp | .tmp | thread-writer-locks | project-metadata-locks | *.lock) continue ;;
         esac
         cp -a "$entry" "$dest/"
     done
