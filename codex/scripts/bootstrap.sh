@@ -184,8 +184,7 @@ if [ "${CODEX_DISABLE_SYSTEM_SKILLS:-1}" = "1" ]; then
 fi
 
 # ── 7. Remove an imported Claude hook layer ──
-# Codex imports Claude Code's hooks on first run: it writes ~/.codex/hooks.json
-# from ~/.claude/settings.json and copies ~/.claude/hooks/ to ~/.codex/hooks/.
+# Codex can sync Claude Code's hooks into ~/.codex/hooks.json and ~/.codex/hooks/.
 # That is wrong for this repo in three ways:
 #   - it duplicates the hooks config.toml already defines, and Codex itself then
 #     warns "loading hooks from both ... prefer a single representation"
@@ -197,12 +196,6 @@ fi
 # config.toml is this repo's single representation, so the import is removed.
 # Backed up rather than deleted, since it is not ours to throw away outright.
 #
-# This reclaims, it does not prevent. Codex imports on ITS first run, which is
-# after this script has finished, so the session that triggers the import keeps
-# Claude's hook set for its whole life — including running without stop-gate.sh —
-# and only the next bootstrap clears it. githooks/post-merge makes that "the next
-# tier merge" in practice, but there is no upper bound. Preventing the import
-# outright would need a Codex-side opt-out; none is known, so this stays a sweep.
 for imported in "$HOME/.codex/hooks.json" "$HOME/.codex/hooks"; do
     if [ -e "$imported" ]; then
         mv "$imported" "$imported.imported.bak.$(date +%s)"

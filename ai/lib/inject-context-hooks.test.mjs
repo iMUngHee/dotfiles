@@ -225,6 +225,28 @@ test("paired injection configurations allow exactly thirty seconds", async () =>
 
   const codex = await readFile(join(repo, "codex", "config.toml.template"), "utf8");
   assert.match(codex, /command = "\$HOME\/\.config\/codex\/hooks\/inject-context\.sh"\ntimeout = 30\b/);
+
+  const windowsCommands = codex.match(/^command_windows = .*run-bash-hook\.ps1.*$/gm) ?? [];
+  assert.equal(windowsCommands.length, 8);
+  assert.match(windowsCommands.join("\n"), /inject-context\.sh/);
+  assert.match(windowsCommands.join("\n"), /pager-hook\.sh/);
+
+  const windowsRunner = await readFile(join(repo, "codex", "hooks", "run-bash-hook.ps1"), "utf8");
+  assert.match(windowsRunner, /\[Console\]::In\.ReadToEnd\(\)/);
+  assert.match(windowsRunner, /CLAUDE_CODE_GIT_BASH_PATH/);
+});
+
+test("codex prompt guard returns an explicit blocking decision", () => {
+  const result = spawnSync("bash", [join(repo, "codex", "hooks", "prompt-guard.sh")], {
+    input: JSON.stringify({ prompt: "password=abcdefghijklmnop" }),
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    decision: "block",
+    reason: "Remove the secret from your prompt and retry.",
+  });
 });
 
 test("no retired token-saving integration survives in the deployed contract", async () => {

@@ -17,6 +17,10 @@ approval_policy = "never"
 approvals_reviewer = "user"
 sandbox_mode = "danger-full-access"
 
+[desktop]
+external-agent-import-sync-enabled = true
+external-agent-import-sync-item-types = { SESSIONS = true, AGENTS_MD = true, CONFIG = true, SKILLS = true, PLUGINS = true, MCP_SERVER_CONFIG = true, SUBAGENTS = true, HOOKS = false, COMMANDS = true, MEMORY = true }
+
 [features]
 apps = false
 plugins = false
@@ -75,12 +79,14 @@ args = ["mcp"]
 type = "command"
 command = "$HOME/.config/codex/hooks/prompt-guard.sh"
 timeout = 5
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" prompt-guard.sh"
 statusMessage = "codex prompt guard"
 
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
 command = "$HOME/.config/codex/hooks/inject-context.sh"
 timeout = 30
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" inject-context.sh"
 statusMessage = "codex active plan context"
 
 # pager: cross-session message delivery. Event name is taken from the payload,
@@ -98,6 +104,7 @@ statusMessage = "codex active plan context"
 type = "command"
 command = "if command -v pager >/dev/null 2>&1; then pager hook; fi"
 timeout = 10
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" pager-hook.sh"
 statusMessage = "pager delivery"
 
 [[hooks.PreToolUse]]
@@ -106,6 +113,7 @@ statusMessage = "pager delivery"
 type = "command"
 command = "$HOME/.config/codex/hooks/protect-files.sh"
 timeout = 5
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" protect-files.sh"
 statusMessage = "codex file safety"
 
 [[hooks.PostToolUse]]
@@ -115,6 +123,7 @@ matcher = "^(Write|Edit|apply_patch)$"
 type = "command"
 command = "$HOME/.config/codex/hooks/post-edit-pipeline.sh"
 timeout = 40
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" post-edit-pipeline.sh"
 statusMessage = "codex edit pipeline"
 
 [[hooks.SessionStart]]
@@ -123,6 +132,7 @@ statusMessage = "codex edit pipeline"
 type = "command"
 command = "if command -v pager >/dev/null 2>&1; then pager hook; fi"
 timeout = 10
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" pager-hook.sh"
 statusMessage = "pager delivery"
 
 [[hooks.Stop]]
@@ -131,6 +141,7 @@ statusMessage = "pager delivery"
 type = "command"
 command = "$HOME/.config/codex/hooks/stop-gate.sh"
 timeout = 45
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" stop-gate.sh"
 statusMessage = "codex final gate"
 
 [[hooks.PermissionRequest]]
@@ -140,4 +151,5 @@ matcher = "*"
 type = "command"
 command = "$HOME/.config/codex/hooks/notify.sh approval"
 timeout = 5
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" notify.sh approval"
 statusMessage = "codex approval notify"

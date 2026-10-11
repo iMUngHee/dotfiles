@@ -28,8 +28,11 @@ if printf '%s' "$prompt" | grep -qE "$combined_pattern"; then
   match=$(printf '%s' "$prompt" | grep -oE "$combined_pattern" | head -1)
   masked="${match:0:8}..."
   echo "[codex prompt-guard] Blocked: detected potential secret (${masked})." >&2
-  echo "Remove the secret from the prompt and retry." >&2
-  exit 2
+  jq -n '{
+    decision: "block",
+    reason: "Remove the secret from your prompt and retry."
+  }'
+  exit 0
 fi
 
 exit 0
