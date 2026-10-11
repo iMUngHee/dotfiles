@@ -28,7 +28,7 @@
 - Screens: code buffer with lens headers; thread modal; history picker.
 - History picker lists every thread including resolved and missing-file ones, filterable by state, jumping to the location on select.
 - Threads belong to the branch they were written on. Headers, `]r`/`[r`, sending and bulk resolve cover the current branch only; switching branches switches the visible threads (`Review threads: <branch>` once per switch).
-- A branch that no longer exists locally has its threads moved to the archive; archives untouched for 30 days are deleted. A live log over 512KB rotates: open threads continue in a fresh log and the old file, with its resolved and deleted threads, moves to the same archive.
+- A branch that no longer exists locally has its threads moved to the archive; archives untouched for 30 days are deleted. A live log over 512KB rotates **if it has a closed thread to leave behind**: open threads continue in a fresh log and the old file, with its resolved and deleted threads, moves to the same archive. Only resolved or deleted threads can leave, so a log of nothing but open threads keeps growing past 512KB rather than rotating into an archive that would hold the same live threads.
 - The picker shows the current branch by default; `<C-a>` adds other branches and the archive, each entry tagged `[<branch>]` or `[archived: <branch>]`.
 
 ## Data & State Model
@@ -57,6 +57,7 @@ A response changes state only when its token matches the thread's latest user me
 | load | response for unknown id | warning naming the id | — |
 | anchor | range moved | header follows extmark / agent `l` / snippet match | — |
 | anchor | range not found | header at original line, `(location estimated)` | reply or resolve |
+| anchor | text gone from its line and matching in more than one other place | header at the nearest match, `(location ambiguous)`; the position is **not** written back | move the thread by replying, or resolve it |
 | anchor | range deleted | header at deletion point, `code removed`; modal shows the original snippet | resolve |
 | file | file missing | picker only, `FILE MISSING`; modal opens with snippet | agent `file` re-targets |
 | view | resolved | hidden inline by default; toggle shows them | `<leader>ah` |
@@ -65,6 +66,7 @@ A response changes state only when its token matches the thread's latest user me
 | picker | archived entry acted on | `Archived threads are read-only` | — |
 | agent | log missing (branch archived) | CLI refuses (exit 1); nothing written | re-copy the prompt |
 | agent | log id mismatch (rotated or another checkout) | CLI refuses (exit 2); nothing written | re-copy the prompt from the right checkout |
+| agent | thread deleted in the editor | CLI refuses (exit 2) with `<id> was deleted in the editor; skip this token`; nothing written | none — the agent skips that token and says so, rather than retrying |
 
 ## Interaction Model
 
@@ -121,7 +123,7 @@ Art direction: review lens — a header line above the range tells what is there
 English UI copy to match existing notifications (`Copied: @path`); comment bodies stay as typed.
 Prompt head: `Review comments — handle each with the inline-review skill, then record one response per token with its respond command (log: <absolute log path>, id: <log id>)`.
 `Review threads: <branch>`, `Resolve <n> answered threads (<ids>)?`, `Resolved <n> threads (<ids>)`, `No answered threads to resolve`, `Archived threads are read-only`.
-`No draft comments to send`, `Copied <n> comments (<ids>)`, `Re-copied <n> sent comments (<ids>)`, `code removed`, `(location estimated)`, `FILE MISSING`, `Delete <id> and its agent responses?`.
+`No draft comments to send`, `Copied <n> comments (<ids>)`, `Copied <n> sent comments (<ids>)`, `code removed`, `(location estimated)`, `FILE MISSING`, `Delete <id> and its agent responses?`.
 
 ## Do / Don't
 

@@ -62,7 +62,14 @@ end
 
 --- Repository root of a live log path, or nil when `log` is not one.
 function M.root_of(log)
-  local root, name = log:match("^(/.+)/%.agents/state/review/([^/]+)%.jsonl$")
+  if log:sub(1, 1) ~= "/" and not log:match("^[A-Za-z]:[/\\]") and log:sub(1, 2) ~= [[\\]] then
+    return
+  end
+  log = vim.fs.normalize(log, { expand_env = false })
+  if log:sub(1, 1) ~= "/" and not log:match("^[A-Za-z]:/") then
+    return
+  end
+  local root, name = log:match("^(.+)/%.agents/state/review/([^/]+)%.jsonl$")
   if root and name ~= "" then
     return root
   end
@@ -377,7 +384,7 @@ local function ensure_dir(dir)
   end
   local ignore = dir .. "/.gitignore"
   if not uv.fs_stat(ignore) then
-    local f = io.open(ignore, "w")
+    local f = io.open(ignore, "wb")
     if f then
       f:write("*\n")
       f:close()
@@ -675,6 +682,30 @@ function M.transact(log, build, opts)
     return nil, res[2]
   end
   return res[2], res[3], res[4], res[5]
+end
+
+--- Logs under `root` that currently hold a lock, live ones before archived.
+---
+--- Returns log paths, not lock paths, so the result feeds M.unlock directly.
+--- A lock is a directory — mkdir is the atomic claim — so a stray file of the
+--- same name is not one and is left alone.
+---
+--- This exists because a crashed writer's lock is not always the current
+--- branch's: the picker resolves threads on other branches, and the CLI writes
+--- whichever log the prompt named. Recovery has to be able to see all of them.
+function M.locks(root)
+  local out = {}
+  for _, sub in ipairs({ "", "/archive" }) do
+    local dir = M.dir(root) .. sub
+    if vim.fn.isdirectory(dir) == 1 then
+      for name, kind in vim.fs.dir(dir) do
+        if kind == "directory" and name:match("%.jsonl%.lock$") then
+          table.insert(out, dir .. "/" .. (name:gsub("%.lock$", "")))
+        end
+      end
+    end
+  end
+  return out
 end
 
 function M.unlock(log)

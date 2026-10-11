@@ -4,7 +4,10 @@
 //
 // The layout is unbounded: nodes take the room their forces give them, and the
 // region is a camera over it (`camera` is the world point at its top-left,
-// `zoom` the spacing scale). `world` only sets the spacing and the centre.
+// `zoom` the spacing scale). Spacing is not `world`'s to set — unbounded, the
+// layout's `k` is the fixed SPACING in layout.ts. What `world` gives is the
+// centre the weak pull aims at, the starting temperature, and the first
+// camera. Reach for SPACING, not for `world`, to spread nodes further apart.
 // Until the person moves the camera it fits the settled graph (zoom at most 1).
 // Drag a node to move it, drag empty space to pan, shift+arrows pan, + and -
 // zoom, 0 fits everything. A drag moves the node's neighbours only, so the rest
@@ -38,7 +41,11 @@ type GraphState = {
   shape: string
   /** The region on screen; 0 by 0 until the first layout. */
   size: Size
-  /** The space the layout runs in: the region, or more for a big graph. */
+  /**
+   * The frame the layout is centred and seeded in — the region, or more for a
+   * big graph. Not a boundary: nodes may settle outside it, which is what the
+   * camera is for.
+   */
   world: Size
   layout: Layout
   camera: Point
@@ -61,7 +68,12 @@ type GraphState = {
 
 const FRAME_MS = 33
 const ZOOMS = [0.25, 0.5, 0.75, 1, 1.5, 2] as const
-/** Cells of world each node asks for, across and down, before the world outgrows the region. */
+/**
+ * Cells of world each node asks for, across and down, when sizing the frame
+ * the layout is centred and seeded in. Only that: nodes are free to settle
+ * outside it, so raising these spreads the starting positions and the first
+ * camera, not the spacing the forces settle to.
+ */
 const ROOM_ACROSS = 24
 const ROOM_DOWN = 6
 const PAN_STEP = { x: 8, y: 3 }
@@ -149,7 +161,7 @@ function neighboursOf(graph: Graph, id: string): string[] {
 
 /** A fresh layout for `graph` in `world`. */
 function fitted(graph: Graph, world: Size): Layout {
-  return { pos: placed(graph.nodes, graph.edges, world, {}, false), temperature: startTemperature(world) }
+  return { pos: placed(graph.nodes, graph.edges, world), temperature: startTemperature(world) }
 }
 
 /** Zoom by `by` levels (0 keeps it), keeping the region's middle where it is. */
@@ -215,7 +227,6 @@ function frame(box: GraphState['box']): void {
   if (!state.isRunning || isEmpty(size)) return
   const result = tick(state.graph.nodes, state.graph.edges, state.layout, state.world, new Set(state.pinned), {
     active: state.active === null ? undefined : new Set(state.active),
-    isBounded: false,
   })
   const isDone = state.drag === null && isSettled(result.layout, result.energy, state.graph.nodes.length)
   const next = { ...state, layout: result.layout, isRunning: !isDone, active: isDone ? null : state.active }
@@ -347,7 +358,7 @@ const GraphView: ClientModule<GraphProps, GraphState> = (graph, surface) => {
         layout: isEmpty(state.size)
           ? state.layout
           : {
-              pos: placed(graph.nodes, graph.edges, world, state.layout.pos, false),
+              pos: placed(graph.nodes, graph.edges, world, state.layout.pos),
               temperature: startTemperature(world),
             },
         active: null,
@@ -384,7 +395,11 @@ const GraphView: ClientModule<GraphProps, GraphState> = (graph, surface) => {
           {runs
             .filter(({ run }) => run.tone !== 'blank')
             .map(({ run, x, y }) => (
-              <Box position="absolute" left={x} top={y}>
+              // width, or truncate-end has no edge to cut against: the
+              // contract promises a run is never wider than the cells it took
+              // on the terminal, and on a proportional face nothing else holds
+              // it to that. Without it a long label overlaps its neighbour.
+              <Box position="absolute" left={x} top={y} width={run.text.length}>
                 <Text wrap="truncate-end" {...TONE[run.tone]}>
                   {run.text}
                 </Text>

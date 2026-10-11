@@ -108,29 +108,37 @@ describe('plan', () => {
       kind: 'none',
       mainRoot: '/r',
     })
-    // A finished plan hides the band but keeps the repository, whose backlog /pm still reads.
-    expect(resolvedOf(ok('{"status":"terminal","plan_status":"done","main_root":"/r"}'))).toEqual({
-      kind: 'hidden',
+    // A terminal plan and the error statuses keep main_root: the backlog is
+    // read in that checkout whether or not a plan is current there.
+    expect(
+      resolvedOf(ok('{"status":"terminal","plan_status":"done","main_root":"/r"}')),
+    ).toEqual({ kind: 'hidden', mainRoot: '/r' })
+    expect(
+      resolvedOf(ok('{"status":"ok","plan_status":"done","main_root":"/r"}')),
+    ).toEqual({ kind: 'hidden', mainRoot: '/r' })
+    expect(resolvedOf(ok('{"status":"missing_worktree","main_root":"/r"}'))).toEqual({
+      kind: 'error',
+      reason: 'missing_worktree',
       mainRoot: '/r',
     })
+    // The three the resolver never answered: no root to report.
     expect(
       resolvedOf({ exitCode: 1, stdout: '', stderr: 'fatal: not a git repository' }),
     ).toEqual({ kind: 'hidden', mainRoot: '' })
-    expect(resolvedOf(ok('{"status":"missing_worktree"}'))).toEqual({
-      kind: 'error',
-      reason: 'missing_worktree',
-    })
     expect(resolvedOf({ exitCode: 2, stdout: '', stderr: 'boom\n' })).toEqual({
       kind: 'error',
       reason: 'boom',
+      mainRoot: '',
     })
     expect(resolvedOf({ ...bound, isStdoutTruncated: true })).toEqual({
       kind: 'error',
       reason: 'output truncated',
+      mainRoot: '',
     })
     expect(resolvedOf(ok('not json'))).toEqual({
       kind: 'error',
       reason: 'unreadable resolver output',
+      mainRoot: '',
     })
   })
 

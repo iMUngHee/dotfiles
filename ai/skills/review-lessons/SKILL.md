@@ -233,7 +233,7 @@ Then, on each run:
 | `Verify` returns N > 0 | `active` — record the count. A large count is the strongest priority signal the file carries |
 | `Verify: none`, absent from the new sample | **Keep as is.** Silence may mean it is followed, or that nobody touched that code. Never delete on absence alone |
 | The same point is raised again in new PRs | Increment `Seen in`; recompute the Adopted bar |
-| A written project rule now covers it (`grep .ai/rules/ docs/`) | `superseded` — replace the body with a one-line pointer to the rule. The rule is authoritative; a duplicate lesson competes with it |
+| A written project rule now covers it (`grep -rn '<lesson keyword>' ai/rules/`) | `superseded` — replace the body with a one-line pointer to the rule. The rule is authoritative; a duplicate lesson competes with it |
 | The API or structure it depended on is gone | Remove, naming what disappeared |
 | New evidence contradicts it | Narrow the condition or move it to `open`. Never overwrite quietly |
 

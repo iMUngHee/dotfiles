@@ -58,7 +58,7 @@ export function placed(
   edges: readonly GraphEdge[],
   size: Size,
   prev: Positions = {},
-  isBounded = true,
+  isBounded = false,
 ): Positions {
   const pos: Positions = {}
   for (const node of nodes) {
@@ -84,8 +84,14 @@ export function placed(
 
 /**
  * How a tick may move nodes. `active`: only these move (the rest hold still,
- * though they still push and pull), absent all do. `isBounded` false: nodes may
- * leave `size`, which then only sets the spacing and the centre.
+ * though they still push and pull), absent all do.
+ *
+ * `isBounded` defaults to false because that is what graph.tsx runs: nodes may
+ * leave `size`, which then sets the centre the weak pull aims at and nothing
+ * else — spacing comes from the fixed SPACING, not from `size`. Bounded has to
+ * ask for itself, so a test that does not is testing the real thing. It used
+ * to default the other way, and since `settle` has no caller outside the
+ * tests, every layout test was pinning geometry the graph never ran.
  */
 export type TickOptions = { active?: ReadonlySet<string>; isBounded?: boolean }
 
@@ -96,7 +102,7 @@ export function tick(
   layout: Layout,
   size: Size,
   pinned: ReadonlySet<string> = new Set(),
-  { active, isBounded = true }: TickOptions = {},
+  { active, isBounded = false }: TickOptions = {},
 ): { layout: Layout; energy: number } {
   const n = nodes.length
   if (n === 0) return { layout: { ...layout, temperature: 0 }, energy: 0 }

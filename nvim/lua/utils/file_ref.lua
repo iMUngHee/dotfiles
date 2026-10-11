@@ -1,10 +1,15 @@
 -- File references shared by the @path copy mappings and inline_review.
 local M = {}
 
+-- Resolve links and use one separator for containment checks on every host.
+local function canonical(path)
+  return vim.fs.normalize(vim.uv.fs_realpath(path) or vim.fn.resolve(path), { expand_env = false })
+end
+
 ---Repository root of a buffer: the nearest .git ancestor, else the cwd.
 ---@param buf? integer
 function M.root(buf)
-  return vim.fs.root(buf or 0, ".git") or vim.fn.getcwd()
+  return canonical(vim.fs.root(buf or 0, ".git") or vim.fn.getcwd())
 end
 
 ---Path of `abs` relative to `root` after resolving symlinks, or nil when the
@@ -13,10 +18,16 @@ end
 ---@param abs string
 ---@return string?
 function M.relative(root, abs)
-  root = vim.fn.resolve(root):gsub("/$", "")
-  local resolved = vim.fn.resolve(abs)
-  if resolved:sub(1, #root + 1) == root .. "/" then
-    return resolved:sub(#root + 2)
+  root = canonical(root):gsub("/$", "")
+  local resolved = canonical(abs)
+  local prefix = root .. "/"
+  local compared = resolved
+  if vim.fn.has("win32") == 1 then
+    -- Windows drive and path casing may differ between git and buffer names.
+    prefix, compared = prefix:lower(), compared:lower()
+  end
+  if compared:sub(1, #prefix) == prefix then
+    return resolved:sub(#prefix + 1)
   end
 end
 
@@ -30,14 +41,22 @@ function M.path(scope)
     return nil
   end
   if scope == "home" then
-    return vim.fn.fnamemodify(abs, ":~")
+    local ref = vim.fn.fnamemodify(abs, ":~")
+    if vim.fn.has("win32") == 1 then
+      return (ref:gsub("\\", "/"))
+    end
+    return ref
   end
   local root = M.root(0)
-  local resolved = vim.fn.resolve(abs)
-  if resolved:sub(1, #root) == root then
-    return resolved:sub(#root + 2)
+  local rel = M.relative(root, abs)
+  if rel then
+    return rel
   end
-  return vim.fn.expand("%:.")
+  local ref = vim.fn.expand("%:.")
+  if vim.fn.has("win32") == 1 then
+    return (ref:gsub("\\", "/"))
+  end
+  return ref
 end
 
 return M
