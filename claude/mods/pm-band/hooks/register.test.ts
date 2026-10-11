@@ -204,7 +204,8 @@ describe('register', () => {
 
     // Two of four done: two filled segments, the current one hollow in the warning color.
     expect(await bandText($)).toBe('▶ demo  ▰▰▱▱ 2/4  pm-band plan.ts\n\nstepsgraph')
-    expect(w.reads).toEqual([`${MAIN}/${PLAN_REL}`])
+    // The engine resolves fs paths for the host, including a Windows drive.
+    expect(w.reads.map(path => path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, ''))).toEqual([`${MAIN}/${PLAN_REL}`])
     const resolver = w.runs.find(r => r.argv.includes('resolve-session'))
     expect(resolver?.argv[1]).toBe(`${HOME}/.config/ai/lib/worktree.mjs`)
     expect(resolver?.init?.env).toEqual({ PM_SESSION_TOOL: 'claude', PM_SESSION_ID: 'sid-a' })
@@ -458,6 +459,31 @@ ${'━'.repeat(8)}${'─'.repeat(70)}
     // The accent marks the current item alone: the bar is `claude`, a blocked mark is not.
     expect(texts.find(one => one.text === '▌')?.props).toMatchObject({ color: 'claude' })
     expect(texts.some(one => one.text === '◌' && one.props.color === 'claude')).toBe(false)
+  })
+
+  test('a terminal plan and a resolver error still read the backlog in the pane', async ($, on) => {
+    // Closing a plan and opening /pm to pick the next item is the normal move,
+    // and it resolves as terminal. The band goes quiet, but both pane tabs have
+    // to show the backlog rather than wait on a plan that will never come.
+    const w = world(on)
+    w.resolver = () => ({ status: 'terminal', plan_status: 'done', main_root: MAIN })
+    await started($, w)
+    expect(await bandText($)).toBe('')
+
+    const ui = await openPane($, w)
+    await ui.press({ key: 'tab-backlog' })
+    const text = textOf(await ui.drawn())
+    expect(text).not.toContain('loading…')
+    expect(text).toContain('◌  P2  needs-demo  ⤷ needs demo  needs-demo')
+    expect(w.runs.some(r => r.argv.includes('list'))).toBe(true)
+
+    // An error status reports a root too, so the backlog survives a bad binding
+    // instead of the pane disagreeing with the warning the band shows.
+    w.resolver = () => ({ status: 'missing_worktree', main_root: MAIN })
+    await $.tool.call({ tool: 'Bash', command: 'true' })
+    await w.clock.advance(SETTLE)
+    expect(await bandText($)).toBe('⚠ plan: missing_worktree')
+    expect(textOf(await ui.drawn())).not.toContain('loading…')
   })
 
   test('the graph tab mounts a Client that lays out, follows a drag, and reports a pick', async ($, on) => {

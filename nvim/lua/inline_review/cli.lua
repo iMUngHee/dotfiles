@@ -13,7 +13,7 @@
 -- Exit 0 on success; 2 on invalid arguments or a log id mismatch; 1 when the
 -- log is missing, locked or could not be written. Nothing is written on refusal.
 
-local lua_dir = debug.getinfo(1, "S").source:sub(2):match("^(.*)/inline_review/[^/]+$")
+local lua_dir = vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2)))
 -- rtp is searched before package.path, so put this checkout first.
 vim.opt.rtp:prepend(vim.fs.dirname(lua_dir))
 local store = require("inline_review.store")
@@ -108,11 +108,12 @@ elseif o["anchor-side"] then
 end
 
 if o.file then
-  local abs = vim.fn.resolve(root .. "/" .. o.file)
-  if o.file:sub(1, 1) == "/" or abs:sub(1, #root + 1) ~= root .. "/" then
+  local file = vim.fs.normalize(o.file, { expand_env = false })
+  local rel = require("utils.file_ref").relative(root, root .. "/" .. file)
+  if file:sub(1, 1) == "/" or file:match("^[A-Za-z]:") or not rel then
     fail(2, "--file must be a path inside the repository: " .. o.file)
   end
-  ev.file = abs:sub(#root + 2)
+  ev.file = rel
 end
 
 if not store.valid(ev) then

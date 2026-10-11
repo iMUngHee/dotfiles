@@ -119,6 +119,24 @@ if [[ "$PROJECT_ROOT" == "$HOME/.config" ]] && command -v node &>/dev/null; then
   if grep -qE '^ai/skills/config-audit/' <<< "$CHANGED_FILES" && command -v go &>/dev/null; then
     run_suite "config-audit go tests" ai/skills/config-audit/scripts go test ./...
   fi
+  # Mods are .ts/.tsx, so neither the instruction trigger above nor any type
+  # checker below sees them: five commits in a row changed graph.tsx alone and
+  # ran no suite at all. `claude plugin test` is the only runner for them.
+  if grep -qE '^claude/mods/' <<< "$CHANGED_FILES" && command -v claude &>/dev/null; then
+    # Absolute glob: this hook's cwd is not guaranteed to be the project root,
+    # and run_suite cds on its own.
+    for mod in "$PROJECT_ROOT"/claude/mods/*/; do
+      [ -f "${mod}.claude-plugin/plugin.json" ] || continue
+      name=$(basename "$mod")
+      run_suite "mod $name tests" . claude plugin test "claude/mods/$name"
+    done
+  fi
+  # Same gap on the Lua side: nvim/README.md documents the command and nothing
+  # ran it. -u NONE keeps it off the user's plugins, as the README's form does.
+  if grep -qE '^nvim/' <<< "$CHANGED_FILES" && command -v nvim &>/dev/null; then
+    run_suite "inline_review spec" . \
+      nvim --headless -u NONE --cmd "set rtp^=nvim" -l nvim/tests/inline_review_spec.lua
+  fi
 fi
 
 # --- Detect project type from changed files ---

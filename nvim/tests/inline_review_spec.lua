@@ -3,10 +3,11 @@
 -- Run from the repository root. Prints ALL PASS and exits 0, or lists failures.
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
-local LUA_DIR = vim.fn.fnamemodify(here .. "/../lua", ":p")
-local NVIM_DIR = vim.fn.fnamemodify(here .. "/..", ":p")
+-- Forward slashes survive runtimepath's option parsing on Windows too.
+local LUA_DIR = vim.fs.normalize(vim.fn.fnamemodify(here .. "/../lua", ":p")) .. "/"
+local NVIM_DIR = vim.fs.normalize(vim.fn.fnamemodify(here .. "/..", ":p"))
 -- Absolute, so tests that :cd elsewhere still resolve the modules.
-vim.opt.rtp:prepend(vim.fn.fnamemodify(here .. "/..", ":p"))
+vim.opt.rtp:prepend(NVIM_DIR)
 local store = require("inline_review.store")
 
 local results = { pass = 0, fail = {}, ran = {} }
@@ -41,7 +42,7 @@ end
 local function tmpdir()
   local d = vim.fn.tempname()
   vim.fn.mkdir(d, "p")
-  return vim.fn.resolve(d)
+  return vim.fs.normalize(vim.fn.resolve(d))
 end
 
 local function write(path, data, mode)
@@ -405,6 +406,12 @@ case("name: branch names encode to collision-free file names", function()
   eq(store.root_of("/r/x/.agents/state/review/main.jsonl"), "/r/x", "root of live log")
   eq(store.root_of("/r/x/.agents/state/review/archive/main.abc.jsonl"), nil, "archive is not a live log")
   eq(store.root_of("rel/.agents/state/review/main.jsonl"), nil, "relative path refused")
+  eq(store.root_of("C:/r/x/.agents/state/review/main.jsonl"), "C:/r/x", "Windows drive root")
+  if vim.fn.has("win32") == 1 then
+    eq(store.root_of([[C:\r\x\.agents\state\review\main.jsonl]]), "C:/r/x", "Windows native separators")
+  end
+  eq(store.root_of("C:rel/.agents/state/review/main.jsonl"), nil, "drive-relative path refused")
+  eq(store.root_of("~/.agents/state/review/main.jsonl"), nil, "home-relative path refused")
 end)
 
 case("header: first write adds a log header; floor survives in id allocation", function()
@@ -755,7 +762,7 @@ local CLI = LUA_DIR .. "inline_review/cli.lua"
 
 local function cli(log, id, ...)
   return vim
-    .system({ NVIM, "-u", "NONE", "--headless", "-l", CLI, "respond", "--log", log, "--log-id", id, ... })
+    .system({ NVIM, "-u", "NONE", "--headless", "-l", CLI, "respond", "--log", log, "--log-id", id, ... }, { text = true })
     :wait(30000)
 end
 
@@ -783,6 +790,8 @@ case("cli: rejects invalid arguments with exit 2 and leaves the log unchanged", 
     { "--id", "c1", "--status", "addressed", "--summary", "x", "--l", "5" },
     { "--id", "c1", "--status", "addressed", "--summary", "x", "--removed", "--l", "5", "--anchor", "a" },
     { "--id", "c1", "--status", "addressed", "--summary", "x", "--l", "1", "--anchor", "a", "--file", "../out.lua" },
+    { "--id", "c1", "--status", "addressed", "--summary", "x", "--l", "1", "--anchor", "a", "--file", "C:/out.lua" },
+    { "--id", "c1", "--status", "addressed", "--summary", "x", "--l", "1", "--anchor", "a", "--file", "C:out.lua" },
     { "--id", "c9", "--status", "addressed", "--summary", "x" },
   }
   for _, args in ipairs(bad) do
@@ -968,7 +977,21 @@ end
     )
   )
   local jobs = { vim.system({ NVIM, "-u", "NONE", "--headless", "-l", hold, log }) }
-  local big = string.rep("나", 22000)
+  -- Windows Nvim 0.12.6 fails to run -l with this 66KB command-line argument.
+  -- Build it in the child while exercising the same CLI parser and writer.
+  local response = vim.fn.tempname() .. ".lua"
+  write(
+    response,
+    string.format(
+      [[
+local log, id, n = arg[1], arg[2], arg[3]
+arg = { "respond", "--log", log, "--log-id", id, "--id", "c1", "--status", "addressed",
+        "--summary", string.rep("나", 22000) .. n }
+dofile(%q)
+]],
+      CLI
+    )
+  )
   for i = 1, 6 do
     table.insert(
       jobs,
@@ -978,18 +1001,10 @@ end
         "NONE",
         "--headless",
         "-l",
-        CLI,
-        "respond",
-        "--log",
+        response,
         log,
-        "--log-id",
         id,
-        "--id",
-        "c1",
-        "--status",
-        "addressed",
-        "--summary",
-        big .. i,
+        tostring(i),
       })
     )
   end
@@ -1049,14 +1064,18 @@ case("file_ref: <leader>l / <leader>L produce the same references as before", fu
     vim.api.nvim_feedkeys(vim.keycode(keys), "mx", false)
     return vim.fn.getreg("+")
   end
-  local home = vim.fn.fnamemodify(root, ":~")
+  local home = vim.fn.fnamemodify(root, ":~"):gsub("\\", "/")
   eq(run(root .. "/sub/a.lua", "<Space>l"), "@sub/a.lua", "project, normal")
   eq(run(root .. "/sub/a.lua", "Vj<Space>l"), "@sub/a.lua#L2-3", "project, visual range")
   eq(run(root .. "/sub/a.lua", "V<Space>l"), "@sub/a.lua#L2", "project, visual line")
   eq(run(root .. "/sub/a.lua", "<Space>L"), "@" .. home .. "/sub/a.lua", "home, normal")
   eq(run(root .. "/sub/a.lua", "Vj<Space>L"), "@" .. home .. "/sub/a.lua#L2-3", "home, visual")
   eq(run(root .. "/link.lua", "<Space>l"), "@sub/a.lua", "symlink resolves into repo")
-  eq(run(outside, "<Space>l"), "@" .. vim.fn.fnamemodify(outside, ":."), "outside repo falls back to cwd-relative")
+  eq(
+    run(outside, "<Space>l"),
+    "@" .. vim.fn.fnamemodify(outside, ":."):gsub("\\", "/"),
+    "outside repo falls back to cwd-relative"
+  )
   vim.cmd("silent! %bwipeout!")
 end)
 
@@ -1071,6 +1090,14 @@ case("file_ref: relative() refuses paths outside the root, including sibling pre
   eq(fr.relative(root, root .. "/link.lua"), "sub/a.lua", "symlink resolved")
   eq(fr.relative(root, root .. "x/f.lua"), nil, "sibling with shared prefix")
   eq(fr.relative(root, "/etc/hosts"), nil, "outside")
+  local outside = tmpdir() .. "/outside.lua"
+  write(outside, "")
+  assert(vim.uv.fs_symlink(outside, root .. "/escape.lua"))
+  eq(fr.relative(root, root .. "/escape.lua"), nil, "symlink outside the repository")
+  if vim.fn.has("win32") == 1 then
+    eq(fr.relative(root:upper(), root .. "/sub/a.lua"), "sub/a.lua", "Windows root casing")
+    eq(fr.relative(root, (root .. "/sub/a.lua"):gsub("/", "\\")), "sub/a.lua", "Windows native separators")
+  end
 end)
 
 -- ── anchors ─────────────────────────────────────────────────────────────────
@@ -1143,6 +1170,25 @@ case("anchor: duplicate text resolves to the occurrence nearest the recorded lin
   local lines = { "end", "x", "end", "y", "y", "end", "z" }
   local t = thread_from({ comment("c1", { l = { 5, 6 }, snippet = { "end" } }) })
   eq(view.resolve(t, lines).s, 6, "nearest to 5")
+end)
+
+case("anchor: a relocation with more than one candidate is marked ambiguous", function()
+  -- The recorded line still holds the text: certain, whatever else matches.
+  local here = { "end", "x", "end" }
+  local sure = thread_from({ comment("c1", { l = { 3, 3 }, snippet = { "end" } }) })
+  local r1 = view.resolve(sure, here)
+  eq({ r1.s, r1.ambiguous }, { 3, nil }, "matched at its own line, so not ambiguous")
+
+  -- The original is gone and the snippet is not unique: nearest is a guess.
+  local moved = { "end", "y", "end" }
+  local guess = thread_from({ comment("c1", { l = { 9, 9 }, snippet = { "end" } }) })
+  local r2 = view.resolve(guess, moved)
+  eq(r2.ambiguous, true, "two candidates, neither at the recorded line")
+
+  -- One candidate is a plain relocation and stays trustworthy.
+  local single = thread_from({ comment("c1", { l = { 9, 9 }, snippet = { "only here" } }) })
+  local r3 = view.resolve(single, { "a", "only here", "b" })
+  eq({ r3.s, r3.ambiguous }, { 2, nil }, "single match relocates without doubt")
 end)
 
 case("anchor: removed ranges keep a point in the middle, at the end and at the top", function()
@@ -1394,7 +1440,7 @@ vim.wait(200)
 local s, e = require("inline_review.view").position(vim.api.nvim_get_current_buf(), "c1")
 io.stdout:write(tostring(s) .. "," .. tostring(e))
 ]],
-      vim.fn.fnamemodify(here .. "/..", ":p"),
+      NVIM_DIR,
       root,
       path
     )
@@ -1715,6 +1761,80 @@ case("bulk: <leader>aX resolves answered threads in one event after confirmation
   vim.cmd("silent! %bwipeout!")
 end)
 
+case("bulk: a write that does not land reports no resolve", function()
+  -- build() runs before the write, so the list of ids exists even when the
+  -- write is refused. Reporting from that list announced a resolve that never
+  -- happened, next to the warning saying so.
+  local root, _, log = answered_repo()
+  notes = {}
+  vim.fn.mkdir(log .. ".lock", "p")
+  vim.fn.confirm = function()
+    return 1
+  end
+  ir.resolve_answered()
+  vim.fn.confirm = real_confirm
+  eq(#events_in(log, "resolve"), 0, "nothing written while locked")
+  truthy(
+    vim.tbl_filter(function(m)
+      return type(m) == "string" and m:match("log is locked")
+    end, notes)[1],
+    "the lock is reported"
+  )
+  eq(
+    vim.tbl_filter(function(m)
+      return type(m) == "string" and m:match("^Resolved ")
+    end, notes),
+    {},
+    "no success notice"
+  )
+  local threads = fold_file(log)
+  eq({ threads.c1.state, threads.c2.state }, { "answered", "answered" }, "states untouched")
+  store.unlock(log)
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+  truthy(root, "root used")
+end)
+
+case("unlock: a lock on another branch's log is removed from a buffer with no file", function()
+  -- The command is advertised by the CLI, and that message is read in a
+  -- terminal buffer. Going through here() refused there and then aimed at
+  -- .detached, so the situation it documents was the one it could not act on.
+  local root, _, log = answered_repo()
+  local other = store.log_path(root, "feat/x")
+  assert(store.transact(other, function()
+    return comment("c1", { body = "on feat" })
+  end, { branch = "feat/x" }))
+  vim.fn.mkdir(other .. ".lock", "p")
+  notes = {}
+  -- a buffer with no file at all, which is what here() rejects
+  vim.cmd("silent! %bwipeout!")
+  vim.cmd.cd(root)
+  vim.cmd("enew")
+  local asked
+  vim.fn.confirm = function(q)
+    asked = q
+    return 1
+  end
+  ir.unlock()
+  vim.fn.confirm = real_confirm
+  truthy(asked and asked:find("feat", 1, true), "asked about the locked log, not .detached")
+  eq(vim.uv.fs_stat(other .. ".lock"), nil, "lock removed")
+  eq(
+    vim.tbl_filter(function(m)
+      return type(m) == "string" and m:match("No file in this buffer")
+    end, notes),
+    {},
+    "no buffer complaint"
+  )
+  -- and with nothing held it says so against the review dir, not a guessed log
+  notes = {}
+  ir.unlock()
+  truthy(notes[#notes] and notes[#notes]:match("^No review log lock under "), "reports the directory it searched")
+  truthy(log, "log used")
+  ir._stop()
+  vim.cmd("silent! %bwipeout!")
+end)
+
 case("picker: entries tag other branches and the archive; resolving skips archived ones", function()
   local root, main, log = answered_repo()
   local other = store.log_path(root, "feat/x")
@@ -1865,6 +1985,8 @@ case("e2e: without a clipboard the prompt goes to the unnamed register", functio
     string.format(
       [[
 vim.opt.rtp:prepend(%q)
+-- Disable the provider in this child, independently of the host's clipboard.
+vim.g.loaded_clipboard_provider = 0
 local ir = require("inline_review")
 ir.setup()
 local seen
@@ -1876,14 +1998,12 @@ ir.add(false)
 ir.yank()
 io.stdout:write(vim.fn.getreg('"') .. "\n--\n" .. tostring(seen))
 ]],
-      vim.fn.fnamemodify(here .. "/..", ":p"),
+      NVIM_DIR,
       root
     )
   )
-  -- No clipboard tool on PATH: the provider has no executable.
-  local only_git = tmpdir()
-  vim.uv.fs_symlink(vim.fn.exepath("git"), only_git .. "/git")
-  local out = vim.system({ NVIM, "-u", "NONE", "--headless", "-l", probe }, { env = { PATH = only_git } }):wait(20000)
+  local out = vim.system({ NVIM, "-u", "NONE", "--headless", "-l", probe }, { text = true }):wait(20000)
+  eq(out.code, 0, "clipboard probe: " .. (out.stderr or ""))
   eq(
     out.stdout,
     store.prompt_head(blog(root), lid(root))
@@ -1957,6 +2077,7 @@ local REQUIRED = {
   "anchor: lines inserted above before the response is read are followed by search",
   "anchor: falls back to the comment snippet, then estimates without a match",
   "anchor: duplicate text resolves to the occurrence nearest the recorded line",
+  "anchor: a relocation with more than one candidate is marked ambiguous",
   "anchor: removed ranges keep a point in the middle, at the end and at the top",
   "sync: CRLF, noeol, empty, single newline, BOM and latin1 files read as in sync",
   "sync: an external rewrite that was not reloaded is out of sync, even with preserved mtime",

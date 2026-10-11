@@ -33,12 +33,14 @@ describe('layout', () => {
     expect(one.layout.pos).toEqual(two.layout.pos)
   })
 
-  test('it settles within the tick limit, every node inside the grid', () => {
+  test('it settles within the tick limit, placing every node', () => {
     const { layout, ticks } = settle(NODES, EDGES, SIZE)
 
     expect(ticks).toBeLessThan(400)
     expect(Object.keys(layout.pos).sort()).toEqual(NODES.map(n => n.id).sort())
-    expect(Object.values(layout.pos).every(p => isInside(p))).toBe(true)
+    // No "inside the grid" here on purpose: unbounded is what graph.tsx runs,
+    // and under it the region is a camera, not a fence. The bounded case has
+    // its own test below.
   })
 
   test('connected nodes end nearer each other than unconnected ones on average', () => {
@@ -80,8 +82,10 @@ describe('layout', () => {
     let free = start
     let kept = start
     for (let i = 0; i < 200; i++) {
-      free = tick(NODES, EDGES, free, tiny, new Set(), { isBounded: false }).layout
-      kept = tick(NODES, EDGES, kept, tiny).layout
+      // Unbounded is the default, because it is what graph.tsx runs; bounded
+      // is the one that has to ask.
+      free = tick(NODES, EDGES, free, tiny).layout
+      kept = tick(NODES, EDGES, kept, tiny, new Set(), { isBounded: true }).layout
     }
     expect(Object.values(free.pos).some(p => !isInside(p, tiny))).toBe(true)
     expect(Object.values(kept.pos).every(p => isInside(p, tiny))).toBe(true)

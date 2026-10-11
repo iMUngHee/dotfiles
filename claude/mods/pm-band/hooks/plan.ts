@@ -56,6 +56,16 @@ export function planFile(mainRoot: string, plan: string): string {
   return `${mainRoot.replace(/\/+$/, '')}/${plan.replace(/^\.\//, '')}`
 }
 
+/**
+ * Every variant carries `mainRoot`, empty only where the resolver never got far
+ * enough to report one (no git repository, a failed run, unreadable output).
+ *
+ * The backlog does not depend on there being a current plan: closing a plan and
+ * opening /pm to pick the next item is the normal move, and that lands on
+ * `hidden`. When only `plan` and `none` carried the root, the pane had nothing
+ * to run `pm list` in on every other variant and both its tabs stayed on
+ * `loading…` for good — so the field is on the union, not on two of its arms.
+ */
 export type Resolved =
   | {
       kind: 'plan'
@@ -66,9 +76,8 @@ export type Resolved =
       mainRoot: string
     }
   | { kind: 'none'; mainRoot: string }
-  /** No plan to show; `mainRoot` still names the repository when there is one ('' outside git). */
   | { kind: 'hidden'; mainRoot: string }
-  | { kind: 'error'; reason: string }
+  | { kind: 'error'; reason: string; mainRoot: string }
 
 function failureOf(run: Run): string | undefined {
   if (run.isStdoutTruncated) return 'output truncated'
@@ -85,22 +94,25 @@ export function resolvedOf(run: Run): Resolved {
     return { kind: 'hidden', mainRoot: '' }
   }
   const failure = failureOf(run)
-  if (failure) return { kind: 'error', reason: failure }
+  if (failure) return { kind: 'error', reason: failure, mainRoot: '' }
   let json: Record<string, unknown>
   try {
     json = JSON.parse(run.stdout) as Record<string, unknown>
   } catch {
-    return { kind: 'error', reason: 'unreadable resolver output' }
+    return { kind: 'error', reason: 'unreadable resolver output', mainRoot: '' }
   }
   const text = (key: string) =>
     typeof json[key] === 'string' ? (json[key] as string) : ''
   const status = text('status')
-  if (status === 'unbound') return { kind: 'none', mainRoot: text('main_root') }
-  if (status === 'terminal') return { kind: 'hidden', mainRoot: text('main_root') }
-  if (status !== 'ok') return { kind: 'error', reason: status || 'no status' }
+  // main_root is on every resolver answer that parsed, terminal and the error
+  // statuses included, so the three above are the only roots left empty.
+  const mainRoot = text('main_root')
+  if (status === 'unbound') return { kind: 'none', mainRoot }
+  if (status === 'terminal') return { kind: 'hidden', mainRoot }
+  if (status !== 'ok') return { kind: 'error', reason: status || 'no status', mainRoot }
   const planStatus = text('plan_status')
   if (planStatus !== 'draft' && planStatus !== 'active') {
-    return { kind: 'hidden', mainRoot: text('main_root') }
+    return { kind: 'hidden', mainRoot }
   }
   return {
     kind: 'plan',

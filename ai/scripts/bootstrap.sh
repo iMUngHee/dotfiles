@@ -150,6 +150,12 @@ if [ -e "$ROOT_DIR/.git" ] && [ -d "$ROOT_DIR/githooks" ]; then
     if [ -x "$ROOT_DIR/lib/git-filter-machine-local.sh" ]; then
         git -C "$ROOT_DIR" config filter.machine-local.clean \
             "$ROOT_DIR/lib/git-filter-machine-local.sh"
+        # required, because git's default on a failing clean filter is to store
+        # the content unfiltered. The filter refuses a machine-local block whose
+        # end marker is missing rather than guess whether to hide or commit it,
+        # and without this that refusal would commit it — the one outcome the
+        # block exists to prevent.
+        git -C "$ROOT_DIR" config filter.machine-local.required true
         echo "Git filter: machine-local → lib/git-filter-machine-local.sh"
     fi
 fi
