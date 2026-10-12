@@ -14,11 +14,15 @@ test("bootstrap backs up settings while excluding runtime locks and scratch dire
   await mkdir(join(root, "ai", "scripts"), { recursive: true });
   await copyFile(join(repo, "ai", "scripts", "bootstrap.sh"), join(root, "ai", "scripts", "bootstrap.sh"));
   // Stub deploy steps so the fixture never touches the real tool homes.
+  // The notifier builds run only on their own platform (macOS with swiftc,
+  // Linux with go), so a stub missing here fails on that platform alone.
   for (const file of [
     "claude/scripts/bootstrap.sh",
     "codex/scripts/bootstrap.sh",
     "ai/lib/verify-no-residual-tokens.sh",
     "ai/lib/verify-agents-md-size.sh",
+    "notifier/macos/build.sh",
+    "notifier/linux/build.sh",
   ]) {
     const target = join(root, file);
     await mkdir(dirname(target), { recursive: true });
