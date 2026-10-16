@@ -17,7 +17,8 @@ ai/
 ├── scripts/
 │   ├── bootstrap.sh            # Orchestrator — calls claude/ + codex/ bootstrap
 │   ├── sync-back.sh            # Orchestrator — calls per-tool sync-back
-│   └── diagram-engines.sh      # User-invoked — installs the latest archify release outside skill discovery
+│   ├── vendor.sh               # User-invoked — checks / syncs vendored code (archify, rea, eli5) outside the repo
+│   └── vendor.manifest         # What vendor.sh manages; machine-only entries live outside the repo
 └── lib/
     ├── verify-no-residual-tokens.sh
     └── verify-agents-md-size.sh
@@ -127,6 +128,29 @@ ai/scripts/bootstrap.sh --no-cleanup-backups
 
 `ai/scripts/sync-back.sh [--strict]` forwards to each tool's sync-back. `--strict` turns AGENTS.manifest drift into a hard fail.
 
-## Diagram engines
+## Vendored dependencies
 
-`ai/skills/diagram` is a router: Mermaid by default (and for ERD/class/gantt), archify only when a polished, shareable, interactive technical HTML is asked for. archify is deliberately **not** a skill in either tool. `ai/scripts/diagram-engines.sh` clones its latest release tag into `~/.local/share/diagram-engines/archify`, outside `~/.claude/skills` and `~/.agents/skills`, so the skill listing carries only the router's description and the engine's own 137-line SKILL.md is read on demand. Rerun the script to update (it follows release tags, never the dev `main`; set `ARCHIFY_TAG=vX.Y.Z` to pin); `--check` prints installed vs latest. archify's own update notice stays on: one GET per run, install never — when it fires, the router points at the script. The script is user-invoked only — `bootstrap.sh` never calls it, so deploys stay offline-safe. Hosts without a shell (Claude Cowork, the Codex desktop app) always get the Mermaid route. Evaluated and not adopted on 2026-09-07: cathrynlavery/diagram-design (hand-placed SVG, ~1,000 instruction lines per diagram).
+Third-party code this config uses but does not carry. `ai/scripts/vendor.manifest` lists it (the format and the kinds are described at the top of that file) and `ai/scripts/vendor.sh` installs and checks it under `~/.local/share/ai-vendor/<name>` (override with `AI_VENDOR_DIR`).
+
+```
+vendor.sh                     # check (read-only): installed vs upstream, one row per entry
+vendor.sh sync archify eli5   # install / update by name; name@ref overrides the ref for one run
+vendor.sh sync --all
+```
+
+| Kind | What it is | Used for |
+|---|---|---|
+| `release` | a git tag or commit, read in place | archify, the diagram engine |
+| `skill` | the same, plus a link into `~/.claude/skills` and `~/.agents/skills` | eli5, upstream DreambigOu/ELI5 verbatim |
+| `npm` | a package whose own installer does the work | rea — `rea setup` registers its MCP server on both tools and installs its skill |
+| `source` | a checkout, cloned when missing and only ever built afterwards | machine-only entries |
+
+Machine-only entries — internal hosts, MCP servers carrying local patches — go in `~/.local/share/ai-vendor/private.manifest`: same format, outside this repo on purpose, so nothing in it can be committed by accident. vendor.sh never changes an existing `source` checkout: `sync` only runs its build there, and `check` reads it with lock-free, read-only git.
+
+The script is user-invoked only — `bootstrap.sh` never calls it, so deploys stay offline-safe. A new machine needs one `vendor.sh sync --all` after bootstrap; until then the diagram router falls back to Mermaid and eli5 and rea are simply absent. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (default 20) and print `unreachable` instead of hanging. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
+
+### Diagram engine
+
+`ai/skills/diagram` is a router: Mermaid by default (and for ERD/class/gantt), archify only when a polished, shareable, interactive technical HTML is asked for. archify is deliberately **not** a skill in either tool: vendor.sh clones it as a `release` entry, outside `~/.claude/skills` and `~/.agents/skills`, so the skill listing carries only the router's description and the engine's own SKILL.md is read on demand. Its ref follows release tags (`v*`), never the dev `main`; write an exact tag in the manifest to pin. archify's own update notice stays on: one GET per run, install never — when it fires, the router points at `vendor.sh sync archify`. Hosts without a shell (Claude Cowork, the Codex desktop app) always get the Mermaid route. Evaluated and not adopted on 2026-09-07: cathrynlavery/diagram-design (hand-placed SVG, ~1,000 instruction lines per diagram).
+
+`~/.local/share/diagram-engines/`, left behind on machines that ran the retired `diagram-engines.sh`, is no longer read and can be deleted.
