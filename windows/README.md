@@ -137,7 +137,7 @@ there is nothing to symlink. So the repo's contribution is packaging:
 
 ```powershell
 cowork-skills                     # zip every skill to windows/dist/cowork-skills/
-cowork-skills -Only design,eli5   # just these
+cowork-skills -Only design,grill  # just these
 cowork-skills -List               # report only
 ```
 

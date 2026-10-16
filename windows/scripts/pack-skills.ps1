@@ -9,7 +9,7 @@
 # Run it directly, or as `cowork-skills` from the PowerShell profile.
 #
 #   cowork-skills                     # every shared skill (no private tier)
-#   cowork-skills -Only design,eli5   # just these
+#   cowork-skills -Only design,grill  # just these
 #   cowork-skills -List               # report only, write nothing
 #   cowork-skills -IncludePrivate     # opt in to ai/skills/private as well
 #
