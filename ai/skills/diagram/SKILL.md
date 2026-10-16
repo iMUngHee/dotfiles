@@ -13,7 +13,7 @@ Create a diagram for: $ARGUMENTS
 
 - **Mermaid (default)** — quick or editable output, and every flowchart, sequence, class, state, ER, or gantt diagram.
 - **archify** — only when the user asks for a polished, shareable, or interactive HTML (or names archify) AND the diagram is an architecture, workflow, sequence, data-flow, or lifecycle/state diagram. Everything else stays on Mermaid.
-- Engine missing (`~/.local/share/diagram-engines/archify` absent, or no `node`): say so, offer `~/.config/ai/scripts/diagram-engines.sh` (network clone of the latest release — run only with 대협's consent), and deliver Mermaid meanwhile. Environments without a shell (Claude Cowork, Codex desktop app) always take the Mermaid route.
+- Engine missing (`~/.local/share/ai-vendor/archify` absent, or no `node`): say so, offer `bash ~/.config/ai/scripts/vendor.sh sync archify` (network clone of the latest release — run only with 대협's consent), and deliver Mermaid meanwhile. Environments without a shell (Claude Cowork, Codex desktop app) always take the Mermaid route.
 
 ## Mermaid
 
@@ -29,9 +29,9 @@ Create a diagram for: $ARGUMENTS
 
 ## archify
 
-Engine root: `ENGINE=~/.local/share/diagram-engines/archify/archify` (latest release installed by `ai/scripts/diagram-engines.sh`; rerun it to update, `--check` to compare).
+Engine root: `ENGINE=~/.local/share/ai-vendor/archify/archify` (installed by `ai/scripts/vendor.sh sync archify`; `vendor.sh check archify` compares it with the latest release). Written against archify v3, whose single `finalize` command validates, delivers, and browser-checks a candidate.
 
-1. Read `$ENGINE/SKILL.md` "Fast authoring path" and only the one schema plus one example it names for the chosen type; follow it for authoring, `validate`, and `deliver`, running the CLI from `$ENGINE`.
-2. One override: write the spec and HTML under `/tmp/archify/<slug>.json` and `/tmp/archify/<slug>.html` unless 대협 names a path. Let its "Update awareness" step run as written; when it reports a newer release, relay the notice and point 대협 to `~/.config/ai/scripts/diagram-engines.sh` — never update mid-task.
-3. Look at the result before reporting: run `visual-check`; when it cannot run here, take headless Chrome screenshots of the delivered HTML at 1440×900 and at a tall viewport (`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars --window-size=1440,900 --screenshot=<out.png> file://<html>`; `brave-origin`/`chromium`/`google-chrome` on Linux — whichever is on PATH), read the images, and fix what the validator cannot see — overlapping boundaries, clipped rows, dead space. Never open a visible browser unless asked.
-4. Report the delivered HTML path, the validate/deliver receipt (a showcase pass is 9 checks, 0 errors), and anything skipped. A non-zero exit is never success; after two repair rounds without a lower error count, stop and report the remaining diagnostics.
+1. Follow `$ENGINE/SKILL.md` — its "Fast authoring path", Type router, and Delivery sections — calling the CLI as `node "$ENGINE/bin/archify.mjs"`. A non-zero `finalize` is never success; its repair limit applies, and when it is reached, stop and report the remaining diagnostics.
+2. One override: work in `/tmp/archify`, so the engine's per-request `.archify/<type>-<slug>-<timestamp>/` folder lands there, unless 대협 names a path. When a receipt's update notice fires, relay it and point 대협 to `bash ~/.config/ai/scripts/vendor.sh sync archify` — never update mid-task.
+3. Look before reporting — required here, though the engine calls it optional: once `finalize` passes, run `node "$ENGINE/bin/archify.mjs" visual-check <output.html> --summary --require-provenance` and read the screenshots it lists. When it cannot run here, take headless Chrome screenshots of the delivered HTML at 1440×900 and at a tall viewport (`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars --window-size=1440,900 --screenshot=<out.png> file://<html>`; `brave-origin`/`chromium`/`google-chrome` on Linux — whichever is on PATH) and read those. Fix what the automated gates cannot see — overlapping boundaries, clipped rows, dead space — and rerun `finalize` with a fresh `--out-dir`, as the engine's delivery contract says. Never open a visible browser unless asked.
+4. Report as the engine's Output section says (a clickable link to the HTML first, no command or receipt recap), and say whether the screenshots were looked at and what was skipped.
