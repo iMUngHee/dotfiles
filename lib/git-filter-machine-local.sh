@@ -2,9 +2,10 @@
 # lib/git-filter-machine-local.sh — git clean filter for machine-local lines
 # inside tracked config files.
 #
-# Registered by ai/scripts/bootstrap.sh as filter.machine-local.clean and wired
-# to files in .gitattributes. Reads the file on stdin, writes to stdout what git
-# should store; the working tree is never touched.
+# Registered by ai/scripts/bootstrap.sh as filter.machine-local.clean (beside a
+# pass-through `smudge = cat`) and wired to files in .gitattributes. Reads the
+# file on stdin, writes to stdout what git should store; the working tree is
+# never touched.
 #
 # The case this exists for: Omarchy's display text size slider runs
 #     sed -i -E "s/^font-size = .*/font-size = $pt/" ~/.config/ghostty/config
@@ -15,11 +16,13 @@
 # did before its value was quoted.
 #
 # So the line stays where Omarchy expects it and git is told to ignore what it
-# says. Only `clean` is defined: a smudge would have to know this machine's
-# value, and git gives a filter no way to read the working tree it is about to
-# overwrite. The consequence is that checking this file out — a pull that
-# changes it, or a hard reset — restores CANONICAL_FONT_SIZE, and the slider
-# has to be used again. That is rare, and recoverable in one move.
+# says. Only `clean` does any work. The smudge is `cat`, registered solely
+# because `required` makes git abort a checkout that has no smudge to run; a
+# real one would have to know this machine's value, and git gives a filter no
+# way to read the working tree it is about to overwrite. The consequence is
+# that checking this file out — a pull that changes it, or a hard reset —
+# restores CANONICAL_FONT_SIZE, and the slider has to be used again. That is
+# rare, and recoverable in one move.
 #
 # The second case: a block between `# >>> machine-local` and
 # `# <<< machine-local` lines is dropped whole. aerospace/aerospace.toml uses it

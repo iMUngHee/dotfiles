@@ -159,6 +159,12 @@ if [ -e "$ROOT_DIR/.git" ] && [ -d "$ROOT_DIR/githooks" ]; then
         # and without this that refusal would commit it — the one outcome the
         # block exists to prevent.
         git -C "$ROOT_DIR" config filter.machine-local.required true
+        # required covers smudge too: with no smudge command git treats every
+        # checkout of a filtered file as a failed smudge, so `git worktree add`,
+        # and any checkout, pull or rebase that rewrites one, aborts with
+        # "smudge filter machine-local failed". cat passes the blob through,
+        # which is all this filter needs on the way out.
+        git -C "$ROOT_DIR" config filter.machine-local.smudge cat
         echo "Git filter: machine-local → lib/git-filter-machine-local.sh"
     fi
 fi
