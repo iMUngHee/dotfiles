@@ -1,0 +1,24 @@
+# ai/scripts/vendor.manifest — third-party code this config uses but does not carry.
+# Read by ai/scripts/vendor.sh; machine-only entries go in
+# ${AI_VENDOR_DIR:-~/.local/share/ai-vendor}/private.manifest, outside this repo.
+#
+# One entry per line, six whitespace-separated fields. Use `-` for an empty
+# field; only the last one, post, may contain spaces (it runs to end of line).
+#
+#   name    unique id; also the install dir under the vendor root
+#   kind    release  git tag or commit cloned under the vendor root, read in place
+#           skill    same, plus <dest> linked into ~/.claude/skills and ~/.agents/skills
+#           npm      package whose own installer (post) does the work
+#           source   a checkout at <dest>: cloned when absent, never touched when present
+#   source  git URL, npm package name, or `-` for a source entry that exists only locally
+#   ref     tag glob (`v*` follows the newest release), exact tag or 40-char SHA (pinned);
+#           npm: `latest` or a version; source: the branch to clone
+#   dest    release/npm: `-` (the vendor root) · skill: the skill dir inside the clone
+#           source: the checkout path
+#   post    command run after a sync — in the clone (release/skill), in $HOME with
+#           {ver} replaced (npm), in the checkout (source)
+#
+# name    kind     source                              ref                                       dest         post
+archify   release  https://github.com/tt-a1i/archify   v*                                        -            node archify/bin/archify.mjs doctor
+rea       npm      rea-agents                          latest                                    -            npx -y rea-agents@{ver} setup --client claude_code --client codex --yes
+eli5      skill    https://github.com/DreambigOu/ELI5  a766623b062331fdde53467001379b4ddf3acc2f  skills/eli5  -

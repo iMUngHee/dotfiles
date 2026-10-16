@@ -48,6 +48,7 @@ in form; all three were only reachable from here.
 | `lib/common.ps1` | shared helpers | — |
 | `scripts/deploy-*.ps1` | per-surface deploy | `*/scripts/bootstrap.sh` |
 | `scripts/install-nerdfont.ps1` | FiraCode Nerd Font | the ghostty AppImage installer in `homebrew/bootstrap.sh` |
+| `scripts/vendor.ps1` | vendored-code check / sync | `ai/scripts/vendor.sh` (runs it under Git Bash) |
 | `scripts/pack-skills.ps1` | Cowork skill zips | — |
 | `dist/` | build output (gitignored) | — |
 | `private.ps1` | machine-local overrides (gitignored) | `zsh/private.sh` |

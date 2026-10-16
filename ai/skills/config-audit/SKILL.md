@@ -43,7 +43,7 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 - `~/.claude/settings.json` hook entries reference scripts that exist under `claude/hooks/` → if a referenced script is missing, FAIL (dangling hook reference).
 - `~/.claude/MEMORY.md` index entries reference files that exist under `~/.claude/memory/` (or its `private/` subdir) → FAIL on missing entry target, WARN on file-without-entry.
 - Plain files under `~/.claude/memory/` that are not generated, not symlinks to `ai/memory/` or `claude/memory/`, and not indexed by `~/.claude/MEMORY.md` → WARN (runtime-only memory drift).
-- `~/.claude/skills/<name>` symlinks resolve to a real directory under `ai/skills/` or `claude/skills/` → FAIL on broken symlink.
+- `~/.claude/skills/<name>` symlinks resolve to a real directory under `ai/skills/` or `claude/skills/`, or under the vendor root (`${AI_VENDOR_DIR:-~/.local/share/ai-vendor}`) for a `skill` entry in `ai/scripts/vendor.manifest` or the private manifest → FAIL on broken symlink. A real directory a vendored tool's own installer put there (rea's `reverse-engineer-anything`) is not a finding.
 - `~/.claude/mods` is a symlink to `claude/mods/`, and every path in `~/.claude/settings.json` `env.CLAUDE_CODE_PLUGIN_DIRS` is a folder under it holding `.claude-plugin/plugin.json` → FAIL on a missing or non-symlinked target (a mod that does not load fails silently).
 
 ### Codex
@@ -62,7 +62,7 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
   for a validated draft/active `ok` binding → FAIL.
 - `~/.agents/.codex/state/current.txt` exists and is non-empty → WARN (legacy tool-specific state pointer; current shared state is repo-local `.agents/state/current.txt`).
 - Any legacy `~/.agents/.codex/plans/*.md` frontmatter has `status: draft` or `status: active` → WARN (old Codex plan namespace may conflict with shared plan/state expectations).
-- `~/.agents/skills/<name>` symlinks resolve under `ai/skills/` or `codex/skills/` → FAIL on broken.
+- `~/.agents/skills/<name>` symlinks resolve under `ai/skills/` or `codex/skills/`, or under the vendor root for a vendored `skill` entry (same rule as Claude) → FAIL on broken.
 
 ## Output
 
