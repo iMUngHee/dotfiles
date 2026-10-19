@@ -12,6 +12,7 @@
 MAX_RETRIES=2
 CHECKER_TIMEOUT=30
 SUITE_TIMEOUT=300
+SUITE_DEADLINE=$((SECONDS + SUITE_TIMEOUT))
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 source "$HOOK_DIR/lib/detect-project.sh"
@@ -62,7 +63,8 @@ fi
 
 cd "$PROJECT_ROOT" || run_notify_and_exit
 
-CHANGED_FILES=$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)
+TRACKED_FILES=$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)
+CHANGED_FILES=$(printf '%s\n' "$TRACKED_FILES"; git ls-files --others --exclude-standard 2>/dev/null)
 if [[ -z "$CHANGED_FILES" ]]; then
   # No modified files — read-only session, skip gate
   rm -f "$COUNTER_FILE"
@@ -71,10 +73,13 @@ fi
 
 # Dedup (unstaged and staged lists can overlap)
 CHANGED_FILES=$(echo "$CHANGED_FILES" | sort -u)
+TRACKED_FILES=$(printf '%s\n' "$TRACKED_FILES" | sort -u)
 
 # --- Stage 0: Auto-format modified files (covers post-edit-pipeline debounce gaps) ---
+# Only tracked changes may be auto-formatted; untracked files select suites only.
 FORMATTED=0
 while IFS= read -r file; do
+  (( SECONDS < SUITE_DEADLINE )) || break
   [[ -z "$file" ]] && continue
   [[ -f "$file" ]] || continue
   detect_checker "$file" "$PROJECT_ROOT"
@@ -83,7 +88,7 @@ while IFS= read -r file; do
   portable_timeout 5 bash -c "$FMT_CMD \"\$1\"" _ "$file" &>/dev/null
   AFTER=$(md5 -q "$file" 2>/dev/null)
   [[ "$BEFORE" != "$AFTER" ]] && FORMATTED=$((FORMATTED + 1))
-done <<< "$CHANGED_FILES"
+done <<< "$TRACKED_FILES"
 (( FORMATTED > 0 )) && echo "[final-gate] auto-formatted ${FORMATTED} file(s)"
 
 TMPOUT="/tmp/claude-final-gate-output-${SESSION_ID}"
@@ -91,7 +96,12 @@ TMPOUT="/tmp/claude-final-gate-output-${SESSION_ID}"
 # --- Helper: run one suite from a subdirectory, failing the gate on nonzero ---
 run_suite() {
   local label="$1" dir="$2"; shift 2
-  ( cd "$PROJECT_ROOT/$dir" 2>/dev/null && portable_timeout "$SUITE_TIMEOUT" "$@" ) > "$TMPOUT" 2>&1 \
+  local remaining=$((SUITE_DEADLINE - SECONDS))
+  if (( remaining <= 0 )); then
+    echo "shared suite budget exhausted" > "$TMPOUT"
+    fail_gate "$label"
+  fi
+  ( cd "$PROJECT_ROOT/$dir" 2>/dev/null && portable_timeout "$remaining" "$@" ) > "$TMPOUT" 2>&1 \
     || fail_gate "$label"
 }
 
@@ -99,7 +109,8 @@ run_suite() {
 # The suites exist but were wired to nothing, so a change could ship them red —
 # that is how a rule asserted verbatim by ai/lib/*.test.mjs got deleted. Each
 # trigger is scoped so untouched areas cost nothing (pm-roadmap alone is ~50s).
-if [[ "$PROJECT_ROOT" == "$HOME/.config" ]] && command -v node &>/dev/null; then
+# -ef compares the directory itself, including Git's C:/ and MSYS's /c/ paths.
+if [[ "$PROJECT_ROOT" -ef "$HOME/.config" ]] && command -v node &>/dev/null; then
   # Instruction files are asserted by string match, and a doc-only change
   # reaches no type checker at all.
   if grep -qE '^(ai|claude|codex)/.*\.(md|sh)$' <<< "$CHANGED_FILES"; then

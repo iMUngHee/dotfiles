@@ -5,6 +5,7 @@ set -euo pipefail
 MAX_RETRIES=2
 CHECKER_TIMEOUT=30
 SUITE_TIMEOUT=300
+SUITE_DEADLINE=$((SECONDS + SUITE_TIMEOUT))
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 source "$HOOK_DIR/lib/detect-project.sh"
@@ -34,14 +35,14 @@ fail_gate() {
 
   if (( current_count >= MAX_RETRIES )); then
     echo "[codex final-gate] ${label} failed after ${MAX_RETRIES} retries. Allowing stop." >&2
-    head -10 "$tmp_out" 2>/dev/null >&2 || true
+    head -10 "$tmp_out" >&2 2>/dev/null || true
     rm -f "$counter_file"
     notify_and_exit
   fi
 
   echo $((current_count + 1)) > "$counter_file"
   echo "[codex final-gate] ${label} failed (attempt $((current_count + 1))/${MAX_RETRIES}). Fix and retry." >&2
-  head -20 "$tmp_out" 2>/dev/null >&2 || true
+  head -20 "$tmp_out" >&2 2>/dev/null || true
   rm -f "$tmp_out" 2>/dev/null
   exit 2
 }
@@ -51,16 +52,20 @@ project_root=$(detect_project_root)
 
 cd "$project_root" || notify_and_exit
 
-changed_files=$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)
+tracked_files=$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)
+changed_files=$(printf '%s\n' "$tracked_files"; git ls-files --others --exclude-standard 2>/dev/null)
 [[ -n "$changed_files" ]] || {
   rm -f "$counter_file"
   notify_and_exit
 }
 
 changed_files=$(printf '%s\n' "$changed_files" | sort -u)
+tracked_files=$(printf '%s\n' "$tracked_files" | sort -u)
 
+# Only tracked changes may be auto-formatted; untracked files select suites only.
 formatted=0
 while IFS= read -r file; do
+  (( SECONDS < SUITE_DEADLINE )) || break
   [[ -n "$file" && -f "$file" ]] || continue
   detect_checker "$file" "$project_root"
   [[ -n "$FMT_CMD" ]] || continue
@@ -68,15 +73,20 @@ while IFS= read -r file; do
   portable_timeout 5 bash -c "$FMT_CMD \"\$1\"" _ "$file" &>/dev/null || true
   after=$(file_checksum "$file")
   [[ -n "$before" && "$before" != "$after" ]] && formatted=$((formatted + 1))
-done <<< "$changed_files"
+done <<< "$tracked_files"
 
 (( formatted > 0 )) && echo "[codex final-gate] auto-formatted ${formatted} file(s)"
 
 # Run one suite from a subdirectory, failing the gate on nonzero.
 run_suite() {
   local label="$1" dir="$2"; shift 2
+  local remaining=$((SUITE_DEADLINE - SECONDS))
+  if (( remaining <= 0 )); then
+    echo "shared suite budget exhausted" > "$tmp_out"
+    fail_gate "$label"
+  fi
   set +e
-  ( cd "$project_root/$dir" 2>/dev/null && portable_timeout "$SUITE_TIMEOUT" "$@" ) > "$tmp_out" 2>&1
+  ( cd "$project_root/$dir" 2>/dev/null && portable_timeout "$remaining" "$@" ) > "$tmp_out" 2>&1
   local rc=$?
   set -e
   (( rc == 0 )) || fail_gate "$label"
@@ -87,7 +97,8 @@ run_suite() {
 # nothing, so a change could ship them red — that is how a rule asserted
 # verbatim by ai/lib/*.test.mjs got deleted. Triggers are scoped so untouched
 # areas cost nothing (pm-roadmap alone is ~50s).
-if [[ "$project_root" == "$HOME/.config" ]] && command -v node &>/dev/null; then
+# -ef compares the directory itself, including Git's C:/ and MSYS's /c/ paths.
+if [[ "$project_root" -ef "$HOME/.config" ]] && command -v node &>/dev/null; then
   if grep -qE '^(ai|claude|codex)/.*\.(md|sh)$' <<< "$changed_files"; then
     run_suite "contract tests" . \
       node --test ai/lib/session-routing-consumers.test.mjs ai/lib/inject-context-hooks.test.mjs
