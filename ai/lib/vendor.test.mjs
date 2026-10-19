@@ -20,6 +20,18 @@ import test from "node:test";
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const script = join(repo, "ai", "scripts", "vendor.sh");
+// Windows: Git\bin\bash.exe is a launcher, and git itself, when /mingw64/bin is not on
+// PATH, both put /mingw64/bin and /usr/bin ahead of the PATH they were given — so Git's
+// own ssh would beat a test shim. Run the MSYS bash the launcher wraps, and keep the real
+// usr\bin and mingw64\bin on PATH right behind the shims (withPath), so PATH stays as
+// given, the same as on macOS and Linux. (A Git Bash session already has both on PATH.)
+const msysDirs =
+  process.platform === "win32"
+    ? (spawnSync("bash", ["-c", 'cygpath -w "$(dirname "$BASH")" /mingw64/bin'], { encoding: "utf8" }).stdout ?? "")
+        .split(/\r?\n/)
+        .filter(Boolean)
+    : [];
+const bash = msysDirs.length ? join(msysDirs[0], "bash.exe") : "bash";
 
 // Every fixture gets its own HOME, vendor root, manifest, and an empty global git
 // config, so neither the real tool homes nor the user's git settings are touched.
@@ -39,6 +51,9 @@ function fixture() {
     AI_VENDOR_TIMEOUT: "2",
     GIT_CONFIG_GLOBAL: gitconfig,
     GIT_CONFIG_NOSYSTEM: "1",
+    // Windows: Git for Windows without MSYSTEM (a plain PowerShell parent) puts its own
+    // /mingw64/bin and /usr/bin ahead of a child's PATH, so Git's ssh would beat a shim.
+    ...(process.platform === "win32" && { MSYSTEM: process.env.MSYSTEM || "MINGW64" }),
     GIT_AUTHOR_NAME: "t",
     GIT_AUTHOR_EMAIL: "t@example.com",
     GIT_COMMITTER_NAME: "t",
@@ -71,7 +86,7 @@ function fixture() {
       return merged;
     },
     run(args, extra = {}, scriptPath = script) {
-      return spawnSync("bash", [scriptPath, ...args], { encoding: "utf8", env: f.envFor(extra) });
+      return spawnSync(bash, [scriptPath, ...args], { encoding: "utf8", env: f.envFor(extra) });
     },
     git(cwd, ...args) {
       const r = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: f.envFor() });
@@ -332,7 +347,7 @@ test("manifests are validated and read with CRLF endings and no final newline", 
 test("a hanging or missing remote is reported unreachable within the timeout and the next entry is still checked", () => {
   const f = fixture();
   const up = f.upstream("eng", [{ tag: "v1.0.0" }]);
-  const realGit = spawnSync("bash", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  const realGit = spawnSync(bash, ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
   const shims = join(f.root, "shims");
   mkdirSync(shims);
   // For a URL containing "hang", keep running past the timeout and leave a child
@@ -377,8 +392,8 @@ function shim(dir, name, body) {
   writeFileSync(join(dir, name), `#!/bin/bash\n${body}\n`, { mode: 0o755 });
   return dir;
 }
-const withPath = (dir) => ({ PATH: dir + delimiter + process.env.PATH });
-const realGit = () => spawnSync("bash", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+const withPath = (dir) => ({ PATH: [dir, ...msysDirs, process.env.PATH].join(delimiter) });
+const realGit = () => spawnSync(bash, ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
 const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
 
 test("origin checks ignore url.insteadOf rewriting (H1)", () => {
@@ -571,7 +586,7 @@ test("Ctrl-C ends the lookup in flight, even one that ignores SIGTERM (L3)", { s
     `for a in "$@"; do case "$a" in *hang*) echo $$ > '${pidFile}'; trap '' TERM; exec sleep 30;; esac; done\nexec '${realGit()}' "$@"`,
   );
   f.manifest(["slow release file:///nowhere/hang v* - -"]);
-  const child = spawn("bash", [script, "check"], {
+  const child = spawn(bash, [script, "check"], {
     env: f.envFor({ ...withPath(bin), AI_VENDOR_TIMEOUT: "60" }),
     detached: true,
     stdio: "ignore",
@@ -686,7 +701,7 @@ test("the script finds its own manifest through a symlink and with CDPATH export
   symlinkSync(join(scripts, "vendor.sh"), link);
   const noOverride = { AI_VENDOR_MANIFEST: null };
   assert.equal(row(ok(f.run(["check"], noOverride, link)).stdout, "eng").upstream, "v1.0.0");
-  const r = spawnSync("bash", ["scripts/vendor.sh", "check"], {
+  const r = spawnSync(bash, ["scripts/vendor.sh", "check"], {
     cwd: join(f.root, "copy"),
     encoding: "utf8",
     env: f.envFor({ ...noOverride, CDPATH: `${f.root}:.` }),
