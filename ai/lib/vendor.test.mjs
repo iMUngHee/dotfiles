@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -11,6 +23,8 @@ const script = join(repo, "ai", "scripts", "vendor.sh");
 
 // Every fixture gets its own HOME, vendor root, manifest, and an empty global git
 // config, so neither the real tool homes nor the user's git settings are touched.
+// Git's repository-locating variables are dropped too: run from a git hook, the suite
+// would otherwise aim fixture commits at the repository that ran the hook.
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "vendor-"));
   const home = join(root, "home");
@@ -29,6 +43,14 @@ function fixture() {
     GIT_AUTHOR_EMAIL: "t@example.com",
     GIT_COMMITTER_NAME: "t",
     GIT_COMMITTER_EMAIL: "t@example.com",
+    GIT_DIR: null,
+    GIT_WORK_TREE: null,
+    GIT_INDEX_FILE: null,
+    GIT_OBJECT_DIRECTORY: null,
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: null,
+    GIT_COMMON_DIR: null,
+    GIT_NAMESPACE: null,
+    GIT_PREFIX: null,
   };
   const f = {
     root,
@@ -42,11 +64,17 @@ function fixture() {
       mkdirSync(vendor, { recursive: true });
       writeFileSync(join(vendor, "private.manifest"), lines.join("\n") + "\n");
     },
-    run(args, extra = {}) {
-      return spawnSync("bash", [script, ...args], { encoding: "utf8", env: { ...process.env, ...env, ...extra } });
+    // A null in extra removes that variable, so a test can run without one the caller exported.
+    envFor(extra = {}) {
+      const merged = { ...process.env, ...env, ...extra };
+      for (const key of Object.keys(merged)) if (merged[key] === null) delete merged[key];
+      return merged;
+    },
+    run(args, extra = {}, scriptPath = script) {
+      return spawnSync("bash", [scriptPath, ...args], { encoding: "utf8", env: f.envFor(extra) });
     },
     git(cwd, ...args) {
-      const r = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: { ...process.env, ...env } });
+      const r = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: f.envFor() });
       assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
       return r.stdout.trim();
     },
@@ -266,7 +294,7 @@ test("source refuses a missing local-only, non-git, or foreign-origin checkout w
   assert.match(row(ok(f.run(["check", "nogit"])).stdout, "nogit").status, /^foreign/);
 
   const wrong = join(f.home, "work", "wrong");
-  spawnSync("git", ["clone", "-q", elsewhere.url, wrong], { env: { ...process.env, ...f.env } });
+  spawnSync("git", ["clone", "-q", elsewhere.url, wrong], { env: f.envFor() });
   r = f.run(["sync", "wrong"]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.ok(!existsSync(join(wrong, "made.txt")));
@@ -340,4 +368,370 @@ test("sync needs names or --all, rejects unknown names, continues past a failure
   const r = f.run(["sync", "--all"]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.equal(f.git(join(f.vendor, "good"), "describe", "--tags", "--exact-match"), "v1.0.0");
+});
+
+// ── Regressions from the first independent verification round (2026-10-19) ──
+
+function shim(dir, name, body) {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, name), `#!/bin/bash\n${body}\n`, { mode: 0o755 });
+  return dir;
+}
+const withPath = (dir) => ({ PATH: dir + delimiter + process.env.PATH });
+const realGit = () => spawnSync("bash", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+
+test("origin checks ignore url.insteadOf rewriting (H1)", () => {
+  const f = fixture();
+  f.upstream("eng", [{ tag: "v1.0.0" }]);
+  f.upstream("src", [{ file: "a.txt" }]);
+  writeFileSync(f.env.GIT_CONFIG_GLOBAL, `[url "${pathToFileURL(join(f.root, "up")).href}/"]\n\tinsteadOf = https://example.invalid/\n`);
+  f.manifest(["eng release https://example.invalid/eng v* - -", "src source https://example.invalid/src main ~/work/src -"]);
+  ok(f.run(["sync", "eng", "src"]));
+  ok(f.run(["sync", "eng", "src"]));
+  const r = ok(f.run(["check"]));
+  assert.equal(row(r.stdout, "eng").status, "ok");
+  assert.doesNotMatch(row(r.stdout, "src").status, /foreign/);
+});
+
+test("an exported GIT_DIR or GIT_WORK_TREE cannot redirect sync into another repository (H2)", () => {
+  const f = fixture();
+  const eng = f.upstream("eng", [{ tag: "v1.0.0" }]);
+  const other = join(f.root, "other");
+  mkdirSync(other);
+  f.git(other, "init", "-q", "-b", "main");
+  writeFileSync(join(other, "precious.txt"), "keep\n");
+  f.git(other, "add", "-A");
+  f.git(other, "commit", "-q", "-m", "other");
+  f.manifest([`eng release ${eng.url} v1.0.0 - -`]);
+  ok(f.run(["sync", "eng"], { GIT_DIR: join(other, ".git"), GIT_WORK_TREE: other }));
+  assert.equal(f.git(join(f.vendor, "eng"), "describe", "--tags", "--exact-match"), "v1.0.0");
+  assert.equal(readFileSync(join(other, "precious.txt"), "utf8"), "keep\n");
+  assert.equal(f.git(other, "remote"), "");
+});
+
+test("a configured SSH command is honoured; otherwise lookups run ssh in batch mode (M1)", () => {
+  const f = fixture();
+  const bin = shim(join(f.root, "bin"), "ssh", `echo "$*" >> '${join(f.root, "ssh.log")}'; exit 255`);
+  shim(bin, "myssh", `echo "$*" >> '${join(f.root, "myssh.log")}'; exit 255`);
+  f.manifest(["far release ssh://example.invalid/x.git v* - -"]);
+  const clean = { ...withPath(bin), GIT_SSH_COMMAND: null, GIT_SSH: null };
+  assert.equal(row(ok(f.run(["check"], clean)).stdout, "far").status, "missing, unreachable");
+  assert.match(readFileSync(join(f.root, "ssh.log"), "utf8"), /BatchMode=yes/);
+
+  writeFileSync(f.env.GIT_CONFIG_GLOBAL, `[core]\n\tsshCommand = ${join(bin, "myssh")}\n`);
+  rmSync(join(f.root, "ssh.log"));
+  ok(f.run(["check"], clean));
+  assert.ok(existsSync(join(f.root, "myssh.log")), "core.sshCommand was used");
+  assert.ok(!existsSync(join(f.root, "ssh.log")), "plain ssh was not used");
+
+  writeFileSync(f.env.GIT_CONFIG_GLOBAL, "");
+  rmSync(join(f.root, "myssh.log"));
+  ok(f.run(["check"], { ...clean, GIT_SSH: join(bin, "myssh") }));
+  assert.ok(existsSync(join(f.root, "myssh.log")), "GIT_SSH was used");
+  assert.ok(!existsSync(join(f.root, "ssh.log")), "plain ssh was not used");
+
+  // Batch mode is for the time-limited lookups only: sync's own git (a clone with a
+  // repo-local core.sshCommand, an includeIf block) and its post command see none of it.
+  f.manifest(["pkg npm some-pkg 1.0.0 - env > post-env.txt"]);
+  ok(f.run(["sync", "pkg"], clean));
+  const postEnv = readFileSync(join(f.home, "post-env.txt"), "utf8");
+  assert.doesNotMatch(postEnv, /^GIT_SSH_COMMAND=/m);
+  assert.doesNotMatch(postEnv, /^GIT_TERMINAL_PROMPT=/m);
+});
+
+test(
+  "an unreadable manifest is an error, not an empty one (M2)",
+  { skip: (isRoot || process.platform === "win32") && "mode 000 does not stop this user from reading" },
+  () => {
+    const f = fixture();
+    const eng = f.upstream("eng", [{ tag: "v1.0.0" }]);
+    f.manifest([`eng release ${eng.url} v* - -`]);
+    f.privateManifest([`p release ${eng.url} v* - -`]);
+    chmodSync(join(f.vendor, "private.manifest"), 0o000);
+    try {
+      const r = f.run(["check"]);
+      assert.equal(r.status, 2, r.stdout + r.stderr);
+      assert.match(r.stderr, /cannot read/);
+    } finally {
+      chmodSync(join(f.vendor, "private.manifest"), 0o600);
+    }
+  },
+);
+
+test("check flags a release dest that sync would refuse (M3)", () => {
+  const f = fixture();
+  const eng = f.upstream("eng", [{ tag: "v1.0.0" }]);
+  const elsewhere = f.upstream("elsewhere", [{ tag: "v1.0.0" }]);
+  f.manifest([`eng release ${eng.url} v* - -`, `two release ${eng.url} v* - -`]);
+  mkdirSync(join(f.vendor, "eng"), { recursive: true });
+  writeFileSync(join(f.vendor, "eng", "keep.txt"), "x\n");
+  spawnSync("git", ["clone", "-q", elsewhere.url, join(f.vendor, "two")], { env: f.envFor() });
+  const r = ok(f.run(["check"]));
+  assert.match(row(r.stdout, "eng").status, /^foreign/);
+  assert.match(row(r.stdout, "two").status, /^foreign/);
+});
+
+test("a force-moved tag is detected and re-synced, even after switching away and back (M4)", () => {
+  const f = fixture();
+  const up = f.upstream("eng", [{ tag: "v1.0.0" }, { tag: "v1.1.0" }]);
+  f.manifest([`eng release ${up.url} v1.0.0 - -`]);
+  ok(f.run(["sync", "eng"]));
+  const dest = join(f.vendor, "eng");
+  const moved = f.commit(up.dir, { file: "moved.txt" });
+  f.git(up.dir, "tag", "-f", "v1.0.0");
+  assert.equal(row(ok(f.run(["check", "eng"])).stdout, "eng").status, "update (tag moved)");
+  ok(f.run(["sync", "eng"]));
+  assert.equal(f.git(dest, "rev-parse", "HEAD"), moved);
+
+  ok(f.run(["sync", "eng@v1.1.0"]));
+  const movedAgain = f.commit(up.dir, { file: "again.txt" });
+  f.git(up.dir, "tag", "-f", "v1.0.0");
+  ok(f.run(["sync", "eng"]));
+  assert.equal(f.git(dest, "rev-parse", "HEAD"), movedAgain);
+  assert.match(row(ok(f.run(["check", "eng"])).stdout, "eng").status, /^ok \(pinned\)/);
+});
+
+test("sync refuses a tag that lacks the skill dir, and check reports links whose target is gone (M5)", () => {
+  const f = fixture();
+  const up = f.upstream("demo", [{ file: "skills/demo/SKILL.md", content: "s\n", tag: "v1.0.0" }]);
+  f.git(up.dir, "rm", "-rq", "skills");
+  f.commit(up.dir, { file: "other.txt", tag: "v1.1.0" });
+  f.manifest([`demo skill ${up.url} v1.0.0 skills/demo -`]);
+  ok(f.run(["sync", "demo"]));
+  const dest = join(f.vendor, "demo");
+  const before = f.git(dest, "rev-parse", "HEAD");
+  const r = f.run(["sync", "demo@v1.1.0"]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(f.git(dest, "rev-parse", "HEAD"), before);
+  assert.ok(existsSync(join(f.home, ".claude", "skills", "demo", "SKILL.md")));
+
+  f.commit(up.dir, { file: "skills/demo", content: "now a file\n", tag: "v1.2.0" });
+  const asFile = f.run(["sync", "demo@v1.2.0"]);
+  assert.equal(asFile.status, 1, asFile.stdout + asFile.stderr);
+  assert.equal(f.git(dest, "rev-parse", "HEAD"), before);
+
+  rmSync(join(dest, "skills"), { recursive: true });
+  assert.match(row(ok(f.run(["check", "demo"])).stdout, "demo").status, /broken: claude agents$/);
+});
+
+test("globs handle dated tags, suffix globs and namespaced tags (M6)", () => {
+  const f = fixture();
+  const dated = f.upstream("dated", [{ tag: "release-2024-01" }, { tag: "release-2024-02" }]);
+  const stable = f.upstream("stable", [{ tag: "v1.0.0-stable" }, { tag: "v1.1.0-stable" }, { tag: "v1.2.0-rc.1-stable" }]);
+  const mixed = f.upstream("mixed", [{ tag: "v1.0.0" }, { tag: "release/v9.9.9" }]);
+  const nested = f.upstream("nested", [{ tag: "release/v1.0.0" }, { tag: "release/v1.1.0" }]);
+  f.manifest([
+    `dated release ${dated.url} release-* - -`,
+    `stable release ${stable.url} v*-stable - -`,
+    `mixed release ${mixed.url} v* - -`,
+    `nested release ${nested.url} release/v* - -`,
+  ]);
+  const r = ok(f.run(["check"]));
+  assert.equal(row(r.stdout, "dated").upstream, "release-2024-02");
+  assert.equal(row(r.stdout, "stable").upstream, "v1.1.0-stable");
+  assert.equal(row(r.stdout, "mixed").upstream, "v1.0.0");
+  assert.equal(row(r.stdout, "nested").upstream, "release/v1.1.0");
+  ok(f.run(["sync", "--all"]));
+  assert.equal(f.git(join(f.vendor, "nested"), "describe", "--tags", "--exact-match"), "release/v1.1.0");
+  assert.equal(f.git(join(f.vendor, "mixed"), "describe", "--tags", "--exact-match"), "v1.0.0");
+
+  // Globs take * and ? only. Git refs cannot contain [, so a [class] could only be a
+  // glob, and half-supporting one silently dropped real tags; it is rejected instead.
+  f.manifest([`bracket release ${stable.url} v*-[s]table - -`]);
+  const bracket = f.run(["check"]);
+  assert.equal(bracket.status, 2, bracket.stdout + bracket.stderr);
+  assert.match(bracket.stderr, /\[/);
+  f.manifest([`mixed release ${mixed.url} v* - -`]);
+  assert.equal(f.run(["sync", "mixed@v[1].0.0"]).status, 2);
+});
+
+test("a lookup that ignores SIGTERM is still ended near the timeout", () => {
+  const f = fixture();
+  const bin = shim(
+    join(f.root, "bin"),
+    "git",
+    `for a in "$@"; do case "$a" in *stubborn*) trap '' TERM; sleep 30; exit 0;; esac; done\nexec '${realGit()}' "$@"`,
+  );
+  f.manifest(["slow release file:///nowhere/stubborn v* - -"]);
+  const started = Date.now();
+  const r = ok(f.run(["check"], { ...withPath(bin), AI_VENDOR_TIMEOUT: "1" }));
+  assert.ok(Date.now() - started < 6000, `check took ${Date.now() - started} ms`);
+  assert.equal(row(r.stdout, "slow").status, "missing, unreachable");
+});
+
+test("Ctrl-C ends the lookup in flight, even one that ignores SIGTERM (L3)", { skip: process.platform === "win32" && "no POSIX process groups" }, async () => {
+  const f = fixture();
+  const pidFile = join(f.root, "lookup.pid");
+  const bin = shim(
+    join(f.root, "bin"),
+    "git",
+    `for a in "$@"; do case "$a" in *hang*) echo $$ > '${pidFile}'; trap '' TERM; exec sleep 30;; esac; done\nexec '${realGit()}' "$@"`,
+  );
+  f.manifest(["slow release file:///nowhere/hang v* - -"]);
+  const child = spawn("bash", [script, "check"], {
+    env: f.envFor({ ...withPath(bin), AI_VENDOR_TIMEOUT: "60" }),
+    detached: true,
+    stdio: "ignore",
+  });
+  const exited = new Promise((resolve) => child.on("exit", resolve));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let lookup = 0;
+  try {
+    for (let i = 0; i < 200 && !existsSync(pidFile); i++) await sleep(50);
+    assert.ok(existsSync(pidFile), "lookup started");
+    lookup = Number(readFileSync(pidFile, "utf8"));
+    process.kill(-child.pid, "SIGINT");
+    const outcome = await Promise.race([exited.then(() => "exited"), sleep(10000).then(() => "stuck")]);
+    assert.equal(outcome, "exited", "vendor.sh did not exit within 10s of Ctrl-C");
+    for (let i = 0; i < 40 && alive(lookup); i++) await sleep(50);
+    assert.equal(alive(lookup), false, "the lookup survived Ctrl-C");
+  } finally {
+    if (lookup && alive(lookup)) process.kill(lookup, "SIGKILL");
+    if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, "SIGKILL");
+  }
+});
+
+test("AI_VENDOR_DIR must be absolute and AI_VENDOR_TIMEOUT a positive integer (L1, L2)", () => {
+  const f = fixture();
+  const eng = f.upstream("eng", [{ tag: "v1.0.0" }]);
+  f.manifest([`eng release ${eng.url} v* - -`]);
+  for (const extra of [
+    { AI_VENDOR_DIR: "relative/vendor" },
+    { AI_VENDOR_TIMEOUT: "0" },
+    { AI_VENDOR_TIMEOUT: "abc" },
+    { AI_VENDOR_TIMEOUT: "08" },
+    { AI_VENDOR_TIMEOUT: "1.5" },
+  ]) {
+    const r = f.run(["check"], extra);
+    assert.equal(r.status, 2, `${JSON.stringify(extra)}\n${r.stdout}${r.stderr}`);
+  }
+  ok(f.run(["sync", "eng"], { AI_VENDOR_DIR: "~/tilde-vendor" }));
+  assert.ok(existsSync(join(f.home, "tilde-vendor", "eng", ".git")));
+});
+
+test("duplicate names are caught in a large manifest (L4)", () => {
+  const f = fixture();
+  const lines = ["a release file:///x v* - -"];
+  for (let i = 0; i < 400; i++) lines.push(`n${i}${"x".repeat(200)} release file:///x v* - -`);
+  lines.push("a release file:///x v* - -");
+  f.manifest(lines);
+  const r = f.run(["check", "a"]);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /duplicate/);
+});
+
+test("check agrees with sync when only prereleases exist, and pinned hints use the version prefix (L5)", () => {
+  const f = fixture();
+  const pre = f.upstream("pre", [{ tag: "v1.0.0-rc.1" }]);
+  const py = f.upstream("py", [{ tag: "py3-v1.0" }, { tag: "py3-v1.1" }]);
+  const bare = f.upstream("bare", [{ tag: "1.0.0" }, { tag: "1.1.0" }, { tag: "nightly" }]);
+  const suffixed = f.upstream("suffixed", [{ tag: "v1.0.0-stable" }, { tag: "v1.1.0-stable" }]);
+  f.manifest([
+    `pre release ${pre.url} v* - -`,
+    `py release ${py.url} py3-v1.0 - -`,
+    `bare release ${bare.url} 1.0.0 - -`,
+    `suffixed release ${suffixed.url} v1.0.0-stable - -`,
+  ]);
+  ok(f.run(["sync", "pre@v1.0.0-rc.1", "py", "bare", "suffixed"]));
+  const r = ok(f.run(["check"]));
+  assert.equal(row(r.stdout, "suffixed").status, "ok (pinned), latest v1.1.0-stable");
+  assert.equal(row(r.stdout, "pre").status, "no matching tag");
+  assert.equal(row(r.stdout, "py").status, "ok (pinned), latest py3-v1.1");
+  assert.equal(row(r.stdout, "bare").status, "ok (pinned), latest 1.1.0");
+});
+
+test("npm versions are trimmed and validated (L6)", () => {
+  const f = fixture();
+  const versionFile = join(f.root, "npm-version");
+  const bin = shim(join(f.root, "bin"), "npm", `[ "$1" = view ] && cat '${versionFile}'`);
+  f.manifest(["pkg npm some-pkg latest - printf '%s' {ver} > npm-post.txt"]);
+  writeFileSync(versionFile, "  2.0.0  \n");
+  ok(f.run(["sync", "pkg"], withPath(bin)));
+  assert.equal(readFileSync(join(f.home, "npm-post.txt"), "utf8"), "2.0.0");
+  assert.equal(readFileSync(join(f.vendor, "pkg", "VERSION"), "utf8"), "2.0.0\n");
+
+  writeFileSync(versionFile, "npm notice something went sideways\n");
+  const r = f.run(["sync", "pkg"], withPath(bin));
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(readFileSync(join(f.vendor, "pkg", "VERSION"), "utf8"), "2.0.0\n");
+  assert.equal(row(ok(f.run(["check"], withPath(bin))).stdout, "pkg").status, "unreachable");
+});
+
+test("the script finds its own manifest through a symlink and with CDPATH exported (L7)", () => {
+  const f = fixture();
+  const eng = f.upstream("eng", [{ tag: "v1.0.0" }]);
+  const scripts = join(f.root, "copy", "scripts");
+  mkdirSync(scripts, { recursive: true });
+  copyFileSync(script, join(scripts, "vendor.sh"));
+  writeFileSync(join(scripts, "vendor.manifest"), `eng release ${eng.url} v* - -\n`);
+  const link = join(f.root, "bin", "vendor");
+  mkdirSync(dirname(link), { recursive: true });
+  symlinkSync(join(scripts, "vendor.sh"), link);
+  const noOverride = { AI_VENDOR_MANIFEST: null };
+  assert.equal(row(ok(f.run(["check"], noOverride, link)).stdout, "eng").upstream, "v1.0.0");
+  const r = spawnSync("bash", ["scripts/vendor.sh", "check"], {
+    cwd: join(f.root, "copy"),
+    encoding: "utf8",
+    env: f.envFor({ ...noOverride, CDPATH: `${f.root}:.` }),
+  });
+  ok(r);
+  assert.equal(row(r.stdout, "eng").upstream, "v1.0.0");
+});
+
+test("a UTF-8 BOM is ignored and names stay ASCII in any locale (L8, L9)", () => {
+  const f = fixture();
+  const eng = f.upstream("eng", [{ tag: "v1.0.0" }]);
+  writeFileSync(f.env.AI_VENDOR_MANIFEST, `\uFEFFeng release ${eng.url} v* - -\n`);
+  assert.equal(row(ok(f.run(["check"])).stdout, "eng").upstream, "v1.0.0");
+  f.manifest([`café release ${eng.url} v* - -`]);
+  for (const locale of ["C", "en_US.UTF-8", "C.UTF-8"]) {
+    const r = f.run(["check"], { LC_ALL: locale, LANG: locale });
+    assert.equal(r.status, 2, `${locale}\n${r.stdout}${r.stderr}`);
+  }
+});
+
+test("odd states give readable rows and vendor messages (L10)", () => {
+  const f = fixture();
+  const up = f.upstream("eng", [{ tag: "v1.0.0-rc.1" }]);
+  f.git(up.dir, "tag", "v1.0.0");
+  const src = f.upstream("src", [{ file: "a.txt" }]);
+  const empty = join(f.home, "work", "empty");
+  mkdirSync(empty, { recursive: true });
+  f.git(empty, "init", "-q", "-b", "main");
+  f.git(empty, "remote", "add", "origin", src.url);
+  spawnSync("git", ["clone", "-q", src.url, join(f.home, "work", "gone")], { env: f.envFor() });
+  mkdirSync(f.vendor, { recursive: true });
+  symlinkSync(join(f.root, "nowhere"), join(f.vendor, "dangle"));
+  const lines = [
+    `eng release ${up.url} v* - -`,
+    `empty source ${src.url} main ~/work/empty -`,
+    `gone source ${src.url} nobranch ~/work/gone -`,
+    `dangle release ${up.url} v* - -`,
+  ];
+  f.manifest(lines);
+
+  ok(f.run(["sync", "eng"]));
+  const r = ok(f.run(["check"]));
+  assert.equal(row(r.stdout, "eng").installed, "v1.0.0");
+  assert.equal(row(r.stdout, "empty").installed, "-");
+  assert.match(row(r.stdout, "empty").status, /no commits/);
+  assert.equal(row(r.stdout, "gone").status, "remote branch missing");
+
+  const d = f.run(["sync", "dangle"]);
+  assert.equal(d.status, 1, d.stdout + d.stderr);
+  assert.match(d.stderr, /^dangle: /m);
+
+  if (process.platform !== "win32") {
+    f.manifest([...lines, "win source - - C:/tools/eng -"]);
+    assert.equal(f.run(["check"]).status, 2);
+  }
 });
