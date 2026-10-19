@@ -24,9 +24,13 @@ changed=false
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
     # Name the runtime keys the filter below is about to drop, so a flag enabled
     # in a live session is a decision to make rather than a silent loss.
+    # Keys the Windows deploy merges in from its own fragment are machine-local
+    # by design, so they are tracked there, not missing here.
+    win_fragment="$ROOT_DIR/windows/claude-settings.windows.json"
+    [ -f "$win_fragment" ] || win_fragment=/dev/null
     untracked_env=$(jq -s -r \
-        '((.[1].env // {} | keys) - (.[0].env // {} | keys))[]' \
-        "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json")
+        '((.[1].env // {} | keys) - (.[0].env // {} | keys) - (.[2].env // {} | keys))[]' \
+        "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" "$win_fragment" | tr -d '\r')
     if [ -n "$untracked_env" ]; then
         echo "WARN: env keys in ~/.claude/settings.json are not tracked in the repo (not synced):"
         echo "$untracked_env" | sed 's/^/  /'
