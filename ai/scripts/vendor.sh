@@ -60,6 +60,11 @@ expand_path() {
     case "$1" in
         "~") printf '%s\n' "$HOME" ;;
         "~/"*) printf '%s\n' "$HOME/${1#\~/}" ;;
+        # Git Bash: a drive path set from PowerShell (C:\x) becomes /c/x, the form
+        # readlink and pwd report, so path comparisons below see one spelling.
+        [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]:[/\\]*)
+            if [ "$IS_MSYS" = 1 ]; then cygpath -u "$1"; else printf '%s\n' "$1"; fi
+            ;;
         *) printf '%s\n' "$1" ;;
     esac
 }
@@ -88,7 +93,7 @@ is_abs() {
     case "$1" in
         /* | "~" | "~/"*) return 0 ;;
         # A drive path is absolute only under Git Bash; elsewhere C:/x is relative.
-        [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]:/*) [ "$IS_MSYS" = 1 ] ;;
+        [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]:[/\\]*) [ "$IS_MSYS" = 1 ] ;;
         *) return 1 ;;
     esac
 }
