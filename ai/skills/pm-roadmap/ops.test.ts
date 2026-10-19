@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as ops from "./ops.ts";
 import { type Block, taskFile, inboxPath, parseBlocks, serializeBlocks, parseFrontmatter, getField, setField, getFmField, readStamped } from "./store.ts";
-import { listTransactions } from "./transaction.ts";
+import { listTransactions, makeTarget, regularDescriptor } from "./transaction.ts";
 import { ensureManagedWorktree, reservationPaths, stagePlan } from "../../lib/worktree.mjs";
 
 const O = { nowMs: 1_750_000_000_000, nowDate: "2026-06-22", retries: 0 as number };
@@ -350,6 +350,8 @@ async function main() {
       const before = (await readStamped(CL("ALPHA")))!.content;
       await writeFile(CL("ALPHA"), `${before}\nSTRANDED-IN-CLOSED\n`);
       const corrupted = (await readStamped(CL("ALPHA")))!.content;
+      const target = await makeTarget(root, CL("ALPHA"), regularDescriptor(corrupted));
+      assert.match(target.path, /\/closed\.md$/, "transaction paths stay slash-normalized on Windows too");
       await assert.rejects(
         () => ops.completePlanFromRetro(root, "ALPHA", "a-two", {
           planPath: ".agents/plans/2026-06-22-a-two.md", terminalStatus: "done", closedDate: "2026-06-22", ...O,

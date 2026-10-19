@@ -1,10 +1,10 @@
-// Tests for package script binary resolution. Run: ./node_modules/.bin/tsx package-scripts.test.ts
+// Tests for package script binary resolution. Run: node ./node_modules/tsx/dist/cli.mjs package-scripts.test.ts
 //
 // npm prepends only node_modules/.bin to PATH, so a bare `tsc` or `tsx` in a script silently
 // falls back to a global install when the local one is absent — running the suite under an
 // unpinned toolchain and, worse, reporting the missing dependency as a type error. Every
-// invocation must name ./node_modules/.bin explicitly so a missing binary fails with exit 127
-// and a message naming the path. This test locks the class, not the three strings that had it.
+// invocation must name a local entry point explicitly so a missing dependency fails with a
+// message naming the path. Node entry points also work in Windows npm's default cmd.exe.
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const AI_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const GUARDED = ["tsc", "tsx"] as const;
-const LOCAL_BIN = "./node_modules/.bin/";
+const LOCAL_ENTRY = "node ./node_modules/<package>/…";
 
 // A bare invocation is the binary name at a command position — start of the script, or after a
 // shell separator (; & | && || newline) or a `do`/`then`. Arguments are never inspected, so
@@ -58,8 +58,9 @@ async function main() {
     for (const [name, script] of Object.entries(pkg.scripts ?? {})) {
       if (typeof script !== "string") continue;
       scriptsChecked++;
+      assert.doesNotMatch(script, /\bfor\s+\w+\s+in\b/, `${p}: ${name} must also run under Windows npm's cmd.exe`);
       for (const bin of bareInvocations(script)) {
-        offenders.push(`${p.slice(AI_ROOT.length + 1)} → "${name}": bare '${bin}' (use ${LOCAL_BIN}${bin})`);
+        offenders.push(`${p.slice(AI_ROOT.length + 1)} → "${name}": bare '${bin}' (use ${LOCAL_ENTRY})`);
       }
     }
   }
@@ -67,7 +68,7 @@ async function main() {
   assert.equal(
     offenders.length,
     0,
-    `package scripts must invoke ${LOCAL_BIN}<bin>, not a bare name that PATH can resolve to a global install:\n  ${offenders.join("\n  ")}`,
+    `package scripts must invoke a local entry point (${LOCAL_ENTRY}), not a bare name that PATH can resolve to a global install:\n  ${offenders.join("\n  ")}`,
   );
   assert.ok(scriptsChecked > 0, "no scripts were inspected");
 

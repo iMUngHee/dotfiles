@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "./node_modules/.bin/tsc -p tsconfig.json",
-    "test": "npm run typecheck && for t in *.test.ts; do ./node_modules/.bin/tsx \"$t\" || exit 1; done"
+    "typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "npm run typecheck && node ./node_modules/tsx/dist/cli.mjs --test --test-concurrency=1 *.test.ts"
   },
   "dependencies": {
     "tsx": "^4.0.0"
