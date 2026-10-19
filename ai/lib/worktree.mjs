@@ -61,6 +61,12 @@ async function exists(path) {
   return lstat(path).then(() => true).catch(() => false);
 }
 
+// Platform path semantics handle Windows separators and case without making
+// case-sensitive Unix paths equivalent or resolving away symlink checks.
+function samePath(left, right) {
+  return relative(left, right) === "";
+}
+
 async function readText(path) {
   return readFile(path, "utf8").catch((error) => {
     if (error?.code === "ENOENT") return "";
@@ -281,7 +287,7 @@ async function ensureDirectoryLink(target, linkPath) {
   if (info?.isSymbolicLink()) {
     const raw = await readlink(linkPath);
     const actual = resolve(dirname(linkPath), raw);
-    if (actual === target) return;
+    if (samePath(actual, target)) return;
     await unlink(linkPath);
   } else if (info?.isDirectory() && await isEmptyDirectory(linkPath)) {
     await rm(linkPath, { recursive: true });
@@ -407,14 +413,14 @@ async function ensureManagedWorktreeLocked({ main, root, id, base, baseCommit, s
   const targetAbs = worktree
     ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
     : join(main, ".agents", "worktrees", id);
-  if (targetAbs === main) throw new Error("main checkout cannot be a plan execution worktree");
+  if (samePath(targetAbs, main)) throw new Error("main checkout cannot be a plan execution worktree");
   await assertManagedTargetPhysical(main, targetAbs);
   const managedRel = relativeManagedPath(main, targetAbs);
   const worktrees = listGitWorktrees(main);
-  const byPath = worktrees.find((entry) => resolve(entry.path) === resolve(targetAbs));
+  const byPath = worktrees.find((entry) => samePath(entry.path, targetAbs));
   const byBranch = worktrees.find((entry) => entry.branch === targetBranch);
   if (byPath && byPath.branch !== targetBranch) throw new Error(`worktree path is occupied by branch ${byPath.branch}`);
-  if (byBranch && resolve(byBranch.path) !== resolve(targetAbs)) throw new Error(`branch ${targetBranch} is already checked out at ${byBranch.path}`);
+  if (byBranch && !samePath(byBranch.path, targetAbs)) throw new Error(`branch ${targetBranch} is already checked out at ${byBranch.path}`);
 
   const branchCommit = runGit(main, ["rev-parse", "--verify", `refs/heads/${targetBranch}^{commit}`], { allowFailure: true });
   const existingRaw = await readText(paths.json);
@@ -466,7 +472,7 @@ export async function ensureManagedWorktree({ root = process.cwd(), id, base, ba
   const targetAbs = worktree
     ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
     : join(main, ".agents", "worktrees", id);
-  if (targetAbs === main) throw new Error("main checkout cannot be a plan execution worktree");
+  if (samePath(targetAbs, main)) throw new Error("main checkout cannot be a plan execution worktree");
   await assertManagedTargetPhysical(main, targetAbs);
   return withReservationLock(main, id, ({ json, stage, lock, dir }) => ensureManagedWorktreeLocked({
     main,
@@ -492,7 +498,7 @@ async function loadPlan(main, planRel) {
 function executionRootFor(main, fields) {
   if (!fields.worktree) return null;
   const target = resolve(main, fields.worktree);
-  if (target === main) throw new Error("main checkout cannot be a plan execution worktree");
+  if (samePath(target, main)) throw new Error("main checkout cannot be a plan execution worktree");
   relativeManagedPath(main, target);
   return assertManagedTarget(main, target);
 }
@@ -504,7 +510,7 @@ async function findNonterminalPlanOwner(main, worktree, { excludePlan = null } =
     const rel = `.agents/plans/${file}`;
     if (rel === excludePlan) continue;
     const fields = parseFrontmatter(await readText(join(plansDir, file)));
-    if (["draft", "active"].includes(fields.status) && fields.worktree && resolve(main, fields.worktree) === target) {
+    if (["draft", "active"].includes(fields.status) && fields.worktree && samePath(resolve(main, fields.worktree), target)) {
       return rel;
     }
   }
@@ -549,7 +555,7 @@ async function resolvePlanReference({ checkout, main, plan: pointer }) {
   } catch (error) {
     return { status: "invalid_mapping", plan: pointer, checkout_root: checkout, main_root: main, error: error.message };
   }
-  const entry = listGitWorktrees(main).find((item) => resolve(item.path) === executionRoot);
+  const entry = listGitWorktrees(main).find((item) => samePath(item.path, executionRoot));
   if (!entry) return { status: "missing_worktree", plan: pointer, execution_root: executionRoot, checkout_root: checkout, main_root: main };
   if (entry.branch !== fields.branch) {
     return { status: "branch_mismatch", plan: pointer, execution_root: executionRoot, expected_branch: fields.branch, actual_branch: entry.branch, checkout_root: checkout, main_root: main };
@@ -567,7 +573,7 @@ async function resolvePlanReference({ checkout, main, plan: pointer }) {
     base_commit: fields.base_commit,
     branch: fields.branch,
     worktree: fields.worktree,
-    route_required: resolve(checkout) !== executionRoot,
+    route_required: !samePath(checkout, executionRoot),
   };
 }
 
@@ -752,7 +758,9 @@ async function resolveSessionState({ root = process.cwd(), tool, sessionId, stor
   }
 
   if (binding.state === "ok") {
-    if (binding.value.main_root !== main) {
+    // Git emits forward slashes on Windows, while older/native writers use
+    // backslashes. Compare absolute paths using the platform's path semantics.
+    if (!isAbsolute(binding.value.main_root) || !samePath(binding.value.main_root, main)) {
       return {
         result: {
           status: "binding_root_mismatch",
@@ -781,7 +789,7 @@ async function resolveSessionState({ root = process.cwd(), tool, sessionId, stor
     };
   }
 
-  if (resolve(checkout) !== resolve(main)) {
+  if (!samePath(checkout, main)) {
     const local = await resolveCurrent(checkout);
     if (local.status === "ok" && local.route_required === false) {
       return {
@@ -883,7 +891,7 @@ export async function ensureSession({ root = process.cwd(), tool, sessionId, sto
     return { ...state.result, binding_pruned: removed, binding_status: "unbound" };
   }
 
-  if (state.result.status === "unbound" && resolve(state.result.checkout_root) !== resolve(state.result.main_root)) {
+  if (state.result.status === "unbound" && !samePath(state.result.checkout_root, state.result.main_root)) {
     await ensureCurrent({ root: state.result.checkout_root });
     state = await resolveSessionState({ root: state.result.checkout_root, tool, sessionId, storeRoot });
   }
@@ -896,7 +904,7 @@ export async function assertPlanRoot({ root = process.cwd(), plan }) {
   const expected = executionRootFor(main, loaded.fields);
   const actual = runGit(root, ["rev-parse", "--show-toplevel"]);
   const branch = runGit(actual, ["branch", "--show-current"]);
-  if (resolve(actual) !== expected || branch !== loaded.fields.branch) {
+  if (!samePath(actual, expected) || branch !== loaded.fields.branch) {
     throw new Error(`execution root mismatch: expected ${expected} (${loaded.fields.branch}), got ${actual} (${branch})`);
   }
   return { ok: true, execution_root: actual, branch };
@@ -909,7 +917,7 @@ export async function assertReservationRoot({ root = process.cwd(), id }) {
   const expected = resolve(main, reservation.worktree);
   const actual = runGit(root, ["rev-parse", "--show-toplevel"]);
   const branch = runGit(actual, ["branch", "--show-current"]);
-  if (resolve(actual) !== expected || branch !== reservation.branch) {
+  if (!samePath(actual, expected) || branch !== reservation.branch) {
     throw new Error(`execution root mismatch: expected ${expected} (${reservation.branch}), got ${actual} (${branch})`);
   }
   return { ok: true, execution_root: actual, branch };
@@ -918,7 +926,7 @@ export async function assertReservationRoot({ root = process.cwd(), id }) {
 async function adoptionCandidates(main, plan) {
   const candidates = [];
   for (const entry of listGitWorktrees(main)) {
-    if (resolve(entry.path) === resolve(main)) continue;
+    if (samePath(entry.path, main)) continue;
     const pointer = (await readText(join(entry.path, ".agents", "state", "current.txt"))).trim();
     if (pointer === plan) candidates.push(entry);
   }
@@ -1066,7 +1074,7 @@ function requestedAdoptionTarget(main, id, branch, worktree) {
   const targetAbs = worktree
     ? (isAbsolute(worktree) ? worktree : resolve(main, worktree))
     : join(main, ".agents", "worktrees", id);
-  if (resolve(targetAbs) === resolve(main)) throw new Error("main checkout cannot be a plan execution worktree");
+  if (samePath(targetAbs, main)) throw new Error("main checkout cannot be a plan execution worktree");
   assertManagedTarget(main, targetAbs);
   return { targetBranch, targetAbs, managedRel: relativeManagedPath(main, targetAbs) };
 }
@@ -1146,7 +1154,7 @@ async function adoptPlanLocked({
       if (branch && branch !== candidate.branch) throw new Error(`adoption candidate branch mismatch: ${candidate.branch}`);
       if (worktree) {
         const requested = isAbsolute(worktree) ? worktree : resolve(main, worktree);
-        if (resolve(requested) !== resolve(candidate.path)) throw new Error(`adoption candidate path mismatch: ${candidate.path}`);
+        if (!samePath(requested, candidate.path)) throw new Error(`adoption candidate path mismatch: ${candidate.path}`);
       }
       const owner = await findNonterminalPlanOwner(main, relativeManagedPath(main, candidate.path), { excludePlan: plan });
       if (owner) throw new Error(`target already owned by plan ${owner}`);
@@ -1156,7 +1164,7 @@ async function adoptPlanLocked({
       const existingRaw = await readText(paths.json);
       if (!existingRaw) {
         const worktrees = listGitWorktrees(main);
-        const occupiedPath = worktrees.some((entry) => resolve(entry.path) === resolve(requested.targetAbs));
+        const occupiedPath = worktrees.some((entry) => samePath(entry.path, requested.targetAbs));
         const occupiedBranch = worktrees.some((entry) => entry.branch === requested.targetBranch)
           || Boolean(runGit(main, ["rev-parse", "--verify", `refs/heads/${requested.targetBranch}^{commit}`], { allowFailure: true }));
         if (occupiedPath || occupiedBranch || await exists(requested.targetAbs)) {
@@ -1183,7 +1191,7 @@ async function adoptPlanLocked({
       if (!["draft", "active"].includes(loaded.fields.status)) throw new Error(`cannot adopt ${loaded.fields.status || "statusless"} plan`);
       const owner = await findNonterminalPlanOwner(main, topology.worktree, { excludePlan: plan });
       if (owner) throw new Error(`target already owned by plan ${owner}`);
-      const entry = listGitWorktrees(main).find((item) => resolve(item.path) === resolve(topology.execution_root));
+      const entry = listGitWorktrees(main).find((item) => samePath(item.path, topology.execution_root));
       if (!entry) throw new Error(`adoption target is no longer registered: ${topology.execution_root}`);
       if (entry.branch !== topology.branch) throw new Error(`adoption target branch changed: ${entry.branch}`);
       const head = runGit(topology.execution_root, ["rev-parse", "HEAD"]);
@@ -1306,7 +1314,7 @@ async function autoAdoptLegacy({ root, legacy }) {
         if (existingReservation.id !== id) throw new AutoAdoptionError("reservation_identity_mismatch", "reservation id differs from the plan");
         const reserved = requestedAdoptionTarget(main, id, existingReservation.branch, existingReservation.worktree);
         if ((hasOwnField(loaded.fields, "branch") && loaded.fields.branch !== reserved.targetBranch)
-          || (hasOwnField(loaded.fields, "worktree") && resolve(main, loaded.fields.worktree) !== reserved.targetAbs)) {
+          || (hasOwnField(loaded.fields, "worktree") && !samePath(resolve(main, loaded.fields.worktree), reserved.targetAbs))) {
           throw new AutoAdoptionError("reservation_identity_mismatch", "legacy topology fields differ from the existing reservation");
         }
         target = { branch: reserved.targetBranch, worktree: reserved.targetAbs };
@@ -1383,7 +1391,7 @@ async function reconcileMappedReservation(result) {
         }
       }
       const startCommit = resolveExactCommit(result.main_root, reservation.start_commit, "residual_reservation_mismatch", "reservation start_commit");
-      const entry = listGitWorktrees(result.main_root).find((item) => resolve(item.path) === resolve(result.execution_root));
+      const entry = listGitWorktrees(result.main_root).find((item) => samePath(item.path, result.execution_root));
       if (!entry || entry.branch !== result.branch) {
         throw new AutoAdoptionError("residual_reservation_mismatch", "residual target registration or branch differs from the mapped plan");
       }
@@ -1438,7 +1446,7 @@ async function ensureMappedCurrent({ result }) {
       return currentPointerConflict(reconciled, "target_current_changed", targetResult.current, "target");
     }
   }
-  if (reconciled.route_required && resolve(reconciled.checkout_root) !== resolve(reconciled.main_root)) {
+  if (reconciled.route_required && !samePath(reconciled.checkout_root, reconciled.main_root)) {
     const cleared = await writeCurrentCAS(reconciled.checkout_root, reconciled.plan, "");
     if (!cleared.updated && cleared.current) {
       return currentPointerConflict(reconciled, "caller_current_changed", cleared.current, "caller");
@@ -1458,7 +1466,7 @@ export async function cancelProvisional({ root = process.cwd(), id }) {
       const owner = await findNonterminalPlanOwner(main, reservation.worktree);
       if (owner) return { removed: false, reason: "owned_by_plan", plan: owner };
       const target = resolve(main, reservation.worktree);
-      const entry = listGitWorktrees(main).find((item) => resolve(item.path) === target);
+      const entry = listGitWorktrees(main).find((item) => samePath(item.path, target));
       // The worktree is already gone, so the reservation is all that is left to clean. The one
       // guard that does not depend on the worktree — durable plan ownership — has already run
       // above; the guards below (current pointer, dirty tree, commits) are all properties of a
@@ -1497,10 +1505,10 @@ export async function pruneManagedWorktree({ root = process.cwd(), plan }) {
     const branch = loaded.fields.branch;
     const owner = await findNonterminalPlanOwner(main, loaded.fields.worktree);
     if (owner) throw new Error(`refusing to prune worktree owned by non-terminal plan ${owner}`);
-    const entry = listGitWorktrees(main).find((item) => resolve(item.path) === target);
+    const entry = listGitWorktrees(main).find((item) => samePath(item.path, target));
     if (!entry) return { removed: false, reason: "not_found" };
     if (entry.branch !== branch) throw new Error(`branch mismatch: expected ${branch}, found ${entry.branch}`);
-    if (resolve(runGit(root, ["rev-parse", "--show-toplevel"])) === target) throw new Error("refusing to prune the caller's current worktree");
+    if (samePath(runGit(root, ["rev-parse", "--show-toplevel"]), target)) throw new Error("refusing to prune the caller's current worktree");
     return withCurrentLock(target, async (current) => {
       if (current) throw new Error(`refusing to prune a worktree with current pointer ${current}`);
       if (runGit(target, ["status", "--porcelain"])) throw new Error("refusing to prune a dirty worktree");
@@ -1554,7 +1562,7 @@ export async function validateManagedWorktrees(root = process.cwd(), { all = fal
         const owner = owners.get(target);
         if (owner) issues.push({ code: "duplicate_worktree_owner", plan: rel, other: owner });
         else owners.set(target, rel);
-        const entry = worktrees.find((item) => resolve(item.path) === target);
+        const entry = worktrees.find((item) => samePath(item.path, target));
         if (!entry) issues.push({ code: "missing_plan_worktree", plan: rel, worktree: fields.worktree });
         else if (entry.branch !== fields.branch) issues.push({ code: "plan_branch_mismatch", plan: rel, expected: fields.branch, actual: entry.branch });
       }
@@ -1583,7 +1591,7 @@ export async function validateManagedWorktrees(root = process.cwd(), { all = fal
           reservations.push({ id, state: "owned_by_plan", plan: owner });
           continue;
         }
-        const entry = worktrees.find((item) => resolve(item.path) === target);
+        const entry = worktrees.find((item) => samePath(item.path, target));
         if (!entry) {
           issues.push({ code: "abandoned_reservation_missing_worktree", id, worktree: reservation.worktree });
           reservations.push({ id, state: "missing_worktree" });

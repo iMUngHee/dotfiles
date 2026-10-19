@@ -133,6 +133,12 @@ export async function acquireOwnerLock(
     await mkdir(temporary);
     await writeFile(join(temporary, marker), `${JSON.stringify(owner)}\n`);
     try {
+      // Windows rename can replace a regular file with a directory. A legacy
+      // file or symlink is not ours to replace, even when publishing a new owner.
+      const occupied = await pathInfo(path);
+      if (occupied && !occupied.isDirectory()) {
+        throw new OwnerLockError(`legacy regular-file lock requires operator cleanup: ${path}`);
+      }
       await rename(temporary, path);
       return { path, token, marker, owner };
     } catch (error) {
