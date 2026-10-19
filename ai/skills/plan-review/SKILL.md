@@ -3,7 +3,6 @@ name: plan-review
 description: "Run an independent fresh-session review loop over a saved design plan before approval, converging reviewer feedback or recording SKIP. Use for high-risk, multi-file, architectural, or costly-to-undo plans. Skip implementation code review (code-review), finished-feature verification (verify), and drafting the plan itself (design)."
 argument-hint: "handoff [plan] | run [plan] | continue [plan] | skip [plan] --reason cost|latency|auth_unavailable|low_risk|user_override|other"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion
-effort: high
 disable-model-invocation: false
 ---
 

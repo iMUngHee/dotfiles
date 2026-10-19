@@ -1,7 +1,6 @@
 ---
 name: pre-commit-verifier
 description: "Verify changed files for security issues, test coverage gaps, and architecture violations. Use before committing or creating a PR."
-model: sonnet
 allowed-tools: Read, Grep, Glob, Bash
 memory: user
 ---

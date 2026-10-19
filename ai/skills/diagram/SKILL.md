@@ -4,7 +4,6 @@ description: "Produce diagrams two ways: Mermaid DSL copied to the clipboard for
 argument-hint: "[diagram description]"
 allowed-tools: Bash, Read
 disable-model-invocation: false
-effort: medium
 ---
 
 Create a diagram for: $ARGUMENTS

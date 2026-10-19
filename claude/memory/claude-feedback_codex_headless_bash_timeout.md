@@ -1,6 +1,6 @@
 ---
 name: claude-feedback_codex_headless_bash_timeout
-description: Running codex exec (via /ask-codex, /plan-review) through the Bash tool needs the Bash timeout raised above the inner gtimeout cap; if the codex run itself hits the 600s cap, split into scoped parallel calls + model_reasoning_effort=medium.
+description: Running codex exec (via /ask-codex, /plan-review) through the Bash tool needs the Bash timeout raised above the inner gtimeout cap; if the codex run itself hits the 600s cap, split into scoped parallel calls.
 metadata:
   type: feedback
 ---
@@ -11,4 +11,4 @@ When a skill runs a long headless subprocess through the Bash tool — e.g. `gti
 
 **How to apply:** on the Bash call, pass an explicit `timeout` greater than the inner cap (e.g. `720000` for `gtimeout 600`). Persist the prompt to a temp file first so a retry reuses it instead of regenerating; on retry just re-run the `codex exec` line with the larger Bash timeout.
 
-**Scoping (2026-07-13):** even with the Bash timeout raised, a full-scope plan review at the configured default reasoning effort (xhigh) can exceed the inner 600s `gtimeout` itself (exit 124, no verdict emitted). Do not raise the cap — shape the work: split the review into 2-3 independently-scoped calls (e.g. server-side vs client-side premises) run as parallel background Bash calls, cap each prompt's exploration to a named file list, and add `-c model_reasoning_effort="medium"` for scoped verification passes. Verified: a full-scope xhigh run timed out; two scoped medium calls returned complete verdicts well under the cap.
+**Scoping (2026-07-13):** even with the Bash timeout raised, a full-scope plan review at the configured default reasoning effort (xhigh) can exceed the inner 600s `gtimeout` itself (exit 124, no verdict emitted). Do not raise the cap — shape the work: split the review into 2-3 independently-scoped calls (e.g. server-side vs client-side premises) run as parallel background Bash calls, and cap each prompt's exploration to a named file list. Verified: a full-scope xhigh run timed out; two scoped medium calls returned complete verdicts well under the cap. Since 2026-10-19 model and effort are local choices that delegated calls must not pin, so `-c model_reasoning_effort="medium"` is no longer added — shrink and split the prompt instead.

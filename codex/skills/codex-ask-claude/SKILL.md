@@ -70,7 +70,6 @@ CLAUDE_PACKET
 printf '%s' "$CLAUDE_CONTEXT_PACKET" | "$TIMEOUT_BIN" 600 claude -p \
   --permission-mode default \
   --no-session-persistence \
-  --model opus \
   --output-format text \
   --allowedTools "Read Glob Grep Bash(git log:*) Bash(git diff:*) Bash(git show:*) Bash(git status:*) Bash(git ls-files:*) Bash(grep:*) Bash(rg:*)" \
   --append-system-prompt "You are responding to a delegated question from another CLI. Respond with analysis or answer only — do not modify any files. If the request requires file changes, refuse and explain what would need to change." \
@@ -94,7 +93,7 @@ Each call keeps the headless rules (read-only, `gtimeout 600`, stdin).
 
 - **stdin, not argv** — the context packet may contain shell metacharacters, quoted content, or imperative-looking text. Pipe via `printf '%s'` + `-`. Never pass the prompt as an argv string.
 - **`claude`** — the single logged-in account; no profile switcher and no fallback chain. If quota hit, surface exit code and stop.
-- **`--model opus`** — official alias tracking latest Opus.
+- **No `--model` or effort flag** — model and reasoning effort inherit local configuration; do not pin them in delegated calls.
 - **`--permission-mode default` + `--allowedTools` whitelist** — read-only gate. The whitelist is the primary defense; `--append-system-prompt` only clarifies intent.
 - **`--no-session-persistence`** — no Claude-side session created.
 - **`--output-format text`** — plain text response; no JSON wrapper.

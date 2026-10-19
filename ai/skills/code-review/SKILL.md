@@ -3,7 +3,6 @@ name: code-review
 description: "Review a PR or feature branch commit by commit so sync-merged changes are not misattributed. Skip feedback on uncommitted edits (verify) and quality questions with no PR or branch context."
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Glob, Grep, Agent
-effort: max
 disable-model-invocation: false
 ---
 

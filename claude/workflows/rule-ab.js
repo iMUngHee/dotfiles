@@ -110,7 +110,7 @@ For each candidate decide meets_requirement, safety_ok, and over_built. Treat ha
 validation or error handling to a caller that is not part of the deliverable as a safety
 gap, not as leanness. Missing ARIA on a native control that already provides it is NOT a
 gap. Be concrete in notes, and rank by overall quality, best first.`,
-    { label: `judge:${t.key}`, phase: 'Judge', schema: VERDICT, effort: 'high' }
+    { label: `judge:${t.key}`, phase: 'Judge', schema: VERDICT }
   ).then(v => ({
     ticket: t.key,
     labelled: labelled.map(l => ({
