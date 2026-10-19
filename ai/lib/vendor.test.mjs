@@ -419,7 +419,9 @@ test("a configured SSH command is honoured; otherwise lookups run ssh in batch m
   assert.equal(row(ok(f.run(["check"], clean)).stdout, "far").status, "missing, unreachable");
   assert.match(readFileSync(join(f.root, "ssh.log"), "utf8"), /BatchMode=yes/);
 
-  writeFileSync(f.env.GIT_CONFIG_GLOBAL, `[core]\n\tsshCommand = ${join(bin, "myssh")}\n`);
+  // Forward slashes: git config reads a backslash as an escape, so a raw Windows
+  // path (C:\Users\…) makes the whole file a "bad config line".
+  writeFileSync(f.env.GIT_CONFIG_GLOBAL, `[core]\n\tsshCommand = ${join(bin, "myssh").replaceAll("\\", "/")}\n`);
   rmSync(join(f.root, "ssh.log"));
   ok(f.run(["check"], clean));
   assert.ok(existsSync(join(f.root, "myssh.log")), "core.sshCommand was used");
