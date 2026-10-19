@@ -585,16 +585,22 @@ test("Ctrl-C ends the lookup in flight, even one that ignores SIGTERM (L3)", { s
     }
   };
   let lookup = 0;
+  let deadline;
   try {
     for (let i = 0; i < 200 && !existsSync(pidFile); i++) await sleep(50);
     assert.ok(existsSync(pidFile), "lookup started");
     lookup = Number(readFileSync(pidFile, "utf8"));
     process.kill(-child.pid, "SIGINT");
-    const outcome = await Promise.race([exited.then(() => "exited"), sleep(10000).then(() => "stuck")]);
+    // Cleared below: a pending 10 s timer would keep node alive after the last test.
+    const stuck = new Promise((resolve) => {
+      deadline = setTimeout(() => resolve("stuck"), 10000);
+    });
+    const outcome = await Promise.race([exited.then(() => "exited"), stuck]);
     assert.equal(outcome, "exited", "vendor.sh did not exit within 10s of Ctrl-C");
     for (let i = 0; i < 40 && alive(lookup); i++) await sleep(50);
     assert.equal(alive(lookup), false, "the lookup survived Ctrl-C");
   } finally {
+    clearTimeout(deadline);
     if (lookup && alive(lookup)) process.kill(lookup, "SIGKILL");
     if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, "SIGKILL");
   }
