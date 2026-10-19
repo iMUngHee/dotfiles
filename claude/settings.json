@@ -154,7 +154,7 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/notify.sh approval",
-            "timeout": 10000
+            "timeout": 10
           }
         ]
       }
@@ -166,7 +166,7 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/notify.sh approval",
-            "timeout": 10000
+            "timeout": 10
           }
         ]
       }
@@ -178,7 +178,7 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/post-edit-pipeline.sh",
-            "timeout": 60000,
+            "timeout": 60,
             "statusMessage": "Formatting & checking..."
           }
         ]
@@ -203,7 +203,7 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/protect-files.sh",
-            "timeout": 5000,
+            "timeout": 5,
             "statusMessage": "Checking file safety..."
           }
         ]
@@ -225,7 +225,7 @@
           {
             "type": "command",
             "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
-            "timeout": 10000,
+            "timeout": 10,
             "statusMessage": "pager delivery"
           }
         ]
@@ -238,13 +238,13 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/stop-handler.sh",
-            "timeout": 45000,
+            "timeout": 360,
             "statusMessage": "Running type checker..."
           },
           {
             "type": "command",
             "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
-            "timeout": 10000,
+            "timeout": 10,
             "statusMessage": "pager delivery"
           }
         ]
@@ -257,18 +257,18 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/prompt-guard.sh",
-            "timeout": 5000,
+            "timeout": 5,
             "statusMessage": "Scanning for secrets..."
           },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/inject-context.sh",
-            "timeout": 30000
+            "timeout": 30
           },
           {
             "type": "command",
             "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
-            "timeout": 10000,
+            "timeout": 10,
             "statusMessage": "pager delivery"
           }
         ]
@@ -297,6 +297,5 @@
   },
   "spinnerTipsEnabled": false,
   "alwaysThinkingEnabled": true,
-  "effortLevel": "xhigh",
   "preferredNotifChannel": "notifications_disabled"
 }

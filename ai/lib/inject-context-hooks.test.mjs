@@ -221,7 +221,8 @@ test("paired injection configurations allow exactly thirty seconds", async () =>
   const claudeInject = claude.hooks.UserPromptSubmit
     .flatMap((group) => group.hooks)
     .find((hook) => hook.command.includes("inject-context.sh"));
-  assert.equal(claudeInject.timeout, 30000);
+  // Claude Code hook timeouts are seconds, like Codex's.
+  assert.equal(claudeInject.timeout, 30);
 
   const codex = await readFile(join(repo, "codex", "config.toml.template"), "utf8");
   assert.match(codex, /command = "\$HOME\/\.config\/codex\/hooks\/inject-context\.sh"\ntimeout = 30\b/);
