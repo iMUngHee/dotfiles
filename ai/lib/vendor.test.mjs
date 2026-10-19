@@ -20,11 +20,12 @@ import test from "node:test";
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const script = join(repo, "ai", "scripts", "vendor.sh");
-// Windows: Git\bin\bash.exe is a launcher, and git itself, when /mingw64/bin is not on
-// PATH, both put /mingw64/bin and /usr/bin ahead of the PATH they were given — so Git's
-// own ssh would beat a test shim. Run the MSYS bash the launcher wraps, and keep the real
-// usr\bin and mingw64\bin on PATH right behind the shims (withPath), so PATH stays as
-// given, the same as on macOS and Linux. (A Git Bash session already has both on PATH.)
+// Windows: the launchers in Git\bin and Git\cmd always put /mingw64/bin and /usr/bin
+// ahead of the PATH they were given, and the real git does the same when MSYSTEM is
+// unset (see the fixture env) — so Git's own ssh would beat a test shim. Run the MSYS
+// bash the launcher wraps, and keep the real usr\bin and mingw64\bin right behind the
+// shims (withPath), so `git` resolves to mingw64\bin\git.exe rather than a launcher and
+// PATH stays as given, the same as on macOS and Linux.
 const msysDirs =
   process.platform === "win32"
     ? (spawnSync("bash", ["-c", 'cygpath -w "$(dirname "$BASH")" /mingw64/bin'], { encoding: "utf8" }).stdout ?? "")
