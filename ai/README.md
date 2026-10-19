@@ -149,8 +149,16 @@ Machine-only entries — internal hosts, MCP servers carrying local patches — 
 
 The script is user-invoked only — `bootstrap.sh` never calls it, so deploys stay offline-safe. A new machine needs the entries synced once after bootstrap; until then the diagram router falls back to Mermaid and eli5 and rea are simply absent. `sync --all` includes rea, whose `setup --yes` edits `~/.claude.json` and `~/.codex/config.toml` with no review step — to look first, sync the others by name and preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (a positive whole number, default 20) and print `unreachable` instead of hanging; `AI_VENDOR_DIR` must be absolute. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
 
+### Bringing another machine up to date
+
+1. Before pulling, on a machine bootstrapped after c240add: `git -C ~/.config config filter.machine-local.smudge cat` (why: the machine-local filter note in the root README). The pull's post-merge hook then re-runs bootstrap, which drops the old link to the removed `ai/skills/eli5`.
+2. `vendor.sh sync archify eli5` — on Windows `windows\scripts\vendor.ps1 sync archify eli5`, with Developer Mode on so the eli5 links can be real symlinks.
+3. Preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`, then `vendor.sh sync rea`.
+4. Confirm: `vendor.sh` shows archify `ok`, rea `ok` and eli5 `ok (pinned)`; `node --test ~/.config/ai/lib/vendor.test.mjs` passes (on Windows run it from Git Bash, so `bash` is not WSL's); on Windows `Get-Item ~\.claude\skills\eli5` reports `LinkType` `SymbolicLink`.
+
+If `sync eli5` reports `~/.claude/skills/eli5` or `~/.agents/skills/eli5` as "not a working link to this skill", that path is a real directory left by an older deploy (a Windows deploy without symlink rights copies instead of linking): delete it and sync again. rea keeps `~/.claude.json.rea.backup*` and `~/.codex/config.toml.rea.backup*` — full copies of those files, MCP tokens included — so guard them like the originals. `~/.local/share/diagram-engines/`, left behind by the retired `diagram-engines.sh`, is no longer read and can be deleted.
+
 ### Diagram engine
 
 `ai/skills/diagram` is a router: Mermaid by default (and for ERD/class/gantt), archify only when a polished, shareable, interactive technical HTML is asked for. archify is deliberately **not** a skill in either tool: vendor.sh clones it as a `release` entry, outside `~/.claude/skills` and `~/.agents/skills`, so the skill listing carries only the router's description and the engine's own SKILL.md is read on demand. Its ref follows release tags (`v*`), never the dev `main`; write an exact tag in the manifest to pin. archify's own update notice stays on: its receipts carry an update check it caches for a day, and it never installs anything — when it fires, the router points at `vendor.sh sync archify`. Hosts without a shell (Claude Cowork, the Codex desktop app) always get the Mermaid route. Evaluated and not adopted on 2026-09-07: cathrynlavery/diagram-design (hand-placed SVG, ~1,000 instruction lines per diagram).
 
-`~/.local/share/diagram-engines/`, left behind on machines that ran the retired `diagram-engines.sh`, is no longer read and can be deleted.
