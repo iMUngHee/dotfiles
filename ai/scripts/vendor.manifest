@@ -9,9 +9,11 @@
 #   kind    release  git tag or commit cloned under the vendor root, read in place
 #           skill    same, plus <dest> linked into ~/.claude/skills and ~/.agents/skills
 #           npm      package whose own installer (post) does the work
-#           source   a checkout at <dest>: cloned when absent, never touched when present
+#           source   a checkout at <dest>: cloned when absent; when present, git leaves it
+#                    alone and only post (the build) runs
 #   source  git URL, npm package name, or `-` for a source entry that exists only locally
-#   ref     tag glob (`v*` follows the newest release), exact tag or 40-char SHA (pinned);
+#   ref     tag glob with * and ? (`v*` follows the newest release, prereleases skipped),
+#           exact tag or 40-char SHA (pinned);
 #           npm: `latest` or a version; source: the branch to clone
 #   dest    release/npm: `-` (the vendor root) · skill: the skill dir inside the clone
 #           source: the checkout path
