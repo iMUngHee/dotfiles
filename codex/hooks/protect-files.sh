@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # PreToolUse hook: block access to sensitive files and lockfiles.
 set -euo pipefail
+# Windows and common macOS filesystems resolve case variants to the same file.
+shopt -s nocasematch
 
 input=$(cat)
 
@@ -8,6 +10,10 @@ if ! command -v jq &>/dev/null; then
   echo "[codex protect-files] Blocked: jq not found." >&2
   exit 2
 fi
+
+# Codex custom tools (including apply_patch and code mode) pass raw strings.
+# Keep one object shape for the existing command and path checks below.
+input=$(printf '%s' "$input" | jq 'if (.tool_input | type) == "string" then .tool_input = {command: .tool_input} else . end')
 
 ext_patterns=(".env" ".pem" ".key" ".p12" ".pfx")
 exact_patterns=("package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "go.sum" "bun.lock" "bun.lockb")
@@ -26,6 +32,10 @@ allowlist_basenames=("mcp-secret-env.sh" "mcp-secret-set.sh")
 check_file() {
   local f="$1"
   [[ -z "$f" ]] && return 1
+  # Tool payloads can use Windows separators even when this hook runs in Bash. Check
+  # the slash form as an extra reading, never instead: on macOS and Linux a
+  # backslash is an ordinary filename character.
+  if [[ "$f" == *\\* ]] && check_file "${f//\\//}"; then return 0; fi
 
   local base
   base="$(basename "$f")"
@@ -93,7 +103,6 @@ check_generated() {
   local f="$1"
   [[ -f "$f" ]] || return 1
   local line rc=1
-  shopt -s nocasematch
   while IFS= read -r line; do
     if [[ "$line" =~ $generated_re ]]; then
       echo "[codex protect-files] Blocked: '$f' declares itself generated: ${line:0:80}" >&2
@@ -102,7 +111,6 @@ check_generated() {
       break
     fi
   done < <(head -n "$generated_scan_lines" "$f" 2>/dev/null)
-  shopt -u nocasematch
   return $rc
 }
 
@@ -167,10 +175,19 @@ paths=$(printf '%s' "$input" | jq -r '
   ] | .[] | select(type == "string" and length > 0)
 ' 2>/dev/null)
 
+# Raw apply_patch input has paths in its headers rather than file_path fields.
+patch_paths=$(printf '%s\n' "$command_text" | awk '
+  # A CRLF patch would leave .env\r, which no pattern below matches.
+  { sub(/\r$/, "") }
+  /^\*\*\* (Add|Update|Delete) File: / { sub(/^\*\*\* (Add|Update|Delete) File: /, ""); print }
+  /^\*\*\* Move to: / { sub(/^\*\*\* Move to: /, ""); print }
+')
+paths=$(printf '%s\n%s\n' "$paths" "$patch_paths" | awk 'NF && !seen[$0]++')
+
 [[ -z "$paths" ]] && exit 0
 
 write_intent=false
-if is_write_intent; then
+if [[ -n "$patch_paths" ]] || is_write_intent; then
   write_intent=true
 fi
 

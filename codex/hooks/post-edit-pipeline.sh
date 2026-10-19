@@ -8,6 +8,8 @@ HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$HOOK_DIR/lib/detect-project.sh"
 
 input=$(cat)
+# Codex custom tools pass a raw patch string instead of an argument object.
+input=$(printf '%s' "$input" | jq 'if (.tool_input | type) == "string" then .tool_input = {command: .tool_input} else . end')
 session_id=$(printf '%s' "$input" | jq -r '.session_id // "default"' 2>/dev/null)
 session_id="${session_id//[^a-zA-Z0-9_-]/}"
 
@@ -30,6 +32,7 @@ extract_paths() {
   ' 2>/dev/null
 
   printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null | awk '
+    { sub(/\r$/, "") }
     /^\*\*\* (Add|Update|Delete) File: / {
       sub(/^\*\*\* (Add|Update|Delete) File: /, "")
       print
