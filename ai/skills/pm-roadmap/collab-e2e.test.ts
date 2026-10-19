@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const PM_CONTEXT = join(HERE, "..", "pm-context");
-const TSX = join(HERE, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+const TSX = join(HERE, "node_modules", "tsx", "dist", "cli.mjs");
 const CLI = join(HERE, "pm-roadmap.ts");
 const SERVER = join(PM_CONTEXT, "server.ts");
 
@@ -27,13 +27,13 @@ function cleanEnv(root: string, extra: Record<string, string> = {}): NodeJS.Proc
 }
 
 function pm(root: string, args: string[], opts: { env?: Record<string, string>; fail?: boolean } = {}): RunResult {
-  const r = spawnSync(TSX, [CLI, ...args], {
+  const r = spawnSync(process.execPath, [TSX, CLI, ...args], {
     cwd: HERE,
     env: cleanEnv(root, opts.env),
     encoding: "utf8",
   });
   const res = { code: r.status, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim() };
-  const detail = `\n$ pm ${args.join(" ")}\nstdout:\n${res.out}\nstderr:\n${res.err}`;
+  const detail = `\n$ pm ${args.join(" ")}\nstdout:\n${res.out}\nstderr:\n${res.err}\n${r.error ?? ""}`;
   if (opts.fail) assert.notEqual(res.code, 0, detail);
   else assert.equal(res.code, 0, detail);
   return res;
@@ -119,7 +119,7 @@ async function isPortBusy(port: number): Promise<boolean> {
 }
 
 async function startDashboardAttempt(root: string, port: number): Promise<Omit<Dashboard, "attempts">> {
-  const child = spawn(TSX, [SERVER], {
+  const child = spawn(process.execPath, [TSX, SERVER], {
     cwd: PM_CONTEXT,
     env: cleanEnv(root, { TASK_CONTEXT_ROOT: root, TASK_CONTEXT_PORT: String(port) }),
   });

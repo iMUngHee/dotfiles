@@ -6,7 +6,7 @@
 import { readdir, mkdir, rename, stat, unlink } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { createHash } from "node:crypto";
-import { join as pathJoin, sep as pathSep, basename as pathBasename } from "node:path";
+import { join as pathJoin, basename as pathBasename } from "node:path";
 import {
   type Block, type Orphan, parseBlocks, serializeBlocks, getField, setField,
   parseFrontmatter, serializeFrontmatter, getFmField, coerceMode, parseIdList,
@@ -60,7 +60,8 @@ async function loadBlocks(path: string): Promise<{ title: string; blocks: Block[
 // planInUse, assertNoOtherOwners) and the read paths in join/validate/server stay lenient so
 // a damaged store remains browsable and diagnosable while that one document is unwritable.
 function orphanRefusal(path: string, orphans: Orphan[]): OpError {
-  const where = path.split(pathSep).slice(-2).join("/");
+  // Transaction paths use forward slashes everywhere; a native Windows path uses backslashes.
+  const where = path.split(/[\\/]/).slice(-2).join("/");
   const clip = (s: string) => (s.length > 60 ? `${s.slice(0, 57)}...` : s);
   const at = orphans.length === 1
     ? `line ${orphans[0].line} holds`
@@ -121,7 +122,8 @@ async function runTransaction(
 const BLOCK_DOCS = new Set(["backlog.md", "closed.md", "links.md", "memory.md", "_inbox.md"]);
 function assertTargetsWritable(targets: TransactionTarget[]): void {
   for (const target of targets) {
-    if (!BLOCK_DOCS.has(target.path.split(pathSep).pop() ?? "")) continue; // plans/pointers are not block grammar
+    // Transaction paths use forward slashes on every platform.
+    if (!BLOCK_DOCS.has(pathBasename(target.path))) continue; // plans/pointers are not block grammar
     const before = target.before as { type: string; content?: string };
     if (before?.type !== "regular" || !before.content) continue; // absent or symlink: nothing to lose
     const { orphans } = parseBlocks(Buffer.from(before.content, "base64").toString("utf-8"));
