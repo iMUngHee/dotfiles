@@ -55,6 +55,13 @@ The same filter drops a `# >>> machine-local` … `# <<< machine-local` block
 whole; `aerospace/aerospace.toml` keeps its work-machine float rules there,
 since AeroSpace has no include to put them in a private file.
 
+Bootstrap registers the filter as `required`, with `smudge = cat` beside it:
+`required` covers checkouts too, and with no smudge to run every checkout of a
+filtered file aborts with `smudge filter machine-local failed`. A machine that
+ran bootstrap after c240add but before 942bb12 has `required` without the
+smudge, so the pull that brings the fix can stop there. Run
+`git -C ~/.config config filter.machine-local.smudge cat` once, then pull again.
+
 ## Submodules
 
 | Path | Repo |
