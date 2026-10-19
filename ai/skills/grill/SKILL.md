@@ -3,7 +3,6 @@ name: grill
 description: "Read-only pre-design interview that surfaces tacit intent before planning. Use on explicit request, or before design when intent risk stays high after discovery and at least two hold: large blast radius, irreversible or costly choice, multiple valid directions, unstated priority. Skip when one clarification suffices, for debugging, and inside another pm skill unless asked."
 argument-hint: "[what to grill about]"
 allowed-tools: Bash, Read, Glob, Grep, AskUserQuestion
-effort: high
 disable-model-invocation: false
 ---
 

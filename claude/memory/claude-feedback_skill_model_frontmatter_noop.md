@@ -1,6 +1,6 @@
 ---
 name: claude-feedback_skill_model_frontmatter_noop
-description: Skill frontmatter `model:` is ignored unless the skill sets `context: fork` (Claude Code 2.1.260, measured in -p and interactive); `effort:` is honored inline. Removed from every skill 2026-09-04 — do not re-add without fork.
+description: Skill frontmatter `model:` is ignored unless the skill sets `context: fork` (Claude Code 2.1.260, measured in -p and interactive); `effort:` is honored inline. Policy since 2026-10-19 — no model or effort pinned anywhere in the repo; machines choose locally.
 metadata:
   type: feedback
 ---
@@ -11,4 +11,4 @@ A probe skill with `model: haiku` and body "reply MODELTEST OK" ran under a `cla
 
 **Why:** 27 skills carried `model: sonnet` (cost) or `model: opus` (capability) that never took effect — every one ran on the session model. Dead config misleads audits and cost reasoning, so all 27 lines were removed on 2026-09-04 (23 `ai/skills`, 2 `ai/skills/private`, 2 `claude/skills`); `effort:` lines stayed. The field was introduced with the first skills in 2026-03 (`31dfb76`, `8a28e6f`) as scaffolding, with no recorded rationale.
 
-**How to apply:** do not put `model:` on a skill unless it also has `context: fork` — and then it runs as a subagent without the conversation. Use `effort:` for cost or depth control; it works inline. Re-measure after a Claude Code upgrade: a `model: haiku` probe skill plus `claude -p "/probe" --output-format json` and a look at `modelUsage` takes about twenty seconds. The measurement contract in `ai/skills/config-audit/references/skill-authoring.md` records the same finding.
+**How to apply:** do not put `model:` on a skill unless it also has `context: fork` — and then it runs as a subagent without the conversation. `effort:` works inline, but since 2026-10-19 대협's policy keeps model and effort out of the repo entirely — no skill `effort:`, no agent `model:`, no `effortLevel` in `claude/settings.json`, no `model`/`model_reasoning_effort` in the Codex template; each machine chooses locally. The 2026-10-19 removal took out the six skill `effort:` lines and three agent `model:` lines this note once kept. Re-measure after a Claude Code upgrade: a `model: haiku` probe skill plus `claude -p "/probe" --output-format json` and a look at `modelUsage` takes about twenty seconds. The measurement contract in `ai/skills/config-audit/references/skill-authoring.md` records the same finding.

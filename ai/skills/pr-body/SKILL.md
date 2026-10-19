@@ -3,7 +3,6 @@ name: pr-body
 description: "Generate or update a PR body from branch changes, editing an existing PR through GitHub MCP while preserving owner-written sections, or copying to the clipboard as a fallback. Skip commit messages and multi-PR release notes."
 argument-hint: "<PR URL or #number> | [base-branch]"
 allowed-tools: Bash, Read, Glob, ToolSearch
-effort: medium
 disable-model-invocation: false
 ---
 

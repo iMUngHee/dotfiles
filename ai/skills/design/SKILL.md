@@ -3,7 +3,6 @@ name: design
 description: "Plan the implementation of multi-file changes, architecture decisions, or ambiguously scoped work before code is written; the plan node of the pm loop. Skip single-file fixes, renames, and small refactors with clear scope."
 argument-hint: "[task description | handoff | continue]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
-effort: max
 disable-model-invocation: false
 ---
 
