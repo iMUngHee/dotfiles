@@ -71,6 +71,7 @@ test("owner locks recover only valid dead local owners and fail closed otherwise
 
   await writeFile(lock, "legacy-file-lock\n");
   await assert.rejects(acquireOwnerLock(lock, { retries: 0 }), /legacy regular-file lock/);
+  assert.equal(await readFile(lock, "utf8"), "legacy-file-lock\n", "a legacy lock must never be replaced");
 });
 
 test("owner lock acquisition enforces an elapsed deadline", async (t) => {

@@ -75,6 +75,13 @@ test("alternate-base ensure creates one reusable managed worktree with shared/lo
   const countAfter = git(root, "worktree", "list", "--porcelain").match(/^worktree /gm)?.length;
   assert.equal(second.execution_root, first.execution_root);
   assert.equal(countAfter, countBefore);
+  if (process.platform === "win32") {
+    const differentlyCased = await ensureManagedWorktree({
+      root, id: "feature-a", base: "release/test", worktree: first.execution_root.toLowerCase(),
+    });
+    assert.equal(await realpath(differentlyCased.execution_root), await realpath(first.execution_root));
+    assert.equal(git(root, "worktree", "list", "--porcelain").match(/^worktree /gm)?.length, countBefore);
+  }
   await assert.rejects(
     ensureManagedWorktree({ root, id: "feature-other", base: "main", branch: first.branch }),
     /already checked out/,
@@ -395,8 +402,12 @@ test("session binding storage is private and rejects symlink redirection", async
   const mapped = await mappedPlan(root, "session-private");
   const paths = sessionBindingPaths({ root, tool: "claude", sessionId: "private", storeRoot });
   await bindSession({ root, tool: "claude", sessionId: "private", plan: mapped.plan, storeRoot });
-  assert.equal((await stat(paths.managed_root)).mode & 0o777, 0o700);
-  assert.equal((await stat(paths.binding)).mode & 0o777, 0o600);
+  // Windows mode bits do not represent POSIX permissions. Keep the symlink
+  // redirection assertions below active on Windows too.
+  if (process.platform !== "win32") {
+    assert.equal((await stat(paths.managed_root)).mode & 0o777, 0o700);
+    assert.equal((await stat(paths.binding)).mode & 0o777, 0o600);
+  }
 
   await unbindSession({ root, tool: "claude", sessionId: "private", storeRoot });
   const victim = join(redirectedRoot, "victim.json");
@@ -730,7 +741,7 @@ test("legacy adoption reuses the one exact current-bearing worktree despite unre
   const adopted = await adoptPlan({ root, plan: planRel, base: "release/test", baseCommit, select: false });
   assert.equal(adopted.status, "reused");
   assert.equal(adopted.outcome, "adopted_parked");
-  assert.equal(adopted.execution_root, candidate);
+  assert.equal(await realpath(adopted.execution_root), await realpath(candidate));
   assert.equal(listCount(root), beforeCount);
   assert.equal(git(candidate, "rev-parse", "HEAD"), beforeHead);
   assert.equal(git(candidate, "branch", "--show-current"), "feature/adopt-existing");
@@ -766,7 +777,7 @@ test("raw adopt CLI forwards an explicit historical base commit for candidate re
   const adopted = JSON.parse(output);
   assert.equal(adopted.status, "reused");
   assert.equal(adopted.base_commit, historicalBase);
-  assert.equal(adopted.execution_root, candidate);
+  assert.equal(await realpath(adopted.execution_root), await realpath(candidate));
   assert.equal(git(candidate, "rev-parse", "HEAD"), candidateHead);
 });
 
@@ -909,7 +920,7 @@ test("provisional cancellation shares the PM lock and rechecks durable plan owne
   await releaseLock(testBarrier);
   const result = await cancellation;
   assert.equal(result.reason, "owned_by_plan");
-  assert.equal(git(root, "worktree", "list", "--porcelain").includes(ensured.execution_root), true);
+  assert.equal(git(root, "worktree", "list", "--porcelain").includes(ensured.execution_root.replaceAll("\\", "/")), true);
   assert.equal((await readFile(reservationPaths(root, "cancel-race").json, "utf8")).length > 0, true);
 });
 
@@ -918,7 +929,7 @@ test("provisional cancellation removes only clean commit-free worktrees", async 
   t.after(() => rm(root, { recursive: true, force: true }));
   const clean = await ensureManagedWorktree({ root, id: "cancel-clean", base: "main" });
   assert.equal((await cancelProvisional({ root, id: "cancel-clean" })).reason, "cancelled");
-  assert.equal(git(root, "worktree", "list", "--porcelain").includes(clean.execution_root), false);
+  assert.equal(git(root, "worktree", "list", "--porcelain").includes(clean.execution_root.replaceAll("\\", "/")), false);
 
   const dirty = await ensureManagedWorktree({ root, id: "cancel-dirty", base: "main" });
   await writeFile(join(dirty.execution_root, "DIRTY.txt"), "dirty\n");
@@ -933,7 +944,7 @@ test("provisional cancellation removes only clean commit-free worktrees", async 
   const current = await ensureManagedWorktree({ root, id: "cancel-current", base: "main" });
   await writeFile(join(current.execution_root, ".agents", "state", "current.txt"), "in-flight.md\n");
   assert.equal((await cancelProvisional({ root, id: "cancel-current" })).reason, "current");
-  assert.equal(git(root, "worktree", "list", "--porcelain").includes(current.execution_root), true);
+  assert.equal(git(root, "worktree", "list", "--porcelain").includes(current.execution_root.replaceAll("\\", "/")), true);
 });
 
 test("provisional cancellation clears a reservation whose worktree is already gone", async (t) => {
@@ -947,7 +958,7 @@ test("provisional cancellation clears a reservation whose worktree is already go
   // longer lists it while the reservation JSON and staged plan stay behind.
   await rm(orphan.execution_root, { recursive: true, force: true });
   git(root, "worktree", "prune");
-  assert.equal(git(root, "worktree", "list", "--porcelain").includes(orphan.execution_root), false);
+  assert.equal(git(root, "worktree", "list", "--porcelain").includes(orphan.execution_root.replaceAll("\\", "/")), false);
 
   const result = await cancelProvisional({ root, id: "cancel-orphan" });
   assert.equal(result.removed, true, "a reservation with no worktree is still the tool's to clean");
