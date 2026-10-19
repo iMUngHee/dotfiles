@@ -10,6 +10,11 @@
 #   Claude-only (existing behavior preserved).
 set -euo pipefail
 
+# Windows: direct runs must create real symlinks, never MSYS's silent copies.
+case "$(uname -s)" in
+    MINGW* | MSYS*) export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict" ;;
+esac
+
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT_DIR="$(cd "$REPO_DIR/.." && pwd)"
 AI_DIR="$ROOT_DIR/ai"
@@ -164,6 +169,19 @@ sweep_repo_skill_links() {
 }
 sweep_repo_skill_links "$CLAUDE_DIR/skills"
 
+archive_skill_copy() {
+    local entry="$1" backup_root="$CLAUDE_DIR/skill-backups" backup
+    mkdir -p "$backup_root" && backup="$(mktemp -d "$backup_root/$(basename "$entry").XXXXXX")" &&
+        mv "$entry" "$backup/$(basename "$entry")" || return 1
+    echo "warn: archived $entry → $backup" >&2
+}
+# Older deploys left discoverable backups here, including skills since removed
+# from the repo. Preserve them outside discovery before creating the overlay.
+for stale in "$CLAUDE_DIR/skills/"*.stale.*; do
+    [ -e "$stale" ] && [ ! -L "$stale" ] || continue
+    archive_skill_copy "$stale" || { echo "ERROR: cannot archive $stale" >&2; exit 1; }
+done
+
 link_skill_dir() {
     local d="$1"
     [ -d "$d" ] || return 0
@@ -183,9 +201,7 @@ link_skill_dir() {
     # recoverable and self-limiting — the next deploy finds a symlink and never
     # re-enters this branch.
     if [ -e "$target" ] && [ ! -L "$target" ]; then
-        local stale="$target.stale.$(date +%s)"
-        mv "$target" "$stale" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
-        echo "warn: moved stale $target → $stale" >&2
+        archive_skill_copy "$target" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
     fi
     # Never fatal: one unlinkable skill must not abort the rest of the deploy.
     ln -sfn "$d" "$target" || echo "warn: cannot link $target → $d" >&2
@@ -249,7 +265,7 @@ echo "Merging settings.json..."
 # merge below is `$local * $repo`, so the repo's value overwrites a local
 # override on the next run, and ai/scripts/bootstrap.sh already notes that a
 # hand-run from a shell is a thing that happens. So the token is expanded here,
-# the same way codex/scripts/bootstrap.sh expands tmux-__UID__.
+# before either tool sees the deployed settings.
 case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*) PATH_LIST_SEP=';' ;;
     *) PATH_LIST_SEP=':' ;;

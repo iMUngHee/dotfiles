@@ -6,6 +6,11 @@
 # - Merge codex/config.toml.template with user-managed local config blocks.
 set -euo pipefail
 
+# Windows: direct runs must create real symlinks, never MSYS's silent copies.
+case "$(uname -s)" in
+    MINGW* | MSYS*) export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict" ;;
+esac
+
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 AI_DIR="$ROOT_DIR/ai"
 CODEX_DIR="$ROOT_DIR/codex"
@@ -70,8 +75,8 @@ echo "Built ~/.codex/AGENTS.md ($SIZE B)"
 TARGET_CFG="$HOME/.codex/config.toml"
 TEMPLATE="$CODEX_DIR/config.toml.template"
 
-# Expand machine-specific placeholders (tmux socket uid) into a temp copy so the
-# committed template carries no hardcoded uid and stays portable across machines.
+# Expand the opt-in socket profile's machine-local tmux UID in a temp copy.
+# Conditional MCP entries also edit this copy, never the source template.
 TEMPLATE_EXPANDED="$(mktemp)"
 trap 'rm -f "$TEMPLATE_EXPANDED"' EXIT
 sed "s|tmux-__UID__|tmux-$(id -u)|g" "$TEMPLATE" > "$TEMPLATE_EXPANDED"
@@ -83,7 +88,9 @@ TEMPLATE="$TEMPLATE_EXPANDED"
 # which registers it only when the binary is present. Stripping the template
 # alone is not enough — the deep merge keeps target-only keys, so an entry a
 # previous deploy wrote would survive; DEL_KEYS removes it from the result too.
-DEL_KEYS='.UserPromptSubmit, .PreToolUse, .PostToolUse, .PreCompact, .SessionStart, .Stop, .PermissionRequest'
+# Codex 0.163 ignores experimental_network. Remove previously deployed copies too:
+# omitting it from the template alone leaves it in the deep-merged user config.
+DEL_KEYS='.experimental_network, .UserPromptSubmit, .PreToolUse, .PostToolUse, .PreCompact, .SessionStart, .Stop, .PermissionRequest'
 if ! command -v pager &>/dev/null; then
     if command -v yq &>/dev/null; then
         yq -i -p toml -o toml 'del(.mcp_servers.pager)' "$TEMPLATE_EXPANDED"
@@ -143,6 +150,19 @@ sweep_repo_skill_links() {
 mkdir -p "$HOME/.agents/skills"
 sweep_repo_skill_links "$HOME/.agents/skills"
 
+archive_skill_copy() {
+    local entry="$1" backup_root="$HOME/.agents/skill-backups" backup
+    mkdir -p "$backup_root" && backup="$(mktemp -d "$backup_root/$(basename "$entry").XXXXXX")" &&
+        mv "$entry" "$backup/$(basename "$entry")" || return 1
+    echo "warn: archived $entry → $backup" >&2
+}
+# Older deploys left discoverable backups here, including skills since removed
+# from the repo. Preserve them outside discovery before creating the overlay.
+for stale in "$HOME/.agents/skills/"*.stale.*; do
+    [ -e "$stale" ] && [ ! -L "$stale" ] || continue
+    archive_skill_copy "$stale" || { echo "ERROR: cannot archive $stale" >&2; exit 1; }
+done
+
 link_skill_dir() {
     local d="$1"
     [ -d "$d" ] || return 0
@@ -153,9 +173,7 @@ link_skill_dir() {
     # shadows the skill. The symlink-only sweep above cannot clear that — and it
     # exists to protect user-added skills, so clear it by moving, never deleting.
     if [ -e "$target" ] && [ ! -L "$target" ]; then
-        local stale="$target.stale.$(date +%s)"
-        mv "$target" "$stale" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
-        echo "warn: moved stale $target → $stale" >&2
+        archive_skill_copy "$target" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
     fi
     ln -sfn "$d" "$target" || echo "warn: cannot link $target → $d" >&2
 }
