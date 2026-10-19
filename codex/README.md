@@ -33,12 +33,12 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 
 2. **`~/.codex/config.toml`** deep-merged with `config.toml.template`:
    - first deploy: `cp template target`
-   - subsequent: `yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1) | del(.UserPromptSubmit, .PreToolUse, .PostToolUse, .PreCompact, .SessionStart, .Stop, .PermissionRequest)' target template` — template keys override, legacy top-level hook arrays are removed, and user/machine keys (trust levels, NUX counters, `[mcp_servers.*]`, `[notice]`, etc.) survive untouched
+   - subsequent: `yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1) | del(...)' target template` — template keys override; the retired `experimental_network` table and legacy top-level hook arrays are removed; other user/machine keys (trust levels, NUX counters, `[mcp_servers.*]`, `[notice]`, etc.) survive
    - depends on `yq` (mikefarah)
 
 3. **`~/.agents/skills/`** overlayed (note: not `~/.codex/skills/` — Codex discovery path is `~/.agents/skills/`):
    - per-skill symlinks from `ai/skills/*/`, `ai/skills/private/*/`, `codex/skills/*/`
-   - existing user-added (non-symlink) entries preserved
+   - unrelated user-added entries preserved; real entries sharing a managed skill name and all old `.stale.*` copies are archived under `~/.agents/skill-backups/`, outside skill discovery
    - plan/state/task artifacts are not deployed here; repo-local `.agents/plans`, `.agents/state`, and `.agents/tasks/` are sibling entries
 
 4. **Bundled Codex system skills disabled by default**:
@@ -63,6 +63,9 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 - `[notice].fast_default_opt_out`
 
 Everything else under `~/.codex/config.toml` is user/machine-managed and is preserved across bootstraps.
+Model and reasoning effort are local choices: the template never sets `model` or `model_reasoning_effort`, so bootstrap preserves the values selected on each machine.
+
+The template also declares the opt-in `workspace-local-sockets` permission profile, extending `:workspace` with the notification socket and the current user's two tmux socket paths. Bootstrap expands the UID locally. Select it with `codex -c 'default_permissions="workspace-local-sockets"'`; an invocation override selects this profile over the legacy `sandbox_mode` in the user config (verified with Codex 0.163.0). The normal invocation keeps `danger-full-access`. Merely passing `--sandbox workspace-write` does not select the custom profile. macOS socket connectivity must be verified on macOS; Windows validation only confirms configuration loading and policy selection.
 
 ## Status Line
 
@@ -120,6 +123,8 @@ On Windows, every shell hook uses `command_windows` to pass stdin through `run-b
 - `PostToolUse` → `post-edit-pipeline.sh` runs bounded format/check feedback after edits.
 - `Stop` → `stop-gate.sh` runs the final quality gate and then sends task completion or review-needed notifications.
 - `PermissionRequest` → `codex/hooks/notify.sh approval` sends approval notifications.
+
+The Stop gate uses staged, unstaged, and untracked files to select suites; only tracked changes may be auto-formatted. Selected suites share a 300-second budget, followed by at most 30 seconds for the type checker; the hook registration allows 360 seconds. Repository matching compares directory identity so Git's Windows paths and Git Bash paths select the same checks.
 
 Notifications use the shared AgentNotifier socket and sender from `notifier/`. Codex hooks request focus-aware delivery (`AGENT_NOTIFIER_DELIVERY=focus-aware`): when the originating terminal is already frontmost the daemon suppresses the desktop alert and routes the message to the tmux pane instead — on both macOS and Linux. See [`notifier/README.md`](../notifier/README.md) for the protocol fields and Linux focus hooks (`AGENT_NOTIFIER_FOCUS_CHECK_CMD`).
 

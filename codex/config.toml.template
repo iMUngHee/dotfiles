@@ -5,12 +5,7 @@
 
 project_doc_max_bytes = 65536
 
-# Enforced like every key here: a model picked locally with /model is reverted on
-# the next bootstrap. That is deliberate - the model is a dotfiles decision, not a
-# per-machine one - but it is the only enforced key a user is likely to change by
-# hand and then wonder about, so it is called out rather than left to the header.
-model = "gpt-6-astra"
-model_reasoning_effort = "medium"
+# Model and reasoning effort are local choices; bootstrap must preserve them.
 
 # Default startup automation = maximum local autonomy (no approvals + no sandbox)
 approval_policy = "never"
@@ -46,7 +41,13 @@ terminal_title = ["app-name", "project-name", "run-state", "task-progress"]
 [notice]
 fast_default_opt_out = true
 
-[experimental_network.unix_sockets]
+# Opt-in sandbox profile for macOS notification and tmux sockets. Defining it
+# does not change the default danger-full-access policy. Select at invocation:
+# codex -c 'default_permissions="workspace-local-sockets"'
+[permissions.workspace-local-sockets]
+extends = ":workspace"
+
+[permissions.workspace-local-sockets.network.unix_sockets]
 "/tmp/agent-notifier.sock" = "allow"
 "/private/tmp/tmux-__UID__/default" = "allow"
 "/tmp/tmux-__UID__/default" = "allow"
@@ -140,7 +141,7 @@ statusMessage = "pager delivery"
 [[hooks.Stop.hooks]]
 type = "command"
 command = "$HOME/.config/codex/hooks/stop-gate.sh"
-timeout = 45
+timeout = 360
 command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" stop-gate.sh"
 statusMessage = "codex final gate"
 

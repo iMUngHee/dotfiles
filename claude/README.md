@@ -51,7 +51,7 @@ Bootstrap will:
 2. Symlink `hooks/`, `commands/`, `agents/`, `mods/` (wholesale dir symlinks, Claude-only) into `~/.claude/`
 3. Per-file symlinks for `rules/` (merged ai/ + claude/) and `memory/` (merged ai/ + claude/ + ai/private)
 4. Auto-generate `~/.claude/MEMORY.md` (Shared / Claude-only / Private sections, with `AUTO-GENERATED` header)
-5. Per-skill symlinks in `~/.claude/skills/` from `ai/skills/`, `ai/skills/private/`, `claude/skills/`
+5. Per-skill symlinks in `~/.claude/skills/` from `ai/skills/`, `ai/skills/private/`, `claude/skills/`. Real entries sharing a managed skill name and old `.stale.*` copies are preserved under `~/.claude/skill-backups/`, outside skill discovery.
 6. Copy executable scripts to `~/.claude/scripts/` (excluding bootstrap/sync-back)
 7. Merge `settings.json` (repo keys override; local-only keys like `model` preserved; permissions resolved against `~/.claude/.settings-repo-managed.json`, so an entry the repo dropped is removed while one you approved at a prompt stays)
 
@@ -106,6 +106,8 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 ### Gate stages (stop-handler.sh / codex stop-gate.sh)
 
 Both gates run the same stages, and both are scoped to `$HOME/.config` so other projects are untouched. Triggers are per-path, so an untouched area costs nothing:
+
+Staged, unstaged, and untracked files select suites; only tracked changes may be auto-formatted. Repository matching uses directory identity so Windows Git and Git Bash path spellings agree. Selected suites share 300 seconds in total; the type checker has another 30 seconds, within the 360-second hook registration (both tools specify seconds).
 
 | Changed path | Suite | Approx |
 |---|---|---|
