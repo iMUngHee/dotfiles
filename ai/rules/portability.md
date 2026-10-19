@@ -4,6 +4,9 @@ paths:
   - "**/*.bash"
   - "**/*.zsh"
   - "**/Makefile"
+  - "**/*.test.mjs"
+  - "**/*.test.ts"
+  - "**/*.ps1"
 ---
 
 # Portability
@@ -26,4 +29,9 @@ until you know otherwise.
 - Windows breaks three assumptions Unix lets you keep: `jq` writes CRLF because
   it opens stdout in text mode, a file another process holds open cannot be read
   at all, and there are no mode bits for `chmod` to set.
-- Say which platforms you actually ran on and which you only reasoned about.
+- Under Git for Windows a PATH shim is not first: `Git\bin\*.exe` launchers, and
+  git itself when `/mingw64/bin` is off PATH, put `/mingw64/bin:/usr/bin` ahead
+  of a child's PATH. MSYS awk drops a CR and MSYS `basename` splits on `\`, so a
+  CRLF or backslash bug can pass there and fail on Unix.
+- Say which platforms you actually ran on and which you only reasoned about, and
+  add what you could not run to "Pending checks" in `PLATFORMS.md`.
