@@ -92,6 +92,25 @@ test("a Windows ';' plugin-dir list syncs back to the repo as ':'", async () => 
   assert.equal(synced.env.CLAUDE_CODE_PLUGIN_DIRS, repoDirs);
 });
 
+test("env keys the Windows fragment deploys are not reported as untracked", async () => {
+  const { root, home } = await fixture();
+  const settings = (env) => `${JSON.stringify({ env, permissions: { allow: [], deny: [] } }, null, 2)}\n`;
+  await writeFile(join(root, "claude", "settings.json"), settings({ TRACKED: "1" }));
+  await mkdir(join(root, "windows"), { recursive: true });
+  await writeFile(join(root, "windows", "claude-settings.windows.json"), settings({ CLAUDE_CODE_GIT_BASH_PATH: "__GIT_BASH_PATH__" }));
+  await mkdir(join(home, ".claude"), { recursive: true });
+  // What windows/scripts/deploy-ai.ps1 leaves, plus one key set by hand in a session.
+  await writeFile(
+    join(home, ".claude", "settings.json"),
+    settings({ TRACKED: "1", CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe", HAND_SET: "1" }),
+  );
+
+  const result = run(root, home);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /not tracked in the repo[\s\S]*HAND_SET/);
+  assert.doesNotMatch(result.stdout, /CLAUDE_CODE_GIT_BASH_PATH/);
+});
+
 test("the main checkout is unaffected: nothing is stale and no INFO line is printed", async () => {
   const { root, home } = await fixture();
   const result = run(root, home);
