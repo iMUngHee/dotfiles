@@ -24,6 +24,7 @@
 !.gitignore
 !.gitattributes
 !README.md
+!PLATFORMS.md
 !bootstrap.sh
 
 # ghostty / tmux — machine-local overrides, same convention as zsh/private.sh
