@@ -55,6 +55,10 @@ check_file() {
   local f="$1"
   local mode="${2:-write}"
   [[ -z "$f" ]] && return 1
+  # Windows tool payloads use backslashes even though this hook runs in Bash. Check
+  # the slash form as an extra reading, never instead: on macOS and Linux a
+  # backslash is an ordinary filename character.
+  if [[ "$f" == *\\* ]] && check_file "${f//\\//}" "$mode"; then return 0; fi
   local base
   base="$(basename "$f")"
 
