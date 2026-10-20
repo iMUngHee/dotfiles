@@ -53,6 +53,8 @@ scrollback-limit = 10000
 
 # Keybindings
 keybind = super+ctrl+f=toggle_fullscreen
+# Drop Ghostty's built-in Ctrl+Enter fullscreen; it overlaps Hyprland's Super+F.
+keybind = ctrl+enter=unbind
 
 # Send Shift+Enter and Alt+Shift+Enter as CSI-u so a TUI can tell them from
 # Enter and Alt+Enter. The legacy encoding collapses both pairs, so without
