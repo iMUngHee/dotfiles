@@ -50,12 +50,22 @@ One case the seam cannot cover: Omarchy's display text size slider rewrites
 would make the slider silently do nothing. That one line is normalized on its
 way into the index by the clean filter in `lib/git-filter-machine-local.sh`
 (wired in `.gitattributes`, registered by `ai/scripts/bootstrap.sh`) — the
-working tree keeps this monitor's size and git never sees it.
+working tree keeps this monitor's size and git never sees it. When git rewrites
+the file (a pull that changes it, a reset, `git stash`), the smudge side of the
+same filter puts the size back from the slider's record in
+`~/.config/omarchy/shell.toml`, using the px-to-pt formula it reads out of the
+installed `omarchy-display-text-size`. If that formula ever changes, the smudge
+leaves the stored 16 in place and says so, and
+`ai/lib/git-filter-machine-local.test.mjs` fails until the filter is updated.
+The smudge is registered by bootstrap, which the post-merge hook runs after a
+pull, so the pull that first brings it in still checks files out with the old
+`cat`. That only matters if the same pull also changes `ghostty/config`; then
+move the slider once.
 The same filter drops a `# >>> machine-local` … `# <<< machine-local` block
 whole; `aerospace/aerospace.toml` keeps its work-machine float rules there,
 since AeroSpace has no include to put them in a private file.
 
-Bootstrap registers the filter as `required`, with `smudge = cat` beside it:
+Bootstrap registers the filter as `required`, with a smudge beside it:
 `required` covers checkouts too, and with no smudge to run every checkout of a
 filtered file aborts with `smudge filter machine-local failed`. A machine that
 ran bootstrap after c240add but before 942bb12 has `required` without the
