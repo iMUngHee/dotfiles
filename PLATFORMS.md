@@ -78,6 +78,12 @@ cannot run something; remove it in the commit that records the result.
       tool, and Unicode Stop filename regressions in
       `ai/lib/{raw-tool-input-hooks,stop-hooks}.test.mjs` (verified on Linux
       2026-10-21).
+- [ ] **macOS / Windows** — the machine-local smudge is now a script, not
+      `cat`. Neither has Omarchy, so it only passes files through, but the
+      filter is `required` and a failure there would stop every pull that
+      touches `ghostty/config` or `aerospace/aerospace.toml`. Run
+      `ai/lib/git-filter-machine-local.test.mjs` and one such pull after
+      bootstrap re-registers the smudge (verified on Linux 2026-10-21).
 - [ ] **macOS** — once a Codex release fixes openai/codex#25416, re-check that
       the `workspace-local-sockets` profile reaches `/tmp/agent-notifier.sock`
       and the tmux socket (`d9e376d`). On 0.163.0 it does not (see `## macOS`).

@@ -151,8 +151,13 @@ if [ -e "$ROOT_DIR/.git" ] && [ -d "$ROOT_DIR/githooks" ]; then
     # filter command a checkout could supply; an unregistered filter is simply
     # not applied, so a machine that skips this step only sees the diff.
     if [ -x "$ROOT_DIR/lib/git-filter-machine-local.sh" ]; then
-        git -C "$ROOT_DIR" config filter.machine-local.clean \
-            "$ROOT_DIR/lib/git-filter-machine-local.sh"
+        # git runs a filter command through sh -c, so the path is single-quoted
+        # for a checkout under a directory with a space (C:/Users/First Last),
+        # with any ' in it written as '\'' (O'Brien). sed rather than ${//}:
+        # bash 3.2 and 5 disagree on quotes inside a replacement.
+        # ai/lib/git-filter-machine-local.test.mjs registers the same form.
+        filter_cmd="'$(printf '%s' "$ROOT_DIR/lib/git-filter-machine-local.sh" | sed "s/'/'\\\\''/g")'"
+        git -C "$ROOT_DIR" config filter.machine-local.clean "$filter_cmd"
         # required, because git's default on a failing clean filter is to store
         # the content unfiltered. The filter refuses a machine-local block whose
         # end marker is missing rather than guess whether to hide or commit it,
@@ -162,9 +167,10 @@ if [ -e "$ROOT_DIR/.git" ] && [ -d "$ROOT_DIR/githooks" ]; then
         # required covers smudge too: with no smudge command git treats every
         # checkout of a filtered file as a failed smudge, so `git worktree add`,
         # and any checkout, pull or rebase that rewrites one, aborts with
-        # "smudge filter machine-local failed". cat passes the blob through,
-        # which is all this filter needs on the way out.
-        git -C "$ROOT_DIR" config filter.machine-local.smudge cat
+        # "smudge filter machine-local failed". The smudge puts this machine's
+        # Omarchy text size back into ghostty/config and otherwise passes the
+        # blob through; it never fails.
+        git -C "$ROOT_DIR" config filter.machine-local.smudge "$filter_cmd smudge"
         echo "Git filter: machine-local → lib/git-filter-machine-local.sh"
     fi
 fi
