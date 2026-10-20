@@ -127,6 +127,38 @@ test("namespaced shell commands retain sensitive command checks", () => {
   }
 });
 
+for (const tool of ["functions.exec_command", "mcp__host__exec_command"]) {
+  test(`${tool} accepts code identifiers that contain extension prefixes`, () => {
+    for (const command of [
+      "python3 -c \"import os; print(os.environ.get('LANG'))\"",
+      "node -p 'Object.keys({a: 1})'",
+      "printf '%s' example.pem_format example.key_count",
+    ]) {
+      const result = run("protect-files.sh", tool, { command });
+      assert.equal(result.status, 0, result.stderr);
+    }
+  });
+
+  test(`${tool} still blocks real extensions, variants and other protected paths`, () => {
+    for (const command of [
+      "cat .env",
+      "cat app/.env.production",
+      "cat settings.env",
+      "cat 'private key.pem'",
+      'cat "C:\\Users\\me\\PRIVATE.KEY"',
+      "cat ./bundle.p12",
+      "cat ./bundle.pfx;",
+      "cat package-lock.json",
+      "cat credentials/token",
+      "cat secrets/token",
+      "cat service-secret.txt",
+    ]) {
+      const result = run("protect-files.sh", tool, { command });
+      assert.equal(result.status, 2, command + result.stderr);
+    }
+  });
+}
+
 test("post-edit registration accepts namespaced edit tools without matching reads", () => {
   const template = readFileSync(join(repo, "codex/config.toml.template"), "utf8");
   const matcher = new RegExp(template.split("[[hooks.PostToolUse]]")[1].match(/matcher = "(.*)"/)[1]);

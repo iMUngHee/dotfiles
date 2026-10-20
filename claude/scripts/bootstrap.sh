@@ -142,28 +142,24 @@ generate_memory_index
 echo "Linking skills..."
 [ -L "$CLAUDE_DIR/skills" ] && rm "$CLAUDE_DIR/skills"
 mkdir -p "$CLAUDE_DIR/skills"
-# Remove only the links THIS repo put here. The sweep used to take every
-# symlink in the directory, standing on the assumption that a symlink is ours
-# and a real directory is the user's — the comment in link_skill_dir still
-# describes it that way. That proxy holds only while nothing else links skills
-# in, and on Omarchy something does: omarchy-provision-user runs
-#   ln -sfn /usr/share/omarchy/default/agents/skills/<name> <dir>/<name>
-# for diagnose-crash and omarchy, into ~/.claude/skills, ~/.codex/skills and
-# ~/.agents/skills alike. So a deploy silently deleted them and the next
-# session came up without the skill that documents the host OS.
-#
-# Matching on the link target says what was meant. readlink is deliberately
-# not -f: a link into a skill this repo has since dropped is broken, -f
-# resolves it to nothing, and the stale link would survive the sweep it exists
-# for. The literal target is absolute here because link_skill_dir always
-# passes an absolute path.
+# Prune only retired repo-owned names. Keep live links available to readers
+# throughout deployment and preserve external links such as Omarchy's.
+# Plain readlink also identifies broken retired links.
 sweep_repo_skill_links() {
-    local dir="$1" link target
+    local dir="$1" link target name
     [ -d "$dir" ] || return 0
     while IFS= read -r link; do
         target="$(readlink "$link" 2>/dev/null)" || continue
         case "$target" in
-            "$ROOT_DIR"/*) rm -f "$link" ;;
+            "$ROOT_DIR"/*)
+                name="$(basename "$link")"
+                if [ -f "$AI_DIR/skills/$name/SKILL.md" ] ||
+                    [ -f "$AI_DIR/skills/private/$name/SKILL.md" ] ||
+                    [ -f "$REPO_DIR/skills/$name/SKILL.md" ]; then
+                    continue
+                fi
+                rm -f "$link"
+                ;;
         esac
     done < <(find "$dir" -maxdepth 1 -mindepth 1 -type l 2>/dev/null)
 }
@@ -183,28 +179,36 @@ for stale in "$CLAUDE_DIR/skills/"*.stale.*; do
 done
 
 link_skill_dir() {
-    local d="$1"
+    local d="$1" name candidate staging linked
     [ -d "$d" ] || return 0
     [ -f "$d/SKILL.md" ] || return 0
-    local target="$CLAUDE_DIR/skills/$(basename "$d")"
-    # `ln -sfn DIR TARGET` descends into TARGET when TARGET is a real directory,
-    # creating TARGET/$(basename DIR) instead of replacing TARGET — so a stale
-    # real directory silently survives and shadows the skill with a nested link.
-    # The sweep above only deletes symlinks (to preserve user-added skills), so
-    # nothing else clears it. This is reachable whenever a previous deploy left
-    # copies behind: on Windows that happens if MSYS=winsymlinks:nativestrict is
-    # unset or Developer Mode is off, which is exactly the degraded mode
-    # windows/scripts/deploy-ai.ps1 checks for.
-    # Move, never delete: a real directory here is usually a stale copy, but it
-    # can equally be a user-added skill that happens to share the name, and the
-    # symlink-only sweep above exists precisely to protect those. Moving is
-    # recoverable and self-limiting — the next deploy finds a symlink and never
-    # re-enters this branch.
+    name="$(basename "$d")"
+    # Resolve native-over-private-over-shared priority before touching the link.
+    for candidate in "$AI_DIR/skills/private/$name" "$REPO_DIR/skills/$name"; do
+        [ ! -f "$candidate/SKILL.md" ] || d="$candidate"
+    done
+    local target="$CLAUDE_DIR/skills/$name"
+    if [ -L "$target" ]; then
+        linked="$(readlink "$target")"
+        [ "${linked%/}" != "${d%/}" ] || return 0
+    fi
+    # Old real-directory copies may contain user edits; archive, never delete.
     if [ -e "$target" ] && [ ! -L "$target" ]; then
         archive_skill_copy "$target" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
     fi
-    # Never fatal: one unlinkable skill must not abort the rest of the deploy.
-    ln -sfn "$d" "$target" || echo "warn: cannot link $target → $d" >&2
+    # Stage outside discovery; a failed rename leaves the old link available.
+    staging="$(mktemp -d "$CLAUDE_DIR/.skill-link.XXXXXX")" ||
+        { echo "warn: cannot stage link $target" >&2; return 0; }
+    if ln -s "$d" "$staging/link" &&
+        { mv -Tf "$staging/link" "$target" 2>/dev/null ||
+            # BSD/macOS: -h replaces the destination link instead of following it.
+            mv -fh "$staging/link" "$target"; }; then
+        :
+    else
+        echo "warn: cannot link $target → $d" >&2
+    fi
+    rm -f "$staging/link"
+    rmdir "$staging"
 }
 for d in "$AI_DIR/skills/"*/;          do link_skill_dir "$d"; done
 for d in "$AI_DIR/skills/private/"*/;  do link_skill_dir "$d"; done

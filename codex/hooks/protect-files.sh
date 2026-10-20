@@ -125,8 +125,18 @@ check_command() {
     scan="${scan//$a/__allowlisted__}"
   done
 
+  # Match Claude's extension boundary rule: os.environ and Object.keys() are
+  # code identifiers, not sensitive filenames. An exact .key property remains
+  # conservatively blocked because its boundary also looks like a file's.
+  for p in "${ext_patterns[@]}"; do
+    local re='\'"$p"'([^[:alnum:]_]|$)'
+    if [[ "$scan" =~ $re ]]; then
+      echo "[codex protect-files] Blocked: command references sensitive pattern '$p'." >&2
+      return 0
+    fi
+  done
+
   local all_patterns=()
-  all_patterns+=("${ext_patterns[@]}")
   all_patterns+=("${exact_patterns[@]}")
   all_patterns+=("${segment_patterns[@]}")
   all_patterns+=("${substring_patterns[@]}")
