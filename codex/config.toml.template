@@ -44,6 +44,17 @@ fast_default_opt_out = true
 # Opt-in sandbox profile for macOS notification and tmux sockets. Defining it
 # does not change the default danger-full-access policy. Select at invocation:
 # codex -c 'default_permissions="workspace-local-sockets"'
+#
+# Known limitation, Codex 0.163.0 on macOS: the profile parses and starts as
+# workspace-write, but all three socket paths still get EPERM because the
+# allowlist never reaches the Seatbelt policy (openai/codex#25416). In the
+# rust-v0.163.0 source, profile network becomes a proxy config forced off, and
+# Seatbelt takes socket rules only from a live proxy, managed policy or CLI
+# extras (codex-rs/core/src/config/permissions.rs,
+# codex-rs/sandboxing/src/seatbelt.rs).
+# `codex sandbox -P workspace-local-sockets --allow-unix-socket <path>` does
+# reach them. Enabling the profile's network is not a fix: Seatbelt then allows
+# general network-outbound and -inbound. Keep the keys; they are the right ones.
 [permissions.workspace-local-sockets]
 extends = ":workspace"
 
