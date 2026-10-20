@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,13 +39,14 @@ async function fixture(tool) {
   await writeFile(join(skillHome, "skills", "removed.stale.456", "SKILL.md"), "Removed skill backup\n");
   await mkdir(join(skillHome, "skills", "user-added"));
   await writeFile(join(skillHome, "skills", "user-added", "SKILL.md"), "Keep user skill\n");
-  const run = () => {
+  const run = (prelude = "", extraEnv = {}) => {
     // Direct bootstrap calls must create native symlinks without a Windows wrapper.
-    const result = spawnSync("bash", [join(root, tool, "scripts", "bootstrap.sh")], {
+    const result = spawnSync("bash", ["-c", `${prelude}\nexec bash "$1"`, "_", join(root, tool, "scripts", "bootstrap.sh")], {
       encoding: "utf8",
-      env: { ...process.env, HOME: home, CODEX_DISABLE_SYSTEM_SKILLS: "0", MSYS: "", PATH: `${join(root, "bin")}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}` },
+      env: { ...process.env, HOME: home, CODEX_DISABLE_SYSTEM_SKILLS: "0", MSYS: "", PATH: `${join(root, "bin")}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`, ...extraEnv },
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    return result;
   };
   return { root, home, skillHome, run };
 }
@@ -66,6 +67,76 @@ for (const tool of ["codex", "claude"]) {
     assert.deepEqual((await readdir(backups, { recursive: true })).sort(), saved.sort());
     assert.deepEqual((await readdir(join(f.skillHome, "skills"))).sort(), ["demo", "user-added"]);
   });
+
+  test(`${tool} redeploy preserves live link identity and prunes only retired repo skills`, async (t) => {
+    const f = await fixture(tool);
+    f.run();
+    const skills = join(f.skillHome, "skills");
+    await mkdir(join(f.root, tool, "skills", "demo"), { recursive: true });
+    await writeFile(join(f.root, tool, "skills", "demo", "SKILL.md"), "Native overlay\n");
+    await mkdir(join(f.root, "ai", "skills", "private", "demo"), { recursive: true });
+    await writeFile(join(f.root, "ai", "skills", "private", "demo", "SKILL.md"), "Private overlay\n");
+    f.run();
+    const link = join(skills, "demo");
+    // Older bootstraps stored the trailing slash from their directory glob.
+    await unlink(link);
+    await symlink(join(f.root, tool, "skills", "demo") + "/", link, "dir");
+    const before = await lstat(link, { bigint: true });
+    await symlink(join(f.root, "ai", "skills", "retired"), join(skills, "retired"), "dir");
+    const outside = await mkdtemp(join(tmpdir(), "external-skill-"));
+    t.after(() => rm(outside, { recursive: true, force: true }));
+    await writeFile(join(outside, "SKILL.md"), "External skill\n");
+    await symlink(outside, join(skills, "external"), "dir");
+
+    f.run();
+
+    const after = await lstat(link, { bigint: true });
+    assert.deepEqual([after.ino, after.mtimeNs], [before.ino, before.mtimeNs], "an unchanged winning overlay must never be unlinked or replaced");
+    assert.equal(await readFile(join(link, "SKILL.md"), "utf8"), "Native overlay\n");
+    assert.equal(await readFile(join(skills, "external", "SKILL.md"), "utf8"), "External skill\n");
+    await assert.rejects(lstat(join(skills, "retired")), { code: "ENOENT" });
+  });
+
+  for (const mode of ["native", "bsd-fallback", "failure"]) {
+    test(`${tool} replaces a readable live skill (${mode})`, {
+      skip: mode === "bsd-fallback" && process.platform !== "linux" && "BSD option fallback is emulated using Linux mv; native platforms run the native case",
+    }, async () => {
+      const f = await fixture(tool);
+      f.run();
+      const link = join(f.skillHome, "skills", "demo");
+      const old = join(f.root, "ai", "skills", "old-demo");
+      await mkdir(old);
+      await writeFile(join(old, "SKILL.md"), "Previous target\n");
+      await unlink(link);
+      await symlink(old, link, "dir");
+      // Exported shell functions also work when a Git for Windows launcher
+      // prepends its own tool directories ahead of PATH.
+      const result = f.run(`
+mv() {
+    local last arg
+    for arg in "$@"; do last="$arg"; done
+    if [[ "$last" == */skills/demo ]]; then
+        [[ -r "$last/SKILL.md" ]] || return 71
+        printf 'Replacing a readable live skill\\n'
+        ${mode === "failure" ? "return 72" : ""}
+        ${mode === "bsd-fallback" ? `
+        # Simulate BSD rejecting -T, then translate its -h for the Linux host.
+        [[ "$1" != -Tf ]] || return 1
+        [[ "$1" == -fh ]] || return 73
+        shift
+        command mv -Tf "$@"
+        return $?
+        ` : ""}
+    fi
+    command mv "$@"
+}
+export -f mv
+`);
+      assert.match(result.stdout, /Replacing a readable live skill/, "replacement must use rename while the destination still exists");
+      assert.equal(await readFile(join(link, "SKILL.md"), "utf8"), mode === "failure" ? "Previous target\n" : await readFile(join(f.root, "ai", "skills", "demo", "SKILL.md"), "utf8"));
+      if (mode === "failure") assert.match(result.stderr, /warn: cannot link/);
+    });
+  }
 }
 
 test("Codex deploy removes retired network config while preserving local MCP servers", async () => {

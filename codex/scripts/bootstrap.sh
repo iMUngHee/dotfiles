@@ -122,28 +122,24 @@ else
 fi
 
 # ── 5. Skills overlay → ~/.agents/skills/ ──
-# Remove only the links THIS repo put here. The sweep used to take every
-# symlink in the directory, standing on the assumption that a symlink is ours
-# and a real directory is the user's — the comment in link_skill_dir still
-# describes it that way. That proxy holds only while nothing else links skills
-# in, and on Omarchy something does: omarchy-provision-user runs
-#   ln -sfn /usr/share/omarchy/default/agents/skills/<name> <dir>/<name>
-# for diagnose-crash and omarchy, into ~/.claude/skills, ~/.codex/skills and
-# ~/.agents/skills alike. So a deploy silently deleted them and the next
-# session came up without the skill that documents the host OS.
-#
-# Matching on the link target says what was meant. readlink is deliberately
-# not -f: a link into a skill this repo has since dropped is broken, -f
-# resolves it to nothing, and the stale link would survive the sweep it exists
-# for. The literal target is absolute here because link_skill_dir always
-# passes an absolute path.
+# Prune only retired repo-owned names. Removing live links before recreating
+# them races Codex's skill scanner. External links (including Omarchy's) are
+# not ours to remove. Plain readlink also identifies broken retired links.
 sweep_repo_skill_links() {
-    local dir="$1" link target
+    local dir="$1" link target name
     [ -d "$dir" ] || return 0
     while IFS= read -r link; do
         target="$(readlink "$link" 2>/dev/null)" || continue
         case "$target" in
-            "$ROOT_DIR"/*) rm -f "$link" ;;
+            "$ROOT_DIR"/*)
+                name="$(basename "$link")"
+                if [ -f "$AI_DIR/skills/$name/SKILL.md" ] ||
+                    [ -f "$AI_DIR/skills/private/$name/SKILL.md" ] ||
+                    [ -f "$CODEX_DIR/skills/$name/SKILL.md" ]; then
+                    continue
+                fi
+                rm -f "$link"
+                ;;
         esac
     done < <(find "$dir" -maxdepth 1 -mindepth 1 -type l 2>/dev/null)
 }
@@ -164,18 +160,37 @@ for stale in "$HOME/.agents/skills/"*.stale.*; do
 done
 
 link_skill_dir() {
-    local d="$1"
+    local d="$1" name candidate staging linked
     [ -d "$d" ] || return 0
     [ -f "$d/SKILL.md" ] || return 0
-    local target="$HOME/.agents/skills/$(basename "$d")"
-    # See claude/scripts/bootstrap.sh: `ln -sfn DIR TARGET` descends into a real
-    # TARGET directory rather than replacing it, leaving a nested link that
-    # shadows the skill. The symlink-only sweep above cannot clear that — and it
-    # exists to protect user-added skills, so clear it by moving, never deleting.
+    name="$(basename "$d")"
+    # Select the winning overlay first so a shared/native collision never
+    # toggles a live link to the lower-priority source during redeployment.
+    for candidate in "$AI_DIR/skills/private/$name" "$CODEX_DIR/skills/$name"; do
+        [ ! -f "$candidate/SKILL.md" ] || d="$candidate"
+    done
+    local target="$HOME/.agents/skills/$name"
+    if [ -L "$target" ]; then
+        linked="$(readlink "$target")"
+        [ "${linked%/}" != "${d%/}" ] || return 0
+    fi
+    # Preserve user edits in old real-directory copies before installing a link.
     if [ -e "$target" ] && [ ! -L "$target" ]; then
         archive_skill_copy "$target" || { echo "warn: cannot clear $target; skipping" >&2; return 0; }
     fi
-    ln -sfn "$d" "$target" || echo "warn: cannot link $target → $d" >&2
+    # Stage outside discovery; rename replaces a symlink without an unlink gap.
+    staging="$(mktemp -d "$HOME/.agents/.skill-link.XXXXXX")" ||
+        { echo "warn: cannot stage link $target" >&2; return 0; }
+    if ln -s "$d" "$staging/link" &&
+        { mv -Tf "$staging/link" "$target" 2>/dev/null ||
+            # BSD/macOS: -h replaces the destination link instead of following it.
+            mv -fh "$staging/link" "$target"; }; then
+        :
+    else
+        echo "warn: cannot link $target → $d" >&2
+    fi
+    rm -f "$staging/link"
+    rmdir "$staging"
 }
 for d in "$AI_DIR/skills/"*/; do link_skill_dir "$d"; done
 for d in "$AI_DIR/skills/private/"*/; do link_skill_dir "$d"; done

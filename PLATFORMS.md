@@ -74,6 +74,11 @@ works when none is installed. The `config-audit` skill checks the deployed tool 
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **macOS / Windows** — run `ai/lib/bootstrap-deploy.test.mjs` and
+      `ai/lib/raw-tool-input-hooks.test.mjs` for stable skill links, replacement
+      failures and Codex command-extension boundaries. Verify macOS's BSD
+      `mv -h` fallback and Windows native symlink replacement while readers
+      are active (verified on Linux 2026-10-21).
 - [ ] **macOS / Windows** — run the object `patch`/`input`/`diff`, namespaced
       tool, and Unicode Stop filename regressions in
       `ai/lib/{raw-tool-input-hooks,stop-hooks}.test.mjs` (verified on Linux
