@@ -100,3 +100,21 @@ test("Stop hook registrations outlive the suite and checker budgets", () => {
     assert.ok(seconds <= budget + 60, `${tool} registration must remain bounded, not hours long`);
   }
 });
+
+test("codex Stop formats a tracked Unicode filename", () => {
+  const f = fixture("codex");
+  const name = "한글.lua";
+  const file = join(f.root, name);
+  writeFileSync(file, "before\n");
+  for (const args of [["add", name], ["commit", "-qm", "unicode fixture"]]) {
+    const r = spawnSync("git", args, { cwd: f.root, env: f.env, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+  }
+  writeFileSync(file, "after\n");
+  const stylua = join(f.home, "bin", "stylua");
+  writeFileSync(stylua, '#!/bin/bash\nprintf formatted > "$1"\n');
+  chmodSync(stylua, 0o755);
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(file, "utf8"), "formatted");
+});

@@ -129,7 +129,7 @@ command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bas
 statusMessage = "codex file safety"
 
 [[hooks.PostToolUse]]
-matcher = "^(Write|Edit|apply_patch)$"
+matcher = "(^|[.]|__)(Write|Edit|apply_patch)$"
 
 [[hooks.PostToolUse.hooks]]
 type = "command"

@@ -52,8 +52,9 @@ project_root=$(detect_project_root)
 
 cd "$project_root" || notify_and_exit
 
-tracked_files=$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)
-changed_files=$(printf '%s\n' "$tracked_files"; git ls-files --others --exclude-standard 2>/dev/null)
+# Keep Unicode filenames literal so file checks and formatters see real paths.
+tracked_files=$(git -c core.quotePath=false diff --name-only 2>/dev/null; git -c core.quotePath=false diff --cached --name-only 2>/dev/null)
+changed_files=$(printf '%s\n' "$tracked_files"; git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null)
 [[ -n "$changed_files" ]] || {
   rm -f "$counter_file"
   notify_and_exit
