@@ -37,7 +37,7 @@ fi
 ## Protocol
 
 1. **Explore first.** Answer everything you can from the inputs. Only what code+context cannot answer goes to the user.
-2. **One question at a time** via `AskUserQuestion`. Never batch.
+2. **One question at a time** using Claude's `AskUserQuestion` or Codex's available structured input tool; when none is available, ask one concise question with 2–4 options in text.
 3. **Each question carries your recommended answer first** + a one-line rationale.
 4. **Dependency-tree order** — each answer narrows the next; prune branches a prior answer closed.
 5. **Hunt tacit knowledge** — prioritize constraints / priorities / "why this way" over surface choices.

@@ -88,3 +88,48 @@ test("raw patches cannot bypass generated-file protection", () => {
   assert.equal(result.status, 2, result.stderr);
   assert.match(result.stderr, /declares itself generated/);
 });
+
+for (const field of ["patch", "input", "diff"]) {
+  test(`object ${field} patches protect generated move destinations with CRLF`, () => {
+    writeFileSync(join(root, "generated move.md"), "# AUTO-GENERATED fixture\n");
+    const patch = "*** Begin Patch\r\n*** Update File: source.md\r\n*** Move to: generated move.md\r\n*** End Patch\r\n";
+    const result = run("protect-files.sh", "functions.apply_patch", { [field]: patch });
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /declares itself generated/);
+  });
+
+  test(`object ${field} patches protect sensitive paths`, () => {
+    const result = run("protect-files.sh", "functions.apply_patch", { [field]: "*** Begin Patch\n*** Add File: app/.env\n+X=1\n*** End Patch\n" });
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /Blocked/);
+  });
+
+  test(`post-edit extracts CRLF paths from object ${field} patches`, () => {
+    const hooks = join(root, `pipeline-${field}`);
+    mkdirSync(join(hooks, "lib"), { recursive: true });
+    writeFileSync(join(hooks, "post-edit-pipeline.sh"), readFileSync(join(repo, "codex/hooks/post-edit-pipeline.sh")));
+    writeFileSync(join(hooks, "lib/detect-project.sh"), 'detect_project_root() { pwd; }\ndetect_checker() { printf "<%s>" "$1" >> "$HOOK_PATH_LOG"; CHECK_CMD=""; LANG_LABEL=""; FMT_CMD=""; }\n');
+    const log = join(root, `paths-${field}.log`);
+    const result = spawnSync("bash", [join(hooks, "post-edit-pipeline.sh")], {
+      cwd: root, encoding: "utf8",
+      input: JSON.stringify({ session_id: `${root.split(/[\\/]/).at(-1)}-${field}`, tool_name: "functions.apply_patch", tool_input: { [field]: "*** Begin Patch\r\n*** Update File: source file.md\r\n*** End Patch\r\n" } }),
+      env: { ...process.env, HOOK_PATH_LOG: log },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(log, "utf8"), "<source file.md>");
+  });
+}
+
+test("namespaced shell commands retain sensitive command checks", () => {
+  for (const tool of ["functions.exec_command", "mcp__host__exec_command"]) {
+    const result = run("protect-files.sh", tool, { command: "cat .env" });
+    assert.equal(result.status, 2, tool + result.stderr);
+  }
+});
+
+test("post-edit registration accepts namespaced edit tools without matching reads", () => {
+  const template = readFileSync(join(repo, "codex/config.toml.template"), "utf8");
+  const matcher = new RegExp(template.split("[[hooks.PostToolUse]]")[1].match(/matcher = "(.*)"/)[1]);
+  for (const tool of ["apply_patch", "functions.apply_patch", "mcp__host__Edit"]) assert.ok(matcher.test(tool), tool);
+  for (const tool of ["Read", "functions.exec_command", "editor_view"]) assert.equal(matcher.test(tool), false, tool);
+});

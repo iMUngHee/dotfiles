@@ -74,12 +74,10 @@ works when none is installed. The `config-audit` skill checks the deployed tool 
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
-- [ ] **Linux** — full `ai/lib` suite and both pm packages
-      (`npm ci && npm test` in `pm-roadmap`, with its typecheck, and in
-      `pm-context`) after `6498454..b1bc21c` (run on Windows 2026-10-19 and on
-      macOS 2026-10-20; `2d25aea` changed the pm runners and `ops.ts`). The
-      Unix-only protect-hook tests and bash 5's handling of `[[ -ef ]]`,
-      `shopt -s nocasematch` and `${f//\\//}` in the hooks have not run there.
+- [ ] **macOS / Windows** — run the object `patch`/`input`/`diff`, namespaced
+      tool, and Unicode Stop filename regressions in
+      `ai/lib/{raw-tool-input-hooks,stop-hooks}.test.mjs` (verified on Linux
+      2026-10-21).
 - [ ] **macOS** — once a Codex release fixes openai/codex#25416, re-check that
       the `workspace-local-sockets` profile reaches `/tmp/agent-notifier.sock`
       and the tmux socket (`d9e376d`). On 0.163.0 it does not (see `## macOS`).

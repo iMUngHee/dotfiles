@@ -30,7 +30,7 @@ Dispatch to **`reviewer`** when:
 
 Dispatch to a separate context to keep the main thread clean:
 - **Claude Code**: `Agent(subagent_type: "reviewer", description: "<short>", prompt: "Base branch: <base>. Focus: <optional>. Branch: <current>. Unique commit/surface inventory: <...>. Requirement/convention source inventory: <...>.")`
-- **Codex CLI**: `codex exec` with the same focused prompt and provenance packet. Codex's `multi_agent_v1.spawn_agent` is explicit-request-only (not for auto-dispatch), so spawn a `codex exec` subprocess instead.
+- **Codex CLI**: `codex exec` with the same focused prompt and provenance packet. The `spawn_agent` tool is explicit-request-only (not for auto-dispatch), so use a `codex exec` subprocess instead.
 
 The parent completes Steps 1–2 before dispatch. Do NOT re-run delegated per-commit analysis, synthesize missing preflight content, or retry an invalid return into success. Before surfacing it, mechanically validate:
 

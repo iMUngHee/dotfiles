@@ -81,7 +81,7 @@ Compute the full new body and diff it against the body from Step 2 before writin
 - **Bounded change** (only the marked block / empty placeholder changed; no unrelated section touched) → update in place: `update_pull_request` (`owner`, `repo`, `pullNumber`, `body`).
 - **Ambiguous or out-of-bounds** (would touch owner sections, no clear target section, MCP write unavailable, or no PR reference) → fall back: show the body as a preview and copy to clipboard instead.
 
-Clipboard fallback (`dangerouslyDisableSandbox: true`):
+Clipboard fallback: Claude uses `dangerouslyDisableSandbox: true`; Codex uses its available command tool under the session's current permissions.
 
 ```bash
 copy_clip() {

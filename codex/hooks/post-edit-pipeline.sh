@@ -31,7 +31,10 @@ extract_paths() {
     ] | .[] | select(type == "string" and length > 0)
   ' 2>/dev/null
 
-  printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null | awk '
+  printf '%s' "$input" | jq -r '
+    .tool_input | [.command?, .patch?, .input?, .diff?] | .[] |
+    select(type == "string")
+  ' 2>/dev/null | awk '
     { sub(/\r$/, "") }
     /^\*\*\* (Add|Update|Delete) File: / {
       sub(/^\*\*\* (Add|Update|Delete) File: /, "")

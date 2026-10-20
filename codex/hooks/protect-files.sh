@@ -144,13 +144,15 @@ check_command() {
 
 tool=$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null)
 command_text=$(printf '%s' "$input" | jq -r '
-  .tool_input.command //
-  .tool_input.cmd //
-  .tool_input.shell_command //
-  empty
+  .tool_input |
+  [.command?, .cmd?, .shell_command?, .patch?, .input?, .diff?] |
+  map(select(type == "string")) | join("\n")
 ' 2>/dev/null)
 
-case "$tool" in
+# Both dotted tool namespaces and MCP's double-underscore names retain the
+# same command checks as their unqualified counterparts.
+tool="${tool##*.}"
+case "${tool##*__}" in
   Bash|exec_command|shell_command|local_shell|command)
     if check_command "$command_text"; then
       exit 2
