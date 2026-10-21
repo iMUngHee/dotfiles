@@ -33,6 +33,56 @@ test("post-edit accepts a raw patch string", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+for (const [label, format, check, fail] of [
+  ["formatter only", true, false, false],
+  ["checker failure only", false, true, true],
+  ["formatter and checker failure", true, true, true],
+  ["successful checker", false, true, false],
+  ["no feedback", false, false, false],
+]) {
+  test(`post-edit emits one JSON context for ${label}`, () => {
+    const dir = mkdtempSync(join(root, "feedback-"));
+    mkdirSync(join(dir, "lib"));
+    writeFileSync(join(dir, "pipeline.sh"), readFileSync(join(repo, "codex", "hooks", "post-edit-pipeline.sh")));
+    writeFileSync(join(dir, "lib", "detect-project.sh"), `
+detect_project_root() { pwd; }
+detect_checker() { FMT_CMD="$HOOK_TEST_FORMAT"; CHECK_CMD="$HOOK_TEST_CHECK"; LANG_LABEL="fixture"; }
+file_checksum() { cksum "$1"; }
+portable_timeout() { shift; "$@"; }
+`);
+    writeFileSync(join(dir, "format.sh"), '#!/bin/bash\nprintf formatted > "$1"\n');
+    writeFileSync(join(dir, "check.sh"), '#!/bin/bash\nprintf checked > checked\nprintf "%s\\n" "$HOOK_TEST_DIAGNOSTIC" >&2\nexit "$HOOK_TEST_EXIT"\n');
+    // Two files, so the formatter lines need their separator as well.
+    const names = ["한글 file.go", "second.go"];
+    for (const one of names) writeFileSync(join(dir, one), "unformatted\n");
+    const diagnostic = 'fixture error: "quoted" \\path\nsecond diagnostic line';
+    const result = spawnSync("bash", [join(dir, "pipeline.sh")], {
+      cwd: dir, encoding: "utf8",
+      input: JSON.stringify({
+        session_id: dir.split(/[\\/]/).at(-1), tool_name: "apply_patch",
+        tool_input: { command: `*** Begin Patch\n${names.map(one => `*** Update File: ${one}`).join("\n")}\n*** End Patch` },
+        tool_response: "Success",
+      }),
+      env: { ...process.env, HOOK_TEST_FORMAT: format ? "bash ./format.sh" : "",
+        HOOK_TEST_CHECK: check ? "bash ./check.sh" : "", HOOK_TEST_DIAGNOSTIC: diagnostic,
+        HOOK_TEST_EXIT: fail ? "17" : "0" },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    for (const one of names) assert.equal(readFileSync(join(dir, one), "utf8"), format ? "formatted" : "unformatted\n");
+    if (check) assert.equal(readFileSync(join(dir, "checked"), "utf8"), "checked");
+    if (!format && !fail) {
+      assert.equal(result.stdout, "");
+      return;
+    }
+    const context = [];
+    if (format) context.push(...names.map(one => `[codex auto-format] bash formatted ${one}`));
+    if (fail) context.push(`[codex typecheck] fixture errors after editing ${names[0]}:\n${diagnostic}`);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context.join("\n") },
+    });
+  });
+}
+
 test("post-edit passes a CRLF patch path to its checker without a trailing CR", () => {
   const hooks = join(root, "pipeline-fixture");
   mkdirSync(join(hooks, "lib"), { recursive: true });
