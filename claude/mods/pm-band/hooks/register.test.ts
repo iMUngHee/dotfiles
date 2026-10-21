@@ -99,7 +99,6 @@ function world(on: On, env: Record<string, string> = { HOME }) {
     const { Box, Text } = $.ui.resolve(e)
     return w.beneath === null ? Box({ children: [] }) : Text({ children: [w.beneath] })
   })
-  on('classic.SessionStart', () => ({}))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('session.id', () => ({ value: w.sessionId }))
@@ -138,6 +137,8 @@ function world(on: On, env: Record<string, string> = { HOME }) {
 }
 
 const SETTLE = 400
+/** How often pm-band looks at the session id. */
+const WATCH = 1_000
 const markersIn = (text: string) => (text.match(/[●◆◉]/g) ?? []).length
 
 /** The `demo` node's label, and not `needs-demo`'s. */
@@ -305,14 +306,15 @@ describe('register', () => {
     await $.tool.call({ tool: 'Bash', command: 'true' })
     await w.clock.advance(SETTLE)
 
+    // Only the id changes, with no event: the watch has to notice on its own.
     w.sessionId = 'sid-b'
     w.hold = null
     w.resolver = () => ({ fail: 'b is not readable yet' })
-    await $.classic.SessionStart({ source: 'clear' })
-    release()
-    // Before sid-b's own refresh runs: sid-a's late result must not have landed.
-    await w.clock.settle()
+    await w.clock.advance(WATCH)
+    // sid-a's view is gone, and sid-b's cannot land while sid-a's refresh is held.
     expect(await bandText($)).toBe('')
+    release()
+    await w.clock.settle()
     await w.clock.advance(SETTLE)
 
     expect(await bandText($)).toBe('⚠ plan: b is not readable yet')

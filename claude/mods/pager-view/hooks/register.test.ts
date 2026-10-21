@@ -35,6 +35,8 @@ const COMMAND = {
 type Message = { id: number; to: string; from: string; fromSession: string; body: string; human?: boolean }
 
 const POLL = 5_000
+/** How often pager-view looks at the session id, well inside POLL. */
+const WATCH = 1_000
 
 function exited(exitCode: number, stdout: string, stderr = '') {
   return { value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } }
@@ -72,7 +74,6 @@ function world(on: On, store: Record<string, unknown> = {}, env: Record<string, 
     if (!w.panes.includes(e.id)) w.panes.push(e.id)
     return { value: { isPlaced: true as const } }
   })
-  on('classic.SessionStart', () => ({}))
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     return w.beneath === null ? Box({ children: [] }) : Text({ children: [w.beneath] })
@@ -205,8 +206,9 @@ describe('band', () => {
     await started($, w)
     expect(await bandText($)).toBe('✉ wogi   1 new   ← buni 20m  mail 40')
 
+    // Only the id changes, with no event: the watch has to notice on its own.
     w.sessionId = 'sid-b'
-    await $.classic.SessionStart({ source: 'clear' })
+    await w.clock.advance(WATCH)
     await w.clock.advance(400)
     expect(await bandText($)).toBe('✉ nuro  ← buni 19m  mail 41\n● 1 live')
   })
@@ -223,9 +225,9 @@ describe('band', () => {
     w.sessionId = 'sid-b'
     w.names['sid-b'] = ''
     w.hold = null
-    await $.classic.SessionStart({ source: 'resume' })
+    await w.clock.advance(WATCH)
     release()
-    // Before sid-b's own refresh runs: sid-a's late result must not have landed.
+    // sid-a's late result must not land in sid-b's band.
     await w.clock.settle()
     expect(await bandText($)).toBe('')
     await w.clock.advance(400)
@@ -366,11 +368,22 @@ describe('chats', () => {
 
     await ui.press({ key: 'chat-buni' })
     w.sessionId = 'sid-b'
-    await $.classic.SessionStart({ source: 'clear' })
+    await w.clock.advance(WATCH)
     await w.clock.advance(400)
     text = textOf(await ui.drawn())
     expect(text).toContain(' nuro ')
     expect(text).not.toContain('‹ chats')
+  })
+
+  test('the first look at the session id is no switch: a room opened at once stays open', async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    const ui = await opened($, w)
+    await ui.press({ key: 'chat-buni' })
+    expect(textOf(await ui.drawn())).toContain('‹ chats')
+
+    await w.clock.advance(WATCH)
+    expect(textOf(await ui.drawn())).toContain('‹ chats')
   })
 
   test('a long root is cut from its start, in the list and in the room, keeping the folder at its end', async ($, on) => {

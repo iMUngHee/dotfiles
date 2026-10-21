@@ -34,6 +34,8 @@ import type { Room, Run } from './pager'
 export const PANE = 'pager'
 const POLL_MS = 5_000
 const REFRESH_DEBOUNCE_MS = 300
+// How often the session id is compared, well inside POLL_MS; see watchSession.
+const SESSION_WATCH_MS = 1_000
 const SHOWN_ENTRIES = 200
 /** The newest messages a room draws: the engine refuses a drawing over 100,000 characters. */
 const ROOM_MESSAGES = 60
@@ -87,8 +89,9 @@ async function run($: Engine, argv: string[]): Promise<Run> {
 // outright, so it is written down here as the assumption it is. Were one
 // process to share an instance across sessions, `pending?.cancel()` in soon()
 // would drop another session's scheduled refresh, `generation` would void its
-// running one, and `isRefreshing` would serialise their I/O; the fix then is
-// to key all four by session id.
+// running one, `isRefreshing` would serialise their I/O, and `sessionSeen`
+// would see the id flip on every watch and wipe each view in turn; the fix
+// then is to key all five by session id.
 //
 // Baselines are never pruned: one `baseline:<uuid>` per session, forever, in a
 // $.store capped at 4 MiB of JSON. At ~55 bytes an entry that is tens of
@@ -98,6 +101,8 @@ let generation = 0
 let isRefreshing = false
 let isDirty = false
 let pending: { cancel: () => void } | null = null
+// The id watchSession last saw.
+let sessionSeen = ''
 
 async function isPaneOpen($: Engine): Promise<boolean> {
   return (await $.ui.panes()).some(one => one.id === PANE)
@@ -291,6 +296,21 @@ async function switched($: Engine): Promise<void> {
   await update($, expanded, () => [])
 }
 
+// /clear, /resume and /branch change the id under the process. classic.SessionStart
+// said so for all three, but on a machine with managed settings (and in Team and
+// Enterprise organizations) the built-in cc-plugin-sec-default runs outermost and
+// sends every classic.* event past the plugins a person installs
+// (next.to(e, "append")): a classic hook here never runs, and the engine reports
+// it as skipped. session.end still fires for /clear and resume, but before the id
+// changes and never for /branch. So the id is compared on a timer.
+async function watchSession($: Engine): Promise<void> {
+  const sessionId = await $.session.id()
+  if (sessionId === sessionSeen) return
+  sessionSeen = sessionId
+  await switched($)
+  soon($)
+}
+
 export function register(on: On): void {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -299,25 +319,15 @@ export function register(on: On): void {
       immediate: true,
     })
     const result = await next(e)
+    sessionSeen = await $.session.id()
     $.clock.every(POLL_MS, () => void refresh($))
+    $.clock.every(SESSION_WATCH_MS, () => void watchSession($))
     soon($)
     return result
   })
 
-  // These only observe; if one fails, .catch hands back what next settled to (or
-  // runs it once when it had not run), so a failure never blocks or repeats work.
-  on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
-    const result = await next(e)
-    await switched($)
-    soon($)
-    return result
-  }).catch(($, e, next) => next(e))
-
-  on('classic.SessionEnd', async ($, e, next) => {
-    generation += 1
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
+  // If it fails, .catch hands back what next settled to (or runs it once when it
+  // had not run), so a failure never blocks or repeats work.
   on('command.run', { command: PANE }, async $ => {
     await openPane($)
     return {}

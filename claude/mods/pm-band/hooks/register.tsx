@@ -24,6 +24,8 @@ import type { Listing, Run } from './plan'
 
 export const PANE = 'pm'
 const REFRESH_DEBOUNCE_MS = 300
+// How often the session id is compared; see watchSession.
+const SESSION_WATCH_MS = 1_000
 // A row is cut at the pane edge anyway; the cap keeps a big backlog inside the
 // engine's 100,000 characters of text per drawing.
 const TITLE_CHARS = 200
@@ -78,6 +80,8 @@ let generation = 0
 let isRefreshing = false
 let isDirty = false
 let pending: { cancel: () => void } | null = null
+// The id watchSession last saw.
+let sessionSeen = ''
 
 async function refreshOnce($: Engine): Promise<void> {
   const started = generation
@@ -183,6 +187,21 @@ async function switched($: Engine): Promise<void> {
   await update($, selected, () => null)
 }
 
+// /clear, /resume and /branch change the id under the process. classic.SessionStart
+// said so for all three, but on a machine with managed settings (and in Team and
+// Enterprise organizations) the built-in cc-plugin-sec-default runs outermost and
+// sends every classic.* event past the plugins a person installs
+// (next.to(e, "append")): a classic hook here never runs, and the engine reports
+// it as skipped. session.end still fires for /clear and resume, but before the id
+// changes and never for /branch. So the id is compared on a timer.
+async function watchSession($: Engine): Promise<void> {
+  const sessionId = await $.session.id()
+  if (sessionId === sessionSeen) return
+  sessionSeen = sessionId
+  await switched($)
+  soon($)
+}
+
 export function register(on: On): void {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -191,24 +210,14 @@ export function register(on: On): void {
       immediate: true,
     })
     const result = await next(e)
+    sessionSeen = await $.session.id()
+    $.clock.every(SESSION_WATCH_MS, () => void watchSession($))
     soon($)
     return result
   })
 
   // The hooks below only observe; if one fails, .catch hands back what next settled
   // to (or runs it once when it had not run), so a failure never blocks or repeats work.
-  on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
-    const result = await next(e)
-    await switched($)
-    soon($)
-    return result
-  }).catch(($, e, next) => next(e))
-
-  on('classic.SessionEnd', async ($, e, next) => {
-    generation += 1
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
     soon($)
