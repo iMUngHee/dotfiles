@@ -22,6 +22,15 @@ claude plugin test ~/.config/claude/mods/pm-band         # likewise pager-view
 `tsc -p claude/mods/<mod>` needs a TypeScript; `ai/skills/pm-roadmap/node_modules/.bin/tsc`
 works when none is installed. The `config-audit` skill checks the deployed tool homes.
 
+If a pull changes Codex hook definitions (including matchers), open the Codex TUI
+on **each machine** and review/trust the new or changed hooks. Trust is local;
+bootstrap does not grant it. Codex 0.163.0 headless `codex exec` can silently skip
+untrusted hooks, so exit 0 alone is not hook verification. Grant trust in the TUI;
+reserve `--dangerously-bypass-hook-trust` for controlled, explicitly authorized
+integration tests. See `codex/README.md` for the output contract and review details.
+If an old startup warning remains after the configuration was fixed, restart the
+shared server through `/daemon` and check again; connected sessions may be interrupted.
+
 ## macOS
 
 - `/bin/bash` is 3.2 and the coreutils are BSD; see `ai/rules/portability.md`.
@@ -74,6 +83,10 @@ works when none is installed. The `config-audit` skill checks the deployed tool 
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **Windows / Linux** — run the PostToolUse JSON feedback cases and Stop
+      formatting/retry regressions in `ai/lib/{raw-tool-input-hooks,stop-hooks}.test.mjs`,
+      then verify live hook completion and model-visible checker feedback after
+      reviewing hook trust locally. The output change is validated on macOS only.
 - [ ] **macOS / Windows** — run `ai/lib/bootstrap-deploy.test.mjs` and
       `ai/lib/raw-tool-input-hooks.test.mjs` for stable skill links, replacement
       failures and Codex command-extension boundaries. Verify macOS's BSD

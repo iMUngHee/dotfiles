@@ -76,7 +76,9 @@ while IFS= read -r file; do
   [[ -n "$before" && "$before" != "$after" ]] && formatted=$((formatted + 1))
 done <<< "$tracked_files"
 
-(( formatted > 0 )) && echo "[codex final-gate] auto-formatted ${formatted} file(s)"
+if (( formatted > 0 )); then
+  jq -n --arg message "[codex final-gate] auto-formatted ${formatted} file(s)" '{systemMessage: $message}'
+fi
 
 # Run one suite from a subdirectory, failing the gate on nonzero.
 run_suite() {

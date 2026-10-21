@@ -117,4 +117,21 @@ test("codex Stop formats a tracked Unicode filename", () => {
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(readFileSync(file, "utf8"), "formatted");
+  assert.deepEqual(JSON.parse(result.stdout), {
+    systemMessage: "[codex final-gate] auto-formatted 1 file(s)",
+  });
+});
+
+test("codex Stop preserves stderr blocking and allows stop after two retries", () => {
+  const f = fixture("codex");
+  for (const attempt of [1, 2]) {
+    const result = f.run({ STOP_AUDIT_EXIT: "17" });
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, new RegExp(`contract tests failed \\(attempt ${attempt}/2\\)`));
+  }
+  const result = f.run({ STOP_AUDIT_EXIT: "17" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /failed after 2 retries\. Allowing stop/);
 });

@@ -68,6 +68,7 @@ date +%s > "$debounce_file"
 selected_check_cmd=""
 selected_lang_label=""
 selected_check_file=""
+feedback=""
 
 while IFS= read -r file; do
   [[ -n "$file" ]] || continue
@@ -87,7 +88,7 @@ while IFS= read -r file; do
       if [[ "$before" != "$after" ]]; then
         fmt_name="${FMT_CMD%% *}"
         fmt_name="${fmt_name##*/}"
-        echo "[codex auto-format] $fmt_name formatted $(basename "$file")"
+        feedback+="${feedback:+$'\n'}[codex auto-format] $fmt_name formatted $(basename "$file")"
       fi
     fi
   fi
@@ -95,21 +96,28 @@ done <<< "$paths"
 
 CHECK_CMD="$selected_check_cmd"
 LANG_LABEL="$selected_lang_label"
-[[ -n "$CHECK_CMD" ]] || exit 0
+if [[ -n "$CHECK_CMD" ]]; then
+  tmp_out="/tmp/codex-pipeline-check-output-${session_id:-default}"
+  set +e
+  (cd "$project_root" && portable_timeout 30 bash -c "$CHECK_CMD" > "$tmp_out" 2>&1)
+  exit_code=$?
+  set -e
 
-tmp_out="/tmp/codex-pipeline-check-output-${session_id:-default}"
-set +e
-(cd "$project_root" && portable_timeout 30 bash -c "$CHECK_CMD" > "$tmp_out" 2>&1)
-exit_code=$?
-set -e
-
-if [[ $exit_code -ne 0 ]]; then
-  output=$(head -20 "$tmp_out")
-  if [[ -n "$output" ]]; then
-    echo "[codex typecheck] ${LANG_LABEL} errors after editing $(basename "$selected_check_file"):"
-    echo "$output"
+  if [[ $exit_code -ne 0 ]]; then
+    output=$(head -20 "$tmp_out")
+    if [[ -n "$output" ]]; then
+      feedback+="${feedback:+$'\n'}[codex typecheck] ${LANG_LABEL} errors after editing $(basename "$selected_check_file"):"$'\n'"$output"
+    fi
   fi
+
+  rm -f "$tmp_out" 2>/dev/null
 fi
 
-rm -f "$tmp_out" 2>/dev/null
+# Plain stdout is ignored; bracket-prefixed text is treated as invalid JSON.
+# Emit one event-specific object so both formatter and checker feedback reach the model.
+if [[ -n "$feedback" ]]; then
+  jq -n --arg context "$feedback" '{
+    hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $context}
+  }'
+fi
 exit 0
