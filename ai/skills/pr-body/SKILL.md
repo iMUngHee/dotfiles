@@ -18,15 +18,27 @@ Input: $ARGUMENTS — a PR URL/number to update in place (primary), or a base br
 
 ### 1. Resolve input
 
-- **PR URL/number given** (primary) → parse `owner` / `repo` / `pullNumber` from the URL (e.g. `https://<host>/<owner>/<repo>/pull/<n>`). This is the update target.
+- **PR URL/number given** (primary) → parse `host` / `owner` / `repo` / `pullNumber` from the URL (e.g. `https://<host>/<owner>/<repo>/pull/<n>`). This is the update target.
+  - A bare `#<n>` has no URL: resolve it with `gh pr view <n> --json url --jq .url`, which picks the repository the way every `gh pr` command does here (in a fork that can be the upstream, not `origin`), and say which PR it resolved to before editing.
 - **No PR reference** (fallback) → infer the base branch from `$ARGUMENTS` or branch naming:
   - `feature/<parent>/...` or `fix/<parent>/...` → use `<parent>` as base
   - If unclear, ask the user
-- The GitHub MCP tools are deferred — load them first (Claude: `ToolSearch("select:mcp__mcp-github__pull_request_read,mcp__mcp-github__update_pull_request")`).
+- The GitHub MCP write tool is deferred — load it first (Claude: `ToolSearch("select:mcp__mcp-github__update_pull_request")`).
 
 ### 2. Read the existing PR body (when a PR is given)
 
-`pull_request_read` (`method: get`) → keep the current body verbatim. This is the base you edit; you never regenerate sections you did not author.
+Read the raw body through `gh api` and keep it verbatim. This is the base you edit; you never regenerate sections you did not author.
+
+```bash
+d=$(mktemp -d) &&
+  gh api --hostname <host> repos/<owner>/<repo>/pulls/<pullNumber> > "$d/pr.json" &&
+  node -e 'const pr = JSON.parse(require("fs").readFileSync(0, "utf8")); if (pr.number !== Number(process.argv[1])) process.exit(1); process.stdout.write(pr.body ?? "")' <pullNumber> < "$d/pr.json" > "$d/body.md" &&
+  echo "$d/body.md"
+```
+
+The printed path holds the body only when the whole chain succeeded. A failed `gh api` still writes its error JSON, and a body read that way is not the PR body — so if any step fails (`gh` missing, not logged in to `<host>`, an HTTP error, a response for another PR), do not edit in place: take the clipboard fallback in Step 6.
+
+Do not use GitHub MCP `pull_request_read` for this: it returns the body with every HTML comment removed (observed on a GitHub Enterprise host, 2026-10-22), so the markers below would be invisible and writing that body back would delete them and the PR template's comment blocks. `jq -r .body` is not a substitute either — it appends a newline the PR body does not have.
 
 ### 3. Identify unique commits
 
@@ -79,7 +91,7 @@ Match the target section by its heading text (e.g. `변경 내용` / "Changes");
 Compute the full new body and diff it against the body from Step 2 before writing.
 
 - **Bounded change** (only the marked block / empty placeholder changed; no unrelated section touched) → update in place: `update_pull_request` (`owner`, `repo`, `pullNumber`, `body`).
-- **Ambiguous or out-of-bounds** (would touch owner sections, no clear target section, MCP write unavailable, or no PR reference) → fall back: show the body as a preview and copy to clipboard instead.
+- **Ambiguous or out-of-bounds** (would touch owner sections, no clear target section, no raw body from Step 2, MCP write unavailable, or no PR reference) → fall back: show the body as a preview and copy to clipboard instead.
 
 Clipboard fallback: Claude uses `dangerouslyDisableSandbox: true`; Codex uses its available command tool under the session's current permissions.
 
@@ -124,5 +136,6 @@ Write every explanatory part of the body the way the `eli5` skill explains to a 
 - Edit ONLY the change-summary marker block; preserve every owner-authored section verbatim
 - Default to updating the PR in place; clipboard is the fallback, not the default — do not both update and copy unless asked
 - Never overwrite the whole body blindly — diff first (Step 6)
+- Never write back a body read through MCP `pull_request_read` — it has lost every HTML comment (Step 2)
 - Keep bullet points concise; match the project's existing PR style and language
 - NEVER render the markdown inline — always via `update_pull_request` or the clipboard command
