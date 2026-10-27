@@ -23,7 +23,7 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 - Duplicate `SKILL.md` frontmatter `name:` values within one deployed skill scope → FAIL (Claude scope: `ai/skills`, `ai/skills/private`, `claude/skills`; Codex scope: `ai/skills`, `ai/skills/private`, `codex/skills`).
 
 ### 3. AGENTS.manifest drift
-- A file in `ai/` (excluding `ai/skills/`, `ai/scripts/`, `ai/lib/`, `ai/.gitignore`, `ai/AGENTS.manifest` itself, `ai/README.md`) NOT listed in `ai/AGENTS.manifest` → WARN (Codex will not see this file). Same as `ai/scripts/sync-back.sh --strict` would catch.
+- A file in `ai/` (excluding `ai/skills/`, `ai/scripts/`, `ai/lib/`, `ai/memory/private/`, `ai/.gitignore`, `ai/AGENTS.manifest` itself, `ai/README.md`) NOT listed in `ai/AGENTS.manifest` → WARN (Codex will not see this file). Codex discovers local `ai/memory/private/*.md` automatically; those filenames must stay out of the tracked manifest.
 - A line in `ai/AGENTS.manifest` whose target file does not exist → FAIL.
 - `feedback_ai_config_structure.md` not the first memory entry in the manifest memory section → FAIL (Codex must see token rules before any token-using file).
 
