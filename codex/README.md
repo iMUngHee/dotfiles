@@ -25,6 +25,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 
 1. **`~/.codex/AGENTS.md`** built from `ai/AGENTS.manifest`:
    - concat sources in manifest order
+   - append local `ai/memory/private/*.md` files not already in the manifest; private filenames stay out of tracked files and a missing directory is skipped
    - frontmatter stripped per-file
    - tokens sed-expanded for Codex (`{{TOOL_HOME}}` → `~/.codex`, `{{PLAN_DIR}}` → `.agents/plans`, etc.)
    - sized against `project_doc_max_bytes` — warns/fails if over cap

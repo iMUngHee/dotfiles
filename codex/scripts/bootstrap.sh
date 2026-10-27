@@ -61,6 +61,18 @@ TMP="$TARGET.tmp"
         strip_frontmatter < "$src" | expand_tokens_codex
         echo
     done < "$MANIFEST"
+    # Machine-local memory is gitignored; discover it without tracked filenames.
+    for src in "$AI_DIR/memory/private/"*.md; do
+        [ -f "$src" ] || continue
+        line="memory/private/${src##*/}"
+        # Older local manifests may already include a private entry.
+        if grep -Fxq "$line" "$MANIFEST"; then
+            continue
+        fi
+        echo "<!-- $line -->"
+        strip_frontmatter < "$src" | expand_tokens_codex
+        echo
+    done
     if [ -f "$CODEX_DIR/DEVGUARD.md" ]; then
         echo "<!-- codex/DEVGUARD.md -->"
         strip_frontmatter < "$CODEX_DIR/DEVGUARD.md" | expand_tokens_codex

@@ -139,6 +139,32 @@ export -f mv
   }
 }
 
+test("Codex deploy includes local private memory once with token expansion and no frontmatter", async (t) => {
+  const f = await fixture("codex");
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  const memory = join(f.root, "ai", "memory", "private");
+  await mkdir(memory, { recursive: true });
+  await writeFile(join(memory, "local rule.md"), "---\nname: Local rule\n---\nPrivate rule for {{TOOL_NAME}} at {{TOOL_HOME}}\n");
+  await writeFile(join(memory, "listed.md"), "Listed private rule\n");
+  await writeFile(join(memory, "notes.txt"), "Not an instruction\n");
+  await mkdir(join(memory, "directory.md"));
+  await writeFile(join(f.root, "ai", "AGENTS.manifest"), "PERSONAL.md\nmemory/private/listed.md\n");
+  await writeFile(join(f.root, "codex", "DEVGUARD.md"), "Native addendum\n");
+  f.run();
+  const agents = await readFile(join(f.home, ".codex", "AGENTS.md"), "utf8");
+  assert.ok(agents.includes(`Private rule for Codex CLI at ${f.home}/.codex`));
+  assert.equal(agents.split("Listed private rule").length - 1, 1);
+  assert.doesNotMatch(agents, /name: Local rule|Not an instruction|directory\.md|\{\{TOOL_/);
+  assert.ok(agents.indexOf("Fixture instructions") < agents.indexOf("Private rule for"));
+  assert.ok(agents.indexOf("Private rule for") < agents.indexOf("Native addendum"));
+  f.run();
+  assert.equal(await readFile(join(f.home, ".codex", "AGENTS.md"), "utf8"), agents);
+  await rm(memory, { recursive: true });
+  await writeFile(join(f.root, "ai", "AGENTS.manifest"), "PERSONAL.md\n");
+  f.run();
+  assert.doesNotMatch(await readFile(join(f.home, ".codex", "AGENTS.md"), "utf8"), /Private rule for|memory\/private\/|Listed private rule/);
+});
+
 test("Codex deploy removes retired network config while preserving local MCP servers", async () => {
   const f = await fixture("codex");
   for (let i = 0; i < 2; i++) {
