@@ -87,7 +87,8 @@ cannot run something; remove it in the commit that records the result.
       `ai/lib/bootstrap-deploy.test.mjs` (verified on macOS 2026-10-26): token
       expansion, frontmatter stripping, filenames with spaces, manifest
       deduplication, repeat deploys, and an absent private-memory directory.
-
+      Also run `ai/lib/sync-back-manifest.test.mjs`, where an unlisted
+      private file is not manifest drift (verified on macOS 2026-10-27).
 - [ ] **Windows / Linux** — run the PostToolUse JSON feedback cases and Stop
       formatting/retry regressions in `ai/lib/{raw-tool-input-hooks,stop-hooks}.test.mjs`,
       then verify live hook completion and model-visible checker feedback after

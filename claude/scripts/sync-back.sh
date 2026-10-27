@@ -99,7 +99,10 @@ if [ -f "$MANIFEST" ]; then
         -not -path './lib/*' \
         -not -name 'README.md' \
         | sed 's|^\./||' | sort -u)
-    missing=$(comm -23 <(echo "$actual") <(echo "$listed"))
+    # codex/scripts/bootstrap.sh collects memory/private/*.md without a manifest
+    # entry, and naming one here is drift on every other machine, so an unlisted
+    # private file is not missing. Listed ones still count toward stale below.
+    missing=$(comm -23 <(echo "$actual" | sed '/^memory\/private\/[^/]*$/d') <(echo "$listed"))
     stale=$(comm -13 <(echo "$actual") <(echo "$listed"))
 
     # memory/private/* is gitignored and lives only in the main checkout; a linked

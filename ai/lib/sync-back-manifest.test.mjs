@@ -118,3 +118,14 @@ test("the main checkout is unaffected: nothing is stale and no INFO line is prin
   assert.doesNotMatch(result.stdout, /INFO: private manifest entries/);
   assert.deepEqual(staleEntries(result.stdout), []);
 });
+
+test("an unlisted private memory file is not drift, while an unlisted shared one still is", async () => {
+  const { root, home } = await fixture();
+  // codex/scripts/bootstrap.sh collects memory/private/*.md without a manifest entry.
+  await writeFile(join(root, "ai", "memory", "private", "unlisted.md"), "private, never listed\n");
+  await writeFile(join(root, "ai", "memory", "unlisted.md"), "shared, never listed\n");
+  const result = run(root, home);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^ {2}memory\/unlisted\.md$/m);
+  assert.doesNotMatch(result.stdout, /memory\/private\/unlisted\.md/);
+});
