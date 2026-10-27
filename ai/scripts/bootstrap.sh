@@ -193,4 +193,5 @@ Edit source files under ~/.config/ai/, claude/, codex/ — NOT the deployed copi
 - Git hooks live in githooks/ via core.hooksPath — .git/hooks is not tracked.
 - Merging a tier change into main runs this script (githooks/post-merge).
 - New ai/*.md? Add to ai/AGENTS.manifest before next bootstrap.
+- ai/memory/private/*.md stays out of it; Codex collects it unlisted.
 EOF

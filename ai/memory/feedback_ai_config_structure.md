@@ -19,7 +19,7 @@ When a `claude-`/`codex-` skill becomes identical across tools, **unify it into 
 - Edit `ai/` originals only — never directly edit the generated copies or symlink targets.
 
 ## AGENTS.manifest
-`ai/AGENTS.manifest` controls the concat order of `ai/*.md` into `~/.codex/AGENTS.md`. Update the manifest whenever a new `ai/*.md` is added or removed. Token-substitution memory MUST be the first entry so later tokens can resolve.
+`ai/AGENTS.manifest` controls the concat order of `ai/*.md` into `~/.codex/AGENTS.md`. Update the manifest whenever a new `ai/*.md` is added or removed — except `ai/memory/private/*.md`, which is gitignored, never listed, and appended by the Codex builder on its own. Token-substitution memory MUST be the first entry so later tokens can resolve.
 
 ## Token substitution
 `ai/` files use `{{double-mustache}}` placeholders for tool-varying paths/names. Replace with actual values when referencing, writing, or executing commands containing them.

@@ -104,7 +104,7 @@ The `SKILL.md` frontmatter `name:` is the user-facing invocation/display name. I
 
 ## AGENTS.manifest
 
-Codex sees no index file — it reads `AGENTS.md` body directly. `ai/AGENTS.manifest` declares the concat order. New `ai/*.md` files MUST be added to the manifest, otherwise Codex never sees them. `feedback_ai_config_structure.md` MUST stay first in the memory section so Codex receives token rules before any token-using content.
+Codex sees no index file — it reads `AGENTS.md` body directly. `ai/AGENTS.manifest` declares the concat order. New `ai/*.md` files MUST be added to the manifest, otherwise Codex never sees them — except `ai/memory/private/*.md`, below. `feedback_ai_config_structure.md` MUST stay first in the memory section so Codex receives token rules before any token-using content.
 
 Local `ai/memory/private/*.md` files are discovered automatically after the manifest entries and before the Codex-only addendum, with the same frontmatter stripping and token expansion. Keep private filenames out of the tracked manifest; files already listed there are included only once. Machines without private memory skip this step.
 

@@ -83,7 +83,7 @@ ai/scripts/bootstrap.sh              # repo → local (re-deploy)
 ## Generated files (do not edit)
 
 - `~/.claude/MEMORY.md` — built from `ai/memory/`, `claude/memory/`, `ai/memory/private/` walks
-- `~/.codex/AGENTS.md` — built from `ai/AGENTS.manifest`
+- `~/.codex/AGENTS.md` — built from `ai/AGENTS.manifest`, then local `ai/memory/private/*.md`
 
 Direct edits are lost on the next bootstrap. Edit source files in `ai/` or `claude/` (or `codex/` for Codex-only) and re-run bootstrap.
 
