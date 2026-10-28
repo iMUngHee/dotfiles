@@ -13,7 +13,7 @@ approvals_reviewer = "user"
 sandbox_mode = "danger-full-access"
 
 [desktop]
-external-agent-import-sync-enabled = true
+external-agent-import-sync-enabled = false
 external-agent-import-sync-item-types = { SESSIONS = true, AGENTS_MD = true, CONFIG = true, SKILLS = true, PLUGINS = true, MCP_SERVER_CONFIG = true, SUBAGENTS = true, HOOKS = false, COMMANDS = true, MEMORY = true }
 
 [features]
