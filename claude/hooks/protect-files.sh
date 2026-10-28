@@ -18,8 +18,12 @@ EXT_PATTERNS=(".env" ".pem" ".key" ".p8" ".p12" ".pfx")
 # Exact filename patterns: match basename exactly. Blocked for BOTH read and
 # write — either integrity-critical (lockfiles) or token/key-bearing
 # (.npmrc/.netrc, id_rsa...), where even a read can exfiltrate.
+# go.sum is deliberately absent (대협, 2026-10-28): the go command writes and
+# verifies it against the checksum database, nobody edits it by hand, and
+# blocking every command that names it made a Go dependency change impossible
+# to stage.
 EXACT_PATTERNS=(
-  "package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "go.sum" "bun.lock" "bun.lockb"
+  "package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "bun.lock" "bun.lockb"
   ".npmrc" ".netrc"
   "id_rsa" "id_dsa" "id_ecdsa" "id_ed25519"
 )

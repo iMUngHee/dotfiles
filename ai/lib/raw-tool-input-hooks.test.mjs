@@ -209,6 +209,20 @@ for (const tool of ["functions.exec_command", "mcp__host__exec_command"]) {
   });
 }
 
+// go.sum is written and verified by the go command, so it is deliberately not
+// protected: blocking every command that names it made a Go dependency change
+// impossible to stage. Pin that, so the entry is not quietly added back.
+for (const [runtime, tool, input] of [
+  ["claude", "Bash", { command: "git add go.mod go.sum" }],
+  ["claude", "Edit", { file_path: "mod/go.sum", old_string: "a", new_string: "b" }],
+  ["codex", "functions.exec_command", { command: "git add go.mod go.sum" }],
+]) {
+  test(`${runtime} ${tool} lets the go checksum file through`, () => {
+    const result = run("protect-files.sh", tool, input, process.env, runtime);
+    assert.equal(result.status, 0, result.stderr);
+  });
+}
+
 test("post-edit registration accepts namespaced edit tools without matching reads", () => {
   const template = readFileSync(join(repo, "codex/config.toml.template"), "utf8");
   const matcher = new RegExp(template.split("[[hooks.PostToolUse]]")[1].match(/matcher = "(.*)"/)[1]);
