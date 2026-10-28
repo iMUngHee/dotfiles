@@ -150,9 +150,12 @@ test("Codex deploy includes local private memory once with token expansion and n
   await mkdir(join(memory, "directory.md"));
   await writeFile(join(f.root, "ai", "AGENTS.manifest"), "PERSONAL.md\nmemory/private/listed.md\n");
   await writeFile(join(f.root, "codex", "DEVGUARD.md"), "Native addendum\n");
-  f.run();
+  const deployed = f.run('printf "fixture_home=%s\\n" "$HOME"');
   const agents = await readFile(join(f.home, ".codex", "AGENTS.md"), "utf8");
-  assert.ok(agents.includes(`Private rule for Codex CLI at ${f.home}/.codex`));
+  // Windows: Git Bash expands HOME to its POSIX spelling, including /tmp aliases.
+  const shellHome = deployed.stdout.match(/^fixture_home=(.*)$/m)?.[1].trim();
+  assert.ok(shellHome, deployed.stdout);
+  assert.ok(agents.includes(`Private rule for Codex CLI at ${shellHome}/.codex`));
   assert.equal(agents.split("Listed private rule").length - 1, 1);
   assert.doesNotMatch(agents, /name: Local rule|Not an instruction|directory\.md|\{\{TOOL_/);
   assert.ok(agents.indexOf("Fixture instructions") < agents.indexOf("Private rule for"));
