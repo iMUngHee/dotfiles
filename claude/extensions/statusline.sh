@@ -125,6 +125,7 @@ parse_stdin() {
       "model=" + (.model.display_name // "Unknown" | @sh),
       "model_id=" + (.model.id // "" | @sh),
       "used_pct=" + (.context_window.used_percentage // "" | tostring | @sh),
+      "ctx_tokens=" + (.context_window.total_input_tokens // 0 | tostring),
       "session_cost=" + (.cost.total_cost_usd // 0 | tostring | @sh),
       "cache_read=" + (.context_window.current_usage.cache_read_input_tokens // 0 | tostring),
       "cache_create=" + (.context_window.current_usage.cache_creation_input_tokens // 0 | tostring),
@@ -219,6 +220,9 @@ render_context() {
     printf '%s[%s%s]%s %s%d%%%s' \
         "$(color_by_pct "$used_int")" "${_BARS:0:filled}" "${_DOTS:0:empty}" "$RESET" \
         "$DIM" "$used_int" "$RESET"
+    # Absolute size too: on a 1M window the percentage stays low long after
+    # the context itself has grown large.
+    [ "${ctx_tokens:-0}" -gt 0 ] && printf ' %s%dk%s' "$DIM" $(( (ctx_tokens + 500) / 1000 )) "$RESET"
 }
 
 render_cost() {

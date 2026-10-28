@@ -83,6 +83,11 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **Linux / Windows (Git Bash)** — pipe a sample payload with
+      `context_window.total_input_tokens` into `claude/extensions/statusline.sh`
+      and check the context segment ends in an absolute size such as `203k`
+      (verified on macOS 2026-10-28). On Windows `jq` writes CRLF, which may
+      break the integer test on that field as it would `input_tk` already.
 - [ ] **Linux / Windows (Git Bash)** — run the local private-memory cases in
       `ai/lib/bootstrap-deploy.test.mjs` (verified on macOS 2026-10-26): token
       expansion, frontmatter stripping, filenames with spaces, manifest
