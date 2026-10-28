@@ -16,7 +16,10 @@ fi
 input=$(printf '%s' "$input" | jq 'if (.tool_input | type) == "string" then .tool_input = {command: .tool_input} else . end')
 
 ext_patterns=(".env" ".pem" ".key" ".p12" ".pfx")
-exact_patterns=("package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "go.sum" "bun.lock" "bun.lockb")
+# go.sum is deliberately absent (대협, 2026-10-28): the go command writes and
+# verifies it against the checksum database, and blocking it made a Go
+# dependency change impossible to stage. Kept in step with claude/hooks.
+exact_patterns=("package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "bun.lock" "bun.lockb")
 segment_patterns=("credentials" "secrets")
 substring_patterns=("-secret")
 # Generated-artifact marker (mirrors claude/hooks/protect-files.sh): a direct edit
