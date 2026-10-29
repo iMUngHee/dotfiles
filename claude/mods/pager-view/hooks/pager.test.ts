@@ -20,6 +20,7 @@ import {
   peersOf,
   roomsOf,
   rosterOf,
+  runStartsOf,
   seenOf,
   unreadOf,
 } from './pager'
@@ -186,18 +187,35 @@ const entry = (id: number, direction: 'in' | 'out', peer: string): Entry => ({
 const peer = (name: string, host = 'live'): Peer => ({ name, tool: 'claude', root: `/w/${name}`, host, last: 'now' })
 
 describe('chats', () => {
-  test('the conversations come first, newest first, then the quiet peers in roster order; self is never a room', () => {
+  test('the chats are the conversations alone, newest first; quiet peers and self are never rooms', () => {
     const entries = [entry(1, 'in', 'buni'), entry(2, 'out', 'lopu'), entry(3, 'in', 'buni'), entry(4, 'in', 'gone')]
     const rooms = roomsOf(entries, [peer('wogi'), peer('lopu'), peer('kiwi'), peer('buni'), peer('zola', 'gone')], 'wogi')
 
-    expect(rooms.map(room => [room.name, room.last?.id ?? null, room.peer?.host ?? null])).toEqual([
+    expect(rooms.map(room => [room.name, room.last.id, room.peer?.host ?? null])).toEqual([
       ['gone', 4, null],
       ['buni', 3, 'live'],
       ['lopu', 2, 'live'],
-      ['kiwi', null, 'live'],
-      ['zola', null, 'gone'],
     ])
-    expect(roomsOf([], [peer('wogi')], 'wogi')).toEqual([])
+    expect(roomsOf([], [peer('wogi'), peer('kiwi')], 'wogi')).toEqual([])
+  })
+
+  test('a run is one side within ten minutes on one day; the first unread starts its own', () => {
+    const at = (id: number, direction: 'in' | 'out', iso: string): Entry => ({ ...entry(id, direction, 'buni'), at: iso })
+    const entries = [
+      at(1, 'in', '2026-10-07T05:00:00.000Z'),
+      at(2, 'in', '2026-10-07T05:09:00.000Z'),
+      at(3, 'in', '2026-10-07T05:30:00.000Z'),
+      at(4, 'out', '2026-10-07T05:31:00.000Z'),
+      at(5, 'out', '2026-10-07T05:32:00.000Z'),
+      at(6, 'in', '2026-10-07T05:33:00.000Z'),
+      at(7, 'in', '2026-10-07T05:34:00.000Z'),
+    ]
+    expect([...runStartsOf(entries, null)]).toEqual([1, 3, 4, 6])
+    expect([...runStartsOf(entries, 7)]).toEqual([1, 3, 4, 6, 7])
+    // A day change parts a run even inside ten minutes (host time zone).
+    const late = new Date(2026, 9, 7, 23, 58).toISOString()
+    const early = new Date(2026, 9, 8, 0, 1).toISOString()
+    expect([...runStartsOf([at(1, 'in', late), at(2, 'in', early)], null)]).toEqual([1, 2])
   })
 
   test('a room met first counts nothing before the prior baseline; the open room is read up to its newest', () => {
@@ -227,21 +245,38 @@ describe('chats', () => {
     expect(cellsOf('\u{1f680}')).toBe(2)
   })
 
-  test('a body folds at eight visual lines, counting wrapped rows and blank lines', () => {
+  test('a body folds at eight visual lines, counting wrapped rows and blank lines, and says it goes on', () => {
     const short = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n')
-    expect(foldOf(short, 30)).toEqual({ text: short.split('\n').slice(0, 8).join('\n'), hidden: 12 })
+    expect(foldOf(short, 30)).toEqual({ text: `${short.split('\n').slice(0, 8).join('\n')}…`, hidden: 12 })
 
     expect(foldOf('x'.repeat(100), 30)).toEqual({ text: 'x'.repeat(100), hidden: 0 })
     expect(foldOf('a\n\n\n\n\n\n\nb', 30).hidden).toBe(0)
-    expect(foldOf('a\n\n\n\n\n\n\n\nb', 30)).toEqual({ text: 'a\n\n\n\n\n\n\n', hidden: 1 })
+    expect(foldOf('a\n\n\n\n\n\n\n\nb', 30)).toEqual({ text: 'a…', hidden: 1 })
 
     // 100 syllables are 200 cells: ten rows at 20 a row; the cut keeps 8 rows' worth.
     const folded = foldOf('가'.repeat(100), 20)
     expect(folded.hidden).toBe(2)
-    expect(folded.text).toBe('가'.repeat(80))
+    expect(folded.text).toBe(`${'가'.repeat(80)}…`)
   })
 
-  test('bubble times read the host clock and the day; a bad time reads dashes', () => {
+  test('a fold cuts at the last space it keeps, never inside a word or an 어절', () => {
+    expect(foldOf('hello world again', 10, 1)).toEqual({ text: 'hello…', hidden: 1 })
+    expect(foldOf('이것은 한국어 문장입니다', 10, 1)).toEqual({ text: '이것은…', hidden: 2 })
+    // Backing off to a space a row or more away would waste the rows: a long path keeps them.
+    expect(foldOf(`see ${'p'.repeat(60)}`, 10, 2)).toEqual({ text: `see ${'p'.repeat(16)}…`, hidden: 5 })
+  })
+
+  test('a fold inside a code fence closes the fence so the controls after it stay out of it', () => {
+    const body = ['intro', '```', ...Array.from({ length: 12 }, (_, i) => `code ${i}`), '```'].join('\n')
+    const folded = foldOf(body, 40)
+    expect(folded.text.endsWith('…\n```')).toBe(true)
+    expect(folded.text.split('\n').filter(line => line.startsWith('```')).length).toBe(2)
+    // A tilde fence is closed with its own kind.
+    const tilde = foldOf(['~~~', ...Array.from({ length: 12 }, (_, i) => `code ${i}`), '~~~'].join('\n'), 40)
+    expect(tilde.text.endsWith('…\n~~~')).toBe(true)
+  })
+
+  test('message times read the host clock and the day; a bad time reads dashes', () => {
     const at = new Date(2026, 9, 7, 14, 48).toISOString()
     expect(clockOf(at)).toBe('14:48')
     expect(dayOf(at)).toBe('10-07')

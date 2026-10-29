@@ -188,32 +188,53 @@ export function dayOf(iso: string): string {
   return `${two(date.getMonth() + 1)}-${two(date.getDate())}`
 }
 
-/** One chat of the /pager list: a peer this session has messages with, or one pager lists. */
+/** One chat of the /pager list: a peer this session has messages with. */
 export type Room = {
   name: string
   /** pager's roster row for the peer; null once the peer left the roster. */
   peer: Peer | null
-  /** The newest message with the peer; null when there is none yet. */
-  last: Entry | null
+  /** The newest message with the peer. */
+  last: Entry
 }
 
 /**
- * The chats: the conversations by their newest message, newest first, then the
- * peers without messages in the roster's order (live first). `self` is this
- * session's name, which is the pane's header and never a room.
+ * The chats: the conversations by their newest message, newest first. A peer
+ * pager lists but this session never talked with is no room; `self` is this
+ * session's name, which is the pane's header and never a room either.
  */
 export function roomsOf(entries: readonly Entry[], peers: readonly Peer[], self: string): Room[] {
   const lastOf = new Map<string, Entry>()
   // Oldest first, so the last write per peer is its newest message.
   for (const entry of entries) if (entry.peer !== self) lastOf.set(entry.peer, entry)
   const peerOf = new Map(peers.map(peer => [peer.name, peer]))
-  const talked = [...lastOf.values()]
+  return [...lastOf.values()]
     .sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id)
     .map(last => ({ name: last.peer, peer: peerOf.get(last.peer) ?? null, last }))
-  const quiet = peers
-    .filter(peer => peer.name !== self && !lastOf.has(peer.name))
-    .map(peer => ({ name: peer.name, peer, last: null }))
-  return [...talked, ...quiet]
+}
+
+/** How far apart two messages of one side may be and still share a sender line. */
+const RUN_MS = 10 * 60_000
+
+/**
+ * The ids that open a run: the first message, a change of side, a gap past ten
+ * minutes, a change of day, and `firstNew`, the message the `new` divider sits
+ * above. A run draws its sender line once.
+ */
+export function runStartsOf(entries: readonly Entry[], firstNew: number | null): Set<number> {
+  const starts = new Set<number>()
+  let prev: Entry | null = null
+  for (const entry of entries) {
+    const gap = prev === null ? Number.NaN : Date.parse(entry.at) - Date.parse(prev.at)
+    const isSameRun =
+      prev !== null &&
+      prev.direction === entry.direction &&
+      gap <= RUN_MS &&
+      dayOf(prev.at) === dayOf(entry.at) &&
+      entry.id !== firstNew
+    if (!isSameRun) starts.add(entry.id)
+    prev = entry
+  }
+  return starts
 }
 
 /** The highest id of what `peer` sent this session; 0 when nothing. */
@@ -302,16 +323,35 @@ export function cellsOf(text: string): number {
   return cells
 }
 
-/** A bubble folds past this many visual lines. */
+/** A message folds past this many visual lines. */
 export const FOLD_LINES = 8
 
-/** What a folded bubble draws: `text`, and how many visual lines it leaves out (0 when whole). */
+/** What a folded message draws: `text`, and how many visual lines it leaves out (0 when whole). */
 export type Fold = { text: string; hidden: number }
+
+/**
+ * The cells of `line` that fit in `left`, given back at the last space when
+ * that costs less than a row of `room`: a Korean 어절, like a word, is not
+ * split, while a long unspaced string (a path, a URL) keeps its eight rows.
+ */
+function cutAt(line: string, left: number, room: number): string {
+  let cut = ''
+  let cells = 0
+  for (const char of line) {
+    if (cells + cellOf(char) > left) break
+    cut += char
+    cells += cellOf(char)
+  }
+  const space = cut.lastIndexOf(' ')
+  if (space <= 0) return cut
+  return cells - cellsOf(cut.slice(0, space)) <= room ? cut.slice(0, space) : cut
+}
 
 /**
  * The first `limit` visual lines of `body` at `width` cells a line. A line of
  * the body takes ceil(cells / width) rows, one when empty; a line cut at the
- * fold keeps the cells that fit.
+ * fold keeps the words that fit. A folded text ends in `…`, and a code fence
+ * it leaves open is closed, so the Markdown it is drawn as ends where it does.
  */
 export function foldOf(body: string, width: number, limit = FOLD_LINES): Fold {
   const room = Math.max(1, width)
@@ -329,19 +369,14 @@ export function foldOf(body: string, width: number, limit = FOLD_LINES): Fold {
       continue
     }
     const left = (limit - used) * room
-    if (left > 0) {
-      let cut = ''
-      let cells = 0
-      for (const char of line) {
-        if (cells + cellOf(char) > left) break
-        cut += char
-        cells += cellOf(char)
-      }
-      kept.push(cut)
-    }
+    if (left > 0) kept.push(cutAt(line, left, room))
     break
   }
-  return { text: kept.join('\n'), hidden: total - limit }
+  const text = `${kept.join('\n').trimEnd()}…`
+  const fences = kept.filter(line => /^\s*(```|~~~)/.test(line))
+  // An odd count leaves one open: close it with its own kind, the last fence kept.
+  const open = fences.at(-1)?.trim().slice(0, 3) ?? '```'
+  return { text: fences.length % 2 === 1 ? `${text}\n${open}` : text, hidden: total - limit }
 }
 
 /** Peers other than `self` whose host pager judges live. */
