@@ -112,6 +112,26 @@ shared server through `/daemon` and check again; connected sessions may be inter
   MCP binaries running. Reconnect MCP or restart the shared app-server, and
   check process replacement; a server restart can interrupt connected chats.
 
+### Verified on 2026-10-30
+
+- Pager `e3f2312` passed `go test ./...`, `go vet ./...`, and Linux/amd64 and
+  Darwin/arm64 cross-builds. The Windows installer rebuilt the clean commit;
+  installed Go build metadata reports that revision and `vcs.modified=false`.
+- Two fresh persisted Codex threads on desktop host `0.165.0-alpha.1.2` ran real
+  host turns against a deterministic local Responses endpoint. Native hook
+  registration and its trusted hash were checked explicitly. While one turn
+  was busy, eight concurrent sender processes produced one queued pager wake.
+  Legacy duplicates merged to one, other-thread wakes remained independent,
+  and ordinary queued user input retained its ID and content.
+- The installed binary repeated the same live test: MCP reads removed obsolete
+  notifications; subsequent mail queued a new wake; native queue execution
+  injected unread mail into the model request. Already-read delayed wakes were
+  rejected before any model HTTP request. All 12 mail records remained stored.
+  The model endpoint was a local fixture, not a cloud model service.
+- Existing persistent MCP processes still require reconnecting after the binary
+  replacement. A standalone helper's reload cannot replace MCP clients owned
+  by another running app-server; closing a desktop window is not proof of it.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
@@ -151,12 +171,9 @@ cannot run something; remove it in the commit that records the result.
       `ai/lib/git-filter-machine-local.test.mjs` and one such pull after
       bootstrap re-registers the smudge (verified on Linux 2026-10-21;
       Windows filter tests and actual checkouts passed 2026-10-28).
-- [ ] **Windows** — verify pager's automatic queue wake through real model
-      turns in fresh sessions, including delayed redundant notifications.
-      New-session direct MCP calls and hook output were checked, without model
-      turns. Cross-machine relay transport was not tested against a real peer.
+- [ ] **Windows** — test pager's cross-machine relay transport against a real peer.
 - [ ] **macOS / Linux** — run pager's runtime suite and session/MCP flows after
-      `4b46b64`; this machine only cross-compiled those targets.
+      `e3f2312`; this machine only cross-compiled those targets.
 - [ ] **macOS** — once a Codex release fixes openai/codex#25416, re-check that
       the `workspace-local-sockets` profile reaches `/tmp/agent-notifier.sock`
       and the tmux socket (`d9e376d`). On 0.163.0 it does not (see `## macOS`).
