@@ -125,6 +125,8 @@ function textOf(tree: unknown): string {
   if (Array.isArray(tree)) return tree.map(textOf).join('')
   const node = tree as { type?: string; children?: unknown; props?: { children?: unknown; label?: string } }
   if (node.type === 'Button') return node.props?.label ?? ''
+  if (node.type === 'Markdown') return `${(node.props as { text?: string } | undefined)?.text ?? ''}
+`
   const children = textOf(node.children ?? node.props?.children)
   return node.type === 'Box' ? `${children}\n` : children
 }
@@ -150,14 +152,10 @@ async function opened($: Engine, w: ReturnType<typeof world>, surface: 'terminal
 
 type Found = { type: string; text: string; props: Record<string, unknown>; children: unknown[] }
 
-/** A bubble row's child by a prop: the card has the round border, the spacer the width. */
-function childOf(row: Found | undefined, test: (props: Record<string, unknown>) => boolean): Found | undefined {
-  return (row?.children ?? []).find(
-    (child): child is Found => typeof child === 'object' && child !== null && test((child as Found).props ?? {}),
-  )
+/** Every Box drawn, for its border and fill props. */
+async function boxes(ui: { findAll: (query: { type: string }) => Promise<Found[]> }): Promise<Found[]> {
+  return ui.findAll({ type: 'Box' })
 }
-const cardOf = (row: Found | undefined) => childOf(row, props => props.borderStyle === 'round')
-const spacerOf = (row: Found | undefined) => childOf(row, props => props.width === '20%')
 
 /** The chips drawn: Texts whose own text is exactly `text` on a background. */
 async function chips(ui: { findAll: (query: { type: string }) => Promise<Found[]> }, text: string): Promise<Found[]> {
@@ -279,8 +277,9 @@ describe('band', () => {
   })
 })
 
+
 describe('chats', () => {
-  test('the pane opens on the chats: conversations newest first, then quiet peers; this session is the header', async ($, on) => {
+  test('the pane opens on the chats: conversations alone, newest first; this session is the header', async ($, on) => {
     const w = world(on)
     w.who = `${w.who}kiwi  codex   /k         live  1m ago\n`
     w.messages = [
@@ -296,17 +295,17 @@ describe('chats', () => {
     expect(text).toContain(' wogi   ● 1 live')
     expect(text.split('wogi').length - 1).toBe(1)
     expect(text.indexOf('gola')).toBeLessThan(text.indexOf('buni'))
-    expect(text.indexOf('buni')).toBeLessThan(text.indexOf('PEERS'))
-    expect(text.indexOf('PEERS')).toBeLessThan(text.indexOf('kiwi'))
-    expect(text).toContain('(human) from 대협')
+    // kiwi is live but never talked with this session: no row, and no group for such peers.
+    expect(text).not.toContain('kiwi')
+    expect(text).not.toContain('PEERS')
+    expect(text).not.toContain('no messages yet')
     expect(text).toContain('you: reply ⏎ second line')
-    expect(text).toContain('no messages yet · /k')
     expect(text).toContain('58m')
     expect(text).not.toContain('mail 63')
-    // Two lines a chat, the cursor bar on the first: presence, name and tool, then the preview.
+    // Two lines a chat, the cursor bar on the first: presence, name and tool, then who said what.
     expect(text).toMatch(/▌\n○\ngola\n\n58m\n/)
+    expect(text).toMatch(/▌\n\(human\) gola: from 대협\n/)
     expect(text).toMatch(/○\nbuni\ncodex\n\n59m\n/)
-    expect(text).toMatch(/▌\n\(human\) from 대협\n/)
     expect(text).toContain('down')
     expect(text).toContain('· click a name')
 
@@ -314,7 +313,20 @@ describe('chats', () => {
     expect(textOf(await desktop.drawn())).toContain('click a name to open its chat')
   })
 
-  test('unread is counted per room, clears when the room opens, and stays read while it is open', async ($, on) => {
+  test('with no conversation the chats say so, under the live count', async ($, on) => {
+    const w = world(on)
+    w.who = `${w.who}kiwi  codex   /k         live  1m ago\n`
+    await started($, w)
+    const ui = await opened($, w)
+    const text = textOf(await ui.drawn())
+
+    expect(text).toContain(' wogi   ● 1 live')
+    expect(text).toContain('No conversations yet.')
+    expect(text).toContain('Messages wogi sends or receives show up here.')
+    expect(text).not.toContain('kiwi')
+  })
+
+  test('unread is counted per room, lights its preview, clears when the room opens, and stays read while it is open', async ($, on) => {
     const w = world(on, { 'baseline:sid-a': 10 })
     w.messages = [MAIL(10), MAIL(11), { id: 12, to: 'wogi', from: 'lopu', fromSession: 'sid-l', body: 'hey' }]
     await started($, w)
@@ -324,13 +336,15 @@ describe('chats', () => {
     let text = textOf(await ui.drawn())
     expect(text).toContain(' · 2 unread')
     expect(await chips(ui, ' 1 ')).toHaveLength(2)
+    const preview = (await ui.findAll({ type: 'Text' })).find(one => one.text === 'lopu: hey')
+    expect(preview?.props.dimColor).toBe(false)
 
-    // Opening scrolls the room to its newest bubble: this kit build answers a plugin's
-    // $.ui.scroll with "no implementation for ui.scroll", so the terminal capture checks it.
     await ui.press({ key: 'chat-buni' })
     await ui.press({ key: 'back' })
     text = textOf(await ui.drawn())
     expect(text).toContain(' · 1 unread')
+    const read = (await ui.findAll({ type: 'Text' })).find(one => one.text === 'buni: mail 11')
+    expect(read?.props.dimColor).toBe(true)
     await w.clock.advance(POLL)
     expect(textOf(await ui.drawn())).toContain(' · 1 unread')
 
@@ -347,7 +361,7 @@ describe('chats', () => {
   test('j, k and o move the cursor and open its room; b returns; a new session returns to the chats', async ($, on) => {
     const w = world(on)
     w.who = `${w.who}kiwi  codex   /k         live  1m ago\n`
-    w.messages = [MAIL(50)]
+    w.messages = [{ id: 49, to: 'wogi', from: 'kiwi', fromSession: 'sid-k', body: 'yo' }, MAIL(50)]
     await started($, w)
     const ui = await opened($, w)
     expect(textOf(await ui.drawn())).toMatch(/▌\n○\nbuni\n/)
@@ -360,7 +374,7 @@ describe('chats', () => {
     let text = textOf(await ui.drawn())
     expect(text).toContain('‹ chats')
     expect(text).toContain('kiwi  ● live · codex · /k')
-    expect(text).toContain('No messages with kiwi yet.')
+    expect(text).toContain('yo')
 
     await ui.press({ key: 'back' })
     await ui.press({ key: 'up' })
@@ -377,6 +391,7 @@ describe('chats', () => {
 
   test('the first look at the session id is no switch: a room opened at once stays open', async ($, on) => {
     const w = world(on)
+    w.messages = [MAIL(50)]
     await started($, w)
     const ui = await opened($, w)
     await ui.press({ key: 'chat-buni' })
@@ -386,17 +401,12 @@ describe('chats', () => {
     expect(textOf(await ui.drawn())).toContain('‹ chats')
   })
 
-  test('a long root is cut from its start, in the list and in the room, keeping the folder at its end', async ($, on) => {
+  test('a long root is cut from its start in the room header, keeping the folder at its end', async ($, on) => {
     const w = world(on)
     w.who = `${w.who}vuba  claude  /Users/u/Library/${'x'.repeat(80)}/scratch-end  live  1m ago\n`
+    w.messages = [{ id: 51, to: 'wogi', from: 'vuba', fromSession: 'sid-v', body: 'hi' }]
     await started($, w)
     const ui = await opened($, w)
-    const row = textOf(await ui.drawn())
-      .split('\n')
-      .find(line => line.startsWith('no messages yet · …'))
-    expect(row?.endsWith('xxx/scratch-end')).toBe(true)
-    expect(row!.length).toBeLessThanOrEqual(78)
-
     await ui.press({ key: 'chat-vuba' })
     const header = textOf(await ui.drawn())
       .split('\n')
@@ -404,7 +414,7 @@ describe('chats', () => {
     expect(header?.endsWith('xxx/scratch-end')).toBe(true)
   })
 
-  test('the seen map is the store\'s: a reload under the same session keeps what each room read', async ($, on) => {
+  test("the seen map is the store's: a reload under the same session keeps what each room read", async ($, on) => {
     const w = world(on, { 'baseline:sid-a': 10, 'seen:sid-a': { buni: 11 } })
     w.messages = [MAIL(10), MAIL(11), MAIL(12)]
     await started($, w)
@@ -433,20 +443,22 @@ describe('chats', () => {
   test('without HOME a Windows root is shortened against USERPROFILE', async ($, on) => {
     const w = world(on, {}, { USERPROFILE: 'C:\\Users\\u' })
     w.who = 'NAME  TOOL    ROOT              HOST  LAST\nwogi  claude  C:\\Users\\u\\work  live  just now\nkiwi  codex   C:\\Users\\u\\k     live  1m ago\n'
+    w.messages = [{ id: 52, to: 'wogi', from: 'kiwi', fromSession: 'sid-k', body: 'hi' }]
     await started($, w)
     const ui = await opened($, w)
+    await ui.press({ key: 'chat-kiwi' })
 
-    expect(textOf(await ui.drawn())).toContain('no messages yet · ~\\k')
+    expect(textOf(await ui.drawn())).toContain('kiwi  ● live · codex · ~\\k')
   })
 })
 
 describe('room', () => {
-  test('received bubbles hug the left and sent ones the right, oldest first, under a day separator', async ($, on) => {
+  test('the room reads as a transcript: received runs under a ● line, sent ones beside the accent bar', async ($, on) => {
     const w = world(on)
     w.messages = [
       MAIL(30),
       { id: 31, to: 'buni', from: 'wogi', fromSession: 'sid-a', body: 'ack' },
-      { id: 32, to: 'wogi', from: 'buni', fromSession: 'sid-buni', body: '대협 확인 부탁', human: true },
+      { id: 32, to: 'wogi', from: 'buni', fromSession: 'sid-buni', body: '대협 **확인** 부탁', human: true },
     ]
     await started($, w)
     const ui = await opened($, w)
@@ -455,74 +467,163 @@ describe('room', () => {
 
     expect(text).toContain('‹ chats')
     expect(text).toContain('buni  ○ gone · codex · /other')
-    expect(text).toContain(`── ${dayOf(isoOf(30))} ──`)
+    expect(text).toMatch(new RegExp(`─ ${dayOf(isoOf(30))} ─`))
     expect(text.indexOf('mail 30')).toBeLessThan(text.indexOf('ack'))
-    expect(text.indexOf('ack')).toBeLessThan(text.indexOf('대협 확인 부탁'))
-    expect(text).toContain(clockOf(isoOf(31)))
-    expect(text).toContain('(human) ')
+    expect(text.indexOf('ack')).toBeLessThan(text.indexOf('대협 **확인** 부탁'))
+    expect(text).toContain(`● buni  ${clockOf(isoOf(30))}`)
+    expect(text).toContain(`you  ${clockOf(isoOf(31))}`)
+    expect(text).toContain(`● buni  ${clockOf(isoOf(32))}  (human)`)
+    // Bodies are Markdown, drawn as the transcript draws a reply.
+    expect((await ui.findAll({ type: 'Markdown' })).map(one => one.props.text)).toEqual(['mail 30', 'ack', '대협 **확인** 부탁'])
+    // The terminal bar is the engine's quote border; no message is boxed.
+    expect((await ui.find({ key: 'run-31' }))?.props).toMatchObject({ borderStyle: 'quote', borderColor: 'claude' })
+    expect((await ui.find({ key: 'run-30' }))?.props.borderStyle).toBeUndefined()
+    expect((await boxes(ui)).filter(one => one.props.borderStyle === 'round')).toHaveLength(0)
+    // The way back is at the bottom with its key; the header's is a plain control.
+    expect((await ui.find({ key: 'back' }))?.props).toMatchObject({ hotkey: 'b', label: '‹ chats' })
+    expect((await ui.find({ key: 'back-top' }))?.props.hotkey).toBeUndefined()
+    expect(text.lastIndexOf('‹ chats')).toBeGreaterThan(text.indexOf('대협 **확인** 부탁'))
 
-    const received = (await ui.find({ key: 'bubble-30' })) as Found | undefined
-    const sent = (await ui.find({ key: 'bubble-31' })) as Found | undefined
-    expect(received?.props).toMatchObject({ flexDirection: 'row', justifyContent: 'flex-start' })
-    expect(sent?.props).toMatchObject({ flexDirection: 'row', justifyContent: 'flex-end' })
-    expect(cardOf(received)?.props).toMatchObject({ borderStyle: 'round', borderColor: 'subtle' })
-    expect(cardOf(sent)?.props).toMatchObject({ borderStyle: 'round', borderColor: 'claude' })
-    // The spacer sits opposite the bubble: after it when received, before it when sent.
-    const at = (row: Found | undefined, child: Found | undefined) => row?.children.indexOf(child) ?? -1
-    expect(at(received, cardOf(received))).toBeLessThan(at(received, spacerOf(received)))
-    expect(at(sent, spacerOf(sent))).toBeLessThan(at(sent, cardOf(sent)))
-    expect(at(received, spacerOf(received))).toBeGreaterThan(-1)
+    // The desktop draws any borderStyle as a full box, so there the bar is a filled Box.
+    const desktop = await $.ui.mount({ plugin: 'pager-view', surface: 'desktop', component: 'Pane', props: PANE_PROPS, requestId: PANE })
+    const sent = (await desktop.find({ key: 'run-31' })) as Found | undefined
+    expect(sent?.props.borderStyle).toBeUndefined()
+    expect(sent?.children.some(child => (child as Found).props?.backgroundColor === 'claude')).toBe(true)
+    const desk = textOf(await desktop.drawn())
+    expect(desk).not.toContain('click ▾')
+    expect(desk).not.toContain('scroll')
   })
 
-  test('a long bubble folds at eight lines and unfolds in place; a body past the cap names the rest', async ($, on) => {
+  test('one side within ten minutes is one run: the sender line once, a time row for the next', async ($, on) => {
     const w = world(on)
-    const long = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n')
+    w.messages = [MAIL(20), MAIL(21), MAIL(45)]
+    await started($, w)
+    const ui = await opened($, w)
+    await ui.press({ key: 'chat-buni' })
+    const text = textOf(await ui.drawn())
+
+    expect(text.split('● buni').length - 1).toBe(2)
+    expect(text).toContain(`● buni  ${clockOf(isoOf(20))}`)
+    expect(text).toContain(`${clockOf(isoOf(21))}mail 21`)
+    expect(text).toContain(`● buni  ${clockOf(isoOf(45))}`)
+  })
+
+  test('sent runs that follow one another share one bar, each under its own sender line', async ($, on) => {
+    const w = world(on)
+    const sent = (id: number): Message => ({ id, to: 'buni', from: 'wogi', fromSession: 'sid-a', body: `sent ${id}` })
+    w.messages = [MAIL(10), sent(11), sent(40), MAIL(41)]
+    await started($, w)
+    const ui = await opened($, w)
+    await ui.press({ key: 'chat-buni' })
+    const text = textOf(await ui.drawn())
+
+    expect((await boxes(ui)).filter(one => one.props.borderStyle === 'quote')).toHaveLength(1)
+    expect(text).toContain(`you  ${clockOf(isoOf(11))}`)
+    expect(text).toContain(`you  ${clockOf(isoOf(40))}`)
+    expect((await ui.find({ key: 'run-41' }))?.props.marginTop).toBe(0)
+  })
+
+  test('the room opens at its first unread under a new rule; what was unread is whole, older long ones fold', async ($, on) => {
+    const w = world(on, { 'baseline:sid-a': 40, 'seen:sid-a': { buni: 40 } })
+    const lines = (word: string) => Array.from({ length: 20 }, (_, i) => `${word} ${i + 1}`).join('\n')
     w.messages = [
-      { ...MAIL(40), body: long },
-      { ...MAIL(41), body: 'ㄱ'.repeat(23_942) },
+      { ...MAIL(40), body: lines('old') },
+      { ...MAIL(41), body: lines('unread') },
+      { ...MAIL(42), body: lines('newest') },
     ]
     await started($, w)
     const ui = await opened($, w)
     await ui.press({ key: 'chat-buni' })
     let text = textOf(await ui.drawn())
 
-    expect(text).toContain('line 8')
-    expect(text).not.toContain('line 9')
+    expect(text).toContain('old 8…')
+    expect(text).not.toContain('old 9')
     expect(text).toContain('▾ 12 more lines')
-    // 6,000 syllables are 12,000 cells: 207 rows at the 58 a bubble wraps at in 80 columns.
-    expect(text).toContain('▾ 199 more lines')
-    expect(text).not.toContain('more characters')
+    expect(text).toContain('unread 20')
+    expect(text).toContain('newest 20')
+    // The rule sits between what was read and what was not, and the window opens on it.
+    expect(text).toMatch(/─ new ─/)
+    expect(text.indexOf(' new ')).toBeGreaterThan(text.indexOf('old 8'))
+    expect(text.indexOf(' new ')).toBeLessThan(text.indexOf('unread 1'))
+    // The window opens on it: `$.ui.scroll({ to: { key: 'new' } })`, which this kit build cannot
+    // answer (no implementation for ui.scroll, and no op to hook), so the terminal capture checks it.
+    expect(await ui.find({ key: 'new' })).toBeDefined()
 
-    await ui.press({ key: 'fold-40' })
-    text = textOf(await ui.drawn())
-    expect(text).toContain('line 20')
-    expect(text).toContain('▴ fold')
-
+    // Folding is the person's: one at a time, or all with `e`.
     await ui.press({ key: 'fold-41' })
     text = textOf(await ui.drawn())
+    expect(text).not.toContain('unread 20')
+    expect(text).toContain('unread 8…')
+    expect(text).toContain('unfold all')
+    await ui.press({ key: 'fold-all' })
+    text = textOf(await ui.drawn())
+    expect(text).toContain('old 20')
+    expect(text).toContain('unread 20')
+    expect(text).toContain('fold all')
+    await ui.press({ key: 'fold-all' })
+    text = textOf(await ui.drawn())
+    expect(text).not.toContain('old 20')
+    expect(text).not.toContain('newest 20')
+    expect((await ui.find({ key: 'fold-all' }))?.props).toMatchObject({ hotkey: 'e' })
+
+    // Back and in again: the rule is gone with the unread, and the newest alone is whole.
+    await ui.press({ key: 'back' })
+    await ui.press({ key: 'chat-buni' })
+    text = textOf(await ui.drawn())
+    expect(text).not.toMatch(/─ new ─/)
+    expect(text).toContain('unread 8…')
+    expect(text).toContain('newest 20')
+  })
+
+  test('when the first unread is past what the room draws, the new rule tops the first message drawn', async ($, on) => {
+    const w = world(on, { 'baseline:sid-a': 40, 'seen:sid-a': { buni: 40 } })
+    // Fifteen unread capped bodies, whole by default: 90,000 characters, past the 80,000 a room draws.
+    w.messages = [MAIL(40), ...Array.from({ length: 15 }, (_, i) => ({ ...MAIL(41 + i), body: `u${41 + i} ${'x'.repeat(5_990)}` }))]
+    await started($, w)
+    const ui = await opened($, w)
+    await ui.press({ key: 'chat-buni' })
+    const text = textOf(await ui.drawn())
+
+    expect(text).toContain('3 earlier messages not shown')
+    expect(text).not.toContain('u42 ')
+    expect(text).toMatch(/─ new ─/)
+    expect(text.indexOf(' new ')).toBeLessThan(text.indexOf('u43 '))
+    expect(text.indexOf(' new ')).toBeGreaterThan(text.indexOf('earlier messages not shown'))
+  })
+
+  test('mail landing while the room is open stays whole after newer mail follows it', async ($, on) => {
+    const w = world(on)
+    w.messages = [MAIL(10)]
+    await started($, w)
+    const ui = await opened($, w)
+    await ui.press({ key: 'chat-buni' })
+    w.messages.push({ ...MAIL(11), body: Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n') }, MAIL(12))
+    await w.clock.advance(POLL)
+    const text = textOf(await ui.drawn())
+
+    expect(text).toContain('line 20')
+    expect(text).toContain('mail 12')
+  })
+
+  test('a body past the cap names the rest when whole', async ($, on) => {
+    const w = world(on)
+    w.messages = [{ ...MAIL(41), body: 'ㄱ'.repeat(23_942) }]
+    await started($, w)
+    const ui = await opened($, w)
+    await ui.press({ key: 'chat-buni' })
+    let text = textOf(await ui.drawn())
+
     expect(text).toContain('ㄱ'.repeat(6_000))
     expect(text).not.toContain('ㄱ'.repeat(6_001))
     expect(text).toContain('… 17,942 more characters · full text: pager export (#41)')
 
-    await ui.press({ key: 'fold-40' })
+    await ui.press({ key: 'fold-41' })
     text = textOf(await ui.drawn())
-    expect(text).not.toContain('line 20')
-
-    // `e` unfolds every folded bubble at once, then folds them all again.
-    expect(text).toContain('unfold all')
-    await ui.press({ key: 'fold-all' })
-    text = textOf(await ui.drawn())
-    expect(text).toContain('line 20')
-    expect(text).toContain('more characters')
-    expect(text).toContain('fold all')
-    await ui.press({ key: 'fold-all' })
-    text = textOf(await ui.drawn())
-    expect(text).not.toContain('line 20')
+    expect(text).toMatch(/▾ \d+ more lines/)
     expect(text).not.toContain('more characters')
-    expect((await ui.find({ key: 'fold-all' }))?.props).toMatchObject({ hotkey: 'e' })
   })
 
-  test('unfolding many long bubbles stays inside the drawing budget, the newest and the controls kept', async ($, on) => {
+  test('unfolding many long messages stays inside the drawing budget, the newest and the controls kept', async ($, on) => {
     const w = world(on)
     // Twenty capped bodies: 120,000 characters unfolded, past the engine's 100,000.
     w.messages = Array.from({ length: 20 }, (_, i) => ({ ...MAIL(100 + i), body: `id${100 + i} ${'x'.repeat(6_100)}` }))
@@ -536,7 +637,7 @@ describe('room', () => {
     expect(text).toContain('id119 ')
     expect(text).toMatch(/\d+ earlier messages not shown/)
     expect(await ui.find({ key: 'fold-all' })).toBeDefined()
-    // And `e` folds them all again, the hidden ones included: every bubble is back.
+    // And `e` folds them all again, the hidden ones included: every message is back.
     await ui.press({ key: 'fold-all' })
     const folded = textOf(await ui.drawn())
     expect(folded).not.toContain('earlier messages not shown')

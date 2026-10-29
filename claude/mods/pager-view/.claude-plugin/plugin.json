@@ -1,7 +1,7 @@
 {
   "name": "pager-view",
   "version": "0.1.0",
-  "description": "This session's pager name and new mail above the prompt; its pager conversation and peers in a pane",
+  "description": "This session's pager name and new mail above the prompt; its pager conversations in a pane",
   "author": {
     "name": "대협"
   },
