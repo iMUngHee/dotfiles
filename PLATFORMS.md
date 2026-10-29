@@ -132,6 +132,31 @@ shared server through `/daemon` and check again; connected sessions may be inter
   replacement. A standalone helper's reload cannot replace MCP clients owned
   by another running app-server; closing a desktop window is not proof of it.
 
+- Pager `6fedd3e` replaced hourly/hop work quotas with a conservative idle-loop
+  wake pause. Both peers must explicitly report fresh idle state with unchanged
+  bodies, checkpoints and human epochs for two minutes. Missing/stale signals
+  remain unknown and fail open; the guard is cooperative, not semantic proof.
+  Result/failure/release events bypass pauses, are prioritized over update
+  backlog, and can use event IDs to deduplicate retries. Mail is always stored.
+- The installed clean `6fedd3e` binary passed the native two-thread loop smoke
+  test (`scripts/codex-loop-smoke.py`, Codex 0.165.0-alpha.1.2, local deterministic
+  Responses provider). Real shell/MCP calls changed an actual artifact across
+  47 messages / 46 causal hops without a pause. Idle ping-pong stopped waking
+  with nine unread updates retained. A simulated GPU lease was then released
+  by a real shell call; its release event reached the next model request ahead
+  of that backlog, without a human epoch reset. Retrying the event before and
+  after reading made one record/wake. All 61 accepted mail records remained.
+- The installed binary also repeated the native queue suite: eight concurrent
+  sends coalesced to one notification; ordinary queued user input survived;
+  mid-turn reads cleared generated wakes and stale wakes made no model call.
+  All 12 fixture records remained. Windows Go tests/vet and Linux/amd64 plus
+  Darwin/arm64 cross-builds passed. A SQLite backup preceded real-store v4-to-v5
+  migration; integrity was OK and all 295 baseline messages were preserved.
+- Already-running MCP processes retained the old image after installation.
+  Reconnect those clients to load new tool metadata/policy, or use the freshly
+  installed CLI in ongoing work. Basic relay messages remain v1-compatible;
+  typed/progress metadata and causal hops above three need upgraded v2 peers.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
@@ -173,7 +198,8 @@ cannot run something; remove it in the commit that records the result.
       Windows filter tests and actual checkouts passed 2026-10-28).
 - [ ] **Windows** — test pager's cross-machine relay transport against a real peer.
 - [ ] **macOS / Linux** — run pager's runtime suite and session/MCP flows after
-      `e3f2312`; this machine only cross-compiled those targets.
+      `6fedd3e`, including the native loop smoke; this machine only cross-compiled
+      those targets.
 - [ ] **macOS** — once a Codex release fixes openai/codex#25416, re-check that
       the `workspace-local-sockets` profile reaches `/tmp/agent-notifier.sock`
       and the tmux socket (`d9e376d`). On 0.163.0 it does not (see `## macOS`).
