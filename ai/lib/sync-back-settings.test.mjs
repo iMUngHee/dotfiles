@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+
+// Every fixture root this file creates, removed once all tests have run.
+const tempDirs = [];
+after(async () => {
+  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 // claude/scripts/sync-back.sh copies repo-tracked settings back from the deployed
 // ~/.claude/settings.json. An entry the repo added but never deployed is not in
@@ -17,6 +23,7 @@ const json = (value) => JSON.stringify(value, null, 2) + "\n";
 
 async function fixture({ repoSettings, deployed, record }) {
   const root = await mkdtemp(join(tmpdir(), "sync-back-settings-"));
+  tempDirs.push(root);
   const home = join(root, "home");
   for (const path of ["claude/scripts/sync-back.sh", "ai/scripts/sync-back.sh", "githooks/pre-commit"]) {
     await mkdir(dirname(join(root, path)), { recursive: true });
