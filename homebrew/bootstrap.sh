@@ -4,6 +4,7 @@
 #   - ~/.zshenv ZDOTDIR guarantee   (lib/shell-env.sh)
 #   - oh-my-zsh, keeping the repo zshrc (lib/shell-env.sh)
 #   - tmux plugins via tpm            (lib/tmux-plugins.sh)
+#   - rust-analyzer rustup component  (lib/rust-analyzer.sh)
 #   - macOS app-menu shortcut overrides (defaults write)
 #
 # This is the macOS package layer. Linux reaches it only on a Linuxbrew box
@@ -28,6 +29,8 @@ have() { command -v "$1" >/dev/null 2>&1; }
 . "$ROOT_DIR/lib/shell-env.sh"
 # shellcheck source=../lib/tmux-plugins.sh
 . "$ROOT_DIR/lib/tmux-plugins.sh"
+# shellcheck source=../lib/rust-analyzer.sh
+. "$ROOT_DIR/lib/rust-analyzer.sh"
 
 # ── brew 경로 감지 (zsh/.zshrc:7-10 패턴) ──────────────────────
 if [ -x /opt/homebrew/bin/brew ]; then
@@ -55,6 +58,8 @@ echo "brew: $BREW"
 # ── 1. brew bundle ────────────────────────────────────────────
 echo "── brew bundle ──"
 brew bundle --file "$SCRIPT_DIR/Brewfile"
+# The Brewfile installs rustup, not its components.
+ensure_rust_analyzer
 
 # ── 2+3. shell environment (shared with the Arch path) ────────
 ensure_zshenv

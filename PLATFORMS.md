@@ -205,3 +205,7 @@ cannot run something; remove it in the commit that records the result.
       and the tmux socket (`d9e376d`). On 0.163.0 it does not (see `## macOS`).
 - [ ] **Windows** — Codex's automatic Stop hook no longer times out at 45 s now
       that the template says 360 (`d9e376d`); a manual run took 112 s, exit 0.
+- [ ] **Arch** — run `arch/bootstrap.sh` (and once with `--dry-run`) and check
+      the `lib/rust-analyzer.sh` step adds the component to pacman's rustup, so
+      `rust-analyzer --version` answers. Verified on macOS 2026-11-02: present,
+      no-toolchain (warns, downloads nothing) and no-rustup branches.
