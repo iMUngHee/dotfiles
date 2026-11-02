@@ -226,6 +226,17 @@ cannot run something; remove it in the commit that records the result.
       `timeout -k 2` on Git Bash) and the clippy/check `.rs` checker (passed on
       macOS 2026-11-02, three runs). On Windows also confirm the GNU branch is
       the one taken and that a Rust Stop runs `cargo clippy --all-targets`.
-- [ ] **Windows** — `windows/packages.ps1` installs only rustup: no
-      rust-analyzer component (see `lib/rust-analyzer.sh`), cargo-nextest or
-      cargo-mutants, so the rust skill falls back to `cargo test` there.
+- [ ] **Windows** — run `windows/bootstrap.ps1` (or
+      `windows/scripts/install-rust-tools.ps1` alone) under Windows PowerShell
+      5.1 and under 7, then check `rust-analyzer --version`, `cargo nextest
+      --version` (0.9.150) and `cargo mutants --version` (27.1.0) in a new
+      terminal, and that a second run reports both tools present. Verified on
+      macOS 2026-11-02 with pwsh 7.6.9: both scripts parse; under
+      `$ErrorActionPreference = 'Stop'` as bootstrap sets it, the installer's
+      download, SHA-256 check (a wrong pin refuses the install), extract, a
+      failed copy (warns, the script runs to its end) and the present-skip on a
+      rerun.
+      Not run: the version probe, Add-UserPath, and Windows PowerShell 5.1 —
+      run it through bootstrap.ps1 under 5.1 in particular, since 5.1 turns a
+      native command's stderr into errors under Stop and the guards around
+      `rustup` and the version probe were checked only by reading.

@@ -82,6 +82,13 @@ if (-not $SkipPackages) {
     & (Join-Path $Scripts 'install-pager.ps1')
 }
 
+# -- 4b. Rust tools (rust-analyzer component, nextest, mutants) -
+# After step 2 so rustup from packages.ps1 is on PATH; after the pager step so
+# ~/.local/bin is already on the user PATH both installers share.
+if (-not $SkipPackages) {
+    & (Join-Path $Scripts 'install-rust-tools.ps1')
+}
+
 # -- 5. Shell + terminal + editor ------------------------------
 & (Join-Path $Scripts 'deploy-shell.ps1')
 
