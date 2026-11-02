@@ -6,7 +6,8 @@
 # the AI config deploy to ai/scripts/bootstrap.sh (the root bootstrap.sh calls
 # that next, exactly as it does on macOS).
 #
-#   1) arch/packages.sh        — pacman + AUR (the Brewfile mapping)
+#   1) arch/packages.sh        — pacman + AUR (the Brewfile mapping), then the
+#                                rust-analyzer rustup component (lib/rust-analyzer.sh)
 #   2) mise install            — node/claude/codex/gh, if mise is configured
 #   3) ~/.zshenv ZDOTDIR       — lib/shell-env.sh
 #   4) oh-my-zsh               — lib/shell-env.sh
@@ -44,6 +45,8 @@ done
 . "$ROOT_DIR/lib/shell-env.sh"
 # shellcheck source=../lib/tmux-plugins.sh
 . "$ROOT_DIR/lib/tmux-plugins.sh"
+# shellcheck source=../lib/rust-analyzer.sh
+. "$ROOT_DIR/lib/rust-analyzer.sh"
 
 # ── zsh/private.sh stub ─────────────────────────────────────────────────────
 # arch/zsh.sh is tracked, but nothing loads it on its own. .zshrc sources
@@ -89,6 +92,12 @@ fi
 
 # ── 1. packages (pass-through flags: --dry-run, --skip-optional) ────────────
 "$SCRIPT_DIR/packages.sh" "$@" || warn "arch/packages.sh reported a failure"
+# packages.sh installs rustup, not its components. The component is a download.
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo "── would add the rust-analyzer rustup component (dry run) ──"
+else
+    ensure_rust_analyzer
+fi
 
 # ── 2. mise — the runtime manager this tier uses instead of fnm/brew casks ──
 # claude, codex, gh and node are pinned in ~/.config/mise/config.toml, which is
