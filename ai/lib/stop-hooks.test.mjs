@@ -163,7 +163,10 @@ test("codex Stop preserves stderr blocking and allows stop after two retries", (
 const isWindows = process.platform === "win32";
 const libOf = (tool) => join(repo, tool, "hooks", "lib", "detect-project.sh");
 const shellOpts = { codex: "set -euo pipefail", claude: "" };
-const which = (name) => spawnSync("bash", ["-c", `command -v ${name}`], { encoding: "utf8" }).stdout.trim();
+// Native Windows Node cannot spawn Git Bash's /usr/bin paths.
+const which = (name) => spawnSync("bash", ["-c", isWindows
+  ? 'p=$(command -v "$1") && cygpath -m "$p"'
+  : 'command -v "$1"', "_", name], { encoding: "utf8" }).stdout.trim();
 const bashPath = which("bash");
 const gnuTimeout = (() => {
   const path = which("timeout");
@@ -225,9 +228,16 @@ function timeoutHome() {
   return home;
 }
 
-const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+function signalFixtureProcess(pid, signal) {
+  // Fixture PIDs come from MSYS $$/$!, not the native Windows PID namespace.
+  if (isWindows) {
+    const r = spawnSync(bashPath, ["-c", 'kill -s "$1" -- "$2"', "_", String(signal), String(pid)], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr || "fixture process unavailable");
+  } else process.kill(pid, signal);
+}
+const alive = (pid) => { try { signalFixtureProcess(pid, 0); return true; } catch { return false; } };
 const loopPid = (hb) => (existsSync(`${hb}.pid`) ? Number(readFileSync(`${hb}.pid`, "utf8").trim()) : 0);
-const killLoop = (hb) => { const pid = loopPid(hb); if (pid && alive(pid)) process.kill(pid, "SIGKILL"); };
+const killLoop = (hb) => { const pid = loopPid(hb); if (pid && alive(pid)) signalFixtureProcess(pid, "SIGKILL"); };
 
 // True when the heartbeat has stopped and its loop process is gone.
 async function stopped(hb) {
@@ -487,7 +497,7 @@ for (const tool of ["claude", "codex"]) {
           assert.ok(r.elapsed >= 4.5 && r.elapsed < 8, `took ${r.elapsed}s`);
           assert.ok(!(probePid && alive(probePid)), "hung probe survived");
         } finally {
-          if (probePid && alive(probePid)) process.kill(probePid, "SIGKILL");
+          if (probePid && alive(probePid)) signalFixtureProcess(probePid, "SIGKILL");
         }
       });
     }

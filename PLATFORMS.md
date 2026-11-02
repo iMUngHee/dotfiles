@@ -78,6 +78,28 @@ shared server through `/daemon` and check again; connected sessions may be inter
   `~/.claude/skill-backups/` and `~/.agents/skill-backups/`. Delete those once
   they hold nothing you need.
 
+### Verified on Windows 2026-11-03
+
+- Pulled dotfiles through `bac5838`; the post-merge bootstrap regenerated the
+  tool homes. Template-owned Codex hooks match after excluding machine-managed
+  `hooks.state`; Claude's mod paths resolve after expanding `~`.
+- `stop-hooks.test.mjs`: 29 passed, 16 skipped with platform reasons. Native
+  Windows Node needs `cygpath -m` for executables found by Git Bash: spawning
+  `/usr/bin/bash` directly fails with `ENOENT`. The GNU timeout process-tree
+  cases and both tools' clippy/check fixtures passed after that conversion.
+  Fixture process checks and cleanup also use MSYS `kill` on Windows because
+  shell `$$`/`$!` values are not native Windows PIDs.
+- Full `ai/lib` suite: 193 passed, 23 skipped, 0 failed. The pm-roadmap and
+  pm-context suites passed 11 and 2 test files respectively; pager-view and
+  pm-band passed 51 and 46 cases, and both mods typechecked. Vendor check
+  passed after syncing the newly referenced pinned `rust-guidelines` checkout.
+- Pager `65515fe`: `go test ./...` and `go vet ./...` passed. The installed
+  binary's native Codex loop smoke passed: 47 working messages, 46 causal hops,
+  idle wake suppression, important release delivery and duplicate protection;
+  all 62 accepted records remained. This used isolated state and a local model
+  fixture, not a real cross-machine relay. Existing resident MCP processes were
+  not restarted; this evidence covers the installed binary and fresh hosts.
+
 ### Verified on 2026-10-28
 
 - Synced through `ecaa264` and deployed with `windows/scripts/deploy-ai.ps1`.
@@ -221,11 +243,12 @@ cannot run something; remove it in the commit that records the result.
       no-toolchain (warns, downloads nothing) and no-rustup branches.
 - [ ] **Arch** — `arch/packages.sh` now installs `cargo-nextest` (extra) and
       `cargo-mutants` (AUR); check both answer `--version` after a bootstrap.
-- [ ] **Linux / Windows** — run `ai/lib/stop-hooks.test.mjs`, which now covers
+- [ ] **Linux** — run `ai/lib/stop-hooks.test.mjs`, which now covers
       the process-tree `portable_timeout` (Perl supervisor on Unix, GNU
       `timeout -k 2` on Git Bash) and the clippy/check `.rs` checker (passed on
-      macOS 2026-11-02, three runs). On Windows also confirm the GNU branch is
-      the one taken and that a Rust Stop runs `cargo clippy --all-targets`.
+      macOS 2026-11-02, three runs; Windows 2026-11-03, GNU branch and checker
+      fixtures). On Windows a real Rust Stop running
+      `cargo clippy --all-targets` remains pending.
 - [ ] **Windows** — run `windows/bootstrap.ps1` (or
       `windows/scripts/install-rust-tools.ps1` alone) under Windows PowerShell
       5.1 and under 7, then check `rust-analyzer --version`, `cargo nextest
