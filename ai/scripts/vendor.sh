@@ -272,10 +272,15 @@ limited() {
 
 # exec_lookup <git args...>: git with prompts off, for limited() only — exec turns
 # the background subshell into git itself, so the pid limited() ends is git's.
+# Run from /, the same place LOOKUP_SSH was decided. When the user has their own
+# core.sshCommand, none of ours is exported, and from the caller's directory git's
+# config order would put that repository's core.sshCommand (the VM checkout keeps
+# its push deploy key there) ahead of the user's for a third-party lookup. Every
+# lookup takes a URL, so the working directory changes nothing else.
 exec_lookup() {
     export GIT_TERMINAL_PROMPT=0
     [ -z "$LOOKUP_SSH" ] || export GIT_SSH_COMMAND="$LOOKUP_SSH"
-    exec git "$@"
+    exec git -C / "$@"
 }
 
 # remote_ref <url> <ref>: the object a remote ref points at. Status 1 when the

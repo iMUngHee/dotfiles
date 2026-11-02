@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,11 @@ import test, { after } from "node:test";
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const filter = join(repo, "lib", "git-filter-machine-local.sh");
+// The filter lives in this repo's root lib/, which not every checkout carrying
+// ai/lib has (the VM's checkout copies ai/ but has no lib/). There the suite
+// reports each case as skipped instead of failing on a missing script.
+const absent = !existsSync(filter) && "lib/git-filter-machine-local.sh is not in this checkout";
+const filterTest = (name, ...rest) => (absent ? test(name, { skip: absent }, () => {}) : test(name, ...rest));
 const root = mkdtempSync(join(tmpdir(), "git-filter-machine-local-"));
 after(() => rmSync(root, { recursive: true, force: true }));
 
@@ -71,20 +76,20 @@ const run = (args, input, env = baseEnv) =>
 
 const ghostty = (size) => `font-family = "FiraCode Nerd Font"\nfont-size = ${size}\ncursor-style = block\n`;
 
-test("clean stores the canonical size and drops a machine-local block", () => {
+filterTest("clean stores the canonical size and drops a machine-local block", () => {
   const result = run([], `${ghostty(9)}# >>> machine-local\nsecret\n# <<< machine-local\n`);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, ghostty(16));
 });
 
-test("clean refuses an unterminated machine-local block", () => {
+filterTest("clean refuses an unterminated machine-local block", () => {
   const result = run([], "a\n# >>> machine-local\nsecret\n");
   assert.equal(result.status, 1);
   assert.match(result.stderr, /never closed/);
 });
 
 for (const [px, pt] of [[12, 9], [16, 12], [13, 10], [9, 7]]) {
-  test(`smudge restores ${pt}pt from a ${px}px slider setting`, () => {
+  filterTest(`smudge restores ${pt}pt from a ${px}px slider setting`, () => {
     const result = run(["smudge"], ghostty(16), machine({ baseSize: px }));
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, ghostty(pt));
@@ -92,7 +97,7 @@ for (const [px, pt] of [[12, 9], [16, 12], [13, 10], [9, 7]]) {
   });
 }
 
-test("smudge passes the file through where the slider was never used", () => {
+filterTest("smudge passes the file through where the slider was never used", () => {
   for (const env of [machine(), machine({ baseSize: undefined, script: null })]) {
     const result = run(["smudge"], ghostty(16), env);
     assert.equal(result.status, 0, result.stderr);
@@ -101,7 +106,7 @@ test("smudge passes the file through where the slider was never used", () => {
   }
 });
 
-test("smudge leaves the size alone and says why when Omarchy's formula changes", () => {
+filterTest("smudge leaves the size alone and says why when Omarchy's formula changes", () => {
   const changed = omarchyScript(`'BEGIN { printf "%.1f", s * p / b }'`);
   const result = run(["smudge"], ghostty(16), machine({ baseSize: 12, script: changed }));
   assert.equal(result.status, 0, "a failing smudge would abort the checkout");
@@ -109,7 +114,7 @@ test("smudge leaves the size alone and says why when Omarchy's formula changes",
   assert.match(result.stderr, /formula .* changed/);
 });
 
-test("smudge never fails on a bad shell.toml or a missing Omarchy script", () => {
+filterTest("smudge never fails on a bad shell.toml or a missing Omarchy script", () => {
   for (const env of [machine({ baseSize: "big" }), machine({ baseSize: 12, script: null })]) {
     const result = run(["smudge"], ghostty(16), env);
     assert.equal(result.status, 0, result.stderr);
@@ -118,14 +123,14 @@ test("smudge never fails on a bad shell.toml or a missing Omarchy script", () =>
   }
 });
 
-test("smudge leaves files without a font-size line untouched", () => {
+filterTest("smudge leaves files without a font-size line untouched", () => {
   const block = "a = 1\n# >>> machine-local\nkept in the working tree\n# <<< machine-local\n";
   const result = run(["smudge"], block, machine({ baseSize: 12 }));
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, block);
 });
 
-test("an unknown mode is a usage error", () => {
+filterTest("an unknown mode is a usage error", () => {
   assert.equal(run(["bogus"], "x\n").status, 2);
 });
 
@@ -133,7 +138,7 @@ test("an unknown mode is a usage error", () => {
 // smudge reads it. The constants are read live, so only a changed formula (or a
 // script the smudge cannot parse) fails this. Skipped where Omarchy is absent.
 const installed = which("omarchy-display-text-size");
-test("the installed omarchy-display-text-size still uses the formula smudge reads", { skip: installed === "" && "Omarchy not installed" }, () => {
+filterTest("the installed omarchy-display-text-size still uses the formula smudge reads", { skip: installed === "" && "Omarchy not installed" }, () => {
   const env = { ...machine({ baseSize: 16, script: null }), PATH: baseEnv.PATH };
   const result = run(["smudge"], ghostty(99), env);
   assert.equal(result.status, 0, result.stderr);
@@ -142,7 +147,7 @@ test("the installed omarchy-display-text-size still uses the formula smudge read
   assert.doesNotMatch(result.stdout, /^font-size = 99$/m, "the size was not restored");
 });
 
-test("git stash keeps the slider's size, with the filter registered as bootstrap does", () => {
+filterTest("git stash keeps the slider's size, with the filter registered as bootstrap does", () => {
   // A space and a ' in the script's path, a space in the repository's: bootstrap
   // writes the command as '<path>' and '<path>' smudge with ' as '\'', and git
   // runs it through sh -c.
