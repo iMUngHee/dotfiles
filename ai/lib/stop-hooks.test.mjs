@@ -1,16 +1,32 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, delimiter } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import test, { describe } from "node:test";
+import test, { after, describe } from "node:test";
+
+// Every scratch home this file creates, removed once all tests have run.
+const tempDirs = [];
+const tempDir = (prefix) => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+};
+after(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 function fixture(tool) {
-  const home = mkdtempSync(join(tmpdir(), "stop-hook-"));
+  const home = tempDir("stop-hook-");
+  // The hooks keep their retry counter and checker output at fixed /tmp paths
+  // keyed by session id (stop-handler.sh:26/94, stop-gate.sh:18-19), outside
+  // tmpdir(), so the run's session id is registered for removal as well.
+  const sid = `stop-${tool}-${home.split(/[\\/]/).at(-1)}`;
+  for (const kind of ["", "output-"]) tempDirs.push(join("/tmp", `${tool}-final-gate-${kind}${sid}`));
   const root = join(home, ".config");
   const hookName = tool === "codex" ? "stop-gate.sh" : "stop-handler.sh";
   const hookDir = join(root, tool, "hooks");
@@ -43,7 +59,7 @@ function fixture(tool) {
   writeFileSync(join(root, "ai", "lib", "untracked.test.mjs"), "fixture\n");
   const run = (extra = {}) => spawnSync("bash", [join(hookDir, hookName)], {
     cwd: root, env: { ...env, ...extra }, encoding: "utf8",
-    input: JSON.stringify({ session_id: `stop-${tool}-${home.split(/[\\/]/).at(-1)}`, cwd: root }),
+    input: JSON.stringify({ session_id: sid, cwd: root }),
   });
   return { home, root, hook: join(hookDir, hookName), run, env };
 }
@@ -203,7 +219,7 @@ esac
 const HANG_MS = 20000;
 
 function timeoutHome() {
-  const home = mkdtempSync(join(tmpdir(), "portable-timeout-"));
+  const home = tempDir("portable-timeout-");
   writeFileSync(join(home, "fixture.sh"), FIXTURE);
   chmodSync(join(home, "fixture.sh"), 0o755);
   return home;
@@ -231,23 +247,41 @@ function bounded(tool, PATH, secs, args, extra = {}) {
   return { status: r.status, stdout: r.stdout, elapsed: (Date.now() - t0) / 1000 };
 }
 
+// The supervisor (perl) the wrapper bash has started, once it exists.
+function supervisorPid(wrapperPid) {
+  const r = spawnSync("pgrep", ["-l", "-P", String(wrapperPid)], { encoding: "utf8" });
+  const line = (r.stdout || "").split("\n").find((l) => /^\d+\s+perl/.test(l));
+  return line ? Number(line.split(/\s+/)[0]) : 0;
+}
+
 // Runs portable_timeout under a wrapper that survives the signal (a trap, not
-// an ignore, so the helper's children start with default dispositions), sends
-// `signal` to the wrapper's process group — the wrapper and the supervisor, not
-// the command's own group — after delayMs, and returns the supervisor's status.
-async function signalled(tool, PATH, home, secs, args, signal, delayMs) {
+// an ignore, so the helper's children start with default dispositions) and
+// returns the supervisor's status. target "group" sends `signal` to the
+// wrapper's process group — the wrapper and the supervisor, not the command's
+// own group — after delayMs. target "supervisor" sends it to the supervisor
+// alone, the moment it appears: a group signal that lands before perl exists
+// (bash still evaluating portable_timeout) would be taken by the wrapper's
+// trap and never reach a supervisor, which is not what the case is about.
+async function signalled(tool, PATH, home, secs, args, signal, delayMs, target = "group") {
   const rcFile = join(home, `rc-${signal}-${delayMs}-${Math.random()}`);
   const script = `trap : TERM INT HUP\n${shellOpts[tool]}\n. "$1"; shift; rc=0; portable_timeout "$@" || rc=$?; echo "$rc" > "${rcFile}"`;
   const child = spawn(bashPath, ["-c", script, "_", libOf(tool), String(secs), ...args],
     { env: { ...process.env, PATH }, detached: true, stdio: "ignore" });
   const exited = new Promise((resolve) => child.on("exit", resolve));
   await sleep(delayMs);
+  let signalledSupervisor = false;
+  if (target === "supervisor") {
+    for (const deadline = Date.now() + 5000; Date.now() < deadline && !signalledSupervisor;) {
+      const pid = supervisorPid(child.pid);
+      if (pid) { try { process.kill(pid, signal); signalledSupervisor = true; } catch {} }
+    }
+  }
   const t0 = Date.now();
-  try { process.kill(-child.pid, signal); } catch {}
+  if (target === "group") { try { process.kill(-child.pid, signal); } catch {} }
   const finished = await Promise.race([exited.then(() => true), sleep(HANG_MS / 2).then(() => false)]);
   const afterSignal = (Date.now() - t0) / 1000;
   if (!finished) { try { process.kill(-child.pid, "SIGKILL"); } catch {} await exited; }
-  return { rc: existsSync(rcFile) ? Number(readFileSync(rcFile, "utf8").trim()) : null, afterSignal };
+  return { rc: existsSync(rcFile) ? Number(readFileSync(rcFile, "utf8").trim()) : null, afterSignal, signalledSupervisor };
 }
 
 for (const tool of ["claude", "codex"]) {
@@ -313,8 +347,11 @@ for (const tool of ["claude", "codex"]) {
         for (let i = 0; i < 20; i++) {
           const hb = join(home, `f-${i}`);
           try {
-            const r = await signalled(tool, PATH, home, 30, [fx, hb, "plain"], "SIGTERM", 0);
-            if (r.rc !== null) assert.equal(r.rc, 143, `run ${i}`);
+            const r = await signalled(tool, PATH, home, 30, [fx, hb, "plain"], "SIGTERM", 0, "supervisor");
+            assert.ok(r.signalledSupervisor, `run ${i}: the supervisor never appeared`);
+            // 143 either way: TERM before perl blocks signals kills it outright
+            // (128 + 15), after that the supervisor exits 143 itself.
+            assert.equal(r.rc, 143, `run ${i}`);
             assert.ok(r.afterSignal < 4, `run ${i} took ${r.afterSignal}s`);
             assert.ok(!loopPid(hb) || (await stopped(hb)), `run ${i} left a heartbeat running`);
           } finally { killLoop(hb); }
@@ -349,7 +386,7 @@ for (const tool of ["claude", "codex"]) {
 // formatter then aborted the hook before any check ran.
 for (const tool of ["claude", "codex"]) {
   test(`${tool} detect_checker leaves the caller running when a formatter is missing`, { skip: isWindows && "curated PATH needs symlinks" }, () => {
-    const home = mkdtempSync(join(tmpdir(), "rust-check-"));
+    const home = tempDir("rust-check-");
     const bin = curatedBin(join(home, "bin"), {});
     writeFileSync(join(home, "go.mod"), "");
     writeFileSync(join(home, "Cargo.toml"), "");
@@ -397,7 +434,7 @@ echo "rc=$rc"`;
 
 for (const tool of ["claude", "codex"]) {
   describe(`${tool} .rs checker`, { concurrency: true }, () => {
-    const home = mkdtempSync(join(tmpdir(), "rust-check-"));
+    const home = tempDir("rust-check-");
     const root = (name) => join(home, name);
     const withShim = (bin) => {
       writeFileSync(join(bin, "cargo"), CARGO_SHIM);
