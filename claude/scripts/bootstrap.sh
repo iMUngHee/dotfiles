@@ -338,8 +338,11 @@ esac
 # user's and kept it. That loses the deletion permanently, not for one run.
 # Through a temp file because a redirect that dies midway leaves a half-written
 # manifest for the next run to cope with.
+# env lists the repo's env key names, for sync-back: a repo key that is neither
+# deployed nor recorded here was added in the repo and has not been deployed yet,
+# so sync-back keeps it instead of reading it as removed from the deployed file.
 if [ "$MERGED" -eq 1 ]; then
-    jq '{allow: (.permissions.allow // []), deny: (.permissions.deny // []), ask: (.permissions.ask // [])}' \
+    jq '{allow: (.permissions.allow // []), deny: (.permissions.deny // []), ask: (.permissions.ask // []), env: (.env // {} | keys)}' \
         "$REPO_SETTINGS" | tr -d '\r' > "$MANAGED.tmp" \
         && mv "$MANAGED.tmp" "$MANAGED"
 fi

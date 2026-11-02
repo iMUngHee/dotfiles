@@ -49,12 +49,37 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
     # bootstrap.sh rewrites CLAUDE_CODE_PLUGIN_DIRS to `;` on Windows, where Claude
     # Code splits it there; the repo keeps `:` for macOS and Linux, so it is put
     # back before env is copied in.
+    #
+    # A repo entry missing from the deployed file is either new in the repo (not
+    # deployed yet) or was deployed and then removed in the UI. bootstrap.sh's
+    # record of what the repo contributed at the last deploy decides: recorded
+    # means removed, so it is dropped; unrecorded means added, so it is kept
+    # with the repo value. Without that, a new allow entry or env key vanished
+    # from the commit that added it unless it had been deployed first. A missing
+    # or unparsable record reads as empty, and so does any field that is not a
+    # list, which keeps every undeployed entry.
+    # Git state is not the reference on purpose: an entry added in the previous
+    # commit is already in HEAD, so an amend would read it as removed.
+    # The record is a third input file rather than an --argjson argument: on
+    # Windows, Git Bash rewrites path-looking arguments for native programs such
+    # as jq.exe, and permission entries are full of slashes.
+    record="$CLAUDE_DIR/.settings-repo-managed.json"
+    jq -e 'type == "object"' "$record" >/dev/null 2>&1 || record=/dev/null
     jq -s '
-      .[0] as $repo | .[1] |
+      .[0] as $repo |
+      ((.[2] // {}) | with_entries(.value |= (if type == "array" then . else [] end))) as $was |
+      # kept: deployed entries the repo tracks, in deployed order. added: repo
+      # entries neither deployed nor recorded. Sorted only when something was
+      # added, which is the order bootstrap deploys in, so nothing reflows.
+      def keep($k):
+        [(.permissions[$k] // [])[] | select(IN(($repo.permissions[$k] // [])[]))] as $kept |
+        ((($repo.permissions[$k] // []) - (.permissions[$k] // [])) - ($was[$k] // [])) as $added |
+        if $added == [] then $kept else ($kept + $added | unique) end;
+      .[1] |
       (.env.CLAUDE_CODE_PLUGIN_DIRS | strings) |= gsub(";"; ":") |
       with_entries(select(.key | IN($repo | keys[]))) |
-      .permissions.allow = ([.permissions.allow[] | select(IN($repo.permissions.allow[]))]) |
-      .permissions.deny  = ([.permissions.deny[]  | select(IN($repo.permissions.deny[]))]) |
+      .permissions.allow = keep("allow") |
+      .permissions.deny  = keep("deny") |
       # env is the one object copied as a whole, so give it the same treatment
       # permissions gets: keep only keys the repo already tracks, in one
       # canonical order. Otherwise runtime keys the CLI appends land in the
@@ -70,15 +95,21 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
       # the key name, so a token added later is covered without touching this
       # filter. (No apostrophes in these comments: the whole program is inside
       # a single-quoted shell string and one would close it.)
-      (if has("env")
-       then .env |= (to_entries
+      # Repo env keys neither deployed nor recorded are added the same way, with
+      # their repo values; that also covers a deployed file with no env at all.
+      ((.env // {}) | keys) as $live |
+      (if has("env") or ($repo | has("env"))
+       then .env = (((.env // {}) | to_entries
                      | map(select(.key | IN($repo.env // {} | keys[])))
                      | map(if ((($repo.env // {})[.key] // "") | test("__[A-Z0-9_]+__"))
-                           then .value = ($repo.env[.key]) else . end)
-                     | sort_by(.key)
-                     | from_entries)
+                           then .value = ($repo.env[.key]) else . end))
+                    + (($repo.env // {}) | to_entries
+                       | map(select((.key | IN($live[])) | not))
+                       | map(select((.key | IN(($was.env // [])[])) | not)))
+                    | sort_by(.key)
+                    | from_entries)
        else . end)
-    ' "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" \
+    ' "$REPO_DIR/settings.json" "$CLAUDE_DIR/settings.json" "$record" \
         | tr -d '\r' > "$REPO_DIR/settings.json.tmp"
     if ! diff -q "$REPO_DIR/settings.json" "$REPO_DIR/settings.json.tmp" &>/dev/null; then
         mv "$REPO_DIR/settings.json.tmp" "$REPO_DIR/settings.json"

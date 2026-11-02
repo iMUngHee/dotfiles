@@ -64,6 +64,8 @@ Git hooks (`.git/hooks/`) handle sync:
 - **`pre-commit`** — runs `ai/scripts/sync-back.sh`, stages changed `claude/settings.json`
 - **`post-merge`** — runs `ai/scripts/bootstrap.sh` if any of `ai/`, `claude/`, `codex/` changed
 
+sync-back copies the repo-tracked permission entries and env keys back from `~/.claude/settings.json`. An entry the repo added but has not deployed yet is kept; an entry that was deployed and then removed from the deployed file (for example in the Claude Code UI) is dropped from the repo. The deploy record `~/.claude/.settings-repo-managed.json`, which bootstrap writes, tells the two apart, so a new permission or env key can be committed before it is deployed.
+
 ### Manual sync
 
 ```bash
