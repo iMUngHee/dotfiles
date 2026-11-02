@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,26 @@ import test, { after } from "node:test";
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const root = mkdtempSync(join(tmpdir(), "raw-tool-input-hooks-"));
-after(() => rmSync(root, { recursive: true, force: true }));
+// Session ids this run hands the hooks as feedback-<mkdtemp> dir names.
+const feedbackIds = [];
+after(() => {
+  rmSync(root, { recursive: true, force: true });
+  // The post-edit hooks keep a debounce stamp (and checker output) at fixed
+  // /tmp paths keyed by session id, outside tmpdir(). Only this run's fixture
+  // session ids are removed: input-regression, this run's root name and its
+  // -field variants, and this run's feedback dirs — never another run's, which
+  // may still be using its files, and never a real session's (a UUID).
+  const rootName = root.split(/[\\/]/).at(-1);
+  const ids = ["input-regression", `${rootName}(-.*)?`, ...feedbackIds];
+  const ours = new RegExp(`^(codex|claude)-pipeline-(last|check-output|typecheck-output)-(${ids.join("|")})$`);
+  let names = [];
+  try { names = readdirSync("/tmp"); } catch {} // no /tmp to sweep (Windows)
+  for (const name of names) {
+    if (!ours.test(name)) continue;
+    // A same-named file another user owns in sticky /tmp must not fail the run.
+    try { rmSync(join("/tmp", name), { force: true }); } catch {}
+  }
+});
 const run = (hook, tool, toolInput, env = process.env, runtime = "codex") => spawnSync("bash", [join(repo, runtime, "hooks", hook)], {
   cwd: root,
   input: JSON.stringify({ session_id: "input-regression", tool_name: tool, tool_input: toolInput }),
@@ -42,6 +61,7 @@ for (const [label, format, check, fail] of [
 ]) {
   test(`post-edit emits one JSON context for ${label}`, () => {
     const dir = mkdtempSync(join(root, "feedback-"));
+    feedbackIds.push(dir.split(/[\\/]/).at(-1));
     mkdirSync(join(dir, "lib"));
     writeFileSync(join(dir, "pipeline.sh"), readFileSync(join(repo, "codex", "hooks", "post-edit-pipeline.sh")));
     writeFileSync(join(dir, "lib", "detect-project.sh"), `

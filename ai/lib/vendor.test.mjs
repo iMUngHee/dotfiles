@@ -16,7 +16,13 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+
+// Every fixture root this file creates, removed once all tests have run.
+const tempDirs = [];
+after(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const script = join(repo, "ai", "scripts", "vendor.sh");
@@ -40,6 +46,7 @@ const bash = msysDirs.length ? join(msysDirs[0], "bash.exe") : "bash";
 // would otherwise aim fixture commits at the repository that ran the hook.
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "vendor-"));
+  tempDirs.push(root);
   const home = join(root, "home");
   const vendor = join(root, "vendor");
   mkdirSync(home, { recursive: true });
