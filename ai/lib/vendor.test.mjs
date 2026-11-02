@@ -465,6 +465,31 @@ test("a configured SSH command is honoured; otherwise lookups run ssh in batch m
   assert.doesNotMatch(postEnv, /^GIT_TERMINAL_PROMPT=/m);
 });
 
+// The VM's checkout keeps its push deploy key in a repo-local core.sshCommand.
+// With the user's own core.sshCommand set, vendor.sh exports none of its own, so
+// from the caller's directory git's config order would pick the repo-local one
+// over the user's for a third-party upstream.
+test("a lookup ignores the calling repository's own core.sshCommand (M1b)", () => {
+  const f = fixture();
+  const bin = shim(join(f.root, "bin"), "ssh", `echo "$*" >> '${join(f.root, "ssh.log")}'; exit 255`);
+  shim(bin, "myssh", `echo "$*" >> '${join(f.root, "myssh.log")}'; exit 255`);
+  shim(bin, "reposh", `echo "$*" >> '${join(f.root, "reposh.log")}'; exit 255`);
+  writeFileSync(f.env.GIT_CONFIG_GLOBAL, `[core]\n\tsshCommand = ${join(bin, "myssh").replaceAll("\\", "/")}\n`);
+  f.manifest(["far release ssh://example.invalid/x.git v* - -"]);
+  const caller = join(f.root, "caller");
+  mkdirSync(caller);
+  f.git(caller, "init", "-q");
+  f.git(caller, "config", "core.sshCommand", join(bin, "reposh").replaceAll("\\", "/"));
+  const r = spawnSync(bash, [script, "check"], {
+    cwd: caller,
+    encoding: "utf8",
+    env: f.envFor({ ...withPath(bin), GIT_SSH_COMMAND: null, GIT_SSH: null }),
+  });
+  assert.equal(row(ok(r).stdout, "far").status, "missing, unreachable");
+  assert.ok(!existsSync(join(f.root, "reposh.log")), "the caller's repo-local core.sshCommand answered the lookup");
+  assert.ok(existsSync(join(f.root, "myssh.log")), "the user's core.sshCommand was used");
+});
+
 test(
   "an unreadable manifest is an error, not an empty one (M2)",
   { skip: (isRoot || process.platform === "win32") && "mode 000 does not stop this user from reading" },
