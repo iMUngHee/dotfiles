@@ -4,12 +4,19 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink,
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
+// Every fixture root this file creates, removed once all tests have run.
+const tempDirs = [];
+after(async () => {
+  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
 async function fixture(tool) {
   const root = await mkdtemp(join(tmpdir(), "bootstrap-deploy-"));
+  tempDirs.push(root);
   const home = join(root, "home");
   const skillHome = join(home, tool === "codex" ? ".agents" : ".claude");
   const put = async (path, text) => {

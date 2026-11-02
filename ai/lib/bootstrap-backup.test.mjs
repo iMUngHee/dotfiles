@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+
+// Every fixture root this file creates, removed once all tests have run.
+const tempDirs = [];
+after(async () => {
+  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 test("bootstrap backs up settings while excluding runtime locks and scratch directories", async () => {
   const root = await mkdtemp(join(tmpdir(), "bootstrap-backup-"));
+  tempDirs.push(root);
   const home = join(root, "home");
   await mkdir(join(root, "ai", "scripts"), { recursive: true });
   await copyFile(join(repo, "ai", "scripts", "bootstrap.sh"), join(root, "ai", "scripts", "bootstrap.sh"));

@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+
+// Every fixture root and HOME this file creates, removed once all tests have run.
+const tempDirs = [];
+after(async () => {
+  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 // claude/scripts/sync-back.sh derives its repo root from its own location, so each
 // fixture gets a copy of the script under <root>/claude/scripts/ and runs that copy.
@@ -15,6 +21,7 @@ const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" 
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "sync-back-manifest-"));
+  tempDirs.push(root);
   git(root, "init", "-b", "main");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test");
@@ -31,6 +38,7 @@ async function fixture() {
   git(root, "worktree", "add", "-q", "-b", "agent/fixture", worktree);
   // An empty HOME keeps the settings.json half of the script inert.
   const home = await mkdtemp(join(tmpdir(), "sync-back-home-"));
+  tempDirs.push(home);
   return { root, worktree, home };
 }
 
