@@ -196,3 +196,15 @@ test("Codex deploy prepares an opt-in socket profile with this machine's UID", a
   assert.doesNotMatch(config, /^default_permissions\s*=/m);
   assert.match(config, /^sandbox_mode = "danger-full-access"$/m);
 });
+
+// sync-back reads this record to tell an env key the repo added but has not
+// deployed yet from one that was deployed and then removed, so it has to list
+// the repo's env keys alongside allow/deny/ask.
+test("claude deploy records the repo's env keys in the settings manifest", async () => {
+  const f = await fixture("claude");
+  f.run();
+  const record = JSON.parse(await readFile(join(f.home, ".claude", ".settings-repo-managed.json"), "utf8"));
+  assert.deepEqual(record.env, ["CLAUDE_CODE_PLUGIN_DIRS"]);
+  assert.deepEqual(record.allow, []);
+  assert.deepEqual(record.deny, []);
+});
