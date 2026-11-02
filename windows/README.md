@@ -48,6 +48,7 @@ in form; all three were only reachable from here.
 | `lib/common.ps1` | shared helpers | — |
 | `scripts/deploy-*.ps1` | per-surface deploy | `*/scripts/bootstrap.sh` |
 | `scripts/install-nerdfont.ps1` | FiraCode Nerd Font | the ghostty AppImage installer in `homebrew/bootstrap.sh` |
+| `scripts/install-rust-tools.ps1` | rust-analyzer component, cargo-nextest, cargo-mutants (pinned release zips, SHA-256 verified, into `~/.local/bin`) | `lib/rust-analyzer.sh` + the Brewfile's cargo-nextest / cargo-mutants |
 | `scripts/vendor.ps1` | vendored-code check / sync | `ai/scripts/vendor.sh` (runs it under Git Bash) |
 | `scripts/pack-skills.ps1` | Cowork skill zips | — |
 | `dist/` | build output (gitignored) | — |
@@ -93,7 +94,7 @@ no claim at all.
 
 `buu` — the same name as the Mac alias, and deliberately more than
 `winget upgrade --all`. brew owns nearly everything on macOS; winget does not,
-because four things here have no winget package at all:
+because five things here have no winget package at all:
 
 | Source | What | Why not winget |
 |---|---|---|
@@ -102,8 +103,14 @@ because four things here have no winget package at all:
 | `npm -g` | `tree-sitter-cli`, `@openai/codex` | not in winget / manifest 5 weeks stale |
 | PSGallery | `PSReadLine`, `PSFzf` | PowerShell modules, not packages |
 | GitHub release | FiraCode Nerd Font | winget's only Nerd Font is JetBrainsMono |
+| GitHub release, pinned | `cargo-nextest`, `cargo-mutants` | not in winget; `cargo install` would need the MSVC linker |
 
-`winget upgrade --all` on its own silently leaves all four behind, and one of
+The pinned pair is the exception to `buu`: `scripts/install-rust-tools.ps1`
+holds each version with its sha256, so an upgrade is a deliberate edit of both
+there, and `buu` leaves them as they are. The rust-analyzer component follows
+the toolchain, which `rustup update` moves.
+
+`winget upgrade --all` on its own silently leaves the other four behind, and one of
 them fails quietly rather than loudly: upgrading `tree-sitter-cli` through npm
 does not touch the copy of `tree-sitter.exe` that `packages.ps1` places ahead of
 npm's sh shim on PATH, so Neovim would keep running the old binary. `buu`
