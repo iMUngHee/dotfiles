@@ -58,6 +58,7 @@ PACMAN_LANG=(
     luajit              # brew "luajit" — neovim runtime dep, pinned explicitly
     go                  # brew "go" — REQUIRED to build notifier/linux
     rustup              # brew "rustup"
+    cargo-nextest       # brew "cargo-nextest" — ai/skills/rust test loop
     kotlin              # brew "kotlin"
     gradle              # brew "gradle"
     jdk21-openjdk       # NOT in the Brewfile. mason builds groovy-language-server
@@ -101,6 +102,7 @@ PACMAN_FONTS=(
 # ── AUR ─────────────────────────────────────────────────────────────────────
 AUR=(
     ccusage             # brew "ccusage" — Claude Code usage CLI, AUR only
+    cargo-mutants       # brew "cargo-mutants" — ai/skills/rust mutation check, AUR only
 )
 
 # ── Deliberately NOT installed here ─────────────────────────────────────────
