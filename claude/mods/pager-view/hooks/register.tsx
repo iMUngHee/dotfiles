@@ -25,6 +25,7 @@ import {
   newestInOf,
   newestOf,
   peersOf,
+  revealOf,
   roomsOf,
   rosterOf,
   runStartsOf,
@@ -47,8 +48,12 @@ const ROOM_MESSAGES = 60
  * the oldest give way so the newest and the controls under them stay drawn.
  */
 const ROOM_TEXT = 80_000
-/** The cells a body gives up to its indent or bar: two either way, and one spare for the quote's far side. */
-const BODY_INSET = 3
+/**
+ * The cells a body gives up beside it, so it folds where the terminal wraps it
+ * (measured in a 53-column dock, 2026-11-02): a received one its two-cell
+ * indent; a sent one the quote's bar and padding and one cell more.
+ */
+const INSET = { in: 2, out: 3 } as const
 /** The key of the `new` divider, which opening a room with unread scrolls to. */
 const NEW_KEY = 'new'
 /** How long, and how many times, opening a room waits for the divider to be drawn before giving up. */
@@ -301,9 +306,9 @@ function revealNew($: Engine, name: string, tries: number): void {
       const result = await $.ui
         .scroll({ in: PANE, to: { key: NEW_KEY }, block: 'start' })
         .catch((error: unknown) => ({ deny: String(error) }))
-      if (result.deny === undefined || /moved meanwhile/.test(result.deny)) return
-      if (tries > 1) revealNew($, name, tries - 1)
-      else await scrollTo($, 'end')
+      const step = revealOf(result.deny, tries)
+      if (step === 'again') revealNew($, name, tries - 1)
+      else if (step === 'end') await scrollTo($, 'end')
     })()
   })
 }
@@ -672,13 +677,13 @@ function roomBody($: Engine, e: RenderInput<'Pane'>, view: View, name: string, w
   // Whole by default: from the first unread at open (or the newest then) on.
   const wholeFrom = was ? (was.firstNew ?? was.newest) : (recent.at(-1)?.id ?? 0)
   const isOpenOf = (entry: Entry) => view.folds[entry.id] ?? entry.id >= wholeFrom
-  const inner = Math.max(8, width - BODY_INSET)
+  const innerOf = (entry: Entry) => Math.max(8, width - INSET[entry.direction])
   // Newest first while the text budget lasts; the newest is always drawn.
   const shown: Entry[] = []
   let left = ROOM_TEXT
   for (let at = recent.length - 1; at >= 0; at--) {
     const entry = recent[at]!
-    const cost = drawnOf(entry, isOpenOf(entry), inner).text.length
+    const cost = drawnOf(entry, isOpenOf(entry), innerOf(entry)).text.length
     if (shown.length > 0 && cost > left) break
     left -= cost
     shown.unshift(entry)
@@ -698,12 +703,12 @@ function roomBody($: Engine, e: RenderInput<'Pane'>, view: View, name: string, w
   // The messages past the fold, which `e` unfolds together (Tab reaches `‹ chats` first).
   // Over every recent one, not just those the budget let in: folding them all must
   // leave none unfolded out of sight.
-  const foldable = recent.filter(entry => drawnOf(entry, false, inner).hidden > 0).map(entry => entry.id)
+  const foldable = recent.filter(entry => drawnOf(entry, false, innerOf(entry)).hidden > 0).map(entry => entry.id)
   const isAllOpen = foldable.every(id => view.folds[id] ?? id >= wholeFrom)
 
   const messageOf = (entry: Entry, isFirst: boolean) => {
     const isOpen = isOpenOf(entry)
-    const { text, hidden, isFolded } = drawnOf(entry, isOpen, inner)
+    const { text, hidden, isFolded } = drawnOf(entry, isOpen, innerOf(entry))
     const rest = entry.length - entry.body.length
     return (
       <Box key={`message-${entry.id}`} flexDirection="column" marginTop={isFirst ? 0 : 1}>

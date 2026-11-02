@@ -2,7 +2,7 @@ import type { Args, On, RenderElement, RenderPropsOf } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { clockOf, dayOf } from './pager'
+import { clockOf, dayOf, foldOf } from './pager'
 import { PANE } from './register'
 
 const SESSION = { surface: 'terminal' as const, isInteractive: true, cwd: '/work' }
@@ -545,8 +545,9 @@ describe('room', () => {
     expect(text).toMatch(/─ new ─/)
     expect(text.indexOf(' new ')).toBeGreaterThan(text.indexOf('old 8'))
     expect(text.indexOf(' new ')).toBeLessThan(text.indexOf('unread 1'))
-    // The window opens on it: `$.ui.scroll({ to: { key: 'new' } })`, which this kit build cannot
-    // answer (no implementation for ui.scroll, and no op to hook), so the terminal capture checks it.
+    // The window opens on it by its key. The kit has no ui.scroll (a plugin's ask answers
+    // `no implementation for ui.scroll` and reaches no test hook), so what follows each
+    // answer is `revealOf`'s, tested in pager.test.ts.
     expect(await ui.find({ key: 'new' })).toBeDefined()
 
     // Folding is the person's: one at a time, or all with `e`.
@@ -573,6 +574,26 @@ describe('room', () => {
     expect(text).not.toMatch(/─ new ─/)
     expect(text).toContain('unread 8…')
     expect(text).toContain('newest 20')
+  })
+
+  test('a received body folds at the width beside its indent, a sent one at the width beside its bar', async ($, on) => {
+    // 80 columns leave the room 78: a received body 76 beside its indent, a sent one 75 beside
+    // the bar (measured 49 and 48 in a 53-column dock). Lines of exactly 76 cells take one row
+    // each at 76 and two at 75.
+    const line = `${'x'.repeat(37)} ${'y'.repeat(38)}`
+    const body = Array(10).fill(line).join('\n')
+    const w = world(on)
+    w.messages = [{ ...MAIL(10), body }, { id: 11, to: 'buni', from: 'wogi', fromSession: 'sid-a', body }, MAIL(12)]
+    await started($, w)
+    const ui = await opened($, w)
+    await ui.press({ key: 'chat-buni' })
+    const text = textOf(await ui.drawn())
+
+    // The received message is drawn first, the sent one under it: each at its own width.
+    const received = text.indexOf(foldOf(body, 76).text)
+    const sent = text.indexOf(foldOf(body, 75).text)
+    expect(received).toBeGreaterThan(-1)
+    expect(sent).toBeGreaterThan(received)
   })
 
   test('when the first unread is past what the room draws, the new rule tops the first message drawn', async ($, on) => {
