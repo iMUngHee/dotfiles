@@ -200,6 +200,16 @@ cannot run something; remove it in the commit that records the result.
 - [ ] **macOS / Linux** — run pager's runtime suite and session/MCP flows after
       `6fedd3e`, including the native loop smoke; this machine only cross-compiled
       those targets.
+- [ ] **macOS / Linux** — open a `/pager` room with unread in a real terminal:
+      it opens with the `new` rule on top. That is `$.ui.scroll`, which no kit
+      test reaches (`revealOf` covers only the decision after each answer); tmux
+      on macOS 2026-11-02 painted rooms without unread only.
+- [ ] **Windows / Linux** — open `/pager` in a real terminal and check every
+      folded body (Korean prose, a code block, a heading) takes at most eight
+      rows and `▾ N more lines` equals the rows unfolding adds. `foldOf` now
+      models the terminal's wrap (wrap-ansi, trim off, hard), measured in tmux
+      on macOS 2026-11-02 with Claude Code 2.1.316, where all fourteen test
+      bodies matched; the Windows captures of 2026-10-30 predate it.
 - [ ] **macOS** — once a Codex release fixes openai/codex#25416, re-check that
       the `workspace-local-sockets` profile reaches `/tmp/agent-notifier.sock`
       and the tmux socket (`d9e376d`). On 0.163.0 it does not (see `## macOS`).
