@@ -31,6 +31,8 @@ brew "ccusage"  # Claude Code usage CLI
 brew "luajit"   # neovim runtime dep, pinned explicitly
 brew "go"
 brew "rustup"
+brew "cargo-nextest"  # ai/skills/rust test loop
+brew "cargo-mutants"  # ai/skills/rust mutation check
 brew "kotlin"
 brew "gradle"
 brew "pipenv"

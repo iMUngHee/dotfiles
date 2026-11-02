@@ -219,3 +219,13 @@ cannot run something; remove it in the commit that records the result.
       the `lib/rust-analyzer.sh` step adds the component to pacman's rustup, so
       `rust-analyzer --version` answers. Verified on macOS 2026-11-02: present,
       no-toolchain (warns, downloads nothing) and no-rustup branches.
+- [ ] **Arch** — `arch/packages.sh` now installs `cargo-nextest` (extra) and
+      `cargo-mutants` (AUR); check both answer `--version` after a bootstrap.
+- [ ] **Linux / Windows** — run `ai/lib/stop-hooks.test.mjs`, which now covers
+      the process-tree `portable_timeout` (Perl supervisor on Unix, GNU
+      `timeout -k 2` on Git Bash) and the clippy/check `.rs` checker (passed on
+      macOS 2026-11-02, three runs). On Windows also confirm the GNU branch is
+      the one taken and that a Rust Stop runs `cargo clippy --all-targets`.
+- [ ] **Windows** — `windows/packages.ps1` installs only rustup: no
+      rust-analyzer component (see `lib/rust-analyzer.sh`), cargo-nextest or
+      cargo-mutants, so the rust skill falls back to `cargo test` there.
