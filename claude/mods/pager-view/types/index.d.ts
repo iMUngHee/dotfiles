@@ -35,6 +35,14 @@ export type PagerState = {
   unread: Record<string, number>
 }
 
+/**
+ * A room as it was when opened. `firstNew` is the oldest message unread then
+ * (the `new` divider sits above it), null when none was; `newest` the newest
+ * message then. A message from `firstNew ?? newest` on is drawn whole until the
+ * person folds it, so mail landing while the room is open is whole too.
+ */
+export type Opened = { room: string; firstNew: number | null; newest: number }
+
 declare module 'claude-code' {
   interface PluginState {
     'pager-view': {
@@ -43,8 +51,10 @@ declare module 'claude-code' {
       room: string | null
       /** The chat the cursor bar is on; null (or a name gone from the list) puts it on the first. */
       cursor: string | null
-      /** The ids of the bubbles unfolded past the fold. */
-      expanded: number[]
+      /** What the room in view held when it opened: where the `new` divider sits and what is whole by default. */
+      opened: Opened | null
+      /** Folds the person set, by message id: true unfolded, false folded; absent follows `opened`. */
+      folds: Record<string, boolean>
     }
   }
 }

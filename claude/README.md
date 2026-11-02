@@ -134,11 +134,11 @@ Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
 | Mod | Draws | Reads |
 |-----|-------|-------|
 | `pm-band` | One band line above the prompt — the bound plan's id, a meter with a segment per step (`▰` done, a hollow `▱` for the current one) and the current step (`○ no plan` when unbound), with `steps` and `graph` controls pinned right that open `/pm` on that tab. `/pm` opens a pane under a tab strip: steps (status chip, gauge, a `NOW` card with the current step in full, then every step), backlog (a section per task, priority chips, `⤷ needs X` / `⤷ after X` before the title), and a force-directed dependency graph on a pannable canvas (drag a node, click or arrows to pick, drag empty space or shift+arrows to pan, `+`/`-` zoom, `0` fit; the desktop places each run of the drawing at its cell; VS Code and mobile get the backlog list). | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
-| `pager-view` | `✉ <name>`, a `N new` chip and the last message under the pm line, the live count pinned right — mail since this session last opened `/pager`. `/pager` opens the chats: a two-line row per conversation (newest first, with its unread count), then the peers without messages; `j`/`k` and `o` (or a click on a name) open a room — the conversation as bubbles, received left and sent right, folded past 8 lines (`e` unfolds them all); `b` goes back. | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
+| `pager-view` | `✉ <name>`, a `N new` chip and the last message under the pm line, the live count pinned right — mail since this session last opened `/pager`. `/pager` opens the chats: a two-line row per peer this session has talked with (newest first, with its unread count); peers without messages are not listed. `j`/`k` and `o` (or a click on a name) open a room drawn as a transcript — the peer's runs under a `● name  HH:MM` line, this session's beside a `▎` bar, bodies in Markdown, a `new` rule above the first unread message, where the room opens; the newest and unread messages are whole and older ones fold past 8 lines (`e` unfolds them all); `b` in the bottom bar goes back. | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
 
 - **What they show and how** is `mods/design-contract.md` (experience and the
-  Console interface system: a tab strip, chips, one focal card per view, rooms of
-  bubbles, a key bar; one accent per meaning).
+  Console interface system: a tab strip, chips, one focal card per view, pager
+  rooms as a transcript, a key bar; one accent per meaning).
 - **Band order** is the `CLAUDE_CODE_PLUGIN_DIRS` order: the first entry is the
   outer hook and draws on top, so pm-band comes first.
 - **I/O never runs while drawing.** Events and timers refresh `$.state`;
