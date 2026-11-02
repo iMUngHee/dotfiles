@@ -18,6 +18,7 @@ import {
   newestInOf,
   newestOf,
   peersOf,
+  revealOf,
   roomsOf,
   rosterOf,
   runStartsOf,
@@ -245,25 +246,46 @@ describe('chats', () => {
     expect(cellsOf('\u{1f680}')).toBe(2)
   })
 
-  test('a body folds at eight visual lines, counting wrapped rows and blank lines, and says it goes on', () => {
+  test('a body folds at eight rows, counting wrapped rows and blank lines, and names the rows unfolding adds', () => {
     const short = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n')
     expect(foldOf(short, 30)).toEqual({ text: `${short.split('\n').slice(0, 8).join('\n')}…`, hidden: 12 })
 
     expect(foldOf('x'.repeat(100), 30)).toEqual({ text: 'x'.repeat(100), hidden: 0 })
     expect(foldOf('a\n\n\n\n\n\n\nb', 30).hidden).toBe(0)
-    expect(foldOf('a\n\n\n\n\n\n\n\nb', 30)).toEqual({ text: 'a…', hidden: 1 })
+    // Blank rows at the cut go with the rest: unfolding adds them and `b`.
+    expect(foldOf('a\n\n\n\n\n\n\n\nb', 30)).toEqual({ text: 'a…', hidden: 8 })
 
-    // 100 syllables are 200 cells: ten rows at 20 a row; the cut keeps 8 rows' worth.
-    const folded = foldOf('가'.repeat(100), 20)
-    expect(folded.hidden).toBe(2)
-    expect(folded.text).toBe(`${'가'.repeat(80)}…`)
+    // 100 syllables are 200 cells, ten rows at 20; eight full rows leave the … no cell, so one syllable gives way.
+    expect(foldOf('가'.repeat(100), 20)).toEqual({ text: `${'가'.repeat(79)}…`, hidden: 2 })
   })
 
-  test('a fold cuts at the last space it keeps, never inside a word or an 어절', () => {
-    expect(foldOf('hello world again', 10, 1)).toEqual({ text: 'hello…', hidden: 1 })
+  test('a paragraph folds where the terminal wraps it: whole words a row, the … inside the last row kept', () => {
+    // Measured in a 53-column dock (2026-11-02, macOS): a received body wraps at 49 cells, a
+    // sent one at 48, and unfolded these take 24, 30, 30 and 25 rows.
+    const english = Array(30).fill('alpha be gamma delta epsilon zeta eta').join(' ')
+    const korean = Array(30).fill('이것은 한국어 문장입니다 그리고 계속됩니다').join(' ')
+    expect(foldOf(english, 49).hidden).toBe(24 - 8)
+    expect(foldOf(korean, 49).hidden).toBe(30 - 8)
+    expect(foldOf(korean, 48).hidden).toBe(30 - 8)
+    expect(foldOf(english, 48).hidden).toBe(25 - 8)
+    // A row after a full one opens with the space it broke at, so eight rows hold 42 words.
+    expect(foldOf(korean, 49).text).toBe(`${korean.split(' ').slice(0, 42).join(' ')}…`)
+
+    expect(foldOf('hello world again', 10, 1)).toEqual({ text: 'hello…', hidden: 2 })
     expect(foldOf('이것은 한국어 문장입니다', 10, 1)).toEqual({ text: '이것은…', hidden: 2 })
-    // Backing off to a space a row or more away would waste the rows: a long path keeps them.
-    expect(foldOf(`see ${'p'.repeat(60)}`, 10, 2)).toEqual({ text: `see ${'p'.repeat(16)}…`, hidden: 5 })
+    // A row filled to its last cell has no room for the …, which wraps with the word it ends.
+    expect(foldOf('hello world again', 11, 1)).toEqual({ text: 'hello…', hidden: 1 })
+    // A word wider than a row starts on the next one and breaks across rows: a long path keeps its rows.
+    expect(foldOf(`see ${'p'.repeat(60)}`, 10, 2)).toEqual({ text: `see ${'p'.repeat(10)}…`, hidden: 5 })
+  })
+
+  test('a fence line draws no row, and a heading a blank row after it unless one follows', () => {
+    // Measured: intro, the twelve, after.
+    const fence = ['intro', '```', ...Array.from({ length: 12 }, (_, i) => `code ${i + 1}`), '```', 'after'].join('\n')
+    expect(foldOf(fence, 49).hidden).toBe(14 - 8)
+    // Measured: Title, blank, body para, Sub, blank, line after sub, Deep, blank, last.
+    const headings = '## Title\n\nbody para\n### Sub\nline after sub\n#### Deep\nlast'
+    expect(foldOf(headings, 49, 1)).toEqual({ text: '## Title…', hidden: 9 - 1 })
   })
 
   test('a fold inside a code fence closes the fence so the controls after it stay out of it', () => {
@@ -274,6 +296,38 @@ describe('chats', () => {
     // A tilde fence is closed with its own kind.
     const tilde = foldOf(['~~~', ...Array.from({ length: 12 }, (_, i) => `code ${i}`), '~~~'].join('\n'), 40)
     expect(tilde.text.endsWith('…\n~~~')).toBe(true)
+  })
+
+  test('a fold never ends on a fence line: the … goes with the last line drawn, in the block it closes', () => {
+    // Eight rows end the block; its closing fence (no row) is kept, then let go from the end.
+    const code = Array.from({ length: 7 }, (_, i) => `c${i + 1}`)
+    expect(foldOf(['intro', '```', ...code, '```', 'after'].join('\n'), 40)).toEqual({
+      text: ['intro', '```', ...code.slice(0, -1), 'c7…', '```'].join('\n'),
+      hidden: 1,
+    })
+    // An opening fence at the cut opens nothing.
+    const plain = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    expect(foldOf([...plain, '```js', 'code', '```'].join('\n'), 40)).toEqual({
+      text: [...plain.slice(0, -1), 'h…'].join('\n'),
+      hidden: 1,
+    })
+  })
+
+  test('an ask for the new rule that lands, or a window the person moved first, ends the asking; a refusal asks again until the last try, then the end', () => {
+    expect(revealOf(undefined, 5)).toBe('stop')
+    expect(revealOf('the window moved meanwhile', 5)).toBe('stop')
+    expect(revealOf('the window moved meanwhile', 1)).toBe('stop')
+    // A key not drawn yet is refused, here as the kit refuses an engine without ui.scroll.
+    expect(revealOf('HooksError: no implementation for ui.scroll', 5)).toBe('again')
+    expect(revealOf('not drawn', 2)).toBe('again')
+    expect(revealOf('not drawn', 1)).toBe('end')
+  })
+
+  test('a fold inside a longer fence closes it with that fence, past the shorter fences inside it', () => {
+    // The inner fences are its code and draw a row each; the outer ones draw none.
+    const kept = ['````md', '```js', 'l1', 'l2', 'l3', '```', 'l4', 'l5', 'l6']
+    const folded = foldOf([...kept, 'l7', '````'].join('\n'), 40)
+    expect(folded).toEqual({ text: `${kept.join('\n')}…\n\`\`\`\``, hidden: 1 })
   })
 
   test('message times read the host clock and the day; a bad time reads dashes', () => {

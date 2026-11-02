@@ -323,60 +323,150 @@ export function cellsOf(text: string): number {
   return cells
 }
 
-/** A message folds past this many visual lines. */
+/** A message folds past this many rows. */
 export const FOLD_LINES = 8
 
-/** What a folded message draws: `text`, and how many visual lines it leaves out (0 when whole). */
+/** What a folded message draws: `text`, and how many more rows it takes whole (0 when whole). */
 export type Fold = { text: string; hidden: number }
 
 /**
- * The cells of `line` that fit in `left`, given back at the last space when
- * that costs less than a row of `room`: a Korean 어절, like a word, is not
- * split, while a long unspaced string (a path, a URL) keeps its eight rows.
+ * Where each row of `line` starts when the terminal wraps it at `room` cells,
+ * as it wraps a Markdown paragraph (wrap-ansi, trim off and hard on; measured
+ * in a 53-column dock on 2026-11-02): word by word at spaces, the space before
+ * a word kept on the row it ends, except after a full row, which the next row
+ * opens with; a word wider than a row starts on the next row when that saves
+ * one, then breaks every `room` cells.
  */
-function cutAt(line: string, left: number, room: number): string {
-  let cut = ''
-  let cells = 0
-  for (const char of line) {
-    if (cells + cellOf(char) > left) break
-    cut += char
-    cells += cellOf(char)
+function rowStartsOf(line: string, room: number): number[] {
+  const starts = [0]
+  let used = 0
+  let at = 0
+  for (const [index, word] of line.split(' ').entries()) {
+    if (index > 0) {
+      if (used >= room) {
+        starts.push(at - 1)
+        used = 0
+      }
+      used += 1
+    }
+    const cells = cellsOf(word)
+    if (cells <= room) {
+      if (used + cells > room && used > 0 && cells > 0) {
+        starts.push(at)
+        used = 0
+      }
+      used += cells
+    } else {
+      if (Math.floor((cells - 1) / room) < 1 + Math.floor((cells - (room - used) - 1) / room)) {
+        starts.push(at)
+        used = 0
+      }
+      let next = at
+      for (const char of word) {
+        if (used + cellOf(char) > room) {
+          starts.push(next)
+          used = 0
+        }
+        used += cellOf(char)
+        next += char.length
+        if (used === room && next < at + word.length) {
+          starts.push(next)
+          used = 0
+        }
+      }
+    }
+    at += word.length + 1
   }
-  const space = cut.lastIndexOf(' ')
-  if (space <= 0) return cut
-  return cells - cellsOf(cut.slice(0, space)) <= room ? cut.slice(0, space) : cut
+  return starts
 }
 
+/** A code fence line; its first group is the run of backticks or tildes that opens or closes it. */
+const FENCE = /^\s*(`{3,}|~{3,})/
+/** A Markdown heading's marker, which the transcript does not draw. */
+const HEADING = /^ {0,3}#{1,6}(?:\s+|$)/
+
 /**
- * The first `limit` visual lines of `body` at `width` cells a line. A line of
- * the body takes ceil(cells / width) rows, one when empty; a line cut at the
- * fold keeps the words that fit. A folded text ends in `…`, and a code fence
- * it leaves open is closed, so the Markdown it is drawn as ends where it does.
+ * The first `limit` rows of `body` drawn as Markdown `width` cells wide, as
+ * the transcript draws it (measured 2026-11-02): a line wraps as `rowStartsOf`
+ * says, a blank line is a row, a line that opens or closes a code fence is
+ * none, and a heading takes a blank row after it unless the source gives one.
+ * The cut keeps whole rows and ends in `…` on the last line drawn; a row with
+ * no cell left for it gives up its last word. A fence left open is closed, so
+ * the controls under the text stay out of the block.
  */
 export function foldOf(body: string, width: number, limit = FOLD_LINES): Fold {
   const room = Math.max(1, width)
   const lines = body.split('\n')
-  const rowsOf = (line: string) => Math.max(1, Math.ceil(cellsOf(line) / room))
-  const total = lines.reduce((sum, line) => sum + rowsOf(line), 0)
+  // Per line: whether it opens or closes a fence, and the fence open after it. Only the
+  // same character, at least as long and alone on its line, closes one, so a shorter
+  // fence inside a longer one is its code.
+  const isMark: boolean[] = []
+  const openAfter: (string | null)[] = []
+  let open: string | null = null
+  for (const line of lines) {
+    const run = FENCE.exec(line)?.[1]
+    const opens = run !== undefined && open === null
+    const closes =
+      run !== undefined && open !== null && run[0] === open[0] && run.length >= open.length && line.trim() === run
+    if (opens) open = run
+    if (closes) open = null
+    isMark.push(opens || closes)
+    openAfter.push(open)
+  }
+  const rows = lines.map((line, at) => {
+    if (isMark[at]) return 0
+    const heading = (openAfter[at - 1] ?? null) === null ? HEADING.exec(line) : null
+    if (heading === null) return rowStartsOf(line, room).length
+    const next = lines[at + 1]
+    return rowStartsOf(line.slice(heading[0].length), room).length + (next !== undefined && next.trim() !== '' ? 1 : 0)
+  })
+  const total = rows.reduce((sum, count) => sum + count, 0)
   if (total <= limit) return { text: body, hidden: 0 }
   const kept: string[] = []
   let used = 0
-  for (const line of lines) {
-    const rows = rowsOf(line)
-    if (used + rows <= limit) {
+  for (const [at, line] of lines.entries()) {
+    if (used + rows[at]! <= limit) {
       kept.push(line)
-      used += rows
+      used += rows[at]!
       continue
     }
-    const left = (limit - used) * room
-    if (left > 0) kept.push(cutAt(line, left, room))
+    if (used < limit) kept.push(line.slice(0, rowStartsOf(line, room)[limit - used]))
     break
   }
-  const text = `${kept.join('\n').trimEnd()}…`
-  const fences = kept.filter(line => /^\s*(```|~~~)/.test(line))
-  // An odd count leaves one open: close it with its own kind, the last fence kept.
-  const open = fences.at(-1)?.trim().slice(0, 3) ?? '```'
-  return { text: fences.length % 2 === 1 ? `${text}\n${open}` : text, hidden: total - limit }
+  // The … goes on the last line drawn: blank lines and fences at the cut go with the rest.
+  let last = kept.length - 1
+  while (last >= 0 && (isMark[last] || kept[last]!.trim() === '')) last--
+  if (last < 0) return { text: '…', hidden: total - 1 }
+  const before = rows.slice(0, last).reduce((sum, count) => sum + count, 0)
+  let tail = kept[last]!.trimEnd()
+  while (tail !== '' && rowStartsOf(`${tail}…`, room).length > limit - before) {
+    // Its last word, or in a word wider than a row its last character.
+    const space = tail.lastIndexOf(' ')
+    tail =
+      space > rowStartsOf(tail, room).at(-1)!
+        ? tail.slice(0, space).trimEnd()
+        : tail.slice(0, -([...tail].at(-1)!.length))
+  }
+  const shown = [...kept.slice(0, last), `${tail}…`].join('\n')
+  const close = openAfter[last] ?? null
+  return {
+    text: close === null ? shown : `${shown}\n${close}`,
+    hidden: total - before - rowStartsOf(`${tail}…`, room).length,
+  }
+}
+
+/** What opening a room does after an ask for its `new` divider answers. */
+export type Reveal = 'stop' | 'again' | 'end'
+
+/**
+ * The step after an ask for the `new` divider that answered `deny` (absent
+ * when the window moved), with `tries` asks counting this one: a landed ask
+ * or a window the person moved first ends the asking; a refusal (the divider
+ * not drawn yet) asks again, and on the last try settles for the room's end.
+ */
+export function revealOf(deny: string | undefined, tries: number): Reveal {
+  if (deny === undefined || /moved meanwhile/.test(deny)) return 'stop'
+  return tries > 1 ? 'again' : 'end'
 }
 
 /** Peers other than `self` whose host pager judges live. */
