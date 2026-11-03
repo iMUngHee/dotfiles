@@ -113,6 +113,16 @@ if ! command -v pager &>/dev/null; then
         echo "warn: pager absent and yq missing — [mcp_servers.pager] left declared" >&2
     fi
 fi
+# gaebu is likewise optional (github.com/iMUngHee/gaebu): same treatment.
+if ! command -v gaebu &>/dev/null; then
+    if command -v yq &>/dev/null; then
+        yq -i -p toml -o toml 'del(.mcp_servers.gaebu)' "$TEMPLATE_EXPANDED"
+        DEL_KEYS="$DEL_KEYS, .mcp_servers.gaebu"
+        echo "Skipped [mcp_servers.gaebu] (gaebu not installed)"
+    else
+        echo "warn: gaebu absent and yq missing — [mcp_servers.gaebu] left declared" >&2
+    fi
+fi
 
 if [ ! -f "$TARGET_CFG" ]; then
     cp "$TEMPLATE" "$TARGET_CFG"

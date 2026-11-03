@@ -83,6 +83,13 @@ extends = ":workspace"
 command = "pager"
 args = ["mcp"]
 
+# gaebu's MCP surface (me, board, duties, leases, escalations, records). Like
+# pager it is invoked by name, and codex/scripts/bootstrap.sh drops the block
+# when the binary is absent.
+[mcp_servers.gaebu]
+command = "gaebu"
+args = ["mcp"]
+
 [hooks]
 
 [[hooks.UserPromptSubmit]]
@@ -119,6 +126,16 @@ timeout = 10
 command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" pager-hook.sh"
 statusMessage = "pager delivery"
 
+# gaebu: team position cards and user-prompt evidence (github.com/iMUngHee/gaebu).
+# Same three events as pager plus Stop, where gaebu only stamps the turn end
+# and prints nothing (Codex ignores additionalContext on Stop anyway).
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = "if command -v gaebu >/dev/null 2>&1; then gaebu hook codex; fi"
+timeout = 10
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" gaebu-hook.sh"
+statusMessage = "gaebu position"
+
 [[hooks.PreToolUse]]
 
 [[hooks.PreToolUse.hooks]]
@@ -147,6 +164,16 @@ timeout = 10
 command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" pager-hook.sh"
 statusMessage = "pager delivery"
 
+# gaebu: team position cards and user-prompt evidence (github.com/iMUngHee/gaebu).
+# Same three events as pager plus Stop, where gaebu only stamps the turn end
+# and prints nothing (Codex ignores additionalContext on Stop anyway).
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "if command -v gaebu >/dev/null 2>&1; then gaebu hook codex; fi"
+timeout = 10
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" gaebu-hook.sh"
+statusMessage = "gaebu position"
+
 [[hooks.Stop]]
 
 [[hooks.Stop.hooks]]
@@ -155,6 +182,16 @@ command = "$HOME/.config/codex/hooks/stop-gate.sh"
 timeout = 360
 command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" stop-gate.sh"
 statusMessage = "codex final gate"
+
+# gaebu: team position cards and user-prompt evidence (github.com/iMUngHee/gaebu).
+# Same three events as pager plus Stop, where gaebu only stamps the turn end
+# and prints nothing (Codex ignores additionalContext on Stop anyway).
+[[hooks.Stop.hooks]]
+type = "command"
+command = "if command -v gaebu >/dev/null 2>&1; then gaebu hook codex; fi"
+timeout = 10
+command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" gaebu-hook.sh"
+statusMessage = "gaebu position"
 
 [[hooks.PermissionRequest]]
 matcher = "*"
