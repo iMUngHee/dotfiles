@@ -1,6 +1,6 @@
 {
   "name": "gaebu",
-  "version": "0.2.0",
-  "description": "Gaebu position card, roster pane and status line for Claude Code sessions",
+  "version": "0.2.1",
+  "description": "Gaebu position card, roster pane, band and status line for Claude Code sessions",
   "types": "./types/index.d.ts"
 }
