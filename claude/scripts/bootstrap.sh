@@ -368,4 +368,19 @@ if command -v claude &>/dev/null && command -v pager &>/dev/null; then
     fi
 fi
 
+# ── 9. gaebu MCP server ──
+# gaebu (github.com/iMUngHee/gaebu) records the command tree of agent teams;
+# its hook injects the position card, and this server exposes duties, leases
+# and escalations as tools. Same reason as pager above: ~/.claude.json is not
+# tracked, so register through the CLI. Codex gets it from config.toml.template.
+if command -v claude &>/dev/null && command -v gaebu &>/dev/null; then
+    if claude mcp get gaebu &>/dev/null; then
+        echo "gaebu MCP server already registered."
+    elif claude mcp add --scope user gaebu -- gaebu mcp &>/dev/null; then
+        echo "Registered gaebu MCP server (user scope)."
+    else
+        echo "WARN: could not register the gaebu MCP server."
+    fi
+fi
+
 echo "=== claude bootstrap done ==="

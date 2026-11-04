@@ -9,6 +9,7 @@ guardrails.md
 # Rules (alphabetical by topic)
 rules/code-review.md
 rules/diagnostics.md
+rules/gaebu.md
 rules/pager.md
 rules/portability.md
 rules/rationalization.md
