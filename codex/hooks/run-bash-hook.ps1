@@ -25,6 +25,13 @@ if (-not (Test-Path -LiteralPath $hookPath)) {
     exit 127
 }
 
+# Codex sends hook input as UTF-8, but [Console]::In decodes with the console
+# input code page (CP949 on a Korean Windows), which turned every non-ASCII
+# prompt into mojibake before the hook saw it. Read it as UTF-8 and pipe it
+# on as UTF-8 without a BOM. Windows-only: this runner exists for Windows.
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = $utf8
+$OutputEncoding = $utf8
 $hookInput = [Console]::In.ReadToEnd()
 $hookInput | & $bashPath $hookPath @HookArguments
 exit $LASTEXITCODE

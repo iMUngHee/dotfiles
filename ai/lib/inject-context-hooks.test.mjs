@@ -228,12 +228,19 @@ test("paired injection configurations allow exactly thirty seconds", async () =>
   assert.match(codex, /command = "\$HOME\/\.config\/codex\/hooks\/inject-context\.sh"\ntimeout = 30\b/);
 
   const windowsCommands = codex.match(/^command_windows = .*run-bash-hook\.ps1.*$/gm) ?? [];
-  assert.equal(windowsCommands.length, 8);
+  assert.equal(windowsCommands.length, 11);
   assert.match(windowsCommands.join("\n"), /inject-context\.sh/);
   assert.match(windowsCommands.join("\n"), /pager-hook\.sh/);
+  assert.match(windowsCommands.join("\n"), /gaebu-hook\.sh/);
 
   const windowsRunner = await readFile(join(repo, "codex", "hooks", "run-bash-hook.ps1"), "utf8");
   assert.match(windowsRunner, /\[Console\]::In\.ReadToEnd\(\)/);
+  // stdin must be decoded as UTF-8 before it is read, not with the console code page.
+  assert.ok(
+    windowsRunner.indexOf("[Console]::InputEncoding = $utf8") >= 0 &&
+      windowsRunner.indexOf("[Console]::InputEncoding = $utf8") < windowsRunner.indexOf("[Console]::In.ReadToEnd()"),
+    "run-bash-hook.ps1 must set a UTF-8 input encoding before reading stdin",
+  );
   assert.match(windowsRunner, /CLAUDE_CODE_GIT_BASH_PATH/);
 });
 
