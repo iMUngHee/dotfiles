@@ -34,6 +34,8 @@ run_notify_and_exit() {
 
 # --- Helper: a gate stage failed — block with retry budget, then let through ---
 # Reads $TMPOUT for the failure output. $1 is the label shown to Claude.
+# Everything goes to stderr: a Stop hook that exits 2 reaches Claude through
+# stderr alone (stdout left it with "No stderr output"), as codex/hooks/stop-gate.sh.
 fail_gate() {
   local label="$1" count=0
   if [[ -f "$COUNTER_FILE" ]]; then
@@ -42,15 +44,15 @@ fail_gate() {
   fi
 
   if (( count >= MAX_RETRIES )); then
-    echo "[final-gate] ${label} failed after ${MAX_RETRIES} retries. Allowing stop."
-    head -10 "$TMPOUT" 2>/dev/null
+    echo "[final-gate] ${label} failed after ${MAX_RETRIES} retries. Allowing stop." >&2
+    head -10 "$TMPOUT" >&2 2>/dev/null
     rm -f "$COUNTER_FILE"
     run_notify_and_exit
   fi
 
   echo $(( count + 1 )) > "$COUNTER_FILE"
-  echo "[final-gate] ${label} failed (attempt $(( count + 1 ))/${MAX_RETRIES}). Fix and retry."
-  head -20 "$TMPOUT" 2>/dev/null
+  echo "[final-gate] ${label} failed (attempt $(( count + 1 ))/${MAX_RETRIES}). Fix and retry." >&2
+  head -20 "$TMPOUT" >&2 2>/dev/null
   rm -f "$TMPOUT" 2>/dev/null
   exit 2
 }

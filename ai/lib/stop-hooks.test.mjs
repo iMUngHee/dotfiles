@@ -82,7 +82,9 @@ for (const tool of ["codex", "claude"]) {
     const f = fixture(tool);
     const r = f.run({ STOP_AUDIT_EXIT: "17" });
     assert.equal(r.status, 2, r.stdout + r.stderr);
-    assert.match(r.stdout + r.stderr, /contract tests failed/);
+    // A blocking Stop hook reaches the model through stderr alone; on stdout
+    // the reason was dropped and the session saw only "No stderr output".
+    assert.match(r.stderr, /contract tests failed/);
   });
 
   test(`${tool} Stop leaves untracked formatter-supported files untouched`, () => {
