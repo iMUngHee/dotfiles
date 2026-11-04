@@ -109,6 +109,7 @@ zstyle ':completion:*:descriptions' format '[%d]'
 
 # $PATH
 export PATH="$HOME/.local/share/nvim/mason/bin:$PATH"
+[ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"
 [ -d /opt/homebrew/opt/rustup/bin ] && export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 
 # Alias
