@@ -295,3 +295,108 @@ test('old card-1/board-1 values are discarded', async ($, on) => {
   expect((await ui.find({ type: 'Text' }))?.text).toMatch(/비어 있습니다/)
   await ui.unmount()
 })
+
+test('prompt.compose stamps the hook only with the card in, at most every ten minutes', async ($, on) => {
+  const calls: string[][] = []
+  let now = 1_000_000
+  let id = 's-1'
+  let isMember = false
+  on('session.id', () => ({ value: id }))
+  on('command.register', () => ({ value: { command: 'gaebu' } }))
+  on('clock.every', () => ({ value: undefined }))
+  on('clock.now', () => ({ value: now }))
+  on('ui.status', () => ({ value: undefined }))
+  on('process.run', (_, e) => {
+    const argv = (e as { argv: string[] }).argv
+    calls.push(argv)
+    return isMember || !argv.includes('me') ? defaultRun(argv) : ran('', 1)
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('prompt.submit', (_, e) => e)
+  on('prompt.compose', () => ({ sections: [] }))
+  const stamps = (session: string) =>
+    calls.filter(a => a.join(' ').includes(`session heartbeat --session ${session} --compose`)).length
+  const request = {
+    model: 'm',
+    promptModel: 'm',
+    surfaces: [],
+    tools: [],
+    outputStyle: null,
+    traits: [],
+  } as const
+
+  // No seat, no section: nothing reached the model, so nothing is stamped.
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect((await $.prompt.compose(request)).sections.length).toBe(0)
+  expect(stamps('s-1')).toBe(0)
+
+  isMember = true
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const first = await $.prompt.compose(request)
+  expect(first.sections.some(s => s.id === 'gaebu:card')).toBe(true)
+  await $.prompt.compose(request)
+  expect(stamps('s-1')).toBe(1)
+  now += 600_000
+  await $.prompt.compose(request)
+  expect(stamps('s-1')).toBe(2)
+
+  // /clear starts a new session id, which gets its own stamp at once.
+  id = 's-2'
+  await $.prompt.submit({ text: 'x', origin: { kind: 'unclassified' } } as never)
+  await $.prompt.compose(request)
+  expect(stamps('s-2')).toBe(1)
+})
+
+const BAND = {
+  hasSurvey: false,
+  isWorking: false,
+  maxRows: 6,
+  bodyColumns: 100,
+  scroll: { offset: 0, bodyRows: 6 },
+  view: {},
+}
+
+/** A rendered tree as text: a Button by its label, a Box as a line. */
+function textOf(tree: unknown): string {
+  if (tree === null || tree === undefined || typeof tree === 'boolean') return ''
+  if (typeof tree === 'string' || typeof tree === 'number') return String(tree)
+  if (Array.isArray(tree)) return tree.map(textOf).join('')
+  const node = tree as { type?: string; children?: unknown; props?: { children?: unknown; label?: string } }
+  if (node.type === 'Button') return node.props?.label ?? ''
+  const children = textOf(node.children ?? node.props?.children)
+  return node.type === 'Box' ? `${children}\n` : children
+}
+
+async function bandText($: Parameters<TestBody>[0], props = BAND): Promise<string> {
+  const tree = await $.ui.render({ component: 'AbovePrompt', surface: 'terminal', requestId: 'band', props })
+  return textOf(tree).replace(/\n+/g, '\n').trim()
+}
+
+test('the band shows my seat and what waits, or that I hold none', async ($, on) => {
+  let isMember = false
+  const opened: string[] = []
+  mountedWith(on, {
+    run: argv => (isMember || !argv.includes('me') ? defaultRun(argv) : ran('', 1)),
+  })
+  on('ui.open', (_, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true as const } }
+  })
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return Text({ children: ['below'] })
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(await bandText($)).toBe('⚑ 개부 자리 없음\nbelow')
+
+  isMember = true
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(await bandText($)).toBe('⚑ 좌장군부 속관 주부 bepo  소임 1 · 대기 1\nbelow')
+  // A survey owns the space above the prompt.
+  expect(await bandText($, { ...BAND, hasSurvey: true })).toBe('below')
+  // The name is the way into /gaebu.
+  const band = await $.ui.mount({ plugin: 'gaebu', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await band.press({ key: 'open-gaebu' })
+  expect(opened).toEqual(['gaebu-board'])
+  await band.unmount()
+})
