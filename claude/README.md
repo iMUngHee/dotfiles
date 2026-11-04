@@ -95,7 +95,7 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys, lock files); block writes to generated files (`AUTO-GENERATED`/`@generated`/`DO NOT EDIT` header) |
+| `protect-files.sh` | PreToolUse (Bash, Edit, Write, MultiEdit) | Block edits/commands targeting sensitive files (.env, keys; not lockfiles); block writes to generated files (`AUTO-GENERATED`/`@generated`/`DO NOT EDIT` header) |
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
 | `inject-context.sh` | UserPromptSubmit | Resolve the exact Claude session binding, allow only checkout-local legacy normalization, and inject bound plan/worktree routing (30s bound); unbound main is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered. A conversation reopened from the agents view continues under a new session id; when the old transcript's last row is `continued-in` naming this session, the binding it held (draft/active only) is carried over and shown as `inherited from <id>`. `/clear`, `/branch` and `--resume` write no such row. Codex has no equivalent, so its adapter does not do this |
 | `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |

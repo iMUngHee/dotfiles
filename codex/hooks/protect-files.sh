@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook: block access to sensitive files and lockfiles.
+# PreToolUse hook: block access to sensitive files.
 set -euo pipefail
 # Windows and common macOS filesystems resolve case variants to the same file.
 shopt -s nocasematch
@@ -16,10 +16,12 @@ fi
 input=$(printf '%s' "$input" | jq 'if (.tool_input | type) == "string" then .tool_input = {command: .tool_input} else . end')
 
 ext_patterns=(".env" ".pem" ".key" ".p12" ".pfx")
-# go.sum is deliberately absent (대협, 2026-10-28): the go command writes and
-# verifies it against the checksum database, and blocking it made a Go
-# dependency change impossible to stage. Kept in step with claude/hooks.
-exact_patterns=("package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "bun.lock" "bun.lockb")
+# Lockfiles are deliberately not protected: go.sum since 2026-10-28, the npm,
+# pnpm, yarn, Cargo and bun ones since 2026-11-04 (대협). Their package managers
+# write them and hold no secrets, and blocking every command that names one
+# made a dependency or version change impossible to stage. Those were the only
+# exact names here, so the exact-name check went with them. Kept in step with
+# claude/hooks.
 segment_patterns=("credentials" "secrets")
 substring_patterns=("-secret")
 # Generated-artifact marker (mirrors claude/hooks/protect-files.sh): a direct edit
@@ -60,13 +62,6 @@ check_file() {
     echo "[codex protect-files] Blocked: '$f' matches .env.* pattern." >&2
     return 0
   fi
-
-  for p in "${exact_patterns[@]}"; do
-    if [[ "$base" == "$p" ]]; then
-      echo "[codex protect-files] Blocked: '$f' matches exact filename pattern '$p'." >&2
-      return 0
-    fi
-  done
 
   for p in "${segment_patterns[@]}"; do
     if [[ "$f" == *"/$p/"* || "$f" == "$p/"* || "$base" == "$p" ]]; then
@@ -140,7 +135,6 @@ check_command() {
   done
 
   local all_patterns=()
-  all_patterns+=("${exact_patterns[@]}")
   all_patterns+=("${segment_patterns[@]}")
   all_patterns+=("${substring_patterns[@]}")
   all_patterns+=(".env.")

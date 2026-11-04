@@ -16,14 +16,13 @@ shopt -s nocasematch
 # Extension patterns: match at end of basename
 EXT_PATTERNS=(".env" ".pem" ".key" ".p8" ".p12" ".pfx")
 # Exact filename patterns: match basename exactly. Blocked for BOTH read and
-# write — either integrity-critical (lockfiles) or token/key-bearing
-# (.npmrc/.netrc, id_rsa...), where even a read can exfiltrate.
-# go.sum is deliberately absent (대협, 2026-10-28): the go command writes and
-# verifies it against the checksum database, nobody edits it by hand, and
-# blocking every command that names it made a Go dependency change impossible
-# to stage.
+# write — token/key-bearing (.npmrc/.netrc, id_rsa...), where even a read can
+# exfiltrate.
+# Lockfiles are deliberately absent: go.sum since 2026-10-28, the npm, pnpm,
+# yarn, Cargo and bun ones since 2026-11-04 (대협). Their package managers write
+# them and hold no secrets, and blocking every command that names one made a
+# dependency or version change impossible to stage, or even to grep past.
 EXACT_PATTERNS=(
-  "package-lock.json" "pnpm-lock.yaml" "yarn.lock" "Cargo.lock" "bun.lock" "bun.lockb"
   ".npmrc" ".netrc"
   "id_rsa" "id_dsa" "id_ecdsa" "id_ed25519"
 )

@@ -125,7 +125,7 @@ test("object input still blocks a protected file", () => {
 });
 
 for (const runtime of ["codex", "claude"]) test(`${runtime} native Windows paths retain filename and secret-directory protection`, () => {
-  for (const path of ["C:\\fixture\\package-lock.json", "C:\\fixture\\secrets\\note.txt", "\\\\server\\share\\package-lock.json", "C:\\fixture\\.ENV", "C:\\fixture\\Credentials\\note.txt"]) {
+  for (const path of ["C:\\fixture\\deploy.pem", "C:\\fixture\\secrets\\note.txt", "\\\\server\\share\\deploy.pem", "C:\\fixture\\.ENV", "C:\\fixture\\Credentials\\note.txt"]) {
     const result = run("protect-files.sh", "Edit", { file_path: path, new_string: "fixture" }, process.env, runtime);
     assert.equal(result.status, 2, `${path}: ${result.stderr}`);
     assert.match(result.stderr, /Blocked/);
@@ -218,7 +218,6 @@ for (const tool of ["functions.exec_command", "mcp__host__exec_command"]) {
       'cat "C:\\Users\\me\\PRIVATE.KEY"',
       "cat ./bundle.p12",
       "cat ./bundle.pfx;",
-      "cat package-lock.json",
       "cat credentials/token",
       "cat secrets/token",
       "cat service-secret.txt",
@@ -229,15 +228,20 @@ for (const tool of ["functions.exec_command", "mcp__host__exec_command"]) {
   });
 }
 
-// go.sum is written and verified by the go command, so it is deliberately not
-// protected: blocking every command that names it made a Go dependency change
-// impossible to stage. Pin that, so the entry is not quietly added back.
+// Lockfiles are written by their package managers and hold no secrets, so they
+// are deliberately not protected: go.sum since 2026-10-28, the rest since
+// 2026-11-04. Blocking every command that names one made a dependency or
+// version change impossible to stage. Pin that, so no entry is quietly added back.
+const LOCKFILES = ["go.sum", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "Cargo.lock", "bun.lock", "bun.lockb"];
 for (const [runtime, tool, input] of [
-  ["claude", "Bash", { command: "git add go.mod go.sum" }],
-  ["claude", "Edit", { file_path: "mod/go.sum", old_string: "a", new_string: "b" }],
-  ["codex", "functions.exec_command", { command: "git add go.mod go.sum" }],
+  ["claude", "Bash", { command: `git add ${LOCKFILES.join(" ")}` }],
+  ["claude", "Bash", { command: "git grep -n version -- ':!Cargo.lock'" }],
+  ...LOCKFILES.map((name) => ["claude", "Edit", { file_path: `mod/${name}`, old_string: "a", new_string: "b" }]),
+  ["claude", "Read", { file_path: "Cargo.lock" }],
+  ["codex", "functions.exec_command", { command: `git add ${LOCKFILES.join(" ")}` }],
+  ["codex", "apply_patch", { command: "*** Begin Patch\n*** Update File: Cargo.lock\n@@\n-a\n+b\n*** End Patch\n" }],
 ]) {
-  test(`${runtime} ${tool} lets the go checksum file through`, () => {
+  test(`${runtime} ${tool} lets lockfiles through: ${JSON.stringify(input).slice(0, 60)}`, () => {
     const result = run("protect-files.sh", tool, input, process.env, runtime);
     assert.equal(result.status, 0, result.stderr);
   });

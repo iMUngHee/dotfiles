@@ -30,7 +30,7 @@ Lint policy belongs to the project: `[workspace.lints]` (or `[lints]`) in Cargo.
 
 ## Dependency APIs: the locked version, not memory
 
-- Which version is in use: `cargo tree -i <crate>`. Its source: `cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "<crate>") | "\(.version) \(.manifest_path)"'` — read the crate under that directory. Never open the lockfile; the harness's file protection blocks it.
+- Which version is in use: `cargo tree -i <crate>`. Its source: `cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "<crate>") | "\(.version) \(.manifest_path)"'` — read the crate under that directory. Prefer these to reading the lockfile: they also name the source directory to read.
 - With an LSP tool available, hover and go-to-definition on the symbol (rust-analyzer) give the same version's docs and signature.
 - A crate that is not a dependency yet: `cargo info <crate>` for the current version and features, then that version's page on docs.rs.
 
