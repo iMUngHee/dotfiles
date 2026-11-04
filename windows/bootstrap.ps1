@@ -89,6 +89,14 @@ if (-not $SkipPackages) {
     & (Join-Path $Scripts 'install-rust-tools.ps1')
 }
 
+# -- 4c. gaebu (built from source; no winget package) -----------
+# After rustup (step 2) and pager (gaebu resolves callers through it), before
+# the AI deploy: the hooks call a bare `gaebu`, and the deploy registers its
+# MCP server only when it is on PATH.
+if (-not $SkipPackages) {
+    & (Join-Path $Scripts 'install-gaebu.ps1')
+}
+
 # -- 5. Shell + terminal + editor ------------------------------
 & (Join-Path $Scripts 'deploy-shell.ps1')
 
