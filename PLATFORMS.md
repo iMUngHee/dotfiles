@@ -192,6 +192,17 @@ shared server through `/daemon` and check again; connected sessions may be inter
   installed CLI in ongoing work. Basic relay messages remain v1-compatible;
   typed/progress metadata and causal hops above three need upgraded v2 peers.
 
+### Verified on 2026-11-04
+
+- `stop-hooks.test.mjs`, the whole file, on macOS and on Linux (the VM, GNU
+  sed 4.8, from a clone of its config carrying the same hooks): 55 passed,
+  12 skipped with platform reasons, 0 failed. It includes the process-tree
+  `portable_timeout`, the clippy/check `.rs` checker, the crate-edition
+  `rustfmt` cases and the Stop block that must reach Claude on stderr.
+- macOS: `ensure_gaebu` from `lib/agent-clis.sh` built gaebu into
+  `~/.local/bin` (pager was present, so only its skip path ran), and the next
+  `ai/scripts/bootstrap.sh` printed `Registered gaebu MCP server (user scope)`.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
@@ -203,7 +214,8 @@ cannot run something; remove it in the commit that records the result.
       then that `bash ~/.config/ai/scripts/bootstrap.sh` prints `Registered gaebu
       MCP server`. On Windows 2026-11-04 only the skip path and the missing-tool
       warnings of `lib/agent-clis.sh` ran; `install-gaebu.ps1` ran its build,
-      `-Force` swap and skip paths.
+      `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
+      (see Verified on 2026-11-04); pager's build path and Linux remain.
 - [ ] **macOS and Linux (zsh)** — `zsh/.zshrc` puts `~/.local/bin` on PATH
       (`[ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"` in the
       `# $PATH` block), so the hooks find a bare `pager` and `gaebu`; check
@@ -268,12 +280,17 @@ cannot run something; remove it in the commit that records the result.
       no-toolchain (warns, downloads nothing) and no-rustup branches.
 - [ ] **Arch** — `arch/packages.sh` now installs `cargo-nextest` (extra) and
       `cargo-mutants` (AUR); check both answer `--version` after a bootstrap.
-- [ ] **Linux** — run `ai/lib/stop-hooks.test.mjs`, which now covers
-      the process-tree `portable_timeout` (Perl supervisor on Unix, GNU
-      `timeout -k 2` on Git Bash) and the clippy/check `.rs` checker (passed on
-      macOS 2026-11-02, three runs; Windows 2026-11-03, GNU branch and checker
-      fixtures). On Windows a real Rust Stop running
-      `cargo clippy --all-targets` remains pending.
+- [ ] **Windows** — a real Rust Stop running `cargo clippy --all-targets`
+      (the `.rs` checker's fixtures passed on Windows 2026-11-03; the whole
+      `ai/lib/stop-hooks.test.mjs` on macOS and Linux 2026-11-04).
+- [ ] **Windows (Git Bash)** — run the `rustfmt gets the edition` and `Stop
+      blocks a failing suite` cases in `ai/lib/stop-hooks.test.mjs` (passed on
+      macOS and Linux 2026-11-04). Then edit a `.rs` file in a CRLF checkout of
+      an edition-2024 crate and check the hook ran `rustfmt --edition 2024`;
+      and source `claude/hooks/lib/detect-project.sh`, run `cargo_edition` on a
+      file under a `//host/share` path with no Cargo.toml above it, and check
+      it returns instead of looping (MSYS `dirname //` is `//`, so the climb
+      ends on parent == dir; checked only by reading).
 - [ ] **Windows** — run `windows/bootstrap.ps1` (or
       `windows/scripts/install-rust-tools.ps1` alone) under Windows PowerShell
       5.1 and under 7, then check `rust-analyzer --version`, `cargo nextest
