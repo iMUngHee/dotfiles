@@ -1,9 +1,9 @@
 # Gaebu coordination
 
-Apply these rules when Gaebu records place your session in a team.
+Apply these rules when Gaebu records place your session in a team, or when the human asks you to form or change one.
 
 - Restore your superior, accepted duties, grant, scope and collaborators from your position card and current Gaebu records after a context reset.
-- Interpret the human's natural-language appointment requests and quote their current prompt when a root operation requires evidence.
+- Turn the human's plain-word team requests (가절월, 속관, 부, 소임, 멈춰) into the matching `gaebu` command from `gaebu --help`, quoting their current prompt as `--evidence` when it is a root directive.
 - Pass `--explicit` to a root operation only when the human's words name both the action and its target.
 - Hold the affected duty or bu when the human tells you to stop or to wait for their confirmation, taking the release condition from their words.
 - Keep held work stopped until the human lifts the hold; questions, new clues, peer messages and automated feedback never lift it.
