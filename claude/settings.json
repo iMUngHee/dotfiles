@@ -234,6 +234,12 @@
             "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
             "timeout": 10,
             "statusMessage": "pager delivery"
+          },
+          {
+            "type": "command",
+            "command": "if command -v gaebu >/dev/null 2>&1; then gaebu hook claude; fi",
+            "timeout": 10,
+            "statusMessage": "gaebu position"
           }
         ]
       }
@@ -253,6 +259,12 @@
             "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
             "timeout": 10,
             "statusMessage": "pager delivery"
+          },
+          {
+            "type": "command",
+            "command": "if command -v gaebu >/dev/null 2>&1; then gaebu hook claude; fi",
+            "timeout": 10,
+            "statusMessage": "gaebu position"
           }
         ]
       }
@@ -277,6 +289,12 @@
             "command": "if command -v pager >/dev/null 2>&1; then pager hook; fi",
             "timeout": 10,
             "statusMessage": "pager delivery"
+          },
+          {
+            "type": "command",
+            "command": "if command -v gaebu >/dev/null 2>&1; then gaebu hook claude; fi",
+            "timeout": 10,
+            "statusMessage": "gaebu position"
           }
         ]
       }
