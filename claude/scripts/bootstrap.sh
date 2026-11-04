@@ -341,9 +341,14 @@ esac
 # env lists the repo's env key names, for sync-back: a repo key that is neither
 # deployed nor recorded here was added in the repo and has not been deployed yet,
 # so sync-back keeps it instead of reading it as removed from the deployed file.
+# hooks is the deployed hooks object after the merge, for sync-back: while the
+# deployed hooks still equal it, a hook added in the repo is kept on commit.
 if [ "$MERGED" -eq 1 ]; then
-    jq '{allow: (.permissions.allow // []), deny: (.permissions.deny // []), ask: (.permissions.ask // []), env: (.env // {} | keys)}' \
-        "$REPO_SETTINGS" | tr -d '\r' > "$MANAGED.tmp" \
+    jq -s '.[0] as $repo | .[1] as $deployed |
+      {allow: ($repo.permissions.allow // []), deny: ($repo.permissions.deny // []),
+       ask: ($repo.permissions.ask // []), env: ($repo.env // {} | keys),
+       hooks: ($deployed.hooks // {})}' \
+        "$REPO_SETTINGS" "$CLAUDE_DIR/settings.json" | tr -d '\r' > "$MANAGED.tmp" \
         && mv "$MANAGED.tmp" "$MANAGED"
 fi
 

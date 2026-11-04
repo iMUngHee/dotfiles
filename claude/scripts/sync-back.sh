@@ -68,6 +68,7 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
     jq -s '
       .[0] as $repo |
       ((.[2] // {}) | with_entries(.value |= (if type == "array" then . else [] end))) as $was |
+      ((.[2] // {}) | .hooks | if type == "object" then . else null end) as $was_hooks |
       # kept: deployed entries the repo tracks, in deployed order. added: repo
       # entries neither deployed nor recorded. Sorted only when something was
       # added, which is the order bootstrap deploys in, so nothing reflows.
@@ -80,6 +81,14 @@ if [ -f "$CLAUDE_DIR/settings.json" ]; then
       with_entries(select(.key | IN($repo | keys[]))) |
       .permissions.allow = keep("allow") |
       .permissions.deny  = keep("deny") |
+      # hooks is copied back as a whole, so a hook added in the repo and not
+      # deployed yet used to vanish from the commit that added it. bootstrap
+      # records the hooks it deployed: while the deployed hooks still equal that
+      # record nothing was changed in the UI, so the repo value stands. A
+      # deployed value that differs is a UI edit and is synced back as before;
+      # so is any hooks value when the record has none (made before this rule).
+      (if ($repo | has("hooks")) and $was_hooks != null and ((.hooks // {}) == $was_hooks)
+       then .hooks = $repo.hooks else . end) |
       # env is the one object copied as a whole, so give it the same treatment
       # permissions gets: keep only keys the repo already tracks, in one
       # canonical order. Otherwise runtime keys the CLI appends land in the

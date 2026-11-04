@@ -138,6 +138,38 @@ test("(9) a record with mistyped fields reads as empty instead of failing", asyn
   assert.deepEqual((await f.sync()).permissions.allow, ["Bash(a*)", "Bash(new*)"]);
 });
 
+const hook = (command) => ({ type: "command", command });
+const hooks = (...commands) => ({ Stop: [{ matcher: "", hooks: commands.map(hook) }] });
+const noPerms = { allow: [], deny: [] };
+
+test("(10) a hook the repo added and never deployed is kept", async () => {
+  const deployed = hooks("pager hook");
+  const f = await fixture({
+    repoSettings: { permissions: noPerms, hooks: hooks("pager hook", "gaebu hook claude") },
+    deployed: { permissions: noPerms, hooks: deployed },
+    record: { ...record([]), hooks: deployed },
+  });
+  assert.deepEqual((await f.sync()).hooks, hooks("pager hook", "gaebu hook claude"));
+});
+
+test("(11) a hook changed in the UI since the last deploy is synced back", async () => {
+  const f = await fixture({
+    repoSettings: { permissions: noPerms, hooks: hooks("pager hook") },
+    deployed: { permissions: noPerms, hooks: hooks("pager hook", "added in the UI") },
+    record: { ...record([]), hooks: hooks("pager hook") },
+  });
+  assert.deepEqual((await f.sync()).hooks, hooks("pager hook", "added in the UI"));
+});
+
+test("(12) a record without hooks keeps the deployed hooks, as before", async () => {
+  const f = await fixture({
+    repoSettings: { permissions: noPerms, hooks: hooks("pager hook", "gaebu hook claude") },
+    deployed: { permissions: noPerms, hooks: hooks("pager hook") },
+    record: record([]),
+  });
+  assert.deepEqual((await f.sync()).hooks, hooks("pager hook"));
+});
+
 test("(C2) a commit and an amend through githooks/pre-commit keep an undeployed addition", async () => {
   const f = await fixture({
     repoSettings: { permissions: { allow: ["Bash(a*)"], deny: [] } },
