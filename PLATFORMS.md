@@ -9,7 +9,20 @@ each platform does differently, and which checks are still owed.
 
 The post-merge hook re-runs bootstrap, but it installs no npm dependencies. On a
 new machine, or after a pull that changes a pm package's lockfile, run `npm ci`
-in that package first. Then:
+in that package first.
+
+It builds no binaries either: pager and gaebu, which the hooks call bare, come
+from the package layer (`~/.config/bootstrap.sh`, `windows/bootstrap.ps1`). On a
+machine that predates that step, build them once, then deploy again so the
+gaebu MCP server is registered:
+
+```bash
+bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'   # macOS / Linux
+bash ~/.config/ai/scripts/bootstrap.sh
+```
+
+On Windows: `pwsh -File ~/.config/windows/scripts/install-gaebu.ps1` (pager:
+`install-pager.ps1`), then the bootstrap line above under Git Bash. Then:
 
 ```bash
 bash ~/.config/ai/scripts/vendor.sh                      # every row ok / ok (pinned)
@@ -183,6 +196,18 @@ shared server through `/daemon` and check again; connected sessions may be inter
 
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
+
+- [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
+      `bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'`
+      and check both build into `~/.local/bin` (`pager who`, `gaebu --version`),
+      then that `bash ~/.config/ai/scripts/bootstrap.sh` prints `Registered gaebu
+      MCP server`. On Windows 2026-11-04 only the skip path and the missing-tool
+      warnings of `lib/agent-clis.sh` ran; `install-gaebu.ps1` ran its build,
+      `-Force` swap and skip paths.
+- [ ] **macOS and Linux (zsh)** — `zsh/.zshrc` puts `~/.local/bin` on PATH
+      (`[ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"` in the
+      `# $PATH` block), so the hooks find a bare `pager` and `gaebu`; check
+      `command -v gaebu` in a new terminal.
 
 - [ ] **Linux (Bash)** — pipe a sample payload with
       `context_window.total_input_tokens` into `claude/extensions/statusline.sh`

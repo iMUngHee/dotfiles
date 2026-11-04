@@ -44,6 +44,12 @@ case "$PLATFORM" in
         if [ -n "${BREW:-}" ] && [ -x "$BREW" ] && shellenv_out="$("$BREW" shellenv)"; then
             eval "$shellenv_out"
         fi
+        # pager and gaebu were just built into ~/.local/bin (lib/agent-clis.sh);
+        # the AI deploy registers their MCP servers only if it finds them.
+        [ -d "$HOME/.local/bin" ] && case ":$PATH:" in
+            *":$HOME/.local/bin:"*) ;;
+            *) PATH="$HOME/.local/bin:$PATH"; export PATH ;;
+        esac
         ;;
     arch)
         # pacman writes to /usr/bin, already on PATH. mise does not: its shims
