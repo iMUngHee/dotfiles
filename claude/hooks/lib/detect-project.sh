@@ -63,6 +63,61 @@ portable_timeout() {
   timeout -k 2 "$secs" "$@"
 }
 
+# toml_edition <Cargo.toml> <section>: the edition one section declares, a year,
+# or `workspace` for `edition.workspace = true` and `edition = { workspace = true }`.
+# Per section, so `[workspace.package]` and `[package]` in one file never mix.
+toml_edition() {
+  awk -v want="$2" -v q="'" '
+    { sub(/\r$/, "") }  # a CRLF Cargo.toml (Windows)
+    /^[[:space:]]*\[/ {
+      sec = $0
+      sub(/^[[:space:]]*\[[[:space:]]*/, "", sec)
+      sub(/[[:space:]]*\].*$/, "", sec)
+      next
+    }
+    sec != want { next }
+    /^[[:space:]]*edition[[:space:]]*\.[[:space:]]*workspace[[:space:]]*=[[:space:]]*true/ { print "workspace"; exit }
+    /^[[:space:]]*edition[[:space:]]*=/ {
+      v = $0
+      sub(/^[^=]*=[[:space:]]*/, "", v)
+      if (v ~ /^\{/) { if (v ~ /workspace[[:space:]]*=[[:space:]]*true/) print "workspace"; exit }
+      if (match(v, "^[\"" q "][0-9]+[\"" q "]")) print substr(v, 2, RLENGTH - 2)
+      exit
+    }
+  ' "$1" 2>/dev/null
+}
+
+# cargo_edition <file>: the edition of the crate <file> belongs to, as Cargo reads
+# it. The nearest Cargo.toml with a [package] decides: its own `edition`, or the
+# workspace root's [workspace.package] one when it inherits. Prints nothing for
+# 2015, the default of Cargo and rustfmt alike. Always returns 0, for set -e.
+cargo_edition() {
+  local dir parent ed=""
+  dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd) || return 0
+  # parent == dir ends a climb at / and at MSYS's // root alike.
+  while ! { [[ -f "$dir/Cargo.toml" ]] && grep -q '^[[:space:]]*\[package\]' "$dir/Cargo.toml"; }; do
+    parent=$(dirname "$dir")
+    [[ "$parent" == "$dir" ]] && return 0
+    dir=$parent
+  done
+  ed=$(toml_edition "$dir/Cargo.toml" package) || ed=""
+  if [[ "$ed" == workspace ]]; then
+    ed=""
+    while :; do
+      if [[ -f "$dir/Cargo.toml" ]]; then
+        ed=$(toml_edition "$dir/Cargo.toml" workspace.package) || ed=""
+        [[ "$ed" == workspace ]] && ed=""
+        [[ -n "$ed" ]] && break
+      fi
+      parent=$(dirname "$dir")
+      [[ "$parent" == "$dir" ]] && break
+      dir=$parent
+    done
+  fi
+  [[ -n "$ed" ]] && printf '%s\n' "$ed"
+  return 0
+}
+
 # detect_checker <file> <project_root>
 # Sets CHECK_CMD (type checker), LANG_LABEL, FMT_CMD (formatter)
 detect_checker() {
@@ -117,7 +172,14 @@ detect_checker() {
           LANG_LABEL="cargo check"
         fi
       fi
-      command -v rustfmt &>/dev/null && FMT_CMD="rustfmt"
+      # Bare rustfmt formats as edition 2015 and reflows a 2024 crate's
+      # untouched lines; cargo fmt knows the edition but formats the whole
+      # crate. So rustfmt on the one file, with the crate's edition.
+      if command -v rustfmt &>/dev/null; then
+        local edition
+        edition=$(cargo_edition "$file")
+        FMT_CMD="rustfmt${edition:+ --edition $edition}"
+      fi
       ;;
     *.py)
       if command -v ruff &>/dev/null; then

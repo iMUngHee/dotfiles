@@ -413,6 +413,53 @@ for (const tool of ["claude", "codex"]) {
   });
 }
 
+// Bare rustfmt formats as edition 2015, so on an edition-2024 crate it reflowed
+// lines nobody touched. The formatter now carries the crate's edition as Cargo
+// reads it: the nearest manifest with a [package] decides.
+for (const tool of ["claude", "codex"]) {
+  test(`${tool} rustfmt gets the edition of the file's crate`, () => {
+    const home = tempDir("rust-edition-");
+    const bin = join(home, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "rustfmt"), "#!/bin/bash\nexit 0\n");
+    writeFileSync(join(bin, "cargo"), "#!/bin/bash\nexit 0\n");
+    chmodSync(join(bin, "rustfmt"), 0o755);
+    chmodSync(join(bin, "cargo"), 0o755);
+    const crate = (dir, toml) => {
+      mkdirSync(join(home, dir, "src"), { recursive: true });
+      writeFileSync(join(home, dir, "Cargo.toml"), toml);
+      return join(home, dir, "src", "x.rs");
+    };
+    const own = crate("own", '[package]\nname = "own"\nedition = "2024"\r\n');
+    crate("ws", '[workspace]\nmembers = ["m", "n"]\n[workspace.package]\n  edition = "2021"\n');
+    const member = crate("ws/m", '[package]\nname = "m"\nedition.workspace = true\n');
+    const inline = crate("ws/n", "[package]\nname = 'n'\nedition = { workspace = true }\n");
+    // A root package that is also the workspace, its [workspace.package] first.
+    const root = crate("root", '[workspace.package]\nedition = "2021"\n[package]\nname = "root"\nedition = "2024"\n');
+    const quoted = crate("quoted", "[package]\nname = 'quoted'\nedition = '2021'\n");
+    // A crate with no edition is 2015 even inside a 2024 crate's tree.
+    const nested = crate("own/fixtures/old", '[package]\nname = "old"\n');
+    const bare = crate("bare", '[package]\nname = "bare"\n[package.metadata]\nedition = "2024"\n');
+    const fmtOf = (file) => {
+      const r = spawnSync(bashPath, ["-c", `${shellOpts[tool]}\n. "$1"; detect_checker "$2" "$(dirname "$(dirname "$2")")"; printf '%s' "$FMT_CMD"`, "_", libOf(tool), file],
+        { env: { ...process.env, PATH: bin + delimiter + process.env.PATH }, encoding: "utf8", timeout: HANG_MS });
+      assert.equal(r.status, 0, r.stderr);
+      return r.stdout;
+    };
+    assert.equal(fmtOf(own), "rustfmt --edition 2024", "the crate's own edition, CRLF line");
+    assert.equal(fmtOf(member), "rustfmt --edition 2021", "a member inherits the workspace's");
+    assert.equal(fmtOf(inline), "rustfmt --edition 2021", "inline-table inheritance");
+    assert.equal(fmtOf(root), "rustfmt --edition 2024", "[package] wins over [workspace.package]");
+    assert.equal(fmtOf(quoted), "rustfmt --edition 2021", "a literal-string edition");
+    // No edition in [package] itself: rustfmt's default, which is Cargo's (2015).
+    assert.equal(fmtOf(nested), "rustfmt", "a nested crate does not take the outer one's");
+    assert.equal(fmtOf(bare), "rustfmt", "an edition key in another section does not count");
+    // No manifest at all: the climb ends at the root instead of looping.
+    mkdirSync(join(home, "loose"));
+    assert.equal(fmtOf(join(home, "loose", "x.rs")), "rustfmt", "no Cargo.toml above");
+  });
+}
+
 // cargo shim for the .rs checker: logs argv and RUSTUP_AUTO_INSTALL; the probe
 // (`cargo clippy --version`) answers ok, fails, or hangs; any other call exits
 // CARGO_SHIM_RUN_EXIT.
