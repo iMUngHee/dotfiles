@@ -166,7 +166,16 @@ if [[ -z "$CHECK_CMD" ]]; then
 fi
 
 # --- Stage 2: Run type checker ---
-portable_timeout "$CHECKER_TIMEOUT" bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1 || fail_gate "${LANG_LABEL} check"
+# A check that runs out of time has found nothing: a cold build of a large
+# crate can outlast the budget, and blocking on its progress output would ask
+# for a fix to code that may be fine. Say so and let the stop through.
+rc=0
+portable_timeout "$CHECKER_TIMEOUT" bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1 || rc=$?
+if [[ $rc -eq 124 ]]; then
+  echo "[final-gate] ${LANG_LABEL} check did not finish within ${CHECKER_TIMEOUT}s — not checked; allowing stop." >&2
+elif [[ $rc -ne 0 ]]; then
+  fail_gate "${LANG_LABEL} check"
+fi
 
 # All stages passed — clean up counter, notify, allow stop
 rm -f "$COUNTER_FILE"

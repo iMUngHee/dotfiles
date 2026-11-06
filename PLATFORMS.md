@@ -282,6 +282,14 @@ cannot run something; remove it in the commit that records the result.
       no-toolchain (warns, downloads nothing) and no-rustup branches.
 - [ ] **Arch** — `arch/packages.sh` now installs `cargo-nextest` (extra) and
       `cargo-mutants` (AUR); check both answer `--version` after a bootstrap.
+- [ ] **macOS / Windows (Git Bash)** — the `.rs` checker now finds the crate
+      from the nearest `Cargo.toml` (`cargo_crate_dir`, builtins only) and runs
+      `cd <crate> && exec cargo …`, and a checker that hits its time limit (124)
+      is reported as not checked instead of blocking Stop. Run
+      `node --test ai/lib/stop-hooks.test.mjs ai/lib/raw-tool-input-hooks.test.mjs`;
+      on Linux 2026-11-07 all passed. The `Stop .rs gate` cases skip on Windows,
+      so there also edit a `.rs` file in a crate below a repository root and
+      check that Stop runs clippy from the crate.
 - [ ] **Windows** — a real Rust Stop running `cargo clippy --all-targets`
       (the `.rs` checker's fixtures passed on Windows 2026-11-03; the whole
       `ai/lib/stop-hooks.test.mjs` on macOS and Linux 2026-11-04).

@@ -253,3 +253,29 @@ test("post-edit registration accepts namespaced edit tools without matching read
   for (const tool of ["apply_patch", "functions.apply_patch", "mcp__host__Edit"]) assert.ok(matcher.test(tool), tool);
   for (const tool of ["Read", "functions.exec_command", "editor_view"]) assert.equal(matcher.test(tool), false, tool);
 });
+
+// A checker that runs out of time (portable_timeout's 124) has found nothing,
+// so both PostToolUse hooks say it did not finish instead of passing its
+// progress output off as errors.
+for (const runtime of ["codex", "claude"]) test(`${runtime} post-edit reports a timed-out checker as not checked`, () => {
+  const dir = mkdtempSync(join(root, "feedback-"));
+  const sid = dir.split(/[\\/]/).at(-1);
+  feedbackIds.push(sid);
+  mkdirSync(join(dir, "lib"));
+  writeFileSync(join(dir, "pipeline.sh"), readFileSync(join(repo, runtime, "hooks", "post-edit-pipeline.sh")));
+  writeFileSync(join(dir, "lib", "detect-project.sh"), `
+detect_project_root() { pwd; }
+detect_checker() { FMT_CMD=""; CHECK_CMD="echo 'Checking fixture v0.1.0'; exit 124"; LANG_LABEL="fixture"; }
+file_checksum() { cksum "$1"; }
+portable_timeout() { shift; "$@"; }
+`);
+  writeFileSync(join(dir, "lib.rs"), "fn a() {}\n");
+  const input = runtime === "codex"
+    ? { session_id: sid, tool_name: "apply_patch", tool_input: { command: "*** Begin Patch\n*** Update File: lib.rs\n*** End Patch" }, tool_response: "Success" }
+    : { session_id: sid, tool_name: "Edit", tool_input: { file_path: join(dir, "lib.rs") } };
+  const result = spawnSync("bash", [join(dir, "pipeline.sh")], { cwd: dir, encoding: "utf8", input: JSON.stringify(input) });
+  assert.equal(result.status, 0, result.stderr);
+  const said = runtime === "codex" ? JSON.parse(result.stdout).hookSpecificOutput.additionalContext : result.stdout.trim();
+  const tag = runtime === "codex" ? "[codex typecheck]" : "[typecheck]";
+  assert.equal(said, `${tag} fixture did not finish within 30s after editing lib.rs — not checked`);
+});
