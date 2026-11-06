@@ -52,12 +52,9 @@ test("post-edit accepts a raw patch string", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-for (const [label, format, check, fail] of [
-  ["formatter only", true, false, false],
-  ["checker failure only", false, true, true],
-  ["formatter and checker failure", true, true, true],
-  ["successful checker", false, true, false],
-  ["no feedback", false, false, false],
+for (const [label, format] of [
+  ["formatter only", true],
+  ["no feedback", false],
 ]) {
   test(`post-edit emits one JSON context for ${label}`, () => {
     const dir = mkdtempSync(join(root, "feedback-"));
@@ -66,16 +63,14 @@ for (const [label, format, check, fail] of [
     writeFileSync(join(dir, "pipeline.sh"), readFileSync(join(repo, "codex", "hooks", "post-edit-pipeline.sh")));
     writeFileSync(join(dir, "lib", "detect-project.sh"), `
 detect_project_root() { pwd; }
-detect_checker() { FMT_CMD="$HOOK_TEST_FORMAT"; CHECK_CMD="$HOOK_TEST_CHECK"; LANG_LABEL="fixture"; }
+detect_formatter() { FMT_CMD="$HOOK_TEST_FORMAT"; }
 file_checksum() { cksum "$1"; }
 portable_timeout() { shift; "$@"; }
 `);
     writeFileSync(join(dir, "format.sh"), '#!/bin/bash\nprintf formatted > "$1"\n');
-    writeFileSync(join(dir, "check.sh"), '#!/bin/bash\nprintf checked > checked\nprintf "%s\\n" "$HOOK_TEST_DIAGNOSTIC" >&2\nexit "$HOOK_TEST_EXIT"\n');
     // Two files, so the formatter lines need their separator as well.
     const names = ["한글 file.go", "second.go"];
     for (const one of names) writeFileSync(join(dir, one), "unformatted\n");
-    const diagnostic = 'fixture error: "quoted" \\path\nsecond diagnostic line';
     const result = spawnSync("bash", [join(dir, "pipeline.sh")], {
       cwd: dir, encoding: "utf8",
       input: JSON.stringify({
@@ -83,31 +78,25 @@ portable_timeout() { shift; "$@"; }
         tool_input: { command: `*** Begin Patch\n${names.map(one => `*** Update File: ${one}`).join("\n")}\n*** End Patch` },
         tool_response: "Success",
       }),
-      env: { ...process.env, HOOK_TEST_FORMAT: format ? "bash ./format.sh" : "",
-        HOOK_TEST_CHECK: check ? "bash ./check.sh" : "", HOOK_TEST_DIAGNOSTIC: diagnostic,
-        HOOK_TEST_EXIT: fail ? "17" : "0" },
+      env: { ...process["env"], HOOK_TEST_FORMAT: format ? "bash ./format.sh" : "" },
     });
     assert.equal(result.status, 0, result.stderr);
     for (const one of names) assert.equal(readFileSync(join(dir, one), "utf8"), format ? "formatted" : "unformatted\n");
-    if (check) assert.equal(readFileSync(join(dir, "checked"), "utf8"), "checked");
-    if (!format && !fail) {
+    if (!format) {
       assert.equal(result.stdout, "");
       return;
     }
-    const context = [];
-    if (format) context.push(...names.map(one => `[codex auto-format] bash formatted ${one}`));
-    if (fail) context.push(`[codex typecheck] fixture errors after editing ${names[0]}:\n${diagnostic}`);
     assert.deepEqual(JSON.parse(result.stdout), {
-      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context.join("\n") },
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: names.map(one => `[codex auto-format] bash formatted ${one}`).join("\n") },
     });
   });
 }
 
-test("post-edit passes a CRLF patch path to its checker without a trailing CR", () => {
+test("post-edit passes a CRLF patch path to its formatter lookup without a trailing CR", () => {
   const hooks = join(root, "pipeline-fixture");
   mkdirSync(join(hooks, "lib"), { recursive: true });
   writeFileSync(join(hooks, "post-edit-pipeline.sh"), readFileSync(join(repo, "codex", "hooks", "post-edit-pipeline.sh")));
-  writeFileSync(join(hooks, "lib", "detect-project.sh"), 'detect_project_root() { pwd; }\ndetect_checker() { printf "<%s>" "$1" >> "$HOOK_PATH_LOG"; CHECK_CMD=""; LANG_LABEL=""; FMT_CMD=""; }\n');
+  writeFileSync(join(hooks, "lib", "detect-project.sh"), 'detect_project_root() { pwd; }\ndetect_formatter() { printf "<%s>" "$1" >> "$HOOK_PATH_LOG"; FMT_CMD=""; }\n');
   const log = join(root, "pipeline-paths.log");
   const result = spawnSync("bash", [join(hooks, "post-edit-pipeline.sh")], {
     cwd: root, encoding: "utf8",
@@ -178,7 +167,7 @@ for (const field of ["patch", "input", "diff"]) {
     const hooks = join(root, `pipeline-${field}`);
     mkdirSync(join(hooks, "lib"), { recursive: true });
     writeFileSync(join(hooks, "post-edit-pipeline.sh"), readFileSync(join(repo, "codex/hooks/post-edit-pipeline.sh")));
-    writeFileSync(join(hooks, "lib/detect-project.sh"), 'detect_project_root() { pwd; }\ndetect_checker() { printf "<%s>" "$1" >> "$HOOK_PATH_LOG"; CHECK_CMD=""; LANG_LABEL=""; FMT_CMD=""; }\n');
+    writeFileSync(join(hooks, "lib/detect-project.sh"), 'detect_project_root() { pwd; }\ndetect_formatter() { printf "<%s>" "$1" >> "$HOOK_PATH_LOG"; FMT_CMD=""; }\n');
     const log = join(root, `paths-${field}.log`);
     const result = spawnSync("bash", [join(hooks, "post-edit-pipeline.sh")], {
       cwd: root, encoding: "utf8",
@@ -252,30 +241,4 @@ test("post-edit registration accepts namespaced edit tools without matching read
   const matcher = new RegExp(template.split("[[hooks.PostToolUse]]")[1].match(/matcher = "(.*)"/)[1]);
   for (const tool of ["apply_patch", "functions.apply_patch", "mcp__host__Edit"]) assert.ok(matcher.test(tool), tool);
   for (const tool of ["Read", "functions.exec_command", "editor_view"]) assert.equal(matcher.test(tool), false, tool);
-});
-
-// A checker that runs out of time (portable_timeout's 124) has found nothing,
-// so both PostToolUse hooks say it did not finish instead of passing its
-// progress output off as errors.
-for (const runtime of ["codex", "claude"]) test(`${runtime} post-edit reports a timed-out checker as not checked`, () => {
-  const dir = mkdtempSync(join(root, "feedback-"));
-  const sid = dir.split(/[\\/]/).at(-1);
-  feedbackIds.push(sid);
-  mkdirSync(join(dir, "lib"));
-  writeFileSync(join(dir, "pipeline.sh"), readFileSync(join(repo, runtime, "hooks", "post-edit-pipeline.sh")));
-  writeFileSync(join(dir, "lib", "detect-project.sh"), `
-detect_project_root() { pwd; }
-detect_checker() { FMT_CMD=""; CHECK_CMD="echo 'Checking fixture v0.1.0'; exit 124"; LANG_LABEL="fixture"; }
-file_checksum() { cksum "$1"; }
-portable_timeout() { shift; "$@"; }
-`);
-  writeFileSync(join(dir, "lib.rs"), "fn a() {}\n");
-  const input = runtime === "codex"
-    ? { session_id: sid, tool_name: "apply_patch", tool_input: { command: "*** Begin Patch\n*** Update File: lib.rs\n*** End Patch" }, tool_response: "Success" }
-    : { session_id: sid, tool_name: "Edit", tool_input: { file_path: join(dir, "lib.rs") } };
-  const result = spawnSync("bash", [join(dir, "pipeline.sh")], { cwd: dir, encoding: "utf8", input: JSON.stringify(input) });
-  assert.equal(result.status, 0, result.stderr);
-  const said = runtime === "codex" ? JSON.parse(result.stdout).hookSpecificOutput.additionalContext : result.stdout.trim();
-  const tag = runtime === "codex" ? "[codex typecheck]" : "[typecheck]";
-  assert.equal(said, `${tag} fixture did not finish within 30s after editing lib.rs — not checked`);
 });

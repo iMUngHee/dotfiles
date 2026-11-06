@@ -258,7 +258,7 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/stop-handler.sh",
             "timeout": 360,
-            "statusMessage": "Running type checker..."
+            "statusMessage": "Running final gate..."
           },
           {
             "type": "command",

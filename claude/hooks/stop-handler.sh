@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Stop hook: final quality gate + notification (unified handler)
-# Runs type checker on modified files before allowing completion.
+# Formats modified files and runs this repo's own test suites before allowing
+# completion. No type checker runs here: that belongs to each project and to
+# the language skills.
 # exit 2 = block stop (Claude continues working), exit 0 = allow stop
 #
 # Flow:
-#   1. Check for modified files (unstaged + staged)
-#   2. Detect project type, run checker with timeout
-#   3. If fail + retries < 2 → exit 2 (block, no notification)
+#   1. Check for modified files (unstaged + staged + untracked)
+#   2. Auto-format, then the suites the changed paths select, with a budget
+#   3. If a suite fails + retries < 2 → exit 2 (block, no notification)
 #   4. If pass or retries exhausted → notify + exit 0
 
 MAX_RETRIES=2
-CHECKER_TIMEOUT=30
 SUITE_TIMEOUT=300
 SUITE_DEADLINE=$((SECONDS + SUITE_TIMEOUT))
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -84,7 +85,7 @@ while IFS= read -r file; do
   (( SECONDS < SUITE_DEADLINE )) || break
   [[ -z "$file" ]] && continue
   [[ -f "$file" ]] || continue
-  detect_checker "$file" "$PROJECT_ROOT"
+  detect_formatter "$file" "$PROJECT_ROOT"
   [[ -z "$FMT_CMD" ]] && continue
   BEFORE=$(md5 -q "$file" 2>/dev/null)
   portable_timeout 5 bash -c "$FMT_CMD \"\$1\"" _ "$file" &>/dev/null
@@ -151,51 +152,6 @@ if [[ "$PROJECT_ROOT" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
       nvim --headless -u NONE --cmd "set rtp^=nvim" -l nvim/tests/inline_review_spec.lua
   fi
 fi
-
-# --- Detect checkers from changed files ---
-# Every distinct checker the changed files call for, in order: one per Rust
-# workspace or lone crate, one for a checker that covers the whole project
-# (tsc, go vet), so the same command runs once. Taking only the first left a
-# second crate, or a second language, unchecked.
-CHECK_CMDS=() CHECK_LABELS=()
-for file in $CHANGED_FILES; do
-  detect_checker "$file" "$PROJECT_ROOT"
-  [[ -n "$CHECK_CMD" ]] || continue
-  seen=0
-  for cmd in ${CHECK_CMDS[@]+"${CHECK_CMDS[@]}"}; do
-    [[ "$cmd" == "$CHECK_CMD" ]] && { seen=1; break; }
-  done
-  (( seen )) || { CHECK_CMDS+=("$CHECK_CMD"); CHECK_LABELS+=("$LANG_LABEL"); }
-done
-
-if (( ${#CHECK_CMDS[@]} == 0 )); then
-  # No supported checker for this project
-  rm -f "$COUNTER_FILE"
-  run_notify_and_exit
-fi
-
-# --- Stage 2: Run type checkers ---
-# The checkers share one CHECKER_TIMEOUT budget, so the hook's registered
-# timeout still covers suites plus checks. A check that runs out of time has
-# found nothing: a cold build of a large crate can outlast the budget, and
-# blocking on its progress output would ask for a fix to code that may be
-# fine. Say so and go on; the first check that fails blocks.
-CHECK_DEADLINE=$((SECONDS + CHECKER_TIMEOUT))
-for i in "${!CHECK_CMDS[@]}"; do
-  LANG_LABEL=${CHECK_LABELS[$i]}
-  remaining=$((CHECK_DEADLINE - SECONDS))
-  if (( remaining <= 0 )); then
-    echo "[final-gate] ${LANG_LABEL} check not started: the ${CHECKER_TIMEOUT}s check budget is spent — not checked." >&2
-    continue
-  fi
-  rc=0
-  portable_timeout "$remaining" bash -c "${CHECK_CMDS[$i]}" > "$TMPOUT" 2>&1 || rc=$?
-  if [[ $rc -eq 124 ]]; then
-    echo "[final-gate] ${LANG_LABEL} check did not finish within ${CHECKER_TIMEOUT}s — not checked; allowing stop." >&2
-  elif [[ $rc -ne 0 ]]; then
-    fail_gate "${LANG_LABEL} check"
-  fi
-done
 
 # All stages passed — clean up counter, notify, allow stop
 rm -f "$COUNTER_FILE"

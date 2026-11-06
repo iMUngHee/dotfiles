@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse hook: bounded auto-format and project check after file edits.
+# PostToolUse hook: bounded auto-format after file edits (no type checker).
 set -euo pipefail
 
 DEBOUNCE_SEC=30
@@ -65,20 +65,11 @@ if [[ -f "$debounce_file" ]]; then
 fi
 date +%s > "$debounce_file"
 
-selected_check_cmd=""
-selected_lang_label=""
-selected_check_file=""
 feedback=""
 
 while IFS= read -r file; do
   [[ -n "$file" ]] || continue
-  detect_checker "$file" "$project_root"
-
-  if [[ -z "$selected_check_cmd" && -n "$CHECK_CMD" ]]; then
-    selected_check_cmd="$CHECK_CMD"
-    selected_lang_label="$LANG_LABEL"
-    selected_check_file="$file"
-  fi
+  detect_formatter "$file" "$project_root"
 
   if [[ -f "$file" && -n "$FMT_CMD" ]]; then
     before=$(file_checksum "$file")
@@ -94,31 +85,8 @@ while IFS= read -r file; do
   fi
 done <<< "$paths"
 
-CHECK_CMD="$selected_check_cmd"
-LANG_LABEL="$selected_lang_label"
-if [[ -n "$CHECK_CMD" ]]; then
-  tmp_out="/tmp/codex-pipeline-check-output-${session_id:-default}"
-  set +e
-  (cd "$project_root" && portable_timeout 30 bash -c "$CHECK_CMD" > "$tmp_out" 2>&1)
-  exit_code=$?
-  set -e
-
-  # 124 is portable_timeout's expiry: the check did not finish, so whatever it
-  # printed so far (compile progress, usually) is not a list of errors.
-  if [[ $exit_code -eq 124 ]]; then
-    feedback+="${feedback:+$'\n'}[codex typecheck] ${LANG_LABEL} did not finish within 30s after editing $(basename "$selected_check_file") — not checked"
-  elif [[ $exit_code -ne 0 ]]; then
-    output=$(head -20 "$tmp_out")
-    if [[ -n "$output" ]]; then
-      feedback+="${feedback:+$'\n'}[codex typecheck] ${LANG_LABEL} errors after editing $(basename "$selected_check_file"):"$'\n'"$output"
-    fi
-  fi
-
-  rm -f "$tmp_out" 2>/dev/null
-fi
-
 # Plain stdout is ignored; bracket-prefixed text is treated as invalid JSON.
-# Emit one event-specific object so both formatter and checker feedback reach the model.
+# Emit one event-specific object so the formatter feedback reaches the model.
 if [[ -n "$feedback" ]]; then
   jq -n --arg context "$feedback" '{
     hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $context}

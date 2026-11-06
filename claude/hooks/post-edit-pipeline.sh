@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# PostToolUse hook (Edit|Write): auto-format → typecheck, sequential pipeline
-# Debounce gates the entire pipeline (format + typecheck together)
+# PostToolUse hook (Edit|Write): auto-format. No type checker runs here: that
+# belongs to each project and to the language skills.
+# Debounce gates the pipeline
 # Always exit 0 (informational only, never block)
 
 DEBOUNCE_SEC=30
@@ -29,7 +30,7 @@ if [[ -f "$DEBOUNCE_FILE" ]]; then
 fi
 date +%s > "$DEBOUNCE_FILE"
 
-detect_checker "$FILE" "$PROJECT_ROOT"
+detect_formatter "$FILE" "$PROJECT_ROOT"
 
 # --- Stage 1: Auto-format ---
 if [[ -n "$FMT_CMD" ]]; then
@@ -46,24 +47,4 @@ if [[ -n "$FMT_CMD" ]]; then
   fi
 fi
 
-# --- Stage 2: Type check ---
-[[ -z "$CHECK_CMD" ]] && exit 0
-
-TMPOUT="/tmp/claude-pipeline-typecheck-output-${SESSION_ID:-default}"
-cd "$PROJECT_ROOT" && portable_timeout 30 bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1
-EXIT_CODE=$?
-
-# 124 is portable_timeout's expiry: the check did not finish, so whatever it
-# printed so far (compile progress, usually) is not a list of errors.
-if [[ $EXIT_CODE -eq 124 ]]; then
-  echo "[typecheck] ${LANG_LABEL} did not finish within 30s after editing $(basename "$FILE") — not checked"
-elif [[ $EXIT_CODE -ne 0 ]]; then
-  OUTPUT=$(head -20 "$TMPOUT")
-  if [[ -n "$OUTPUT" ]]; then
-    echo "[typecheck] ${LANG_LABEL} errors after editing $(basename "$FILE"):"
-    echo "$OUTPUT"
-  fi
-fi
-
-rm -f "$TMPOUT" 2>/dev/null
 exit 0

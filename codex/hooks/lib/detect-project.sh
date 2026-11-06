@@ -128,16 +128,16 @@ cargo_edition() {
   return 0
 }
 
-detect_checker() {
+# detect_formatter <file> <project_root>: sets FMT_CMD, the formatter for
+# <file>, or "" for none. The hooks only format: type checking, vetting and
+# compiling belong to each project (its CI) and to the language skills
+# (ai/skills/rust, ai/skills/go), for every language alike.
+detect_formatter() {
   local file="$1" root="$2"
-  CHECK_CMD="" LANG_LABEL="" FMT_CMD=""
+  FMT_CMD=""
 
   case "$file" in
     *.ts|*.tsx)
-      if [[ -f "$root/tsconfig.json" ]] && [[ -f "$root/node_modules/.bin/tsc" ]]; then
-        CHECK_CMD="npx tsc --noEmit --pretty 2>&1"
-        LANG_LABEL="tsc"
-      fi
       if command -v npx &>/dev/null && [[ -f "$root/node_modules/.bin/prettier" ]]; then
         FMT_CMD="npx prettier --write"
       fi
@@ -148,14 +148,9 @@ detect_checker() {
       fi
       ;;
     *.go)
-      # No checker, as for Rust: vetting and testing Go belong to each project
-      # (its CI, or the go skill's loop). Only the formatter runs here.
       command -v gofmt &>/dev/null && FMT_CMD="gofmt -w"
       ;;
     *.rs)
-      # No checker: compiling Rust belongs to each project (its CI, or the
-      # rust skill's clippy loop). A global gate cannot know a workspace's
-      # layout, toolchain or build time. Only the formatter runs here.
       # Bare rustfmt formats as edition 2015 and reflows a 2024 crate's
       # untouched lines; cargo fmt knows the edition but formats the whole
       # crate. So rustfmt on the one file, with the crate's edition.
