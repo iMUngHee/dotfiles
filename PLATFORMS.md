@@ -285,8 +285,8 @@ cannot run something; remove it in the commit that records the result.
 - [ ] **macOS** — `brew bundle` installs `staticcheck` and `homebrew/bootstrap.sh`
       builds `gremlins` v0.6.0 into `~/.local/bin` (`lib/go-tools.sh`); check
       `staticcheck -version` and `gremlins --version` in a new terminal, then run
-      the go skill's mutation step (`GOFLAGS=-count=1 gremlins unleash --diff
-      <start>`) on a changed module. On Linux 2026-11-07 the install, the skip
+      the go skill's mutation step (`gremlins unleash --diff <start>` with
+      `-count=1` appended to `GOFLAGS`) on a changed module. On Linux 2026-11-07 the install, the skip
       when present, the `--dry-run` line and the skill's commands all ran.
 - [ ] **Windows** — the go skill's tools are not installed there: no
       `staticcheck` or `gremlins` step in `windows/bootstrap.ps1`. Add one

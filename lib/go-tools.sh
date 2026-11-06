@@ -6,7 +6,7 @@
 #
 # gremlins has no pacman or Homebrew core package, so it comes from `go install`
 # at a pinned version: v0.6.0 is the version the skill's instructions were
-# measured against (GOFLAGS=-count=1, --diff, exit status always 0). Install
+# measured against (-count=1 in GOFLAGS, --diff and its gaps, exit status). Install
 # only when absent; moving the pin is a decision, not a side effect of a deploy.
 # staticcheck, the skill's linter, is a regular package (arch/packages.sh,
 # homebrew/Brewfile).
