@@ -57,6 +57,7 @@ PACMAN_CLI=(
 PACMAN_LANG=(
     luajit              # brew "luajit" — neovim runtime dep, pinned explicitly
     go                  # brew "go" — REQUIRED to build notifier/linux
+    staticcheck         # brew "staticcheck" — ai/skills/go lint step
     rustup              # brew "rustup"
     cargo-nextest       # brew "cargo-nextest" — ai/skills/rust test loop
     kotlin              # brew "kotlin"

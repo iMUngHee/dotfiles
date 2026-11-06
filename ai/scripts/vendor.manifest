@@ -24,5 +24,3 @@
 archify   release  https://github.com/tt-a1i/archify   v*                                        -            node archify/bin/archify.mjs doctor
 rea       npm      rea-agents                          latest                                    -            npx -y rea-agents@{ver} setup --client claude_code --client codex --yes
 eli5      skill    https://github.com/DreambigOu/ELI5  a766623b062331fdde53467001379b4ddf3acc2f  skills/eli5  -
-# Read in place by ai/skills/rust (no tags upstream, so pinned to a commit).
-rust-guidelines  release  https://github.com/microsoft/rust-guidelines  9585e288d21d2da994a0550c926a09b62d79f8bd  -  -
