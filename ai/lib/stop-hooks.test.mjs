@@ -579,29 +579,42 @@ const STOP_CARGO = `#!/bin/bash
 if [ "$1" = locate-project ]; then [ -n "\${STOP_CARGO_WS:-}" ] || exit 1; echo "$STOP_CARGO_WS"; exit 0; fi
 pwd -P >> "$STOP_CARGO_CWD"
 echo "Checking app v0.1.0"
+[ -n "\${STOP_CARGO_FAIL_IN:-}" ] && [ "$(pwd -P)" = "$STOP_CARGO_FAIL_IN" ] && exit 101
 exit "\${STOP_CARGO_EXIT:-0}"
 `;
 
 // workspace: put a CRLF workspace manifest at the repository root, so the
 // crate is one of its members.
-function rustStopFixture(tool, { workspace = false } = {}) {
+// second: another crate outside any workspace, changed as well.
+// twoFiles: a second changed file in the first crate.
+function rustStopFixture(tool, { workspace = false, second = false, twoFiles = false } = {}) {
   const f = fixture(tool);
   const crate = join(f.root, "crates", "app");
   mkdirSync(join(crate, "src"), { recursive: true });
   writeFileSync(join(crate, "Cargo.toml"), '[package]\nname = "app"\nedition = "2021"\n');
   writeFileSync(join(crate, "src", "lib.rs"), "pub fn a() {}\n");
   if (workspace) writeFileSync(join(f.root, "Cargo.toml"), '[workspace] # members below\r\nmembers = ["crates/app"]\r\n');
+  const other = join(f.root, "tools", "gen");
+  if (second) {
+    mkdirSync(join(other, "src"), { recursive: true });
+    writeFileSync(join(other, "Cargo.toml"), '[package]\nname = "gen"\nedition = "2021"\n');
+    writeFileSync(join(other, "src", "main.rs"), "fn main() {}\n");
+  }
+  if (twoFiles) writeFileSync(join(crate, "src", "util.rs"), "pub fn u() {}\n");
   const gitEnv = f["env"];
   for (const args of [["add", "."], ["commit", "-qm", "crate"]]) {
     const r = spawnSync("git", args, { cwd: f.root, env: gitEnv, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
   }
   writeFileSync(join(crate, "src", "lib.rs"), "pub fn a() {}\npub fn b() {}\n");
+  if (second) writeFileSync(join(other, "src", "main.rs"), "fn main() { let _ = 1; }\n");
+  if (twoFiles) writeFileSync(join(crate, "src", "util.rs"), "pub fn u() { let _ = 1; }\n");
   writeFileSync(join(f.home, "bin", "cargo"), STOP_CARGO);
   chmodSync(join(f.home, "bin", "cargo"), 0o755);
   const cwdLog = join(f.home, "cargo-cwd");
   const ws = workspace ? { STOP_CARGO_WS: join(f.root, "Cargo.toml") } : {};
-  return { ...f, crate, cwdLog, runCargo: (exit) => f.run({ STOP_CARGO_CWD: cwdLog, STOP_CARGO_EXIT: String(exit), ...ws }) };
+  return { ...f, crate, other, cwdLog,
+    runCargo: (exit, extra = {}) => f.run({ STOP_CARGO_CWD: cwdLog, STOP_CARGO_EXIT: String(exit), ...ws, ...extra }) };
 }
 
 for (const tool of ["codex", "claude"]) {
@@ -638,6 +651,29 @@ for (const tool of ["codex", "claude"]) {
       const r = f.runCargo(101);
       assert.equal(r.status, 2, r.stdout + r.stderr);
       assert.match(r.stderr, /cargo clippy check failed/);
+    });
+
+    test("checks every changed crate, not only the first", () => {
+      const f = rustStopFixture(tool, { second: true });
+      const r = f.runCargo(0);
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      const cwds = readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/).sort();
+      assert.deepEqual(cwds, [realpathSync(f.crate), realpathSync(f.other)].sort());
+    });
+
+    test("blocks when only the second changed crate fails", () => {
+      const f = rustStopFixture(tool, { second: true });
+      const later = [realpathSync(f.crate), realpathSync(f.other)].sort()[1];
+      const r = f.runCargo(0, { STOP_CARGO_FAIL_IN: later });
+      assert.equal(r.status, 2, r.stdout + r.stderr);
+      assert.match(r.stderr, /cargo clippy check failed/);
+    });
+
+    test("runs one check for two changed files in the same crate", () => {
+      const f = rustStopFixture(tool, { twoFiles: true });
+      const r = f.runCargo(0);
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.deepEqual(readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/), [realpathSync(f.crate)]);
     });
   });
 }

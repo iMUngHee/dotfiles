@@ -152,30 +152,50 @@ if [[ "$PROJECT_ROOT" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
   fi
 fi
 
-# --- Detect project type from changed files ---
-CHECK_CMD=""
+# --- Detect checkers from changed files ---
+# Every distinct checker the changed files call for, in order: one per Rust
+# workspace or lone crate, one for a checker that covers the whole project
+# (tsc, go vet), so the same command runs once. Taking only the first left a
+# second crate, or a second language, unchecked.
+CHECK_CMDS=() CHECK_LABELS=()
 for file in $CHANGED_FILES; do
   detect_checker "$file" "$PROJECT_ROOT"
-  [[ -n "$CHECK_CMD" ]] && break
+  [[ -n "$CHECK_CMD" ]] || continue
+  seen=0
+  for cmd in ${CHECK_CMDS[@]+"${CHECK_CMDS[@]}"}; do
+    [[ "$cmd" == "$CHECK_CMD" ]] && { seen=1; break; }
+  done
+  (( seen )) || { CHECK_CMDS+=("$CHECK_CMD"); CHECK_LABELS+=("$LANG_LABEL"); }
 done
 
-if [[ -z "$CHECK_CMD" ]]; then
+if (( ${#CHECK_CMDS[@]} == 0 )); then
   # No supported checker for this project
   rm -f "$COUNTER_FILE"
   run_notify_and_exit
 fi
 
-# --- Stage 2: Run type checker ---
-# A check that runs out of time has found nothing: a cold build of a large
-# crate can outlast the budget, and blocking on its progress output would ask
-# for a fix to code that may be fine. Say so and let the stop through.
-rc=0
-portable_timeout "$CHECKER_TIMEOUT" bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1 || rc=$?
-if [[ $rc -eq 124 ]]; then
-  echo "[final-gate] ${LANG_LABEL} check did not finish within ${CHECKER_TIMEOUT}s — not checked; allowing stop." >&2
-elif [[ $rc -ne 0 ]]; then
-  fail_gate "${LANG_LABEL} check"
-fi
+# --- Stage 2: Run type checkers ---
+# The checkers share one CHECKER_TIMEOUT budget, so the hook's registered
+# timeout still covers suites plus checks. A check that runs out of time has
+# found nothing: a cold build of a large crate can outlast the budget, and
+# blocking on its progress output would ask for a fix to code that may be
+# fine. Say so and go on; the first check that fails blocks.
+CHECK_DEADLINE=$((SECONDS + CHECKER_TIMEOUT))
+for i in "${!CHECK_CMDS[@]}"; do
+  LANG_LABEL=${CHECK_LABELS[$i]}
+  remaining=$((CHECK_DEADLINE - SECONDS))
+  if (( remaining <= 0 )); then
+    echo "[final-gate] ${LANG_LABEL} check not started: the ${CHECKER_TIMEOUT}s check budget is spent — not checked." >&2
+    continue
+  fi
+  rc=0
+  portable_timeout "$remaining" bash -c "${CHECK_CMDS[$i]}" > "$TMPOUT" 2>&1 || rc=$?
+  if [[ $rc -eq 124 ]]; then
+    echo "[final-gate] ${LANG_LABEL} check did not finish within ${CHECKER_TIMEOUT}s — not checked; allowing stop." >&2
+  elif [[ $rc -ne 0 ]]; then
+    fail_gate "${LANG_LABEL} check"
+  fi
+done
 
 # All stages passed — clean up counter, notify, allow stop
 rm -f "$COUNTER_FILE"
