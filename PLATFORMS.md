@@ -7,7 +7,9 @@ each platform does differently, and which checks are still owed.
 
 ## After a pull, on any machine
 
-The post-merge hook re-runs bootstrap, but it installs no npm dependencies. On a
+The post-merge hook (post-rewrite after a rebase pull) re-runs bootstrap and
+syncs vendored entries that `vendor.sh check` reports as `update` or `missing`,
+but it installs no npm dependencies. On a
 new machine, or after a pull that changes a pm package's lockfile, run `npm ci`
 in that package first.
 
