@@ -19,6 +19,7 @@
 !hypr/
 !windows/
 !omarchy/
+!fcitx5/
 !brave/
 !aerospace/
 !.gitignore
@@ -39,6 +40,11 @@ nvim/lua/private/*
 
 # tmux
 tmux/plugins/
+
+# fcitx5 — only the hotkeys; Omarchy migrations rewrite this file, so a diff
+# here is the signal. profile and conf/ hold machine state (cached layouts).
+fcitx5/*
+!fcitx5/config
 
 # zsh
 zsh/*
