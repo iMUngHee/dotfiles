@@ -236,6 +236,33 @@ for (const [runtime, tool, input] of [
   });
 }
 
+// The Claude pipeline compared checksums with BSD `md5 -q`, which Linux does
+// not have: the checksum came back empty and the formatter never ran after an
+// edit (found in kope's d-72 review). This runs the real hook, its real lib and
+// a real gofmt on whatever checksum tool the host has.
+const gofmt = spawnSync("bash", ["-c", "command -v gofmt"], { encoding: "utf8" }).stdout.trim();
+test("claude post-edit formats the edited file on this host", { skip: !gofmt && "no gofmt on PATH" }, () => {
+  const dir = mkdtempSync(join(root, "feedback-"));
+  const sid = dir.split(/[\\/]/).at(-1);
+  feedbackIds.push(sid);
+  mkdirSync(join(dir, "hooks", "lib"), { recursive: true });
+  for (const name of ["post-edit-pipeline.sh", "lib/detect-project.sh"]) {
+    writeFileSync(join(dir, "hooks", name), readFileSync(join(repo, "claude", "hooks", name)));
+  }
+  const project = join(dir, "project");
+  mkdirSync(project);
+  spawnSync("git", ["init", "-q"], { cwd: project });
+  const file = join(project, "main.go");
+  writeFileSync(file, "package main\nfunc main(){\nx:=1\n_=x}\n");
+  const result = spawnSync("bash", [join(dir, "hooks", "post-edit-pipeline.sh")], {
+    cwd: project, encoding: "utf8",
+    input: JSON.stringify({ session_id: sid, tool_name: "Edit", tool_input: { file_path: file } }),
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(file, "utf8"), "package main\n\nfunc main() {\n\tx := 1\n\t_ = x\n}\n");
+  assert.equal(result.stdout.trim(), "[auto-format] gofmt formatted main.go");
+});
+
 test("post-edit registration accepts namespaced edit tools without matching reads", () => {
   const template = readFileSync(join(repo, "codex/config.toml.template"), "utf8");
   const matcher = new RegExp(template.split("[[hooks.PostToolUse]]")[1].match(/matcher = "(.*)"/)[1]);
