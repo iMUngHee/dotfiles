@@ -97,23 +97,10 @@ toml_edition() {
   ' "$1" 2>/dev/null
 }
 
-# cargo_has_workspace <Cargo.toml>: whether it declares a [workspace] table.
-# Builtins only, like cargo_crate_dir; a CRLF manifest (Windows) counts too.
-cargo_has_workspace() {
-  local line
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line=${line%$'\r'}
-    [[ "$line" =~ ^[[:space:]]*\[workspace\][[:space:]]*(#.*)?$ ]] && return 0
-  done < "$1"
-  return 1
-}
-
-# cargo_crate_dir <file> <root>: where to run cargo for <file>, climbing from
-# its directory and not above <root>. The first Cargo.toml with a [workspace]
-# wins: from a member's own directory cargo checks that member alone, so a
-# change breaking a sibling that depends on it would pass. Otherwise the
-# nearest Cargo.toml. Nothing when there is none. A relative <file> is taken
-# from the working directory, as git lists it. Always returns 0, for set -e.
+# cargo_crate_dir <file> <root>: the nearest directory at or above <file>, and
+# not above <root>, that holds a Cargo.toml; nothing when there is none. A
+# relative <file> is taken from the working directory, as git lists it. Always
+# returns 0, for set -e.
 cargo_crate_dir() {
   local dir stop
   # Builtins only (no dirname): the hooks also run under a PATH trimmed to the
@@ -121,23 +108,39 @@ cargo_crate_dir() {
   dir=.
   [[ "$1" == */* ]] && dir=${1%/*}
   [[ -n "$dir" ]] || dir=/
-  local crate=""
   dir=$(cd "$dir" 2>/dev/null && pwd -P) || return 0
   stop=$(cd "$2" 2>/dev/null && pwd -P) || stop=""
   while :; do
     if [[ -f "$dir/Cargo.toml" ]]; then
-      [[ -n "$crate" ]] || crate=$dir
-      if cargo_has_workspace "$dir/Cargo.toml"; then
-        crate=$dir
-        break
-      fi
+      printf '%s\n' "$dir"
+      return 0
     fi
     # The project root bounds the climb; / (or MSYS's //) ends one outside it.
-    [[ "$dir" == "$stop" || "$dir" == / || "$dir" == // ]] && break
+    [[ "$dir" == "$stop" || "$dir" == / || "$dir" == // ]] && return 0
     dir=${dir%/*}
     [[ -n "$dir" ]] || dir=/
   done
-  [[ -n "$crate" ]] && printf '%s\n' "$crate"
+}
+
+# cargo_workspace_dir <crate_dir>: the root of the workspace Cargo puts the
+# crate in, as `cargo locate-project --workspace` reports it. Cargo is asked
+# rather than the manifest read: only Cargo applies members, exclude,
+# package.workspace and every TOML spelling of the table ([ workspace ],
+# [workspace.dependencies]) exactly as it builds. <crate_dir> itself when Cargo
+# gives no usable answer (a manifest it rejects, no answer within 5 s).
+# Bounded and download-free like the clippy probe, stdin /dev/null for the
+# same reason. Always returns 0, for set -e.
+cargo_workspace_dir() {
+  local ws
+  ws=$(cd "$1" 2>/dev/null && RUSTUP_AUTO_INSTALL=0 portable_timeout 5 cargo locate-project --workspace --message-format plain </dev/null 2>/dev/null) || ws=""
+  # Windows: cargo prints a native path — backslash separators, maybe a CR.
+  ws=${ws%$'\r'}
+  ws=${ws%[/\\]*}
+  if [[ -n "$ws" && -d "$ws" ]]; then
+    printf '%s\n' "$ws"
+  else
+    printf '%s\n' "$1"
+  fi
   return 0
 }
 
@@ -199,36 +202,42 @@ detect_checker() {
       command -v gofmt &>/dev/null && FMT_CMD="gofmt -w"
       ;;
     *.rs)
-      # Cargo runs where cargo_crate_dir says: the enclosing workspace root,
-      # else the nearest Cargo.toml — so a crate in a subdirectory of the
-      # repository is checked too. The checker cds there instead of passing
+      # Cargo runs at the root of the workspace Cargo puts the edited crate in
+      # (cargo_workspace_dir), over every member: from a member's own directory
+      # cargo checks that member alone, and from the root without --workspace
+      # only default-members, so a change breaking another member — or the
+      # edited crate itself, when it is not a default member — would pass. A
+      # crate outside any workspace runs on its own, in a subdirectory of the
+      # repository too. The checker cds there instead of passing
       # --manifest-path because rustup picks the toolchain, rust-toolchain.toml
       # included, from the working directory.
-      local crate_dir crate_cd
+      local crate_dir run_cd
       crate_dir=$(cargo_crate_dir "$file" "$root")
       if [[ -n "$crate_dir" ]]; then
-        # Clippy when the crate's toolchain has it, else check — both over
-        # all targets, so test code is compiled too. The probe runs here, not
-        # inside CHECK_CMD, so CHECK_CMD stays one command (exec'd after the
-        # cd) that the timeout signals directly; it is bounded on its own and
-        # cannot start a toolchain download. Its status goes through `if`:
-        # Codex consumers source this under `set -e`; stdin is /dev/null
-        # because Stop's Stage 0 feeds its file list on stdin. Memo: the most
-        # recent crate (Stop's Stage 0 calls this per changed file).
+        # Clippy when the toolchain has it, else check — both over all
+        # targets, so test code is compiled too. The workspace lookup and the
+        # probe run here, not inside CHECK_CMD, so CHECK_CMD stays one command
+        # (exec'd after the cd) that the timeout signals directly; each is
+        # bounded on its own and cannot start a toolchain download. The probe's
+        # status goes through `if`: Codex consumers source this under
+        # `set -e`; stdin is /dev/null because Stop's Stage 0 feeds its file
+        # list on stdin. Memo: the most recent crate (Stop's Stage 0 calls this
+        # per changed file).
         if [[ "${_CLIPPY_PROBE_ROOT:-}" != "$crate_dir" ]]; then
           _CLIPPY_PROBE_ROOT="$crate_dir"
-          if (cd "$crate_dir" && RUSTUP_AUTO_INSTALL=0 portable_timeout 5 cargo clippy --version) </dev/null >/dev/null 2>&1; then
+          _CARGO_RUN_DIR=$(cargo_workspace_dir "$crate_dir")
+          if (cd "$_CARGO_RUN_DIR" && RUSTUP_AUTO_INSTALL=0 portable_timeout 5 cargo clippy --version) </dev/null >/dev/null 2>&1; then
             _CLIPPY_PROBE_OK=1
           else
             _CLIPPY_PROBE_OK=0
           fi
         fi
-        printf -v crate_cd '%q' "$crate_dir"
+        printf -v run_cd '%q' "$_CARGO_RUN_DIR"
         if [[ "$_CLIPPY_PROBE_OK" -eq 1 ]]; then
-          CHECK_CMD="cd $crate_cd && exec cargo clippy --all-targets --message-format short 2>&1"
+          CHECK_CMD="cd $run_cd && exec cargo clippy --workspace --all-targets --message-format short 2>&1"
           LANG_LABEL="cargo clippy"
         else
-          CHECK_CMD="cd $crate_cd && exec cargo check --all-targets --message-format short 2>&1"
+          CHECK_CMD="cd $run_cd && exec cargo check --workspace --all-targets --message-format short 2>&1"
           LANG_LABEL="cargo check"
         fi
       fi

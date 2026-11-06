@@ -462,9 +462,11 @@ for (const tool of ["claude", "codex"]) {
 
 // cargo shim for the .rs checker: logs argv and RUSTUP_AUTO_INSTALL; the probe
 // (`cargo clippy --version`) answers ok, fails, or hangs; any other call exits
-// CARGO_SHIM_RUN_EXIT.
+// CARGO_SHIM_RUN_EXIT. locate-project prints CARGO_SHIM_WS, CRLF-terminated as
+// a Windows cargo may, or nothing.
 const CARGO_SHIM = `#!/bin/bash
 echo "$* | RUSTUP_AUTO_INSTALL=\${RUSTUP_AUTO_INSTALL-unset}" >> "$CARGO_SHIM_LOG"
+if [ "$1" = locate-project ]; then [ -n "\${CARGO_SHIM_WS:-}" ] && printf '%s\\r\\n' "$CARGO_SHIM_WS"; exit 0; fi
 if [ "$1 $2" = "clippy --version" ]; then
   case "\${CARGO_SHIM_PROBE:-ok}" in
     ok) echo "clippy 0.1.0"; exit 0 ;;
@@ -507,19 +509,31 @@ for (const tool of ["claude", "codex"]) {
       assert.equal(r.status, 0, r.out + r.err);
       assert.match(r.out, /label=cargo clippy/);
       assert.equal(r.probes.length, 1, r.lines.join("\n"));
-      assert.ok(r.lines.some((l) => l.startsWith("clippy --all-targets --message-format short")), r.lines.join("\n"));
+      assert.ok(r.lines.some((l) => l.startsWith("clippy --workspace --all-targets --message-format short")), r.lines.join("\n"));
     });
 
     test("(2) a failing probe falls back to check without aborting the shell", () => {
       const r = rustCheck(tool, ambient, home, [root("fail")], { CARGO_SHIM_PROBE: "fail" });
       assert.equal(r.status, 0, r.out + r.err);
       assert.match(r.out, /label=cargo check/);
-      assert.ok(r.lines.some((l) => l.startsWith("check --all-targets --message-format short")), r.lines.join("\n"));
+      assert.ok(r.lines.some((l) => l.startsWith("check --workspace --all-targets --message-format short")), r.lines.join("\n"));
     });
 
     test("(3) the checker's exit status comes through bash -c", () => {
       const r = rustCheck(tool, ambient, home, [root("exit3")], { CARGO_SHIM_RUN_EXIT: "3" });
       assert.match(r.out, /rc=3/);
+    });
+
+    // Windows cargo prints a native path: backslash separators, maybe a CR.
+    test("(7) a Windows-shaped locate-project answer still names the workspace", () => {
+      const ws = join(home, "ws-native");
+      mkdirSync(join(ws, "member", "src"), { recursive: true });
+      writeFileSync(join(ws, "member", "Cargo.toml"), "");
+      const script = `${shellOpts[tool]}\n. "$1"; detect_checker "$2/member/src/x.rs" "$2"; printf '%s\\n' "$CHECK_CMD"`;
+      const env = { ...process["env"], PATH: ambient, CARGO_SHIM_LOG: join(home, "ws-native.log"), CARGO_SHIM_WS: `${ws}\\Cargo.toml` };
+      const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), ws], { env, encoding: "utf8", timeout: HANG_MS });
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok(r.stdout.startsWith(`cd ${ws} && exec cargo clippy --workspace`), r.stdout);
     });
 
     test("(5) the probe cannot trigger a toolchain download", () => {
@@ -558,8 +572,11 @@ for (const tool of ["claude", "codex"]) {
 // shim answers the clippy probe, records where the check ran, prints compile
 // progress and exits STOP_CARGO_EXIT (124 stands in for portable_timeout's
 // expiry; the fixture's timeout and perl shims run commands unbounded).
+// locate-project answers STOP_CARGO_WS when set and fails otherwise, as a
+// crate outside any workspace manifest Cargo can read would.
 const STOP_CARGO = `#!/bin/bash
 [ "$1 $2" = "clippy --version" ] && { echo "clippy 0.1.0"; exit 0; }
+if [ "$1" = locate-project ]; then [ -n "\${STOP_CARGO_WS:-}" ] || exit 1; echo "$STOP_CARGO_WS"; exit 0; fi
 pwd -P >> "$STOP_CARGO_CWD"
 echo "Checking app v0.1.0"
 exit "\${STOP_CARGO_EXIT:-0}"
@@ -583,7 +600,8 @@ function rustStopFixture(tool, { workspace = false } = {}) {
   writeFileSync(join(f.home, "bin", "cargo"), STOP_CARGO);
   chmodSync(join(f.home, "bin", "cargo"), 0o755);
   const cwdLog = join(f.home, "cargo-cwd");
-  return { ...f, crate, cwdLog, runCargo: (exit) => f.run({ STOP_CARGO_CWD: cwdLog, STOP_CARGO_EXIT: String(exit) }) };
+  const ws = workspace ? { STOP_CARGO_WS: join(f.root, "Cargo.toml") } : {};
+  return { ...f, crate, cwdLog, runCargo: (exit) => f.run({ STOP_CARGO_CWD: cwdLog, STOP_CARGO_EXIT: String(exit), ...ws }) };
 }
 
 for (const tool of ["codex", "claude"]) {
@@ -621,5 +639,75 @@ for (const tool of ["codex", "claude"]) {
       assert.equal(r.status, 2, r.stdout + r.stderr);
       assert.match(r.stderr, /cargo clippy check failed/);
     });
+  });
+}
+
+// ── Which workspace the .rs checker runs in, decided by real Cargo ──────────
+// Each case is a layout where reading the manifest text gave the wrong answer
+// (d-18 review, 2026-11-07): the checker must run where Cargo itself puts the
+// edited crate, over every member, or a change breaking another member — or
+// the edited crate, when it is not a default member — passes. Only
+// `cargo locate-project` runs here; nothing is compiled.
+const realCargo = spawnSync("cargo", ["locate-project", "--help"], { encoding: "utf8" }).status === 0;
+
+function cargoLayout(files) {
+  const home = tempDir("cargo-layout-");
+  spawnSync("git", ["init", "-q"], { cwd: home });
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(home, path)), { recursive: true });
+    writeFileSync(join(home, path), text);
+  }
+  return home;
+}
+const pkg = (name, extra = "") => `[package]\nname = "${name}"\nversion = "0.1.0"\nedition = "2021"\n${extra}`;
+const lib = "pub fn f() {}\n";
+
+function checkerFor(tool, home, file) {
+  const script = `${shellOpts[tool]}\n. "$1"; cd "$2"; detect_checker "$3" "$2"; printf '%s\\n' "$CHECK_CMD"`;
+  const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), home, file], { encoding: "utf8", timeout: HANG_MS });
+  assert.equal(r.status, 0, r.stderr);
+  return r.stdout.trim();
+}
+
+const layouts = {
+  "a [workspace] member runs at the workspace root": [{
+    "Cargo.toml": '[workspace]\nmembers = ["api", "consumer"]\nresolver = "2"\n',
+    "api/Cargo.toml": pkg("api"), "api/src/lib.rs": lib,
+    "consumer/Cargo.toml": pkg("consumer", '\n[dependencies]\napi = { path = "../api" }\n'), "consumer/src/lib.rs": lib,
+  }, "api/src/lib.rs", "."],
+  "a [ workspace ] member, spaced, runs at the workspace root": [{
+    "Cargo.toml": '[ workspace ]\nmembers = ["api", "consumer"]\nresolver = "2"\n',
+    "api/Cargo.toml": pkg("api"), "api/src/lib.rs": lib,
+    "consumer/Cargo.toml": pkg("consumer"), "consumer/src/lib.rs": lib,
+  }, "api/src/lib.rs", "."],
+  "a root declared only by [workspace.dependencies] is the workspace": [{
+    "Cargo.toml": pkg("root", '\n[workspace.dependencies]\n\n[dependencies]\nchild = { path = "crates/child" }\n'),
+    "src/lib.rs": lib, "crates/child/Cargo.toml": pkg("child"), "crates/child/src/lib.rs": lib,
+  }, "crates/child/src/lib.rs", "."],
+  "an excluded crate runs on its own": [{
+    "Cargo.toml": '[workspace]\nmembers = ["good"]\nexclude = ["bad"]\nresolver = "2"\n',
+    "good/Cargo.toml": pkg("good"), "good/src/lib.rs": lib, "bad/Cargo.toml": pkg("bad"), "bad/src/lib.rs": lib,
+  }, "bad/src/lib.rs", "bad"],
+  "a non-default member runs at the root": [{
+    "Cargo.toml": '[workspace]\nmembers = ["good", "bad"]\ndefault-members = ["good"]\nresolver = "2"\n',
+    "good/Cargo.toml": pkg("good"), "good/src/lib.rs": lib, "bad/Cargo.toml": pkg("bad"), "bad/src/lib.rs": lib,
+  }, "bad/src/lib.rs", "."],
+  "a lone crate in a subdirectory runs in that crate": [{
+    "tools/x/Cargo.toml": pkg("x"), "tools/x/src/lib.rs": lib,
+  }, "tools/x/src/lib.rs", "tools/x"],
+};
+
+for (const tool of ["claude", "codex"]) {
+  describe(`${tool} .rs checker follows Cargo's workspace`, { concurrency: true, skip: !realCargo && "no cargo on PATH" }, () => {
+    for (const [name, [files, edited, runDir]] of Object.entries(layouts)) {
+      test(name, () => {
+        const home = cargoLayout(files);
+        const cmd = checkerFor(tool, home, edited);
+        const want = realpathSync(join(home, runDir));
+        assert.ok(cmd.startsWith(`cd ${want} && exec cargo `), cmd);
+        // Every member, not default-members: --all-targets alone selects no package.
+        assert.match(cmd, / --workspace /, cmd);
+      });
+    }
   });
 }
