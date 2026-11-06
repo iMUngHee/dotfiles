@@ -565,14 +565,17 @@ echo "Checking app v0.1.0"
 exit "\${STOP_CARGO_EXIT:-0}"
 `;
 
-function rustStopFixture(tool) {
+// workspace: put a CRLF workspace manifest at the repository root, so the
+// crate is one of its members.
+function rustStopFixture(tool, { workspace = false } = {}) {
   const f = fixture(tool);
   const crate = join(f.root, "crates", "app");
   mkdirSync(join(crate, "src"), { recursive: true });
   writeFileSync(join(crate, "Cargo.toml"), '[package]\nname = "app"\nedition = "2021"\n');
   writeFileSync(join(crate, "src", "lib.rs"), "pub fn a() {}\n");
+  if (workspace) writeFileSync(join(f.root, "Cargo.toml"), '[workspace] # members below\r\nmembers = ["crates/app"]\r\n');
   const gitEnv = f["env"];
-  for (const args of [["add", "crates"], ["commit", "-qm", "crate"]]) {
+  for (const args of [["add", "."], ["commit", "-qm", "crate"]]) {
     const r = spawnSync("git", args, { cwd: f.root, env: gitEnv, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
   }
@@ -591,6 +594,17 @@ for (const tool of ["codex", "claude"]) {
       assert.equal(r.status, 0, r.stdout + r.stderr);
       const cwds = readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/);
       assert.deepEqual(cwds, [realpathSync(f.crate)]);
+    });
+
+    // From a member's own directory cargo checks that member alone, so a change
+    // that breaks a sibling depending on it would pass; the workspace root
+    // checks every member.
+    test("checks a workspace member from the workspace root", () => {
+      const f = rustStopFixture(tool, { workspace: true });
+      const r = f.runCargo(0);
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      const cwds = readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/);
+      assert.deepEqual(cwds, [realpathSync(f.root)]);
     });
 
     test("lets a timed-out check through and says it was not checked", () => {

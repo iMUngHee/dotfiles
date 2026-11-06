@@ -97,10 +97,23 @@ toml_edition() {
   ' "$1" 2>/dev/null
 }
 
-# cargo_crate_dir <file> <root>: the nearest directory at or above <file>, and
-# not above <root>, that holds a Cargo.toml; nothing when there is none. A
-# relative <file> is taken from the working directory, as git lists it. Always
-# returns 0, for set -e.
+# cargo_has_workspace <Cargo.toml>: whether it declares a [workspace] table.
+# Builtins only, like cargo_crate_dir; a CRLF manifest (Windows) counts too.
+cargo_has_workspace() {
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line=${line%$'\r'}
+    [[ "$line" =~ ^[[:space:]]*\[workspace\][[:space:]]*(#.*)?$ ]] && return 0
+  done < "$1"
+  return 1
+}
+
+# cargo_crate_dir <file> <root>: where to run cargo for <file>, climbing from
+# its directory and not above <root>. The first Cargo.toml with a [workspace]
+# wins: from a member's own directory cargo checks that member alone, so a
+# change breaking a sibling that depends on it would pass. Otherwise the
+# nearest Cargo.toml. Nothing when there is none. A relative <file> is taken
+# from the working directory, as git lists it. Always returns 0, for set -e.
 cargo_crate_dir() {
   local dir stop
   # Builtins only (no dirname): the hooks also run under a PATH trimmed to the
@@ -108,18 +121,24 @@ cargo_crate_dir() {
   dir=.
   [[ "$1" == */* ]] && dir=${1%/*}
   [[ -n "$dir" ]] || dir=/
+  local crate=""
   dir=$(cd "$dir" 2>/dev/null && pwd -P) || return 0
   stop=$(cd "$2" 2>/dev/null && pwd -P) || stop=""
   while :; do
     if [[ -f "$dir/Cargo.toml" ]]; then
-      printf '%s\n' "$dir"
-      return 0
+      [[ -n "$crate" ]] || crate=$dir
+      if cargo_has_workspace "$dir/Cargo.toml"; then
+        crate=$dir
+        break
+      fi
     fi
     # The project root bounds the climb; / (or MSYS's //) ends one outside it.
-    [[ "$dir" == "$stop" || "$dir" == / || "$dir" == // ]] && return 0
+    [[ "$dir" == "$stop" || "$dir" == / || "$dir" == // ]] && break
     dir=${dir%/*}
     [[ -n "$dir" ]] || dir=/
   done
+  [[ -n "$crate" ]] && printf '%s\n' "$crate"
+  return 0
 }
 
 # cargo_edition <file>: the edition of the crate <file> belongs to, as Cargo reads
@@ -180,9 +199,9 @@ detect_checker() {
       command -v gofmt &>/dev/null && FMT_CMD="gofmt -w"
       ;;
     *.rs)
-      # The crate is the nearest Cargo.toml at or above the file, so a crate
-      # in a subdirectory of the repository is checked too; cargo finds its
-      # workspace from there. The checker cds there instead of passing
+      # Cargo runs where cargo_crate_dir says: the enclosing workspace root,
+      # else the nearest Cargo.toml — so a crate in a subdirectory of the
+      # repository is checked too. The checker cds there instead of passing
       # --manifest-path because rustup picks the toolchain, rust-toolchain.toml
       # included, from the working directory.
       local crate_dir crate_cd
