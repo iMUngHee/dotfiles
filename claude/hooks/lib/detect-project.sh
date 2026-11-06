@@ -87,53 +87,6 @@ toml_edition() {
   ' "$1" 2>/dev/null
 }
 
-# cargo_crate_dir <file> <root>: the nearest directory at or above <file>, and
-# not above <root>, that holds a Cargo.toml; nothing when there is none. A
-# relative <file> is taken from the working directory, as git lists it. Always
-# returns 0, for set -e.
-cargo_crate_dir() {
-  local dir stop
-  # Builtins only (no dirname): the hooks also run under a PATH trimmed to the
-  # checker's own tools.
-  dir=.
-  [[ "$1" == */* ]] && dir=${1%/*}
-  [[ -n "$dir" ]] || dir=/
-  dir=$(cd "$dir" 2>/dev/null && pwd -P) || return 0
-  stop=$(cd "$2" 2>/dev/null && pwd -P) || stop=""
-  while :; do
-    if [[ -f "$dir/Cargo.toml" ]]; then
-      printf '%s\n' "$dir"
-      return 0
-    fi
-    # The project root bounds the climb; / (or MSYS's //) ends one outside it.
-    [[ "$dir" == "$stop" || "$dir" == / || "$dir" == // ]] && return 0
-    dir=${dir%/*}
-    [[ -n "$dir" ]] || dir=/
-  done
-}
-
-# cargo_workspace_dir <crate_dir>: the root of the workspace Cargo puts the
-# crate in, as `cargo locate-project --workspace` reports it. Cargo is asked
-# rather than the manifest read: only Cargo applies members, exclude,
-# package.workspace and every TOML spelling of the table ([ workspace ],
-# [workspace.dependencies]) exactly as it builds. <crate_dir> itself when Cargo
-# gives no usable answer (a manifest it rejects, no answer within 5 s).
-# Bounded and download-free like the clippy probe, stdin /dev/null for the
-# same reason. Always returns 0, for set -e.
-cargo_workspace_dir() {
-  local ws
-  ws=$(cd "$1" 2>/dev/null && RUSTUP_AUTO_INSTALL=0 portable_timeout 5 cargo locate-project --workspace --message-format plain </dev/null 2>/dev/null) || ws=""
-  # Windows: cargo prints a native path — backslash separators, maybe a CR.
-  ws=${ws%$'\r'}
-  ws=${ws%[/\\]*}
-  if [[ -n "$ws" && -d "$ws" ]]; then
-    printf '%s\n' "$ws"
-  else
-    printf '%s\n' "$1"
-  fi
-  return 0
-}
-
 # cargo_edition <file>: the edition of the crate <file> belongs to, as Cargo reads
 # it. The nearest Cargo.toml with a [package] decides: its own `edition`, or the
 # workspace root's [workspace.package] one when it inherits. Prints nothing for
@@ -194,45 +147,9 @@ detect_checker() {
       command -v gofmt &>/dev/null && FMT_CMD="gofmt -w"
       ;;
     *.rs)
-      # Cargo runs at the root of the workspace Cargo puts the edited crate in
-      # (cargo_workspace_dir), over every member: from a member's own directory
-      # cargo checks that member alone, and from the root without --workspace
-      # only default-members, so a change breaking another member — or the
-      # edited crate itself, when it is not a default member — would pass. A
-      # crate outside any workspace runs on its own, in a subdirectory of the
-      # repository too. The checker cds there instead of passing
-      # --manifest-path because rustup picks the toolchain, rust-toolchain.toml
-      # included, from the working directory.
-      local crate_dir run_cd
-      crate_dir=$(cargo_crate_dir "$file" "$root")
-      if [[ -n "$crate_dir" ]]; then
-        # Clippy when the toolchain has it, else check — both over all
-        # targets, so test code is compiled too. The workspace lookup and the
-        # probe run here, not inside CHECK_CMD, so CHECK_CMD stays one command
-        # (exec'd after the cd) that the timeout signals directly; each is
-        # bounded on its own and cannot start a toolchain download. The probe's
-        # status goes through `if`: Codex consumers source this under
-        # `set -e`; stdin is /dev/null because Stop's Stage 0 feeds its file
-        # list on stdin. Memo: the most recent crate (Stop's Stage 0 calls this
-        # per changed file).
-        if [[ "${_CLIPPY_PROBE_ROOT:-}" != "$crate_dir" ]]; then
-          _CLIPPY_PROBE_ROOT="$crate_dir"
-          _CARGO_RUN_DIR=$(cargo_workspace_dir "$crate_dir")
-          if (cd "$_CARGO_RUN_DIR" && RUSTUP_AUTO_INSTALL=0 portable_timeout 5 cargo clippy --version) </dev/null >/dev/null 2>&1; then
-            _CLIPPY_PROBE_OK=1
-          else
-            _CLIPPY_PROBE_OK=0
-          fi
-        fi
-        printf -v run_cd '%q' "$_CARGO_RUN_DIR"
-        if [[ "$_CLIPPY_PROBE_OK" -eq 1 ]]; then
-          CHECK_CMD="cd $run_cd && exec cargo clippy --workspace --all-targets --message-format short 2>&1"
-          LANG_LABEL="cargo clippy"
-        else
-          CHECK_CMD="cd $run_cd && exec cargo check --workspace --all-targets --message-format short 2>&1"
-          LANG_LABEL="cargo check"
-        fi
-      fi
+      # No checker: compiling Rust belongs to each project (its CI, or the
+      # rust skill's clippy loop). A global gate cannot know a workspace's
+      # layout, toolchain or build time. Only the formatter runs here.
       # Bare rustfmt formats as edition 2015 and reflows a 2024 crate's
       # untouched lines; cargo fmt knows the edition but formats the whole
       # crate. So rustfmt on the one file, with the crate's edition.

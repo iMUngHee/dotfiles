@@ -159,8 +159,8 @@ test("codex Stop preserves stderr blocking and allows stop after two retries", (
   assert.match(result.stderr, /failed after 2 retries\. Allowing stop/);
 });
 
-// ── portable_timeout and the Rust checker (plan rust-agent-harness, C2a/C2c) ──
-// Both detect-project.sh copies carry the same portable_timeout and .rs block;
+// ── portable_timeout and detect_checker ──────────────────────────────────────
+// Both detect-project.sh copies carry the same portable_timeout and checkers;
 // each consumer sources them under its own shell options.
 const isWindows = process.platform === "win32";
 const libOf = (tool) => join(repo, tool, "hooks", "lib", "detect-project.sh");
@@ -460,290 +460,70 @@ for (const tool of ["claude", "codex"]) {
   });
 }
 
-// cargo shim for the .rs checker: logs argv and RUSTUP_AUTO_INSTALL; the probe
-// (`cargo clippy --version`) answers ok, fails, or hangs; any other call exits
-// CARGO_SHIM_RUN_EXIT. locate-project prints CARGO_SHIM_WS, CRLF-terminated as
-// a Windows cargo may, or nothing.
-const CARGO_SHIM = `#!/bin/bash
-echo "$* | RUSTUP_AUTO_INSTALL=\${RUSTUP_AUTO_INSTALL-unset}" >> "$CARGO_SHIM_LOG"
-if [ "$1" = locate-project ]; then [ -n "\${CARGO_SHIM_WS:-}" ] && printf '%s\\r\\n' "$CARGO_SHIM_WS"; exit 0; fi
-if [ "$1 $2" = "clippy --version" ]; then
-  case "\${CARGO_SHIM_PROBE:-ok}" in
-    ok) echo "clippy 0.1.0"; exit 0 ;;
-    fail) echo "error: 'cargo-clippy' is not installed" >&2; exit 1 ;;
-    hang) echo "$$" > "$CARGO_SHIM_LOG.probe.pid"; exec sleep 30 ;;
-  esac
-fi
-exit "\${CARGO_SHIM_RUN_EXIT:-0}"
-`;
-
-function rustCheck(tool, PATH, home, roots, extraEnv = {}) {
-  const log = join(home, `cargo-${Math.random()}.log`);
-  const script = `${shellOpts[tool]}
-. "$1"; shift
-for root in "$@"; do mkdir -p "$root/src"; : > "$root/Cargo.toml"; detect_checker "$root/src/x.rs" "$root"; done
-printf 'label=%s\\n' "$LANG_LABEL"
-cd "$root"; rc=0; portable_timeout 5 bash -c "$CHECK_CMD" || rc=$?
-echo "rc=$rc"`;
-  const t0 = Date.now();
-  const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), ...roots],
-    { env: { ...process.env, PATH, CARGO_SHIM_LOG: log, ...extraEnv }, encoding: "utf8", timeout: HANG_MS, killSignal: "SIGKILL" });
-  const lines = existsSync(log) ? readFileSync(log, "utf8").trim().split(/\r?\n/) : [];
-  return { status: r.status, out: r.stdout, err: r.stderr, elapsed: (Date.now() - t0) / 1000, lines, log,
-    probes: lines.filter((l) => l.startsWith("clippy --version")) };
-}
-
+// Compiling Rust belongs to each project (its CI, or the rust skill's clippy
+// loop), not to a global gate that cannot know a workspace's layout,
+// toolchain or build time: a .rs file gets its formatter and no checker.
 for (const tool of ["claude", "codex"]) {
-  describe(`${tool} .rs checker`, { concurrency: true }, () => {
-    const home = tempDir("rust-check-");
-    const root = (name) => join(home, name);
-    const withShim = (bin) => {
-      writeFileSync(join(bin, "cargo"), CARGO_SHIM);
-      chmodSync(join(bin, "cargo"), 0o755);
-      return bin;
-    };
-    const ambient = (() => { const b = join(home, "shim-bin"); mkdirSync(b); withShim(b); return b + delimiter + process.env.PATH; })();
-
-    test("(1) a working clippy runs clippy over all targets", () => {
-      const r = rustCheck(tool, ambient, home, [root("ok")]);
-      assert.equal(r.status, 0, r.out + r.err);
-      assert.match(r.out, /label=cargo clippy/);
-      assert.equal(r.probes.length, 1, r.lines.join("\n"));
-      assert.ok(r.lines.some((l) => l.startsWith("clippy --workspace --all-targets --message-format short")), r.lines.join("\n"));
-    });
-
-    test("(2) a failing probe falls back to check without aborting the shell", () => {
-      const r = rustCheck(tool, ambient, home, [root("fail")], { CARGO_SHIM_PROBE: "fail" });
-      assert.equal(r.status, 0, r.out + r.err);
-      assert.match(r.out, /label=cargo check/);
-      assert.ok(r.lines.some((l) => l.startsWith("check --workspace --all-targets --message-format short")), r.lines.join("\n"));
-    });
-
-    test("(3) the checker's exit status comes through bash -c", () => {
-      const r = rustCheck(tool, ambient, home, [root("exit3")], { CARGO_SHIM_RUN_EXIT: "3" });
-      assert.match(r.out, /rc=3/);
-    });
-
-    // Windows cargo prints a native path: backslash separators, maybe a CR.
-    test("(7) a Windows-shaped locate-project answer still names the workspace", () => {
-      const ws = join(home, "ws-native");
-      mkdirSync(join(ws, "member", "src"), { recursive: true });
-      writeFileSync(join(ws, "member", "Cargo.toml"), "");
-      const script = `${shellOpts[tool]}\n. "$1"; detect_checker "$2/member/src/x.rs" "$2"; printf '%s\\n' "$CHECK_CMD"`;
-      const env = { ...process["env"], PATH: ambient, CARGO_SHIM_LOG: join(home, "ws-native.log"), CARGO_SHIM_WS: `${ws}\\Cargo.toml` };
-      const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), ws], { env, encoding: "utf8", timeout: HANG_MS });
-      assert.equal(r.status, 0, r.stderr);
-      assert.ok(r.stdout.startsWith(`cd ${ws} && exec cargo clippy --workspace`), r.stdout);
-    });
-
-    test("(5) the probe cannot trigger a toolchain download", () => {
-      const r = rustCheck(tool, ambient, home, [root("noinstall")]);
-      assert.equal(r.probes.length, 1, r.lines.join("\n"));
-      assert.match(r.probes[0], /RUSTUP_AUTO_INSTALL=0$/);
-    });
-
-    test("(6) the probe runs once per root; a new root probes again", () => {
-      assert.equal(rustCheck(tool, ambient, home, [root("A"), root("A")]).probes.length, 1);
-      assert.equal(rustCheck(tool, ambient, home, [root("A"), root("B"), root("A")]).probes.length, 3);
-    });
-
-    for (const p of timeoutPaths) {
-      test(`(4) a hanging probe is bounded and falls back, ${p.name} path`, { skip: p.skip }, () => {
-        const PATH = isWindows ? ambient : withShim(p.bin(join(home, `hang-${p.name}`)));
-        const r = rustCheck(tool, PATH, home, [root(`hang-${p.name}`)], { CARGO_SHIM_PROBE: "hang" });
-        const pidFile = `${r.log}.probe.pid`;
-        const probePid = existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0;
-        try {
-          assert.equal(r.status, 0, r.out + r.err);
-          assert.equal(r.probes.length, 1, "the probe must have run");
-          assert.match(r.out, /label=cargo check/);
-          assert.ok(r.elapsed >= 4.5 && r.elapsed < 8, `took ${r.elapsed}s`);
-          assert.ok(!(probePid && alive(probePid)), "hung probe survived");
-        } finally {
-          if (probePid && alive(probePid)) signalFixtureProcess(probePid, "SIGKILL");
-        }
-      });
-    }
+  test(`${tool} .rs gets a formatter but no checker`, () => {
+    const home = tempDir("rust-nocheck-");
+    mkdirSync(join(home, "src"));
+    writeFileSync(join(home, "Cargo.toml"), '[package]\nname = "x"\nedition = "2021"\n');
+    const script = `${shellOpts[tool]}\n. "$1"; detect_checker "$2/src/lib.rs" "$2"; printf 'check=[%s] fmt=[%s]\\n' "$CHECK_CMD" "$FMT_CMD"`;
+    const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), home], { encoding: "utf8", timeout: HANG_MS });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /^check=\[\] /, r.stdout);
+    if (which("rustfmt")) assert.match(r.stdout, /fmt=\[rustfmt --edition 2021\]/, r.stdout);
   });
 }
 
-// ── The .rs gate through a whole Stop run: crate lookup and timeout ─────────
-// The crate sits below the repository root, which has no Cargo.toml. The cargo
-// shim answers the clippy probe, records where the check ran, prints compile
-// progress and exits STOP_CARGO_EXIT (124 stands in for portable_timeout's
-// expiry; the fixture's timeout and perl shims run commands unbounded).
-// locate-project answers STOP_CARGO_WS when set and fails otherwise, as a
-// crate outside any workspace manifest Cargo can read would.
-const STOP_CARGO = `#!/bin/bash
-[ "$1 $2" = "clippy --version" ] && { echo "clippy 0.1.0"; exit 0; }
-if [ "$1" = locate-project ]; then [ -n "\${STOP_CARGO_WS:-}" ] || exit 1; echo "$STOP_CARGO_WS"; exit 0; fi
-pwd -P >> "$STOP_CARGO_CWD"
-echo "Checking app v0.1.0"
-[ -n "\${STOP_CARGO_FAIL_IN:-}" ] && [ "$(pwd -P)" = "$STOP_CARGO_FAIL_IN" ] && exit 101
-exit "\${STOP_CARGO_EXIT:-0}"
-`;
-
-// workspace: put a CRLF workspace manifest at the repository root, so the
-// crate is one of its members.
-// second: another crate outside any workspace, changed as well.
-// twoFiles: a second changed file in the first crate.
-function rustStopFixture(tool, { workspace = false, second = false, twoFiles = false } = {}) {
+// ── Stop runs every distinct checker the changed files call for ────────────
+// go vet and tsc both cover the whole project, so a Go and a TypeScript change
+// call for two checkers; two Go changes call for one. Shims log each run and
+// fail when STOP_FAIL names their tool.
+function polyglotFixture(tool, files) {
   const f = fixture(tool);
-  const crate = join(f.root, "crates", "app");
-  mkdirSync(join(crate, "src"), { recursive: true });
-  writeFileSync(join(crate, "Cargo.toml"), '[package]\nname = "app"\nedition = "2021"\n');
-  writeFileSync(join(crate, "src", "lib.rs"), "pub fn a() {}\n");
-  if (workspace) writeFileSync(join(f.root, "Cargo.toml"), '[workspace] # members below\r\nmembers = ["crates/app"]\r\n');
-  const other = join(f.root, "tools", "gen");
-  if (second) {
-    mkdirSync(join(other, "src"), { recursive: true });
-    writeFileSync(join(other, "Cargo.toml"), '[package]\nname = "gen"\nedition = "2021"\n');
-    writeFileSync(join(other, "src", "main.rs"), "fn main() {}\n");
+  writeFileSync(join(f.root, "go.mod"), "module fixture\n");
+  writeFileSync(join(f.root, "tsconfig.json"), "{}\n");
+  mkdirSync(join(f.root, "node_modules", ".bin"), { recursive: true });
+  writeFileSync(join(f.root, "node_modules", ".bin", "tsc"), "");
+  const log = join(f.home, "checkers");
+  for (const [name, label] of [["go", "go"], ["npx", "tsc"]]) {
+    writeFileSync(join(f.home, "bin", name),
+      `#!/bin/bash\n[ "$1" = vet ] || [ "$1" = tsc ] || exit 0\necho ${label} >> "$STOP_CHECKERS"\n[ "\${STOP_FAIL:-}" = ${label} ] && { echo "${label}: broken"; exit 1; }\nexit 0\n`);
+    chmodSync(join(f.home, "bin", name), 0o755);
   }
-  if (twoFiles) writeFileSync(join(crate, "src", "util.rs"), "pub fn u() {}\n");
   const gitEnv = f["env"];
-  for (const args of [["add", "."], ["commit", "-qm", "crate"]]) {
+  for (const name of files) writeFileSync(join(f.root, name), "before\n");
+  for (const args of [["add", "."], ["commit", "-qm", "sources"]]) {
     const r = spawnSync("git", args, { cwd: f.root, env: gitEnv, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
   }
-  writeFileSync(join(crate, "src", "lib.rs"), "pub fn a() {}\npub fn b() {}\n");
-  if (second) writeFileSync(join(other, "src", "main.rs"), "fn main() { let _ = 1; }\n");
-  if (twoFiles) writeFileSync(join(crate, "src", "util.rs"), "pub fn u() { let _ = 1; }\n");
-  writeFileSync(join(f.home, "bin", "cargo"), STOP_CARGO);
-  chmodSync(join(f.home, "bin", "cargo"), 0o755);
-  const cwdLog = join(f.home, "cargo-cwd");
-  const ws = workspace ? { STOP_CARGO_WS: join(f.root, "Cargo.toml") } : {};
-  return { ...f, crate, other, cwdLog,
-    runCargo: (exit, extra = {}) => f.run({ STOP_CARGO_CWD: cwdLog, STOP_CARGO_EXIT: String(exit), ...ws, ...extra }) };
+  for (const name of files) writeFileSync(join(f.root, name), "after\n");
+  return { ...f, log, runWith: (extra = {}) => f.run({ STOP_CHECKERS: log, ...extra }) };
 }
+const ran = (f) => existsSync(f.log) ? readFileSync(f.log, "utf8").trim().split(/\r?\n/).sort() : [];
 
 for (const tool of ["codex", "claude"]) {
-  describe(`${tool} Stop .rs gate`, { skip: isWindows && "cargo shim is a bash script" }, () => {
-    test("checks a crate below the repository root, from the crate", () => {
-      const f = rustStopFixture(tool);
-      const r = f.runCargo(0);
+  describe(`${tool} Stop checkers`, { skip: isWindows && "checker shims are bash scripts" }, () => {
+    test("runs a checker for each language changed", () => {
+      const f = polyglotFixture(tool, ["a.ts", "b.go"]);
+      const r = f.runWith();
       assert.equal(r.status, 0, r.stdout + r.stderr);
-      const cwds = readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/);
-      assert.deepEqual(cwds, [realpathSync(f.crate)]);
+      assert.deepEqual(ran(f), ["go", "tsc"]);
     });
 
-    // From a member's own directory cargo checks that member alone, so a change
-    // that breaks a sibling depending on it would pass; the workspace root
-    // checks every member.
-    test("checks a workspace member from the workspace root", () => {
-      const f = rustStopFixture(tool, { workspace: true });
-      const r = f.runCargo(0);
-      assert.equal(r.status, 0, r.stdout + r.stderr);
-      const cwds = readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/);
-      assert.deepEqual(cwds, [realpathSync(f.root)]);
-    });
-
-    test("lets a timed-out check through and says it was not checked", () => {
-      const f = rustStopFixture(tool);
-      const r = f.runCargo(124);
-      assert.equal(r.status, 0, r.stdout + r.stderr);
-      assert.match(r.stderr, /cargo clippy check did not finish within 30s — not checked; allowing stop\./);
-      assert.doesNotMatch(r.stderr, /Checking app/);
-    });
-
-    test("still blocks a check that fails", () => {
-      const f = rustStopFixture(tool);
-      const r = f.runCargo(101);
+    test("blocks when only the later checker fails", () => {
+      const f = polyglotFixture(tool, ["a.ts", "b.go"]);
+      const r = f.runWith({ STOP_FAIL: "tsc" });
       assert.equal(r.status, 2, r.stdout + r.stderr);
-      assert.match(r.stderr, /cargo clippy check failed/);
+      assert.match(r.stderr, /tsc check failed/);
     });
 
-    test("checks every changed crate, not only the first", () => {
-      const f = rustStopFixture(tool, { second: true });
-      const r = f.runCargo(0);
+    test("runs one checker for two changes it covers", () => {
+      const f = polyglotFixture(tool, ["a.go", "b.go"]);
+      const r = f.runWith();
       assert.equal(r.status, 0, r.stdout + r.stderr);
-      const cwds = readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/).sort();
-      assert.deepEqual(cwds, [realpathSync(f.crate), realpathSync(f.other)].sort());
+      assert.deepEqual(ran(f), ["go"]);
     });
-
-    test("blocks when only the second changed crate fails", () => {
-      const f = rustStopFixture(tool, { second: true });
-      const later = [realpathSync(f.crate), realpathSync(f.other)].sort()[1];
-      const r = f.runCargo(0, { STOP_CARGO_FAIL_IN: later });
-      assert.equal(r.status, 2, r.stdout + r.stderr);
-      assert.match(r.stderr, /cargo clippy check failed/);
-    });
-
-    test("runs one check for two changed files in the same crate", () => {
-      const f = rustStopFixture(tool, { twoFiles: true });
-      const r = f.runCargo(0);
-      assert.equal(r.status, 0, r.stdout + r.stderr);
-      assert.deepEqual(readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/), [realpathSync(f.crate)]);
-    });
-  });
-}
-
-// ── Which workspace the .rs checker runs in, decided by real Cargo ──────────
-// Each case is a layout where reading the manifest text gave the wrong answer
-// (d-18 review, 2026-11-07): the checker must run where Cargo itself puts the
-// edited crate, over every member, or a change breaking another member — or
-// the edited crate, when it is not a default member — passes. Only
-// `cargo locate-project` runs here; nothing is compiled.
-const realCargo = spawnSync("cargo", ["locate-project", "--help"], { encoding: "utf8" }).status === 0;
-
-function cargoLayout(files) {
-  const home = tempDir("cargo-layout-");
-  spawnSync("git", ["init", "-q"], { cwd: home });
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(home, path)), { recursive: true });
-    writeFileSync(join(home, path), text);
-  }
-  return home;
-}
-const pkg = (name, extra = "") => `[package]\nname = "${name}"\nversion = "0.1.0"\nedition = "2021"\n${extra}`;
-const lib = "pub fn f() {}\n";
-
-function checkerFor(tool, home, file) {
-  const script = `${shellOpts[tool]}\n. "$1"; cd "$2"; detect_checker "$3" "$2"; printf '%s\\n' "$CHECK_CMD"`;
-  const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), home, file], { encoding: "utf8", timeout: HANG_MS });
-  assert.equal(r.status, 0, r.stderr);
-  return r.stdout.trim();
-}
-
-const layouts = {
-  "a [workspace] member runs at the workspace root": [{
-    "Cargo.toml": '[workspace]\nmembers = ["api", "consumer"]\nresolver = "2"\n',
-    "api/Cargo.toml": pkg("api"), "api/src/lib.rs": lib,
-    "consumer/Cargo.toml": pkg("consumer", '\n[dependencies]\napi = { path = "../api" }\n'), "consumer/src/lib.rs": lib,
-  }, "api/src/lib.rs", "."],
-  "a [ workspace ] member, spaced, runs at the workspace root": [{
-    "Cargo.toml": '[ workspace ]\nmembers = ["api", "consumer"]\nresolver = "2"\n',
-    "api/Cargo.toml": pkg("api"), "api/src/lib.rs": lib,
-    "consumer/Cargo.toml": pkg("consumer"), "consumer/src/lib.rs": lib,
-  }, "api/src/lib.rs", "."],
-  "a root declared only by [workspace.dependencies] is the workspace": [{
-    "Cargo.toml": pkg("root", '\n[workspace.dependencies]\n\n[dependencies]\nchild = { path = "crates/child" }\n'),
-    "src/lib.rs": lib, "crates/child/Cargo.toml": pkg("child"), "crates/child/src/lib.rs": lib,
-  }, "crates/child/src/lib.rs", "."],
-  "an excluded crate runs on its own": [{
-    "Cargo.toml": '[workspace]\nmembers = ["good"]\nexclude = ["bad"]\nresolver = "2"\n',
-    "good/Cargo.toml": pkg("good"), "good/src/lib.rs": lib, "bad/Cargo.toml": pkg("bad"), "bad/src/lib.rs": lib,
-  }, "bad/src/lib.rs", "bad"],
-  "a non-default member runs at the root": [{
-    "Cargo.toml": '[workspace]\nmembers = ["good", "bad"]\ndefault-members = ["good"]\nresolver = "2"\n',
-    "good/Cargo.toml": pkg("good"), "good/src/lib.rs": lib, "bad/Cargo.toml": pkg("bad"), "bad/src/lib.rs": lib,
-  }, "bad/src/lib.rs", "."],
-  "a lone crate in a subdirectory runs in that crate": [{
-    "tools/x/Cargo.toml": pkg("x"), "tools/x/src/lib.rs": lib,
-  }, "tools/x/src/lib.rs", "tools/x"],
-};
-
-for (const tool of ["claude", "codex"]) {
-  describe(`${tool} .rs checker follows Cargo's workspace`, { concurrency: true, skip: !realCargo && "no cargo on PATH" }, () => {
-    for (const [name, [files, edited, runDir]] of Object.entries(layouts)) {
-      test(name, () => {
-        const home = cargoLayout(files);
-        const cmd = checkerFor(tool, home, edited);
-        const want = realpathSync(join(home, runDir));
-        assert.ok(cmd.startsWith(`cd ${want} && exec cargo `), cmd);
-        // Every member, not default-members: --all-targets alone selects no package.
-        assert.match(cmd, / --workspace /, cmd);
-      });
-    }
   });
 }
