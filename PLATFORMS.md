@@ -282,21 +282,14 @@ cannot run something; remove it in the commit that records the result.
       no-toolchain (warns, downloads nothing) and no-rustup branches.
 - [ ] **Arch** — `arch/packages.sh` now installs `cargo-nextest` (extra) and
       `cargo-mutants` (AUR); check both answer `--version` after a bootstrap.
-- [ ] **macOS / Windows (Git Bash)** — the `.rs` checker now finds the crate
-      from the nearest `Cargo.toml` (`cargo_crate_dir`, builtins only), asks
-      `cargo locate-project --workspace` for its workspace
-      (`cargo_workspace_dir`) and runs `cd <workspace> && exec cargo clippy
-      --workspace …`; a checker that hits its time limit (124) is reported as
-      not checked instead of blocking Stop. Run
-      `node --test ai/lib/stop-hooks.test.mjs ai/lib/raw-tool-input-hooks.test.mjs`;
-      on Linux 2026-11-07 all passed, including the real-Cargo layouts. On
-      Windows the backslash/CRLF parsing of locate-project's native path is
-      covered only by a shim; the `Stop .rs gate` cases skip there, so also
-      edit a `.rs` file in a workspace member below a repository root and check
-      that Stop runs clippy from the workspace root.
-- [ ] **Windows** — a real Rust Stop running `cargo clippy --all-targets`
-      (the `.rs` checker's fixtures passed on Windows 2026-11-03; the whole
-      `ai/lib/stop-hooks.test.mjs` on macOS and Linux 2026-11-04).
+- [ ] **macOS / Windows (Git Bash)** — Stop now runs every distinct checker
+      the changed files call for within one shared `CHECKER_TIMEOUT`, and a
+      checker that hits its time limit (124) is reported as not checked instead
+      of blocking. Run
+      `node --test ai/lib/stop-hooks.test.mjs ai/lib/raw-tool-input-hooks.test.mjs`
+      (all passed on Linux 2026-11-07); on macOS also under `/bin/bash` 3.2,
+      whose `set -u` the empty-array guard in `codex/hooks/stop-gate.sh` is for.
+      The `Stop checkers` cases skip on Windows.
 - [ ] **Windows (Git Bash)** — run the `rustfmt gets the edition` and `Stop
       blocks a failing suite` cases in `ai/lib/stop-hooks.test.mjs` (passed on
       macOS and Linux 2026-11-04). Then edit a `.rs` file in a CRLF checkout of

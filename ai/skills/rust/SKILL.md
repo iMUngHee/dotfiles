@@ -12,7 +12,7 @@ Rust work for: $ARGUMENTS
 
 Run these from the crate or workspace root, in order, and fix what each reports before moving on.
 
-1. `cargo clippy --all-targets --message-format short` — errors first, then warnings; treat a warning as work unless the project allows it. The Stop gate runs it with `--workspace` at the root of the workspace Cargo puts the edited crate in (falling back to `cargo check` when the toolchain has no clippy) and blocks only on errors and deny-level lints: it is a floor, not the loop.
+1. `cargo clippy --all-targets --message-format short` — errors first, then warnings; treat a warning as work unless the project allows it. No hook runs it for you — the hooks only format — so this loop is the check. In a workspace, run it from the workspace root with `--workspace`: from a member's directory cargo checks that member alone, and from the root without the flag only `default-members`.
 2. Tests: `cargo nextest run` when `cargo nextest --version` answers, otherwise `cargo test`.
 3. Before calling a logic change done, check that the tests would notice it breaking:
 
