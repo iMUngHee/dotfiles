@@ -11,8 +11,10 @@
 #
 # check exits 0 even when an entry is behind (its row says so); sync tries every
 # selected entry and exits 1 if any failed; a usage or manifest error exits 2.
-# User-invoked only: ai/scripts/bootstrap.sh never calls this, so deploys stay
-# offline-safe. On Windows run it through windows/scripts/vendor.ps1.
+# ai/scripts/bootstrap.sh never calls this, so deploys stay offline-safe. Its
+# callers are the person and githooks/post-merge (also run after a rebase pull),
+# which runs check and then syncs the update and missing rows. On Windows run it
+# through windows/scripts/vendor.ps1.
 #
 # Runs on macOS /bin/bash 3.2, Linux and Git Bash alike: no associative arrays,
 # mapfile or ${x,,}, and no sed -i, readlink -f or stat.

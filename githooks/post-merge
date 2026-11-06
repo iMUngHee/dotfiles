@@ -1,7 +1,27 @@
 #!/bin/bash
+# Runs after every pull: a merge, a fast-forward, or (through post-rewrite) a rebase.
+root="$(git rev-parse --show-toplevel)"
+
 # Auto-run ai/ orchestrator bootstrap if any tier changed in the merge.
 changed=$(git diff-tree -r --name-only ORIG_HEAD HEAD -- ai/ claude/ codex/)
 if [ -n "$changed" ]; then
     echo "[post-merge] ai/claude/codex/ changed, running ai bootstrap..."
-    "$(git rev-parse --show-toplevel)/ai/scripts/bootstrap.sh"
+    "$root/ai/scripts/bootstrap.sh"
+fi
+
+# Bring vendored code up to date. Here rather than in bootstrap.sh, which stays
+# offline-safe: a pull has just used the network anyway. Only `update` and
+# `missing` rows are synced; a pinned entry moves only when the manifest does,
+# and its `upstream moved` / `latest` note is left in the printed table.
+vendor="$root/ai/scripts/vendor.sh"
+if [ -f "$vendor" ]; then
+    echo "[post-merge] checking vendored code..."
+    table="$(bash "$vendor" check)"
+    printf '%s\n' "$table"
+    stale="$(printf '%s\n' "$table" | awk 'NR > 1 && ($5 == "update" || $5 == "missing") { print $1 }')"
+    if [ -n "$stale" ]; then
+        echo "[post-merge] syncing:" $stale
+        # shellcheck disable=SC2086 # entry names never contain spaces
+        bash "$vendor" sync $stale || echo "[post-merge] vendor sync reported a failure; run vendor.sh to see which entry"
+    fi
 fi

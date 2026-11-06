@@ -1,0 +1,5 @@
+#!/bin/bash
+# pull.rebase is on, so a pull over local commits rebases, and git runs no
+# post-merge for that. Run the same steps after a rebase (not after --amend).
+[ "$1" = rebase ] || exit 0
+exec "$(dirname "$0")/post-merge"
