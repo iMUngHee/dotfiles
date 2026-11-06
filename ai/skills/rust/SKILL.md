@@ -22,7 +22,7 @@ Run these from the crate or workspace root, in order, and fix what each reports 
    cargo mutants --in-diff "$d/change.diff" --output "$d"
    ```
 
-   Add `--test-tool=nextest` when nextest is installed. Exit status 2 means some mutants were missed, not that the tool failed. A `MISSED` mutant is a test gap: add an assertion that fails on that mutation. Do not write a test that restates the implementation to kill it — skip a truly equivalent mutant with `#[mutants::skip]` and say why (M-TAUTOLOGICAL-TESTS). Skip this step for docs, formatting, and pure renames.
+   Add `--test-tool=nextest` when nextest is installed. Exit status 2 means some mutants were missed, not that the tool failed. A `MISSED` mutant is a test gap: add an assertion that fails on that mutation. Do not write a test that restates the implementation to kill it — skip a truly equivalent mutant and say why (M-TAUTOLOGICAL-TESTS). `#[mutants::skip]` compiles only with the `mutants` crate as a dependency (`cargo add mutants`), and `#[cfg_attr(test, mutants::skip)]` still breaks `cargo test` without it; in a crate that does not depend on it, list the mutant in `.cargo/mutants.toml` instead (`exclude_re = ["replace foo -> i32"]`, matched against `cargo mutants --list`). Skip this step for docs, formatting, and pure renames.
 
 Tests are the oracle. Never change an existing test's expectation to make it pass unless the task changes that behaviour, and say so when it does.
 
