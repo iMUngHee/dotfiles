@@ -87,6 +87,19 @@ toml_edition() {
   ' "$1" 2>/dev/null
 }
 
+# file_checksum <file>: a content hash for spotting a formatter's change. GNU
+# md5sum first, then BSD md5 (macOS), then shasum: Linux has no `md5`.
+file_checksum() {
+  local file="$1"
+  if command -v md5sum &>/dev/null; then
+    md5sum "$file" 2>/dev/null | awk '{print $1}'
+  elif command -v md5 &>/dev/null; then
+    md5 -q "$file" 2>/dev/null
+  else
+    shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+  fi
+}
+
 # cargo_edition <file>: the edition of the crate <file> belongs to, as Cargo reads
 # it. The nearest Cargo.toml with a [package] decides: its own `edition`, or the
 # workspace root's [workspace.package] one when it inherits. Prints nothing for

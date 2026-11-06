@@ -108,6 +108,25 @@ for (const tool of ["codex", "claude"]) {
     assert.equal(r.status, 2, r.stdout + r.stderr);
     assert.match(r.stdout + r.stderr, /suite budget exhausted/);
   });
+
+  // The format stage counted changes with BSD `md5 -q`, which Linux lacks, so
+  // the count stayed 0 and the notice never showed. Real gofmt, real checksum.
+  const gofmt = spawnSync("bash", ["-c", "command -v gofmt"], { encoding: "utf8" }).stdout.trim();
+  test(`${tool} Stop formats a tracked file and says so`, { skip: !gofmt && "no gofmt on PATH" }, () => {
+    const f = fixture(tool);
+    const file = join(f.root, "main.go");
+    const gitEnv = f["env"];
+    writeFileSync(file, "package main\n");
+    for (const args of [["add", "main.go"], ["commit", "-qm", "go"]]) {
+      const g = spawnSync("git", args, { cwd: f.root, env: gitEnv, encoding: "utf8" });
+      assert.equal(g.status, 0, g.stderr);
+    }
+    writeFileSync(file, "package main\nfunc main(){}\n");
+    const r = f.run();
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(readFileSync(file, "utf8"), "package main\n\nfunc main() {}\n");
+    assert.match(r.stdout + r.stderr, /formatted 1 file/);
+  });
 }
 
 test("Stop hook registrations outlive the suite budget", () => {

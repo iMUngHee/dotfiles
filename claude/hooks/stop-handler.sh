@@ -87,10 +87,10 @@ while IFS= read -r file; do
   [[ -f "$file" ]] || continue
   detect_formatter "$file" "$PROJECT_ROOT"
   [[ -z "$FMT_CMD" ]] && continue
-  BEFORE=$(md5 -q "$file" 2>/dev/null)
+  BEFORE=$(file_checksum "$file")
   portable_timeout 5 bash -c "$FMT_CMD \"\$1\"" _ "$file" &>/dev/null
-  AFTER=$(md5 -q "$file" 2>/dev/null)
-  [[ "$BEFORE" != "$AFTER" ]] && FORMATTED=$((FORMATTED + 1))
+  AFTER=$(file_checksum "$file")
+  [[ -n "$BEFORE" && "$BEFORE" != "$AFTER" ]] && FORMATTED=$((FORMATTED + 1))
 done <<< "$TRACKED_FILES"
 (( FORMATTED > 0 )) && echo "[final-gate] auto-formatted ${FORMATTED} file(s)"
 

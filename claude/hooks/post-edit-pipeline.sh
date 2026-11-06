@@ -34,11 +34,11 @@ detect_formatter "$FILE" "$PROJECT_ROOT"
 
 # --- Stage 1: Auto-format ---
 if [[ -n "$FMT_CMD" ]]; then
-  CHECKSUM_BEFORE=$(md5 -q "$FILE" 2>/dev/null)
+  CHECKSUM_BEFORE=$(file_checksum "$FILE")
   if [[ -n "$CHECKSUM_BEFORE" ]]; then
     # Run formatter with 5s timeout (portable_timeout for macOS)
     portable_timeout 5 bash -c "$FMT_CMD \"\$1\"" _ "$FILE" &>/dev/null
-    CHECKSUM_AFTER=$(md5 -q "$FILE" 2>/dev/null)
+    CHECKSUM_AFTER=$(file_checksum "$FILE")
     if [[ "$CHECKSUM_BEFORE" != "$CHECKSUM_AFTER" ]]; then
       FMT_NAME="${FMT_CMD%% *}"
       FMT_NAME="${FMT_NAME##*/}"
