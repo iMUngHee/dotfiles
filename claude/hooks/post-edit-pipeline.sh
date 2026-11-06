@@ -53,7 +53,11 @@ TMPOUT="/tmp/claude-pipeline-typecheck-output-${SESSION_ID:-default}"
 cd "$PROJECT_ROOT" && portable_timeout 30 bash -c "$CHECK_CMD" > "$TMPOUT" 2>&1
 EXIT_CODE=$?
 
-if [[ $EXIT_CODE -ne 0 ]]; then
+# 124 is portable_timeout's expiry: the check did not finish, so whatever it
+# printed so far (compile progress, usually) is not a list of errors.
+if [[ $EXIT_CODE -eq 124 ]]; then
+  echo "[typecheck] ${LANG_LABEL} did not finish within 30s after editing $(basename "$FILE") — not checked"
+elif [[ $EXIT_CODE -ne 0 ]]; then
   OUTPUT=$(head -20 "$TMPOUT")
   if [[ -n "$OUTPUT" ]]; then
     echo "[typecheck] ${LANG_LABEL} errors after editing $(basename "$FILE"):"

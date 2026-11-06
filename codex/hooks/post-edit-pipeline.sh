@@ -103,7 +103,11 @@ if [[ -n "$CHECK_CMD" ]]; then
   exit_code=$?
   set -e
 
-  if [[ $exit_code -ne 0 ]]; then
+  # 124 is portable_timeout's expiry: the check did not finish, so whatever it
+  # printed so far (compile progress, usually) is not a list of errors.
+  if [[ $exit_code -eq 124 ]]; then
+    feedback+="${feedback:+$'\n'}[codex typecheck] ${LANG_LABEL} did not finish within 30s after editing $(basename "$selected_check_file") — not checked"
+  elif [[ $exit_code -ne 0 ]]; then
     output=$(head -20 "$tmp_out")
     if [[ -n "$output" ]]; then
       feedback+="${feedback:+$'\n'}[codex typecheck] ${LANG_LABEL} errors after editing $(basename "$selected_check_file"):"$'\n'"$output"
