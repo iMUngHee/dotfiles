@@ -476,22 +476,32 @@ for (const tool of ["claude", "codex"]) {
   });
 }
 
-// ── Stop runs every distinct checker the changed files call for ────────────
-// go vet and tsc both cover the whole project, so a Go and a TypeScript change
-// call for two checkers; two Go changes call for one. Shims log each run and
-// fail when STOP_FAIL names their tool.
-function polyglotFixture(tool, files) {
+// Compiling or vetting Go belongs to each project too (its CI, or the go
+// skill's vet/staticcheck/test loop): a .go file gets gofmt and no checker.
+for (const tool of ["claude", "codex"]) {
+  test(`${tool} .go gets a formatter but no checker`, () => {
+    const home = tempDir("go-nocheck-");
+    writeFileSync(join(home, "go.mod"), "module fixture\n");
+    const script = `${shellOpts[tool]}\n. "$1"; detect_checker "$2/main.go" "$2"; printf 'check=[%s] fmt=[%s]\\n' "$CHECK_CMD" "$FMT_CMD"`;
+    const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), home], { encoding: "utf8", timeout: HANG_MS });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /^check=\[\] /, r.stdout);
+    if (which("gofmt")) assert.match(r.stdout, /fmt=\[gofmt -w\]/, r.stdout);
+  });
+}
+
+// ── Stop runs each distinct checker the changed files call for, once ───────
+// tsc covers the whole project, so two TypeScript changes call for one run.
+// The npx shim logs each tsc run and fails when STOP_FAIL=tsc.
+function tsFixture(tool, files) {
   const f = fixture(tool);
-  writeFileSync(join(f.root, "go.mod"), "module fixture\n");
   writeFileSync(join(f.root, "tsconfig.json"), "{}\n");
   mkdirSync(join(f.root, "node_modules", ".bin"), { recursive: true });
   writeFileSync(join(f.root, "node_modules", ".bin", "tsc"), "");
   const log = join(f.home, "checkers");
-  for (const [name, label] of [["go", "go"], ["npx", "tsc"]]) {
-    writeFileSync(join(f.home, "bin", name),
-      `#!/bin/bash\n[ "$1" = vet ] || [ "$1" = tsc ] || exit 0\necho ${label} >> "$STOP_CHECKERS"\n[ "\${STOP_FAIL:-}" = ${label} ] && { echo "${label}: broken"; exit 1; }\nexit 0\n`);
-    chmodSync(join(f.home, "bin", name), 0o755);
-  }
+  writeFileSync(join(f.home, "bin", "npx"),
+    `#!/bin/bash\n[ "$1" = tsc ] || exit 0\necho tsc >> "$STOP_CHECKERS"\n[ "\${STOP_FAIL:-}" = tsc ] && { echo "tsc: broken"; exit 1; }\nexit 0\n`);
+  chmodSync(join(f.home, "bin", "npx"), 0o755);
   const gitEnv = f["env"];
   for (const name of files) writeFileSync(join(f.root, name), "before\n");
   for (const args of [["add", "."], ["commit", "-qm", "sources"]]) {
@@ -501,29 +511,30 @@ function polyglotFixture(tool, files) {
   for (const name of files) writeFileSync(join(f.root, name), "after\n");
   return { ...f, log, runWith: (extra = {}) => f.run({ STOP_CHECKERS: log, ...extra }) };
 }
-const ran = (f) => existsSync(f.log) ? readFileSync(f.log, "utf8").trim().split(/\r?\n/).sort() : [];
+const ran = (f) => existsSync(f.log) ? readFileSync(f.log, "utf8").trim().split(/\r?\n/) : [];
 
 for (const tool of ["codex", "claude"]) {
   describe(`${tool} Stop checkers`, { skip: isWindows && "checker shims are bash scripts" }, () => {
-    test("runs a checker for each language changed", () => {
-      const f = polyglotFixture(tool, ["a.ts", "b.go"]);
+    test("runs one checker for two changes it covers", () => {
+      const f = tsFixture(tool, ["a.ts", "b.ts"]);
       const r = f.runWith();
       assert.equal(r.status, 0, r.stdout + r.stderr);
-      assert.deepEqual(ran(f), ["go", "tsc"]);
+      assert.deepEqual(ran(f), ["tsc"]);
     });
 
-    test("blocks when only the later checker fails", () => {
-      const f = polyglotFixture(tool, ["a.ts", "b.go"]);
+    test("blocks a failing checker", () => {
+      const f = tsFixture(tool, ["a.ts"]);
       const r = f.runWith({ STOP_FAIL: "tsc" });
       assert.equal(r.status, 2, r.stdout + r.stderr);
       assert.match(r.stderr, /tsc check failed/);
     });
 
-    test("runs one checker for two changes it covers", () => {
-      const f = polyglotFixture(tool, ["a.go", "b.go"]);
+    test("runs no checker for a Go change", () => {
+      const f = tsFixture(tool, ["main.go"]);
+      writeFileSync(join(f.root, "go.mod"), "module fixture\n");
       const r = f.runWith();
       assert.equal(r.status, 0, r.stdout + r.stderr);
-      assert.deepEqual(ran(f), ["go"]);
+      assert.deepEqual(ran(f), []);
     });
   });
 }

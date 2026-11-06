@@ -36,22 +36,23 @@ Lint policy belongs to the project: `[workspace.lints]` (or `[lints]`) in Cargo.
 - With an LSP tool available, hover and go-to-definition on the symbol (rust-analyzer) give the same version's docs and signature.
 - A crate that is not a dependency yet: `cargo info <crate>` for the current version and features, then that version's page on docs.rs.
 
-## Guidelines
+## Style references
 
-Microsoft's Pragmatic Rust Guidelines, one rule per file: `G="${AI_VENDOR_DIR:-$HOME/.local/share/ai-vendor}/rust-guidelines/src/guidelines"`, at `$G/<topic>/M-<ID>.md`. Find a rule with `find "$G" -name 'M-<ID>.md'`, list a topic with `ls "$G/<topic>"`, search with `grep -ril '<term>' "$G"`. Read the rules for the task, not the whole set.
+Read the rules that bear on the task, not the whole set; fetch when needed. Precedence: the project's own conventions, then these. Cite the rule ID when one drives a change.
 
-| Task | Topics under `$G` |
-| --- | --- |
-| Any change | `universal`, `ai` |
-| Library API: types, traits, constructors, errors | `libs/ux`, `libs/interop`, `libs/resilience` |
-| Crate layout, features, `-sys` crates, workspaces, MSRV, edition | `libs/building`, `project` |
-| Panics, `unsafe`, soundness | `correctness` |
-| Application binaries: error handling, allocator, target CPU | `apps` |
-| Throughput, allocation, hashing, async yield points | `performance` |
-| Doc comments and module docs | `docs` |
-| FFI | `ffi` |
-| Macros | `macros` |
+- Rust API Guidelines — the Rust library team's API design rules, `C-` IDs: checklist https://rust-lang.github.io/api-guidelines/checklist.html, each ID linked to its rule.
+- Microsoft's Pragmatic Rust Guidelines — broader than API design (panics, `unsafe`, apps, performance, AI-written code), `M-` IDs: checklist https://microsoft.github.io/rust-guidelines/guidelines/checklist/; a rule lives at `https://microsoft.github.io/rust-guidelines/guidelines/<topic>/#M-<ID>`.
 
-Missing (`$G` absent): say so, offer `bash ~/.config/ai/scripts/vendor.sh sync rust-guidelines` (network clone — run only with 대협's consent), and meanwhile read the rule on https://microsoft.github.io/rust-guidelines/.
+  | Task | Microsoft topics |
+  | --- | --- |
+  | Any change | `universal`, `ai` |
+  | Library API: types, traits, constructors, errors | `libs/ux`, `libs/interop`, `libs/resilience` (with the API Guidelines) |
+  | Crate layout, features, `-sys` crates, workspaces, MSRV, edition | `libs/building`, `project` |
+  | Panics, `unsafe`, soundness | `correctness` |
+  | Application binaries: error handling, allocator, target CPU | `apps` |
+  | Throughput, allocation, hashing, async yield points | `performance` |
+  | Doc comments and module docs | `docs` |
+  | FFI | `ffi` |
+  | Macros | `macros` |
 
-For naming and style the Microsoft set leaves open, Google's Rust Style Guide is a secondary reference: https://google.github.io/styleguide/rustguide.html, fetched when needed. Precedence: the project's own conventions, then Microsoft by rule ID, then Google. Cite the rule ID when a guideline drives a change.
+- The Rust Style Guide — the default formatting style, which rustfmt implements, so the formatter covers it: https://doc.rust-lang.org/stable/style-guide/

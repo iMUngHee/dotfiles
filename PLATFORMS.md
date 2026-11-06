@@ -282,6 +282,16 @@ cannot run something; remove it in the commit that records the result.
       no-toolchain (warns, downloads nothing) and no-rustup branches.
 - [ ] **Arch** — `arch/packages.sh` now installs `cargo-nextest` (extra) and
       `cargo-mutants` (AUR); check both answer `--version` after a bootstrap.
+- [ ] **macOS** — `brew bundle` installs `staticcheck` and `homebrew/bootstrap.sh`
+      builds `gremlins` v0.6.0 into `~/.local/bin` (`lib/go-tools.sh`); check
+      `staticcheck -version` and `gremlins --version` in a new terminal, then run
+      the go skill's mutation step (`GOFLAGS=-count=1 gremlins unleash --diff
+      <start>`) on a changed module. On Linux 2026-11-07 the install, the skip
+      when present, the `--dry-run` line and the skill's commands all ran.
+- [ ] **Windows** — the go skill's tools are not installed there: no
+      `staticcheck` or `gremlins` step in `windows/bootstrap.ps1`. Add one
+      (as `install-rust-tools.ps1` does for Rust) or note the skill's steps that
+      skip there.
 - [ ] **macOS / Windows (Git Bash)** — Stop now runs every distinct checker
       the changed files call for within one shared `CHECKER_TIMEOUT`, and a
       checker that hits its time limit (124) is reported as not checked instead

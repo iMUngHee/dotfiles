@@ -148,10 +148,8 @@ detect_checker() {
       fi
       ;;
     *.go)
-      if [[ -f "$root/go.mod" ]]; then
-        CHECK_CMD="go vet ./... 2>&1"
-        LANG_LABEL="go vet"
-      fi
+      # No checker, as for Rust: vetting and testing Go belong to each project
+      # (its CI, or the go skill's loop). Only the formatter runs here.
       command -v gofmt &>/dev/null && FMT_CMD="gofmt -w"
       ;;
     *.rs)

@@ -9,6 +9,7 @@
 #   1) arch/packages.sh        — pacman + AUR (the Brewfile mapping), then the
 #                                rust-analyzer rustup component (lib/rust-analyzer.sh)
 #                                and pager + gaebu into ~/.local/bin (lib/agent-clis.sh)
+#                                and gremlins into ~/.local/bin (lib/go-tools.sh)
 #   2) mise install            — node/claude/codex/gh, if mise is configured
 #   3) ~/.zshenv ZDOTDIR       — lib/shell-env.sh
 #   4) oh-my-zsh               — lib/shell-env.sh
@@ -50,6 +51,8 @@ done
 . "$ROOT_DIR/lib/rust-analyzer.sh"
 # shellcheck source=../lib/agent-clis.sh
 . "$ROOT_DIR/lib/agent-clis.sh"
+# shellcheck source=../lib/go-tools.sh
+. "$ROOT_DIR/lib/go-tools.sh"
 
 # ── zsh/private.sh stub ─────────────────────────────────────────────────────
 # arch/zsh.sh is tracked, but nothing loads it on its own. .zshrc sources
@@ -99,11 +102,13 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "── would add the rust-analyzer rustup component (dry run) ──"
     echo "── would build pager and gaebu into ~/.local/bin if absent (dry run) ──"
+    echo "── would build gremlins into ~/.local/bin if absent (dry run) ──"
 else
     ensure_rust_analyzer
     # After packages.sh (go, rustup) and before the AI deploy (hooks, MCP).
     ensure_pager
     ensure_gaebu
+    ensure_gremlins
 fi
 
 # ── 2. mise — the runtime manager this tier uses instead of fnm/brew casks ──
