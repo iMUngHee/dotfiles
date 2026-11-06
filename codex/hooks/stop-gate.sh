@@ -3,7 +3,6 @@
 set -euo pipefail
 
 MAX_RETRIES=2
-CHECKER_TIMEOUT=30
 SUITE_TIMEOUT=300
 SUITE_DEADLINE=$((SECONDS + SUITE_TIMEOUT))
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -68,7 +67,7 @@ formatted=0
 while IFS= read -r file; do
   (( SECONDS < SUITE_DEADLINE )) || break
   [[ -n "$file" && -f "$file" ]] || continue
-  detect_checker "$file" "$project_root"
+  detect_formatter "$file" "$project_root"
   [[ -n "$FMT_CMD" ]] || continue
   before=$(file_checksum "$file")
   portable_timeout 5 bash -c "$FMT_CMD \"\$1\"" _ "$file" &>/dev/null || true
@@ -120,52 +119,7 @@ if [[ "$project_root" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
   fi
 fi
 
-# Stage 2: type check
-# Every distinct checker the changed files call for, in order: one per Rust
-# workspace or lone crate, one for a checker that covers the whole project
-# (tsc, go vet), so the same command runs once. Taking only the first left a
-# second crate, or a second language, unchecked.
-# ${a[@]+"${a[@]}"}: macOS /bin/bash 3.2 calls an empty array unbound under set -u.
-check_cmds=() check_labels=()
-while IFS= read -r file; do
-  CHECK_CMD="" LANG_LABEL=""
-  detect_checker "$file" "$project_root"
-  [[ -n "$CHECK_CMD" ]] || continue
-  seen=0
-  for cmd in ${check_cmds[@]+"${check_cmds[@]}"}; do
-    [[ "$cmd" == "$CHECK_CMD" ]] && { seen=1; break; }
-  done
-  (( seen )) || { check_cmds+=("$CHECK_CMD"); check_labels+=("$LANG_LABEL"); }
-done <<< "$changed_files"
-
-(( ${#check_cmds[@]} > 0 )) || {
-  rm -f "$counter_file"
-  notify_and_exit
-}
-
-# The checkers share one CHECKER_TIMEOUT budget, so the hook's registered
-# timeout still covers suites plus checks. A check that runs out of time has
-# found nothing: a cold build of a large crate can outlast the budget, and
-# blocking on its progress output would ask for a fix to code that may be
-# fine. Say so and go on; the first check that fails blocks.
-check_deadline=$((SECONDS + CHECKER_TIMEOUT))
-for i in "${!check_cmds[@]}"; do
-  LANG_LABEL=${check_labels[$i]}
-  remaining=$((check_deadline - SECONDS))
-  if (( remaining <= 0 )); then
-    echo "[final-gate] ${LANG_LABEL} check not started: the ${CHECKER_TIMEOUT}s check budget is spent — not checked." >&2
-    continue
-  fi
-  set +e
-  portable_timeout "$remaining" bash -c "${check_cmds[$i]}" > "$tmp_out" 2>&1
-  exit_code=$?
-  set -e
-  if [[ $exit_code -eq 124 ]]; then
-    echo "[final-gate] ${LANG_LABEL} check did not finish within ${CHECKER_TIMEOUT}s — not checked; allowing stop." >&2
-  elif [[ $exit_code -ne 0 ]]; then
-    fail_gate "${LANG_LABEL} check"
-  fi
-done
-
+# No type checker runs here: that belongs to each project and to the
+# language skills.
 rm -f "$counter_file"
 notify_and_exit

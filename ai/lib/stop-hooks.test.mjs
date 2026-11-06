@@ -110,7 +110,7 @@ for (const tool of ["codex", "claude"]) {
   });
 }
 
-test("Stop hook registrations outlive the suite and checker budgets", () => {
+test("Stop hook registrations outlive the suite budget", () => {
   const template = readFileSync(join(repo, "codex", "config.toml.template"), "utf8");
   const codex = template.split("[[hooks.Stop.hooks]]")[1].split("[[hooks.PermissionRequest]]")[0];
   const settings = JSON.parse(readFileSync(join(repo, "claude", "settings.json"), "utf8"));
@@ -118,8 +118,8 @@ test("Stop hook registrations outlive the suite and checker budgets", () => {
   // Both products specify command-hook timeout in seconds, not milliseconds.
   for (const [tool, seconds] of [["codex", Number(codex.match(/timeout = (\d+)/)[1])], ["claude", claude.timeout]]) {
     const source = readFileSync(join(repo, tool, "hooks", tool === "codex" ? "stop-gate.sh" : "stop-handler.sh"), "utf8");
-    const budget = Number(source.match(/SUITE_TIMEOUT=(\d+)/)[1]) + Number(source.match(/CHECKER_TIMEOUT=(\d+)/)[1]);
-    assert.ok(seconds >= budget + 10, `${tool} registration must allow the bounded checks to finish`);
+    const budget = Number(source.match(/SUITE_TIMEOUT=(\d+)/)[1]);
+    assert.ok(seconds >= budget + 10, `${tool} registration must allow the bounded suites to finish`);
     assert.ok(seconds <= budget + 60, `${tool} registration must remain bounded, not hours long`);
   }
 });
@@ -159,7 +159,7 @@ test("codex Stop preserves stderr blocking and allows stop after two retries", (
   assert.match(result.stderr, /failed after 2 retries\. Allowing stop/);
 });
 
-// ── portable_timeout and detect_checker ──────────────────────────────────────
+// ── portable_timeout and detect_formatter ──────────────────────────────────────
 // Both detect-project.sh copies carry the same portable_timeout and checkers;
 // each consumer sources them under its own shell options.
 const isWindows = process.platform === "win32";
@@ -393,11 +393,11 @@ for (const tool of ["claude", "codex"]) {
     });
 }
 
-// detect_checker ends with the status of `command -v <formatter> && FMT_CMD=...`
+// detect_formatter ends with the status of `command -v <formatter> && FMT_CMD=...`
 // unless it returns explicitly; under the Codex consumers' `set -e` a missing
 // formatter then aborted the hook before any check ran.
 for (const tool of ["claude", "codex"]) {
-  test(`${tool} detect_checker leaves the caller running when a formatter is missing`, { skip: isWindows && "curated PATH needs symlinks" }, () => {
+  test(`${tool} detect_formatter leaves the caller running when a formatter is missing`, { skip: isWindows && "curated PATH needs symlinks" }, () => {
     const home = tempDir("rust-check-");
     const bin = curatedBin(join(home, "bin"), {});
     writeFileSync(join(home, "go.mod"), "");
@@ -405,7 +405,7 @@ for (const tool of ["claude", "codex"]) {
     writeFileSync(join(bin, "cargo"), "#!/bin/bash\nexit 0\n");
     chmodSync(join(bin, "cargo"), 0o755);
     for (const file of ["x.go", "x.rs", "x.lua"]) {
-      const r = spawnSync(bashPath, ["-c", `${shellOpts[tool]}\n. "$1"; detect_checker "$2/${file}" "$2"; echo reached`, "_", libOf(tool), home],
+      const r = spawnSync(bashPath, ["-c", `${shellOpts[tool]}\n. "$1"; detect_formatter "$2/${file}" "$2"; echo reached`, "_", libOf(tool), home],
         { env: { ...process.env, PATH: bin }, encoding: "utf8", timeout: HANG_MS });
       assert.equal(r.status, 0, `${file}: ${r.stderr}`);
       assert.equal(r.stdout.trim(), "reached", file);
@@ -441,7 +441,7 @@ for (const tool of ["claude", "codex"]) {
     const nested = crate("own/fixtures/old", '[package]\nname = "old"\n');
     const bare = crate("bare", '[package]\nname = "bare"\n[package.metadata]\nedition = "2024"\n');
     const fmtOf = (file) => {
-      const r = spawnSync(bashPath, ["-c", `${shellOpts[tool]}\n. "$1"; detect_checker "$2" "$(dirname "$(dirname "$2")")"; printf '%s' "$FMT_CMD"`, "_", libOf(tool), file],
+      const r = spawnSync(bashPath, ["-c", `${shellOpts[tool]}\n. "$1"; detect_formatter "$2" "$(dirname "$(dirname "$2")")"; printf '%s' "$FMT_CMD"`, "_", libOf(tool), file],
         { env: { ...process.env, PATH: bin + delimiter + process.env.PATH }, encoding: "utf8", timeout: HANG_MS });
       assert.equal(r.status, 0, r.stderr);
       return r.stdout;
@@ -460,48 +460,43 @@ for (const tool of ["claude", "codex"]) {
   });
 }
 
-// Compiling Rust belongs to each project (its CI, or the rust skill's clippy
-// loop), not to a global gate that cannot know a workspace's layout,
-// toolchain or build time: a .rs file gets its formatter and no checker.
+// No language gets a type checker from the hooks: compiling, vetting and type
+// checking belong to each project (its CI) and to the language skills. A file
+// gets its formatter, and detect_formatter leaves CHECK_CMD/LANG_LABEL alone.
 for (const tool of ["claude", "codex"]) {
-  test(`${tool} .rs gets a formatter but no checker`, () => {
-    const home = tempDir("rust-nocheck-");
+  test(`${tool} detect_formatter sets a formatter and no checker`, () => {
+    const home = tempDir("formatter-only-");
     mkdirSync(join(home, "src"));
+    mkdirSync(join(home, "node_modules", ".bin"), { recursive: true });
     writeFileSync(join(home, "Cargo.toml"), '[package]\nname = "x"\nedition = "2021"\n');
-    const script = `${shellOpts[tool]}\n. "$1"; detect_checker "$2/src/lib.rs" "$2"; printf 'check=[%s] fmt=[%s]\\n' "$CHECK_CMD" "$FMT_CMD"`;
-    const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), home], { encoding: "utf8", timeout: HANG_MS });
-    assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /^check=\[\] /, r.stdout);
-    if (which("rustfmt")) assert.match(r.stdout, /fmt=\[rustfmt --edition 2021\]/, r.stdout);
-  });
-}
-
-// Compiling or vetting Go belongs to each project too (its CI, or the go
-// skill's vet/staticcheck/test loop): a .go file gets gofmt and no checker.
-for (const tool of ["claude", "codex"]) {
-  test(`${tool} .go gets a formatter but no checker`, () => {
-    const home = tempDir("go-nocheck-");
     writeFileSync(join(home, "go.mod"), "module fixture\n");
-    const script = `${shellOpts[tool]}\n. "$1"; detect_checker "$2/main.go" "$2"; printf 'check=[%s] fmt=[%s]\\n' "$CHECK_CMD" "$FMT_CMD"`;
-    const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), home], { encoding: "utf8", timeout: HANG_MS });
-    assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /^check=\[\] /, r.stdout);
-    if (which("gofmt")) assert.match(r.stdout, /fmt=\[gofmt -w\]/, r.stdout);
+    writeFileSync(join(home, "tsconfig.json"), "{}\n");
+    writeFileSync(join(home, "node_modules", ".bin", "tsc"), "");
+    for (const [file, fmt] of [["src/lib.rs", "rustfmt"], ["main.go", "gofmt"], ["a.ts", null]]) {
+      const script = `${shellOpts[tool]}\nCHECK_CMD=sentinel LANG_LABEL=sentinel\n. "$1"; detect_formatter "$2/${file}" "$2"; printf '%s|%s|%s\\n' "$CHECK_CMD" "$LANG_LABEL" "$FMT_CMD"`;
+      const r = spawnSync(bashPath, ["-c", script, "_", libOf(tool), home], { encoding: "utf8", timeout: HANG_MS });
+      assert.equal(r.status, 0, `${file}: ${r.stderr}`);
+      assert.match(r.stdout, /^sentinel\|sentinel\|/, `${file}: ${r.stdout}`);
+      if (fmt && which(fmt)) assert.ok(r.stdout.split("|")[2].startsWith(fmt), `${file}: ${r.stdout}`);
+    }
   });
 }
 
-// ── Stop runs each distinct checker the changed files call for, once ───────
-// tsc covers the whole project, so two TypeScript changes call for one run.
-// The npx shim logs each tsc run and fails when STOP_FAIL=tsc.
-function tsFixture(tool, files) {
+// ── Stop runs no type checker ──────────────────────────────────────────────
+// The fixture has everything the removed checkers keyed on (tsconfig.json with
+// node_modules/.bin/tsc, go.mod); the npx and go shims log any tsc or vet run.
+function checkerShimFixture(tool, files) {
   const f = fixture(tool);
   writeFileSync(join(f.root, "tsconfig.json"), "{}\n");
+  writeFileSync(join(f.root, "go.mod"), "module fixture\n");
   mkdirSync(join(f.root, "node_modules", ".bin"), { recursive: true });
   writeFileSync(join(f.root, "node_modules", ".bin", "tsc"), "");
   const log = join(f.home, "checkers");
-  writeFileSync(join(f.home, "bin", "npx"),
-    `#!/bin/bash\n[ "$1" = tsc ] || exit 0\necho tsc >> "$STOP_CHECKERS"\n[ "\${STOP_FAIL:-}" = tsc ] && { echo "tsc: broken"; exit 1; }\nexit 0\n`);
-  chmodSync(join(f.home, "bin", "npx"), 0o755);
+  for (const name of ["npx", "go"]) {
+    writeFileSync(join(f.home, "bin", name),
+      `#!/bin/bash\ncase "$1" in tsc|vet) echo "${name} $1" >> "$STOP_CHECKERS"; exit 1 ;; esac\nexit 0\n`);
+    chmodSync(join(f.home, "bin", name), 0o755);
+  }
   const gitEnv = f["env"];
   for (const name of files) writeFileSync(join(f.root, name), "before\n");
   for (const args of [["add", "."], ["commit", "-qm", "sources"]]) {
@@ -509,32 +504,18 @@ function tsFixture(tool, files) {
     assert.equal(r.status, 0, r.stderr);
   }
   for (const name of files) writeFileSync(join(f.root, name), "after\n");
-  return { ...f, log, runWith: (extra = {}) => f.run({ STOP_CHECKERS: log, ...extra }) };
+  return { ...f, log, runWith: () => f.run({ STOP_CHECKERS: log }) };
 }
-const ran = (f) => existsSync(f.log) ? readFileSync(f.log, "utf8").trim().split(/\r?\n/) : [];
 
 for (const tool of ["codex", "claude"]) {
-  describe(`${tool} Stop checkers`, { skip: isWindows && "checker shims are bash scripts" }, () => {
-    test("runs one checker for two changes it covers", () => {
-      const f = tsFixture(tool, ["a.ts", "b.ts"]);
-      const r = f.runWith();
-      assert.equal(r.status, 0, r.stdout + r.stderr);
-      assert.deepEqual(ran(f), ["tsc"]);
-    });
-
-    test("blocks a failing checker", () => {
-      const f = tsFixture(tool, ["a.ts"]);
-      const r = f.runWith({ STOP_FAIL: "tsc" });
-      assert.equal(r.status, 2, r.stdout + r.stderr);
-      assert.match(r.stderr, /tsc check failed/);
-    });
-
-    test("runs no checker for a Go change", () => {
-      const f = tsFixture(tool, ["main.go"]);
-      writeFileSync(join(f.root, "go.mod"), "module fixture\n");
-      const r = f.runWith();
-      assert.equal(r.status, 0, r.stdout + r.stderr);
-      assert.deepEqual(ran(f), []);
-    });
+  describe(`${tool} Stop runs no type checker`, { skip: isWindows && "checker shims are bash scripts" }, () => {
+    for (const [lang, files] of [["TypeScript", ["a.ts", "b.tsx"]], ["Go", ["main.go"]]]) {
+      test(`for a ${lang} change`, () => {
+        const f = checkerShimFixture(tool, files);
+        const r = f.runWith();
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.equal(existsSync(f.log), false, existsSync(f.log) ? readFileSync(f.log, "utf8") : "");
+      });
+    }
   });
 }

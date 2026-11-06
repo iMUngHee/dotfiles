@@ -100,8 +100,8 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 | `prompt-guard.sh` | UserPromptSubmit | Scan prompts for accidentally pasted secrets |
 | `inject-context.sh` | UserPromptSubmit | Resolve the exact Claude session binding, allow only checkout-local legacy normalization, and inject bound plan/worktree routing (30s bound); unbound main is plan-free, `current.txt` is launcher-only, and the shared restored/compacted-summary continuation guard is delivered. A conversation reopened from the agents view continues under a new session id; when the old transcript's last row is `continued-in` naming this session, the binding it held (draft/active only) is carried over and shown as `inherited from <id>`. `/clear`, `/branch` and `--resume` write no such row. Codex has no equivalent, so its adapter does not do this |
 | `notify.sh` | Notification, PermissionRequest | AgentNotifier desktop/tmux notification on approval requests |
-| `stop-handler.sh` | Stop | Final gate — auto-format, then this repo's own test suites selected by changed path, then type check |
-| `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format + type check (30s debounce) |
+| `stop-handler.sh` | Stop | Final gate — auto-format, then this repo's own test suites selected by changed path. No type checker, for any language |
+| `post-edit-pipeline.sh` | PostToolUse (Edit, Write, MultiEdit) | Auto-format (30s debounce). No type checker |
 | `compact-restore.sh` | SessionStart (matcher: compact) | Inject git branch, recent commits, modified files |
 | `log-tool-failure.sh` | PostToolUse | Log tool failures to `~/.claude/tool-failures.log` |
 | `log-instructions.sh` | InstructionsLoaded | Log loaded instruction files for debugging |
@@ -110,7 +110,7 @@ All hooks use session-isolated temp files (`/tmp/claude/sessions/${SESSION_ID}/`
 
 Both gates run the same stages, and both are scoped to `$HOME/.config` so other projects are untouched. Triggers are per-path, so an untouched area costs nothing:
 
-Staged, unstaged, and untracked files select suites; only tracked changes may be auto-formatted. Repository matching uses directory identity so Windows Git and Git Bash path spellings agree. Selected suites share 300 seconds in total; the type checker has another 30 seconds, within the 360-second hook registration (both tools specify seconds).
+Staged, unstaged, and untracked files select suites; only tracked changes may be auto-formatted. Repository matching uses directory identity so Windows Git and Git Bash path spellings agree. Selected suites share 300 seconds in total, within the 360-second hook registration (both tools specify seconds). No type checker runs for any language: checking belongs to each project and to the language skills.
 
 | Changed path | Suite | Approx |
 |---|---|---|
@@ -122,9 +122,9 @@ Staged, unstaged, and untracked files select suites; only tracked changes may be
 | `claude/mods/**` | `claude plugin test` per mod | 1s |
 | `nvim/**` | `inline_review_spec.lua` (headless) | 20s |
 
-Instruction files are asserted by exact string match in `ai/lib/*.test.mjs`, and a doc-only change reaches no type checker — so without the first stage a rule can be edited out while its suite goes red unnoticed. That happened once (`6f9b845`).
+Instruction files are asserted by exact string match in `ai/lib/*.test.mjs`, and no type checker runs at all — so without the first stage a rule can be edited out while its suite goes red unnoticed. That happened once (`6f9b845`).
 
-The last two stages were added after the same gap opened twice more: mods and the Lua are `.ts`/`.tsx`/`.lua`, which the instruction trigger's `\.(md|sh)$` does not match and no type checker below reaches, so five consecutive commits to `graph.tsx` and four to `inline_review/` ran no suite at all — `nvim/README.md` documented its command and nothing called it.
+The last two stages were added after the same gap opened twice more: mods and the Lua are `.ts`/`.tsx`/`.lua`, which the instruction trigger's `\.(md|sh)$` does not match and no type checker reaches, so five consecutive commits to `graph.tsx` and four to `inline_review/` ran no suite at all — `nvim/README.md` documented its command and nothing called it.
 
 ## Mods
 
@@ -175,8 +175,8 @@ claude --plugin-dir claude/mods/pm-band --plugin-dir claude/mods/pager-view
 
 `.claude-plugin/types/` is written by the engine on every load and is git-ignored.
 The Stop gate runs `claude plugin test` for every mod on a `claude/mods/**`
-change, but still does not type-check them (no tsconfig at the repo root), so
-run `tsc -p <mod folder>` yourself.
+change, but does not type-check them (no hook runs a type checker), so run
+`tsc -p <mod folder>` yourself.
 
 ## Measuring a rule
 

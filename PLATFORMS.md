@@ -292,14 +292,13 @@ cannot run something; remove it in the commit that records the result.
       `staticcheck` or `gremlins` step in `windows/bootstrap.ps1`. Add one
       (as `install-rust-tools.ps1` does for Rust) or note the skill's steps that
       skip there.
-- [ ] **macOS / Windows (Git Bash)** — Stop now runs every distinct checker
-      the changed files call for within one shared `CHECKER_TIMEOUT`, and a
-      checker that hits its time limit (124) is reported as not checked instead
-      of blocking. Run
+- [ ] **macOS / Windows (Git Bash)** — the hooks no longer run any type checker
+      (tsc, go vet and cargo were removed; `detect_checker` is now
+      `detect_formatter`, setting only `FMT_CMD`). Run
       `node --test ai/lib/stop-hooks.test.mjs ai/lib/raw-tool-input-hooks.test.mjs`
-      (all passed on Linux 2026-11-07); on macOS also under `/bin/bash` 3.2,
-      whose `set -u` the empty-array guard in `codex/hooks/stop-gate.sh` is for.
-      The `Stop checkers` cases skip on Windows.
+      (all passed on Linux 2026-11-07), and on Windows, where the `Stop runs no
+      type checker` cases skip, edit a `.ts` file under a `tsconfig.json` and
+      check that Stop runs no `tsc`.
 - [ ] **Windows (Git Bash)** — run the `rustfmt gets the edition` and `Stop
       blocks a failing suite` cases in `ai/lib/stop-hooks.test.mjs` (passed on
       macOS and Linux 2026-11-04). Then edit a `.rs` file in a CRLF checkout of

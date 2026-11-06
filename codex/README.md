@@ -125,13 +125,13 @@ On Windows, every shell hook uses `command_windows` to pass stdin through `run-b
 - `Stop` → `stop-gate.sh` runs the final quality gate and then sends task completion or review-needed notifications.
 - `PermissionRequest` → `codex/hooks/notify.sh approval` sends approval notifications.
 
-The Stop gate uses staged, unstaged, and untracked files to select suites; only tracked changes may be auto-formatted. Selected suites share a 300-second budget, followed by at most 30 seconds shared by the type checkers the changed files call for (each distinct one runs once; a checker that runs out of time is reported as not checked); the hook registration allows 360 seconds. Repository matching compares directory identity so Git's Windows paths and Git Bash paths select the same checks.
+The Stop gate uses staged, unstaged, and untracked files to select suites; only tracked changes may be auto-formatted. Selected suites share a 300-second budget, within the 360-second hook registration. No type checker runs for any language: checking belongs to each project and to the language skills. Repository matching compares directory identity so Git's Windows paths and Git Bash paths select the same checks.
 
 Hook stdout follows the Codex 0.163.0 event schemas. PostToolUse returns one JSON
 object with `hookSpecificOutput.hookEventName = "PostToolUse"` and
-`hookSpecificOutput.additionalContext` containing all formatter/checker feedback;
+`hookSpecificOutput.additionalContext` containing the formatter feedback;
 quiet runs emit nothing. Plain PostToolUse stdout is ignored by the model, and
-bracket-prefixed text such as `[codex typecheck] ...` is mistaken for malformed
+bracket-prefixed text such as `[codex auto-format] ...` is mistaken for malformed
 JSON. Stop formatting notices use the universal `systemMessage` field. Blocking
 Stop failures retain stderr diagnostics and exit code 2 with bounded retries.
 The version-pinned schemas and consumers are in
