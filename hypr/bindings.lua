@@ -77,6 +77,13 @@ hl.unbind("SUPER + SHIFT + P")          -- Google Photos
 hl.unbind("SUPER + SHIFT + X")          -- X
 hl.unbind("SUPER + SHIFT + ALT + X")    -- X Post
 
+-- ── Hangul toggle on CTRL + SPACE ──────────────────────────────────────────
+-- CTRL+SPACE is a Fcitx trigger key here (~/.config/fcitx5/config). Omarchy 4.5
+-- binds it non-consuming in default/hypr/bindings/input-method.lua to force
+-- direct input in terminals, which would switch Hangul straight back off. The
+-- tmux prefix is C-s, so nothing needs that pass-through.
+hl.unbind("CTRL + SPACE")
+
 -- ── Screen zoom on SUPER + CTRL + scroll ───────────────────────────────────
 -- Omarchy only zooms from the keyboard (SUPER+CTRL+Z in, +ALT+Z reset). Plain
 -- CTRL+scroll is left alone because browsers and terminals use it for their
