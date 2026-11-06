@@ -1,0 +1,7 @@
+[Hotkey/TriggerKeys]
+0=Zenkaku_Hankaku
+1=Hangul
+2=Control+space
+
+[Behavior]
+ActiveByDefault=False
