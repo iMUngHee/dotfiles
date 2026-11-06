@@ -22,7 +22,6 @@
   "includeGitInstructions": false,
   "permissions": {
     "allow": [
-      "Bash(GOFLAGS=-count=1 gremlins unleash*)",
       "Bash(awk*)",
       "Bash(basename*)",
       "Bash(brew info*)",

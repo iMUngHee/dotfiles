@@ -17,10 +17,16 @@ Run these from the module root (the directory with `go.mod`; in a `go.work` work
 3. Before calling a logic change done, check that the tests would notice it breaking, when `gremlins --version` answers:
 
    ```bash
-   GOFLAGS=-count=1 gremlins unleash --diff <start>   # <start> = the commit this work began from
+   # <start> = the commit this work began from. Append to GOFLAGS rather than
+   # replacing it, so flags the project needs (-tags=...) stay.
+   GOFLAGS="${GOFLAGS:+$GOFLAGS }-count=1" gremlins unleash --diff <start>
    ```
 
-   `GOFLAGS=-count=1` is required: with Go's test cache warm the baseline runs in no time, gremlins derives its timeout from it, and sound mutants come back `TIMED OUT`. `--diff` limits the run to changed lines, new untracked files included. The exit status is 0 whatever the result — the `--threshold-*` flags do not change it — so read the lines: `LIVED` is a test gap (add an assertion that fails on that mutation), `NOT COVERED` is code no test reaches, `TIMED OUT` points at the cache or a slow test, and `Killed: 0, Lived: 0, Not covered: 0` means nothing was checked. Do not write a test that restates the implementation to kill a mutant; leave a truly equivalent one and say why. Skip this step for docs, formatting, and pure renames.
+   `-count=1` turns off Go's test cache: with it warm the baseline can run in no time, gremlins derives its timeout from that, and sound mutants come back `TIMED OUT`. `--diff` limits the run to changed lines, with two gaps:
+   - A file git does not track yet comes back `SKIPPED`: run `git add -N <file>` for each new `.go` file first (it records the path only; nothing is staged).
+   - When `go.mod` is not at the git root (a module in a subdirectory), `--diff` matches nothing and every mutant is `SKIPPED`: run without `--diff` on the changed packages instead, `gremlins unleash ./path/to/pkg`.
+
+   Read the lines, not the exit status: it is 0 whatever the mutants did — the `--threshold-*` flags do not change it — and non-zero only when the run itself failed (a bad ref, a build error, outside a module). `LIVED` is a test gap (add an assertion that fails on that mutation), `NOT COVERED` is code no test reaches, `TIMED OUT` points at the cache or a slow test, and only `SKIPPED` lines, or `Killed: 0, Lived: 0, Not covered: 0`, mean nothing was checked. Do not write a test that restates the implementation to kill a mutant; leave a truly equivalent one and say why. Skip this step for docs, formatting, and pure renames.
 
 Tests are the oracle. Never change an existing test's expectation to make it pass unless the task changes that behaviour, and say so when it does.
 
