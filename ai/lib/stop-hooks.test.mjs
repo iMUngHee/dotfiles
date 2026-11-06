@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, delimiter } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -550,5 +550,62 @@ for (const tool of ["claude", "codex"]) {
         }
       });
     }
+  });
+}
+
+// ── The .rs gate through a whole Stop run: crate lookup and timeout ─────────
+// The crate sits below the repository root, which has no Cargo.toml. The cargo
+// shim answers the clippy probe, records where the check ran, prints compile
+// progress and exits STOP_CARGO_EXIT (124 stands in for portable_timeout's
+// expiry; the fixture's timeout and perl shims run commands unbounded).
+const STOP_CARGO = `#!/bin/bash
+[ "$1 $2" = "clippy --version" ] && { echo "clippy 0.1.0"; exit 0; }
+pwd -P >> "$STOP_CARGO_CWD"
+echo "Checking app v0.1.0"
+exit "\${STOP_CARGO_EXIT:-0}"
+`;
+
+function rustStopFixture(tool) {
+  const f = fixture(tool);
+  const crate = join(f.root, "crates", "app");
+  mkdirSync(join(crate, "src"), { recursive: true });
+  writeFileSync(join(crate, "Cargo.toml"), '[package]\nname = "app"\nedition = "2021"\n');
+  writeFileSync(join(crate, "src", "lib.rs"), "pub fn a() {}\n");
+  const gitEnv = f["env"];
+  for (const args of [["add", "crates"], ["commit", "-qm", "crate"]]) {
+    const r = spawnSync("git", args, { cwd: f.root, env: gitEnv, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+  }
+  writeFileSync(join(crate, "src", "lib.rs"), "pub fn a() {}\npub fn b() {}\n");
+  writeFileSync(join(f.home, "bin", "cargo"), STOP_CARGO);
+  chmodSync(join(f.home, "bin", "cargo"), 0o755);
+  const cwdLog = join(f.home, "cargo-cwd");
+  return { ...f, crate, cwdLog, runCargo: (exit) => f.run({ STOP_CARGO_CWD: cwdLog, STOP_CARGO_EXIT: String(exit) }) };
+}
+
+for (const tool of ["codex", "claude"]) {
+  describe(`${tool} Stop .rs gate`, { skip: isWindows && "cargo shim is a bash script" }, () => {
+    test("checks a crate below the repository root, from the crate", () => {
+      const f = rustStopFixture(tool);
+      const r = f.runCargo(0);
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      const cwds = readFileSync(f.cwdLog, "utf8").trim().split(/\r?\n/);
+      assert.deepEqual(cwds, [realpathSync(f.crate)]);
+    });
+
+    test("lets a timed-out check through and says it was not checked", () => {
+      const f = rustStopFixture(tool);
+      const r = f.runCargo(124);
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.match(r.stderr, /cargo clippy check did not finish within 30s — not checked; allowing stop\./);
+      assert.doesNotMatch(r.stderr, /Checking app/);
+    });
+
+    test("still blocks a check that fails", () => {
+      const f = rustStopFixture(tool);
+      const r = f.runCargo(101);
+      assert.equal(r.status, 2, r.stdout + r.stderr);
+      assert.match(r.stderr, /cargo clippy check failed/);
+    });
   });
 }

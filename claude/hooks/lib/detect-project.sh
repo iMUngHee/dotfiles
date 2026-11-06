@@ -87,6 +87,31 @@ toml_edition() {
   ' "$1" 2>/dev/null
 }
 
+# cargo_crate_dir <file> <root>: the nearest directory at or above <file>, and
+# not above <root>, that holds a Cargo.toml; nothing when there is none. A
+# relative <file> is taken from the working directory, as git lists it. Always
+# returns 0, for set -e.
+cargo_crate_dir() {
+  local dir stop
+  # Builtins only (no dirname): the hooks also run under a PATH trimmed to the
+  # checker's own tools.
+  dir=.
+  [[ "$1" == */* ]] && dir=${1%/*}
+  [[ -n "$dir" ]] || dir=/
+  dir=$(cd "$dir" 2>/dev/null && pwd -P) || return 0
+  stop=$(cd "$2" 2>/dev/null && pwd -P) || stop=""
+  while :; do
+    if [[ -f "$dir/Cargo.toml" ]]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    # The project root bounds the climb; / (or MSYS's //) ends one outside it.
+    [[ "$dir" == "$stop" || "$dir" == / || "$dir" == // ]] && return 0
+    dir=${dir%/*}
+    [[ -n "$dir" ]] || dir=/
+  done
+}
+
 # cargo_edition <file>: the edition of the crate <file> belongs to, as Cargo reads
 # it. The nearest Cargo.toml with a [package] decides: its own `edition`, or the
 # workspace root's [workspace.package] one when it inherits. Prints nothing for
@@ -147,28 +172,36 @@ detect_checker() {
       command -v gofmt &>/dev/null && FMT_CMD="gofmt -w"
       ;;
     *.rs)
-      if [[ -f "$root/Cargo.toml" ]]; then
-        # Clippy when the project's toolchain has it, else check — both over
+      # The crate is the nearest Cargo.toml at or above the file, so a crate
+      # in a subdirectory of the repository is checked too; cargo finds its
+      # workspace from there. The checker cds there instead of passing
+      # --manifest-path because rustup picks the toolchain, rust-toolchain.toml
+      # included, from the working directory.
+      local crate_dir crate_cd
+      crate_dir=$(cargo_crate_dir "$file" "$root")
+      if [[ -n "$crate_dir" ]]; then
+        # Clippy when the crate's toolchain has it, else check — both over
         # all targets, so test code is compiled too. The probe runs here, not
-        # inside CHECK_CMD, so CHECK_CMD stays one command that the timeout
-        # signals directly; it is bounded on its own and cannot start a
-        # toolchain download. Its status goes through `if`: Codex consumers
-        # source this under `set -e`; stdin is /dev/null because Stop's Stage 0
-        # feeds its file list on stdin. Memo: the most recent root (one hook run
-        # serves one project; Stop's Stage 0 calls this per changed file).
-        if [[ "${_CLIPPY_PROBE_ROOT:-}" != "$root" ]]; then
-          _CLIPPY_PROBE_ROOT="$root"
-          if (cd "$root" && RUSTUP_AUTO_INSTALL=0 portable_timeout 5 cargo clippy --version) </dev/null >/dev/null 2>&1; then
+        # inside CHECK_CMD, so CHECK_CMD stays one command (exec'd after the
+        # cd) that the timeout signals directly; it is bounded on its own and
+        # cannot start a toolchain download. Its status goes through `if`:
+        # Codex consumers source this under `set -e`; stdin is /dev/null
+        # because Stop's Stage 0 feeds its file list on stdin. Memo: the most
+        # recent crate (Stop's Stage 0 calls this per changed file).
+        if [[ "${_CLIPPY_PROBE_ROOT:-}" != "$crate_dir" ]]; then
+          _CLIPPY_PROBE_ROOT="$crate_dir"
+          if (cd "$crate_dir" && RUSTUP_AUTO_INSTALL=0 portable_timeout 5 cargo clippy --version) </dev/null >/dev/null 2>&1; then
             _CLIPPY_PROBE_OK=1
           else
             _CLIPPY_PROBE_OK=0
           fi
         fi
+        printf -v crate_cd '%q' "$crate_dir"
         if [[ "$_CLIPPY_PROBE_OK" -eq 1 ]]; then
-          CHECK_CMD="cargo clippy --all-targets --message-format short 2>&1"
+          CHECK_CMD="cd $crate_cd && exec cargo clippy --all-targets --message-format short 2>&1"
           LANG_LABEL="cargo clippy"
         else
-          CHECK_CMD="cargo check --all-targets --message-format short 2>&1"
+          CHECK_CMD="cd $crate_cd && exec cargo check --all-targets --message-format short 2>&1"
           LANG_LABEL="cargo check"
         fi
       fi
