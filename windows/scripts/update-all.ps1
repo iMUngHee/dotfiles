@@ -6,8 +6,9 @@
 #
 #   winget / msstore : every CLI, runtime, and app in packages.ps1
 #   go install       : pager        (no winget package, no release binaries)
-#   npm -g           : tree-sitter-cli, plus the real .exe copied ahead of
-#                      npm's sh shim on PATH - that copy goes stale on upgrade
+#   npm -g           : tree-sitter-cli and @openai/codex (packages.ps1's
+#                      $NpmGlobals), plus tree-sitter's real .exe copied ahead
+#                      of npm's sh shim on PATH - that copy goes stale on upgrade
 #   PSGallery        : PSReadLine, PSFzf (the oh-my-zsh plugin equivalents)
 #   GitHub release   : FiraCode Nerd Font
 #
@@ -46,7 +47,10 @@ Write-Step "npm globals"
 if (-not (Test-Command 'npm')) {
     Add-Warn "npm not on PATH - skipped"
 } else {
-    npm update -g tree-sitter-cli
+    # Named, not a bare `npm update -g`, so a global installed by hand is left
+    # alone. Keep this list equal to $NpmGlobals in packages.ps1: the Codex CLI
+    # moved there from winget so that this step would update it.
+    npm update -g tree-sitter-cli @openai/codex
     if ($LASTEXITCODE -ne 0) { Add-Warn "npm update -g exited $LASTEXITCODE" }
 
     # Re-copy the real binary. npm's global bin holds an extensionless sh shim
