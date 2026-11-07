@@ -210,7 +210,7 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
-- [ ] **macOS / Windows** — run the Codex pager-name SessionStart integration
+- [ ] **macOS** — run the Codex pager-name SessionStart integration
       on Codex 0.167.0 with Node 22 or later. Review the changed hook in `/hooks`,
       start/resume a session, then `/rename other` and send a prompt. Verify
       the name returns to `pager whoami` and is visible via `thread-name`.
@@ -226,8 +226,9 @@ cannot run something; remove it in the commit that records the result.
       the working directory ran unless the shell starts in the hook's
       directory; a stub proxy that ignores EOF ended at the 3 s timeout
       (3096 ms) and outlived the hook.
-      Still owed there: the TUI `/rename` and next-prompt recovery. On Linux
-      and macOS, rerun `node --test codex/hooks/pager-session-name.test.mjs`:
+      The TUI `/rename` was then restored to the pager name on the next prompt
+      (observed by the person, 2026-11-08), so Windows is done. On Linux and
+      macOS, rerun `node --test codex/hooks/pager-session-name.test.mjs`:
       `finish()` now also closes the proxy's pipes there, untested since.
 
 - [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
