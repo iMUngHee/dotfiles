@@ -217,6 +217,18 @@ cannot run something; remove it in the commit that records the result.
       Linux protocol/wrapper tests, actual TUI rename/next-prompt recovery,
       mail delivery and combined startup-wake smoke are covered; the POSIX executable fixtures
       in `codex/hooks/pager-session-name.test.mjs` skip on native Windows.
+      On Windows 2026-11-08 (Codex 0.167.0, Node 26.12.1) the rename never ran:
+      `spawn("codex")` cannot start npm's `codex.cmd` shim and failed with
+      ENOENT, which the hook swallows. With the win32 shell spawn, running
+      `pager-session-name.mjs` for a live session set its `thread_name` to the
+      pager name (`~/.codex/session_index.jsonl`) and left no proxy process.
+      With `NoDefaultCurrentDirectoryInExePath` unset, a `codex.cmd` planted in
+      the working directory ran unless the shell starts in the hook's
+      directory; a stub proxy that ignores EOF ended at the 3 s timeout
+      (3096 ms) and outlived the hook.
+      Still owed there: the TUI `/rename` and next-prompt recovery. On Linux
+      and macOS, rerun `node --test codex/hooks/pager-session-name.test.mjs`:
+      `finish()` now also closes the proxy's pipes there, untested since.
 
 - [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
       `bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'`

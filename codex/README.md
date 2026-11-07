@@ -94,6 +94,10 @@ jq, pager, and the local Codex daemon. Its optional update is bounded to one sec
 for alias lookup and three seconds for the server connection. Missing aliases
 are ignored; connection failures produce a diagnostic without blocking pager
 delivery. Remote and `--no-daemon` sessions are not covered by this integration.
+On Windows the npm-installed `codex` is a `codex.cmd` shim, which Node cannot
+spawn directly, so `codex app-server proxy` is started through a shell there,
+from the hook's own directory so that a `codex.cmd` in the session's repository
+cannot run instead.
 The loopback transport accepts only a request bearing a fresh random token and
 closes after the one connection; it adds no package dependency.
 
