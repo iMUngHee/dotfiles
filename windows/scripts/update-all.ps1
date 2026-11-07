@@ -51,7 +51,10 @@ if (-not (Test-Command 'npm')) {
     # Named, not a bare `npm update -g`, so a global installed by hand is left
     # alone. Keep this list equal to $NpmGlobals in packages.ps1: the Codex CLI
     # moved there from winget so that this step would update it.
-    npm update -g tree-sitter-cli @openai/codex
+    # --allow-scripts names the entries marked scripts = $true there: npm 11.20
+    # warns about, and strict-allow-scripts blocks, any install script not on
+    # that list, and tree-sitter-cli's is what downloads its binary.
+    npm update -g tree-sitter-cli @openai/codex --allow-scripts=tree-sitter-cli
     if ($LASTEXITCODE -ne 0) { Add-Warn "npm update -g exited $LASTEXITCODE" }
 
     # Re-copy the real binary. npm's global bin holds an extensionless sh shim
