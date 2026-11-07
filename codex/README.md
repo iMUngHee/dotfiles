@@ -70,9 +70,44 @@ The template also declares the opt-in `workspace-local-sockets` permission profi
 
 ## Status Line
 
-Codex 0.133.0 supports built-in status line items only. `config.toml.template` keeps the footer compact by prioritizing model, run state, `task-progress`, context, quota, current directory, and git branch. Wider duplicate or low-signal items stay out of the footer to avoid truncation.
+Codex 0.167.0 provides a built-in `thread-name` footer item. The template puts it
+first, followed by model, run state, task progress, context, quota, directory and
+branch. `/statusline` opens the item picker.
 
-The current Codex CLI does not support a Claude-style external status command. Local plan frontmatter such as `.agents/plans/*` `draft` or `active` cannot be rendered directly in the Codex footer without a Codex TUI feature or fork. Use `task-progress` as the closest built-in signal.
+At SessionStart and UserPromptSubmit, `hooks/pager-hook.sh` delivers pager messages, then
+`hooks/pager-session-name.mjs` resolves the exact hook session's alias with
+`pager whoami --session <id>`. It connects through the running local app-server's
+control socket, reads `thread/read` once per invocation and calls `thread/name/set`
+only when the name differs. Codex does not include the current thread name in
+the hook input, so this read is needed to observe a rename made in the UI.
+Codex dispatches SessionStart on the first turn; the name appears when that
+hook runs. `/rename other` is restored to the pager alias on the next prompt.
+An already matching name causes no write or adapter output. Other hook events
+leave the thread name alone, and aliases are never changed from a thread name.
+
+A consumed-poke `decision: block` remains byte-for-byte intact and skips the
+adapter entirely. Pager 0.7.1 also preserves a wake whose SessionStart hook just
+delivered the mail, so the first model turn can still run.
+
+This adapter requires Node with the built-in WebSocket API (Node 22 or later),
+jq, pager, and the local Codex daemon. Its optional update is bounded to one second
+for alias lookup and three seconds for the server connection. Missing aliases
+are ignored; connection failures produce a diagnostic without blocking pager
+delivery. Remote and `--no-daemon` sessions are not covered by this integration.
+The loopback transport accepts only a request bearing a fresh random token and
+closes after the one connection; it adds no package dependency.
+
+After deploying the changed startup/prompt hooks, review their trust in `/hooks`.
+For an existing session, select `thread-name` through `/statusline`, or restart
+Codex to load the template's footer configuration. Local plan frontmatter is
+still represented by the built-in `task-progress` signal rather than an external
+status command.
+
+Run the focused hook checks with:
+
+```bash
+node --test codex/hooks/pager-session-name.test.mjs
+```
 
 ## MCP servers
 

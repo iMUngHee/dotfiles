@@ -210,6 +210,14 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **macOS / Windows** — run the Codex pager-name SessionStart integration
+      on Codex 0.167.0 with Node 22 or later. Review the changed hook in `/hooks`,
+      start/resume a session, then `/rename other` and send a prompt. Verify
+      the name returns to `pager whoami` and is visible via `thread-name`.
+      Linux protocol/wrapper tests, actual TUI rename/next-prompt recovery,
+      mail delivery and combined startup-wake smoke are covered; the POSIX executable fixtures
+      in `codex/hooks/pager-session-name.test.mjs` skip on native Windows.
+
 - [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
       `bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'`
       and check both build into `~/.local/bin` (`pager who`, `gaebu --version`),
