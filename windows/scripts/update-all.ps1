@@ -1,19 +1,20 @@
 # windows/scripts/update-all.ps1 - the `buu` implementation for Windows.
 #
 # On macOS `buu` is `brew update; brew upgrade`, and brew genuinely owns almost
-# everything. winget does not: this tier deliberately installs four things from
+# everything. winget does not: this tier deliberately installs the rest from
 # outside it, because winget has no package for them.
 #
 #   winget / msstore : every CLI, runtime, and app in packages.ps1
 #   go install       : pager        (no winget package, no release binaries)
+#   cargo install    : gaebu        (same; built from its git HEAD)
 #   npm -g           : tree-sitter-cli and @openai/codex (packages.ps1's
 #                      $NpmGlobals), plus tree-sitter's real .exe copied ahead
 #                      of npm's sh shim on PATH - that copy goes stale on upgrade
 #   PSGallery        : PSReadLine, PSFzf (the oh-my-zsh plugin equivalents)
 #   GitHub release   : FiraCode Nerd Font
 #
-# Running `winget upgrade --all` alone silently leaves all four behind, so this
-# exists to make `buu` mean the same thing on both platforms.
+# Running `winget upgrade --all` alone silently leaves all of those behind, so
+# this exists to make `buu` mean the same thing on both platforms.
 #
 # The font is opt-in with -Font: it is a 27 MB download whose content changes a
 # few times a year, so paying for it on every routine update is not worth it.
@@ -109,7 +110,14 @@ foreach ($m in @('PSReadLine', 'PSFzf')) {
 # `go install @latest` IS the update mechanism.
 & (Join-Path $PSScriptRoot 'install-pager.ps1') -Force
 
-# ── 5. Nerd Font (opt-in) ─────────────────────────────────────
+# ── 5. gaebu ──────────────────────────────────────────────────
+# Same reason as pager: no release binaries, so a -Force rebuild from git is the
+# update. install-gaebu.ps1 leaves an installed gaebu alone without -Force so
+# that bootstrap never upgrades it as a side effect; running buu is the
+# person's call to upgrade. After pager, which gaebu resolves callers through.
+& (Join-Path $PSScriptRoot 'install-gaebu.ps1') -Force
+
+# ── 6. Nerd Font (opt-in) ─────────────────────────────────────
 if ($Font) {
     & (Join-Path $PSScriptRoot 'install-nerdfont.ps1') -Force
 } else {
