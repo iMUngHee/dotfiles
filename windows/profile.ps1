@@ -177,10 +177,10 @@ if (Get-Command nvim.exe -ErrorAction SilentlyContinue) {
 # alias buu="brew update;brew upgrade -y"
 #
 # Not just `winget upgrade --all`: brew owns nearly everything on the Mac, but
-# this tier installs pager (go), tree-sitter-cli (npm), PSReadLine/PSFzf
-# (PSGallery) and the Nerd Font (GitHub release) from outside winget, because
-# winget has no package for any of them. update-all.ps1 covers all of it so buu
-# means the same thing on both platforms.
+# this tier installs pager (go), tree-sitter-cli and the Codex CLI (npm),
+# PSReadLine/PSFzf (PSGallery) and the Nerd Font (GitHub release) from outside
+# winget, because winget has no package for any of them. update-all.ps1 covers
+# all of it so buu means the same thing on both platforms.
 function buu { & (Join-Path $ConfigRoot 'windows\scripts\update-all.ps1') @args }
 
 # Windows has no `open`/`loginctl lock-session` pair; these are the equivalents.
