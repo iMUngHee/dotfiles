@@ -27,6 +27,7 @@ notifications = false
 vim_mode_default = true
 status_line_use_colors = true
 status_line = [
+  "thread-name",
   "model-with-reasoning",
   "run-state",
   "task-progress",
@@ -121,7 +122,7 @@ statusMessage = "codex active plan context"
 # no mid-turn injection point and the event lists differ on purpose.
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
-command = "if command -v pager >/dev/null 2>&1; then pager hook; fi"
+command = "bash \"$HOME/.config/codex/hooks/pager-hook.sh\""
 timeout = 10
 command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" pager-hook.sh"
 statusMessage = "pager delivery"
@@ -159,7 +160,7 @@ statusMessage = "codex edit pipeline"
 
 [[hooks.SessionStart.hooks]]
 type = "command"
-command = "if command -v pager >/dev/null 2>&1; then pager hook; fi"
+command = "bash \"$HOME/.config/codex/hooks/pager-hook.sh\""
 timeout = 10
 command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bash-hook.ps1\" pager-hook.sh"
 statusMessage = "pager delivery"
