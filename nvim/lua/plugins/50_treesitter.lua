@@ -39,6 +39,7 @@ return {
         -- Neovim 0.12 already maps .fs/.fsx/.fsi to the fsharp filetype.
         "fsharp",
         "c_sharp",
+        "slint",
       })
 
       vim.treesitter.language.register("bash", "sh")

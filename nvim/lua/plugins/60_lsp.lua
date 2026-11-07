@@ -79,6 +79,7 @@ return {
           -- on PATH: winget Microsoft.DotNet.SDK.8 (Windows), pacman dotnet-sdk
           -- (Omarchy), already present on the Mac.
           "fsautocomplete",
+          "slint_lsp",
         },
       })
     end,
