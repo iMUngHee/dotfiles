@@ -73,12 +73,15 @@ $NpmGlobals = @(
     # brew "tree-sitter-cli". nvim-treesitter's `main` branch calls the
     # tree-sitter CLI to generate a parser before compiling it, so without this
     # every :TSInstall fails with ENOENT: 'tree-sitter'.
-    # The package's postinstall is what downloads the actual binary, so install
-    # scripts must run - they do, by default: `npm config get ignore-scripts` is
-    # false on npm 11.6.2. (An earlier revision passed --allow-scripts here for
-    # that reason; npm has no such flag, and it only produced "Unknown cli config
-    # ... will stop working in the next major version of npm".)
-    @{ id = 'tree-sitter-cli'; note = 'brew "tree-sitter-cli" - nvim-treesitter parser builds' },
+    # The package's install script is what downloads the actual binary, so it
+    # must run. npm 11.20 gates install scripts on an allow-list: one not on it
+    # still runs, with an "install scripts not yet covered by allowScripts"
+    # warning, and `strict-allow-scripts` turns that into a failed install.
+    # scripts = $true passes --allow-scripts=<id>, the documented way to allow
+    # them for `npm install -g`, where there is no package.json to record it.
+    # (npm 11.6.2 did not know the flag and warned "Unknown cli config"; the
+    # install still worked there.)
+    @{ id = 'tree-sitter-cli'; note = 'brew "tree-sitter-cli" - nvim-treesitter parser builds'; scripts = $true },
     # cask "codex" / brew "codex" on the Mac. Deliberately NOT winget: the
     # community manifest for OpenAI.Codex sat on 0.146.1 (published 2026-08-05)
     # while upstream was already 0.153.4 (2026-09-04), and `winget upgrade`
@@ -207,7 +210,10 @@ if (-not (Test-Command 'npm')) {
             continue
         }
         Write-Host "   installing $id  ($($pkg.note))"
-        npm install -g $id *> $null
+        $npmArgs = @('install', '-g', $id)
+        # ContainsKey first: StrictMode (common.ps1) throws on a missing key.
+        if ($pkg.ContainsKey('scripts') -and $pkg.scripts) { $npmArgs += "--allow-scripts=$id" }
+        npm @npmArgs *> $null
         if ($LASTEXITCODE -ne 0) {
             Add-Warn "npm install failed for $id (exit $LASTEXITCODE)"
         }
