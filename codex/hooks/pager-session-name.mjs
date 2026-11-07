@@ -4,6 +4,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { fileURLToPath } from "node:url";
 
 try {
   const input = JSON.parse(readFileSync(0, "utf8"));
@@ -32,7 +33,15 @@ try {
       if (!header.startsWith(`GET /${token} HTTP/1.1\r\n`)) return socket.destroy();
       server.close();
       socket.removeAllListeners("data");
-      const child = spawn("codex", ["app-server", "proxy"], { stdio: ["pipe", "pipe", "pipe"] });
+      const stdio = ["pipe", "pipe", "pipe"];
+      // Windows: the npm-installed codex is a codex.cmd shim, which spawn cannot
+      // run without a shell (ENOENT). One command string, not shell + args,
+      // which Node deprecates (DEP0190); the arguments are fixed. cmd.exe looks
+      // in its working directory before PATH, so run it from this hook's own
+      // directory, not the session's repository, where a codex.cmd would win.
+      const child = process.platform === "win32"
+        ? spawn("codex app-server proxy", { shell: true, stdio, cwd: fileURLToPath(new URL(".", import.meta.url)) })
+        : spawn("codex", ["app-server", "proxy"], { stdio });
       children.add(child);
       child.stdin.write(header);
       socket.pipe(child.stdin);
@@ -52,7 +61,14 @@ try {
     if (error) console.error(`pager session name: ${error}`);
     ws?.close();
     for (const socket of sockets) socket.destroy();
-    for (const child of children) child.kill();
+    // Close the pipes before the kill: on Windows the kill reaches only the
+    // shell, and a proxy that outlived it would hold this process open.
+    for (const child of children) {
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+      child.kill();
+    }
     server.close();
   }
   server.on("error", (error) => finish(error.message));
