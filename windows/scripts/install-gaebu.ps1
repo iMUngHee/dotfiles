@@ -50,13 +50,23 @@ if ((Test-Path $exe) -and -not $Force) {
 } else {
     if (-not (Test-Path $BinDir)) { New-Item -ItemType Directory -Path $BinDir -Force | Out-Null }
 
+    # rustup and cargo report progress on stderr. Windows PowerShell 5.1 wraps
+    # each line captured by 2>&1 in an ErrorRecord, and Out-Host prints the
+    # first as a NativeCommandError block; this turns them back into their text.
+    # Exception.Message, not "$_": a blank line's record stringifies to its
+    # type name. pwsh 7 wraps them too but prints plain red text, so there
+    # the filter only drops the colour.
+    filter ConvertTo-StderrText {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+    }
+
     $prevPref = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
         $installed = (& rustup toolchain list 2>&1 | Out-String)
         if ($installed -notmatch [regex]::Escape($Toolchain)) {
             Write-Host "   rustup toolchain install $Toolchain --profile minimal"
-            & rustup toolchain install $Toolchain --profile minimal 2>&1 | Out-Host
+            & rustup toolchain install $Toolchain --profile minimal 2>&1 | ConvertTo-StderrText | Out-Host
             if ($LASTEXITCODE -ne 0) {
                 Add-Warn "rustup could not install $Toolchain - gaebu not built"
                 return
@@ -67,7 +77,7 @@ if ((Test-Path $exe) -and -not $Force) {
         New-Item -ItemType Directory -Path $stage | Out-Null
         try {
             Write-Host "   cargo +$Toolchain install --git $Git --locked gaebu"
-            & cargo "+$Toolchain" install --git $Git --locked --root $stage gaebu 2>&1 | Out-Host
+            & cargo "+$Toolchain" install --git $Git --locked --root $stage gaebu 2>&1 | ConvertTo-StderrText | Out-Host
             $cargoExit = $LASTEXITCODE
             $new = Join-Path $stage 'bin\gaebu.exe'
             if ($cargoExit -ne 0 -or -not (Test-Path $new)) {
