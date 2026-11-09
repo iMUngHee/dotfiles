@@ -1,6 +1,6 @@
 ---
 name: Rule phrasing for agent instructions
-description: State agent rules as one short behavioral sentence; use exact-format wording only for output a hook, test, script, or 대협's contract consumes (A/B 2026-09-07: format-forcing added nothing).
+description: "State agent rules as one short behavioral sentence; use exact-format wording only for output a hook, test, script, or 대협's contract consumes (A/B 2026-09-07: format-forcing added nothing)."
 type: feedback
 ---
 
