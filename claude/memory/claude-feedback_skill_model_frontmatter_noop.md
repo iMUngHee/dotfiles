@@ -1,6 +1,6 @@
 ---
 name: claude-feedback_skill_model_frontmatter_noop
-description: Skill frontmatter `model:` is ignored unless the skill sets `context: fork` (Claude Code 2.1.260, measured in -p and interactive); `effort:` is honored inline. Policy since 2026-10-19 — no model or effort pinned anywhere in the repo; machines choose locally.
+description: "Skill frontmatter `model:` is ignored unless the skill sets `context: fork` (Claude Code 2.1.260, measured in -p and interactive); `effort:` is honored inline. Policy since 2026-10-19 — no model or effort pinned anywhere in the repo; machines choose locally."
 metadata:
   type: feedback
 ---

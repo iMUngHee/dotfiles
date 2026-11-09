@@ -1,6 +1,6 @@
 ---
 name: ai config structure (3-tier, prefix, token, deploy, manifest)
-description: ~/.config 3-tier (ai/claude/codex): layout, deploy model, prefix, AGENTS.manifest order, token substitution. Must load first.
+description: "~/.config 3-tier (ai/claude/codex): layout, deploy model, prefix, AGENTS.manifest order, token substitution. Must load first."
 type: feedback
 ---
 
