@@ -76,8 +76,11 @@ branch. `/statusline` opens the item picker.
 
 At SessionStart and UserPromptSubmit, `hooks/pager-hook.sh` delivers pager messages, then
 `hooks/pager-session-name.mjs` resolves the exact hook session's alias with
-`pager whoami --session <id>`. It connects through the running local app-server's
-control socket, reads `thread/read` once per invocation and calls `thread/name/set`
+`pager whoami --session <id>`. It first connects through the running local
+app-server's control socket. If that transport is unavailable, it starts a
+short-lived `codex app-server --listen stdio://` client for the same persisted
+thread. This covers desktop sessions without a CLI daemon, including after a
+Windows reboot. Both paths read `thread/read` once and call `thread/name/set`
 only when the name differs. Codex does not include the current thread name in
 the hook input, so this read is needed to observe a rename made in the UI.
 Codex dispatches SessionStart on the first turn; the name appears when that
@@ -90,14 +93,18 @@ adapter entirely. Pager 0.7.1 also preserves a wake whose SessionStart hook just
 delivered the mail, so the first model turn can still run.
 
 This adapter requires Node with the built-in WebSocket API (Node 22 or later),
-jq, pager, and the local Codex daemon. Its optional update is bounded to one second
-for alias lookup and three seconds for the server connection. Missing aliases
-are ignored; connection failures produce a diagnostic without blocking pager
-delivery. Remote and `--no-daemon` sessions are not covered by this integration.
+jq, pager, and a local Codex CLI with the app-server APIs. Its optional update is
+bounded to one second for alias lookup and three seconds total across server
+transports. Missing aliases are ignored; connection failures produce a diagnostic
+without blocking pager delivery. The fallback never starts a model turn or writes
+Codex databases directly. Desktop windows may retain a cached title until they
+read thread metadata again; switching away and back refreshes it. The fallback
+does not send a live title event to an already open desktop window. Remote
+threads unavailable in the local Codex home are not covered by this integration.
 On Windows the npm-installed `codex` is a `codex.cmd` shim, which Node cannot
 spawn directly, so `codex app-server proxy` is started through a shell there,
 from the hook's own directory so that a `codex.cmd` in the session's repository
-cannot run instead.
+cannot run instead. The stdio fallback uses the same Windows shell boundary.
 The loopback transport accepts only a request bearing a fresh random token and
 closes after the one connection; it adds no package dependency.
 
@@ -112,6 +119,10 @@ Run the focused hook checks with:
 ```bash
 node --test codex/hooks/pager-session-name.test.mjs
 ```
+
+The protocol and wrapper fixtures also run on native Windows using Git Bash;
+Windows no longer skips the behavioral suite. Tests replace executable lookup
+inside child Node processes while exercising real socket and stdio transports.
 
 ## MCP servers
 
@@ -150,6 +161,11 @@ Codex also auto-installs bundled system skills such as `skill-creator` under `~/
 `codex/DEVGUARD.md` is appended to generated `~/.codex/AGENTS.md` after shared `ai/` content. Use it for Codex-specific invocation paths only; shared policy stays in `ai/`.
 
 Commit-time sensitive-info scanning uses `codex/scripts/pre-commit-sensitive-scan.sh`. Run it before `git commit` in 대협-owned repos and surface any `FAIL` or `WARN` before committing.
+
+The exact algorithm name `SHA-256` is excluded from ticket warnings before the
+first match is selected; actual ticket identifiers later in the same text still
+warn. Token and private-key checks are unchanged. Run its index-based regression
+suite with `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs`.
 
 ## Hooks
 
