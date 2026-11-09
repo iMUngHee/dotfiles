@@ -245,6 +245,25 @@ shared server through `/daemon` and check again; connected sessions may be inter
   exited 1 (fake: boom)` and went on, and the same fake as `pager.exe` gave
   the one-line `version` warning.
 
+### Verified on Windows 2026-11-10: Codex desktop Pager names
+
+- Codex CLI 0.167.0, desktop host 0.167.0-alpha.3.2 and Node 26.12.1:
+  `node --test codex/hooks/pager-session-name.test.mjs` passed 17 tests with
+  zero failures and zero skips, including both transports, mail preservation,
+  exact-session checks, API errors and the total timeout.
+- With the CLI daemon socket refusing connections, temporarily named the live
+  desktop thread `pager-desktop-smoke`, invoked the naming adapter and read the
+  thread again through the official API: `pager-desktop-smoke` -> `lapo`, exit 0
+  and empty stderr. The person confirmed the desktop displayed `lapo`.
+  An already open desktop window can retain the
+  old title until it reads metadata again; the fallback does not emit a live
+  desktop title event.
+- The fallback exited without leaving an additional `codex.exe` process. Its
+  short-lived stdio server needs neither a daemon restart nor a model turn.
+- The sensitive-info scanner's seven native Windows regressions passed. Exact
+  `SHA-256` notation passes while later ticket identifiers, filename findings,
+  staged-only findings and token detection remain covered.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
@@ -255,8 +274,8 @@ cannot run something; remove it in the commit that records the result.
       start/resume a session, then `/rename other` and send a prompt. Verify
       the name returns to `pager whoami` and is visible via `thread-name`.
       Linux protocol/wrapper tests, actual TUI rename/next-prompt recovery,
-      mail delivery and combined startup-wake smoke are covered; the POSIX executable fixtures
-      in `codex/hooks/pager-session-name.test.mjs` skip on native Windows.
+      mail delivery and combined startup-wake smoke were covered before the
+      desktop fallback; all current fixtures now run on native Windows too.
       On Windows 2026-11-08 (Codex 0.167.0, Node 26.12.1) the rename never ran:
       `spawn("codex")` cannot start npm's `codex.cmd` shim and failed with
       ENOENT, which the hook swallows. With the win32 shell spawn, running
@@ -268,8 +287,13 @@ cannot run something; remove it in the commit that records the result.
       (3096 ms) and outlived the hook.
       The TUI `/rename` was then restored to the pager name on the next prompt
       (observed by the person, 2026-11-08), so Windows is done. On Linux and
-      macOS, rerun `node --test codex/hooks/pager-session-name.test.mjs`:
-      `finish()` now also closes the proxy's pipes there, untested since.
+      macOS, rerun `node --test codex/hooks/pager-session-name.test.mjs` and
+      exercise the new stdio fallback with the CLI daemon stopped. The current
+      fallback and executable-lookup fixtures were executed only on Windows.
+
+- [ ] **macOS and Linux** — run
+      `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` to verify the
+      exact hash-algorithm exception and retained findings on the local grep.
 
 - [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
       `bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'`
