@@ -109,8 +109,11 @@ foreach ($m in @('PSReadLine', 'PSFzf')) {
 }
 
 # ── 4. pager ──────────────────────────────────────────────────
-# Rebuilt rather than version-checked: pager publishes no release binaries, so
-# `go install @latest` IS the update mechanism.
+# Rebuilt rather than version-checked: pager publishes no release binaries, and
+# its version is a constant in the source rather than a git tag, so
+# `go install @latest` IS the update mechanism. install-pager.ps1 prints the
+# release it replaced and the one now installed; when the release moves, its
+# CHANGELOG.md Upgrading note says what to restart.
 & (Join-Path $PSScriptRoot 'install-pager.ps1') -Force
 
 # ── 5. gaebu ──────────────────────────────────────────────────

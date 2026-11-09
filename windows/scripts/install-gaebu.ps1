@@ -123,6 +123,18 @@ if ($BinDir -eq $defaultBin) {
 $probe = (& $exe --version 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -eq 0) {
     Write-Ok "gaebu --version -> $probe"
+
+    # The gaebu mod and rule this repo deploys (claude/mods/gaebu,
+    # ai/rules/gaebu.md) are copied from one gaebu release, and gaebu's tests
+    # hold the mod's plugin.json at the crate version: warn when this binary is
+    # a different release. Same check as ensure_gaebu in lib/agent-clis.sh.
+    $plugin = Join-Path (Get-ConfigRoot) 'claude\mods\gaebu\.claude-plugin\plugin.json'
+    $want = $null
+    try { $want = (Get-Content -Raw -LiteralPath $plugin -ErrorAction Stop | ConvertFrom-Json).version } catch { }
+    $have = ($probe -split '\s+')[1]
+    if ($want -and $have -and $have -ne $want) {
+        Add-Warn "gaebu $have is installed, but claude/mods/gaebu and ai/rules/gaebu.md are from $want - if older, re-run with -Force; if newer, copy both from gaebu $have"
+    }
 } else {
     Add-Warn "gaebu installed but '--version' exited $LASTEXITCODE ($probe)"
 }

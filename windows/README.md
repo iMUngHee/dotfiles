@@ -49,7 +49,7 @@ in form; all three were only reachable from here.
 | `scripts/deploy-*.ps1` | per-surface deploy | `*/scripts/bootstrap.sh` |
 | `scripts/install-nerdfont.ps1` | FiraCode Nerd Font | the ghostty AppImage installer in `homebrew/bootstrap.sh` |
 | `scripts/install-rust-tools.ps1` | rust-analyzer component, cargo-nextest, cargo-mutants (pinned release zips, SHA-256 verified, into `~/.local/bin`) | `lib/rust-analyzer.sh` + the Brewfile's cargo-nextest / cargo-mutants |
-| `scripts/install-gaebu.ps1` | gaebu built from source with the GNU toolchain (no MSVC linker needed), staged, smoke-tested and swapped into `~/.local/bin`; skipped when present unless `-Force`, which `buu` passes | `lib/agent-clis.sh` (`ensure_gaebu`) |
+| `scripts/install-gaebu.ps1` | gaebu built from source with the GNU toolchain (no MSVC linker needed), staged, smoke-tested and swapped into `~/.local/bin`; skipped when present unless `-Force`, which `buu` passes; warns when its release differs from the copied `claude/mods/gaebu` | `lib/agent-clis.sh` (`ensure_gaebu`) |
 | `scripts/vendor.ps1` | vendored-code check / sync | `ai/scripts/vendor.sh` (runs it under Git Bash) |
 | `scripts/pack-skills.ps1` | Cowork skill zips | — |
 | `dist/` | build output (gitignored) | — |
