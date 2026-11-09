@@ -220,6 +220,21 @@ shared server through `/daemon` and check again; connected sessions may be inter
   ran against pager 0.6.0 and a pre-0.6.0 binary, which got the one-line
   warning and did not stop the script.
 
+### Verified on 2026-11-10
+
+- Windows PowerShell 5.1.26100 with `$ErrorActionPreference = 'Stop'`, in a
+  temporary `USERPROFILE` with `Add-UserPath` stubbed so the user PATH was not
+  touched: `install-pager.ps1` over pager `65515fe` (before 0.6.0) ran its
+  skip path and ended in the one-line warning `'version' exited 1 (pager: unknown command "version")`, not a throw;
+  `-Force` printed `built ... (replaced a pager before 0.6.0)` then
+  `pager version -> pager 0.7.2 (v0.0.0-20261109085326-d0c4345946a2)`.
+  `install-gaebu.ps1 -BinDir <temp>` warned for gaebu 0.2.1 against
+  `plugin.json` 0.2.2 and stayed quiet for 0.2.2.
+- Windows Git Bash, `lib/agent-clis.sh` under `set -euo pipefail` with the
+  same pre-0.6.0 pager and gaebu 0.2.1 first on PATH: the pager skip path fell
+  back to its path, `ensure_gaebu` warned for 0.2.1, stayed quiet for 0.2.2,
+  and the shell survived both.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
@@ -255,14 +270,6 @@ cannot run something; remove it in the commit that records the result.
       `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
       (see Verified on 2026-11-04) and on 2026-11-05 pager's build path, into a
       temporary `LOCAL_BIN` (see Verified on 2026-11-05); Linux remains.
-- [ ] **Windows (Windows PowerShell 5.1)** — run `install-pager.ps1` over a
-      pager from before 0.6.0: the skip path must end in the one-line `version`
-      warning, not a throw (5.1 turns captured stderr into errors; pwsh 7 on
-      macOS does not, so it could not show this), and `-Force` must print
-      `built ... (replaced a pager before 0.6.0)` then
-      `pager version -> pager <current release> (...)`.
-      Run `install-gaebu.ps1` with an installed gaebu whose version differs from
-      `claude/mods/gaebu/.claude-plugin/plugin.json` and check the drift warning.
 - [ ] **Linux (Arch)** — run `buu` and check the pager step ends in
       `<release before> → <release after>`.
 - [ ] **macOS and Linux (zsh)** — `zsh/.zshrc` puts `~/.local/bin` on PATH
