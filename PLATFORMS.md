@@ -225,7 +225,8 @@ shared server through `/daemon` and check again; connected sessions may be inter
 - Windows PowerShell 5.1.26100 with `$ErrorActionPreference = 'Stop'`, in a
   temporary `USERPROFILE` with `Add-UserPath` stubbed so the user PATH was not
   touched: `install-pager.ps1` over pager `65515fe` (before 0.6.0) ran its
-  skip path and ended in the one-line warning `'version' exited 1 (pager: unknown command "version")`, not a throw;
+  skip path and ended in the one-line warning
+  `'version' exited 1 (pager: unknown command "version")`, not a throw;
   `-Force` printed `built ... (replaced a pager before 0.6.0)` then
   `pager version -> pager 0.7.2 (v0.0.0-20261109085326-d0c4345946a2)`.
   `install-gaebu.ps1 -BinDir <temp>` warned for gaebu 0.2.1 against
