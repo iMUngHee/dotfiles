@@ -114,7 +114,9 @@ if [[ "$project_root" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
   if grep -qE '^ai/skills/pm-context/' <<< "$changed_files"; then
     run_suite "pm-context tests" ai/skills/pm-context npm test --silent
   fi
-  if grep -qE '^ai/skills/config-audit/' <<< "$changed_files" && command -v go &>/dev/null; then
+  # Any .md under the tiers too: TestRepoFrontmatterParses is the only strict
+  # YAML parse memory, rule and agent frontmatter gets.
+  if grep -qE '^ai/skills/config-audit/|^(ai|claude|codex)/.*\.md$' <<< "$changed_files" && command -v go &>/dev/null; then
     run_suite "config-audit go tests" ai/skills/config-audit/scripts go test ./...
   fi
 fi

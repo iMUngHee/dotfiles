@@ -280,6 +280,13 @@ cannot run something; remove it in the commit that records the result.
       `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
       (see Verified on 2026-11-04) and on 2026-11-05 pager's build path, into a
       temporary `LOCAL_BIN` (see Verified on 2026-11-05); Linux remains.
+- [ ] **macOS and Linux** — a changed `.md` under the tiers now selects the
+      config-audit Go suite, whose `TestRepoFrontmatterParses` parses every
+      tier frontmatter. Run `node --test ai/lib/stop-hooks.test.mjs` (its
+      fixture's `go` recorder and the three-suite assertion ran only on
+      Windows 2026-11-10), and `go test -v -run TestRepoFrontmatterParses .`
+      from `~/.claude/skills/config-audit/scripts`: it must PASS, not SKIP,
+      through the symlink.
 - [ ] **Linux (Arch)** — run `buu` and check the pager step ends in
       `<release before> → <release after>`.
 - [ ] **macOS and Linux (zsh)** — `zsh/.zshrc` puts `~/.local/bin` on PATH

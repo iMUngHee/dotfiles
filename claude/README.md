@@ -118,7 +118,7 @@ Staged, unstaged, and untracked files select suites; only tracked changes may be
 | `ai/lib/**` | every `ai/lib/*.test.mjs` | 50s |
 | `ai/skills/pm-roadmap/**` | `npm test` (tsx) | 50s |
 | `ai/skills/pm-context/**` | `npm test` (tsx) | 1s |
-| `ai/skills/config-audit/**` | `go test ./...` | 2s |
+| `ai/skills/config-audit/**`, `{ai,claude,codex}/**/*.md` | `go test ./...` (includes the strict YAML parse of every tier frontmatter) | 2s |
 | `claude/mods/**` | `claude plugin test` per mod | 1s |
 | `nvim/**` | `inline_review_spec.lua` (headless) | 20s |
 
