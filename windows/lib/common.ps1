@@ -50,6 +50,17 @@ function Test-Command {
     return [bool]$c
 }
 
+# Pipe a native command's `2>&1` output through this before showing it, or
+# capturing it for display. Windows PowerShell 5.1 wraps each stderr line in an
+# ErrorRecord, and Out-Host / Out-String render the first one as a whole
+# NativeCommandError block (`At line:1 char:...`). Exception.Message, not "$_":
+# a blank line's record stringifies to its type name. pwsh 7 wraps them too but
+# prints plain red text, so there this only drops the colour. Capturing 2>&1
+# under Stop still throws on 5.1; callers switch to Continue first.
+filter ConvertTo-StderrText {
+    if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+}
+
 # -- Repo root -------------------------------------------------
 # Resolved from this file's location so the tier works from any cwd and from a
 # clone that is not at ~/.config (worktrees, CI).

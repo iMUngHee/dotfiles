@@ -50,16 +50,9 @@ if ((Test-Path $exe) -and -not $Force) {
 } else {
     if (-not (Test-Path $BinDir)) { New-Item -ItemType Directory -Path $BinDir -Force | Out-Null }
 
-    # rustup and cargo report progress on stderr. Windows PowerShell 5.1 wraps
-    # each line captured by 2>&1 in an ErrorRecord, and Out-Host prints the
-    # first as a NativeCommandError block; this turns them back into their text.
-    # Exception.Message, not "$_": a blank line's record stringifies to its
-    # type name. pwsh 7 wraps them too but prints plain red text, so there
-    # the filter only drops the colour.
-    filter ConvertTo-StderrText {
-        if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
-    }
-
+    # rustup and cargo report progress on stderr, so their output goes through
+    # ConvertTo-StderrText (lib/common.ps1) before it is shown. Continue, not
+    # the caller's Stop: under Windows PowerShell 5.1 that stderr would throw.
     $prevPref = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
@@ -85,7 +78,7 @@ if ((Test-Path $exe) -and -not $Force) {
                 return
             }
 
-            $version = (& $new --version 2>&1 | Out-String).Trim()
+            $version = (& $new --version 2>&1 | ConvertTo-StderrText | Out-String).Trim()
             if ($LASTEXITCODE -ne 0) {
                 Add-Warn "gaebu candidate failed smoke ('--version': $version) - kept the installed binary"
                 return
@@ -129,9 +122,18 @@ if ($BinDir -eq $defaultBin) {
     }
 }
 
-# Prove the binary runs rather than trusting that the file exists.
-$probe = (& $exe --version 2>&1 | Out-String).Trim()
-if ($LASTEXITCODE -eq 0) {
+# Prove the binary runs rather than trusting that the file exists. Continue,
+# not the caller's Stop: under Windows PowerShell 5.1 a stderr line from a
+# broken binary would otherwise throw past the warning below.
+$prevPref = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $probe = (& $exe --version 2>&1 | ConvertTo-StderrText | Out-String).Trim()
+    $probeExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevPref
+}
+if ($probeExit -eq 0) {
     Write-Ok "gaebu --version -> $probe"
 
     # The gaebu mod and rule this repo deploys (claude/mods/gaebu,
@@ -146,5 +148,5 @@ if ($LASTEXITCODE -eq 0) {
         Add-Warn "gaebu $have is installed, but claude/mods/gaebu and ai/rules/gaebu.md are from $want - if older, re-run with -Force; if newer, copy both from gaebu $have"
     }
 } else {
-    Add-Warn "gaebu installed but '--version' exited $LASTEXITCODE ($probe)"
+    Add-Warn "gaebu installed but '--version' exited $probeExit ($probe)"
 }

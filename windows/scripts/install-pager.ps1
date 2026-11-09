@@ -71,7 +71,7 @@ if ((Test-Path $exe) -and -not $Force) {
         try {
             $ErrorActionPreference = 'Continue'
             $env:PAGER_DB = Join-Path $stage 'smoke.db'
-            $smoke = (& $new who 2>&1 | Out-String).Trim()
+            $smoke = (& $new who 2>&1 | ConvertTo-StderrText | Out-String).Trim()
             $smokeExit = $LASTEXITCODE
 
             # The release this build replaces, for the line after the swap.
@@ -79,7 +79,7 @@ if ((Test-Path $exe) -and -not $Force) {
             # more reason this sits under Continue.
             $was = 'nothing'
             if (Test-Path $exe) {
-                $was = (& $exe version 2>&1 | Out-String).Trim()
+                $was = (& $exe version 2>&1 | ConvertTo-StderrText | Out-String).Trim()
                 if ($LASTEXITCODE -ne 0) { $was = 'a pager before 0.6.0' }
             }
         } finally {
@@ -135,7 +135,7 @@ if (Add-UserPath -Directory $binDir) {
 $prevPref = $ErrorActionPreference
 try {
     $ErrorActionPreference = 'Continue'
-    $probe = (& $exe version 2>&1 | Out-String).Trim()
+    $probe = (& $exe version 2>&1 | ConvertTo-StderrText | Out-String).Trim()
     $probeExit = $LASTEXITCODE
 } finally {
     $ErrorActionPreference = $prevPref

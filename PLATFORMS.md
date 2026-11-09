@@ -235,6 +235,15 @@ shared server through `/daemon` and check again; connected sessions may be inter
   same pre-0.6.0 pager and gaebu 0.2.1 first on PATH: the pager skip path fell
   back to its path, `ensure_gaebu` warned for 0.2.1, stayed quiet for 0.2.2,
   and the shell survived both.
+- Windows PowerShell 5.1.26100 and pwsh 7 on Windows, after rustup, cargo and
+  probe output started going through `ConvertTo-StderrText`
+  (`windows/lib/common.ps1`): a build printed cargo's progress with no
+  `NativeCommandError` block, and a bad `-Git` or `-Toolchain` still ended in
+  its warning. A `gaebu.exe` that writes `fake: boom` to stderr and exits 1 made
+  5.1's final `--version` probe throw under Stop before the change; after it,
+  both shells printed `WARN gaebu installed but '--version' exited 1
+  (fake: boom)` and went on, and the same fake as `pager.exe` gave the
+  one-line `version` warning.
 
 ## Pending checks
 
