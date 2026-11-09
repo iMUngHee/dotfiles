@@ -77,7 +77,6 @@ Collected on first real encounter with that medium, not up front.
 
 ## Entries
 
-_None yet. The first tournament seeds this table._
-
 | Axis | Value | Note (verbatim) | Collected | Medium | Confirmations | Overturns |
 | --- | --- | --- | --- | --- | --- | --- |
+| `native-vs-brand` | `brand-feel` | 근데 내가 윈도우 앱 몇개 만들면서 느낀게, 왜 이런 현대적인 앱 느낌이 아니라, 실용 최적화 UI로만 만드는거냐 | 2026-11-09 | Desktop GUI | 1 | 0 |
