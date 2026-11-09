@@ -31,12 +31,14 @@ function fixture(tool) {
   const hookName = tool === "codex" ? "stop-gate.sh" : "stop-handler.sh";
   const hookDir = join(root, tool, "hooks");
   const bin = join(home, "bin");
-  for (const dir of [join(hookDir, "lib"), bin, join(root, "ai", "lib")]) mkdirSync(dir, { recursive: true });
+  for (const dir of [join(hookDir, "lib"), bin, join(root, "ai", "lib"), join(root, "ai", "skills", "config-audit", "scripts")]) mkdirSync(dir, { recursive: true });
   copyFileSync(join(repo, tool, "hooks", hookName), join(hookDir, hookName));
   copyFileSync(join(repo, tool, "hooks", "lib", "detect-project.sh"), join(hookDir, "lib", "detect-project.sh"));
   const putExecutable = (path, text) => { writeFileSync(path, text); chmodSync(path, 0o755); };
   putExecutable(join(hookDir, "notify.sh"), "#!/bin/bash\nexit 0\n");
   putExecutable(join(bin, "node"), '#!/bin/bash\necho "$*" >> "$STOP_AUDIT_CALLS"\ncase "$*" in *session-routing*) sleep 1 ;; esac\nexit "${STOP_AUDIT_EXIT:-0}"\n');
+  // A changed .md also selects the config-audit Go suite (frontmatter parse).
+  putExecutable(join(bin, "go"), '#!/bin/bash\necho "go $*" >> "$STOP_AUDIT_CALLS"\nexit "${STOP_AUDIT_EXIT:-0}"\n');
   // Budget recorders for both portable_timeout branches: GNU `timeout -k N secs
   // cmd...` (Windows, perl-less hosts) and the perl supervisor `perl -e SCRIPT
   // secs cmd...` (Unix). Each records secs and runs the command unbounded.
@@ -70,9 +72,10 @@ for (const tool of ["codex", "claude"]) {
     const r = f.run();
     assert.equal(r.status, 0, r.stdout + r.stderr);
     const calls = readFileSync(f.env.STOP_AUDIT_CALLS, "utf8").trim().split(/\r?\n/);
-    assert.equal(calls.length, 2, "tracked instructions and an untracked ai/lib test both trigger suites");
+    assert.equal(calls.length, 3, "tracked instructions, an untracked ai/lib test and a changed .md each trigger a suite");
     assert.match(calls[0], /session-routing-consumers/);
     assert.match(calls[1], /untracked.test.mjs/);
+    assert.equal(calls[2], "go test ./...");
     const budgets = readFileSync(f.env.STOP_AUDIT_BUDGETS, "utf8").trim().split(/\r?\n/).map(Number);
     assert.ok(budgets.every((n) => n > 0 && n <= 300));
     assert.ok(budgets[1] < budgets[0], "later suites consume the remaining budget");
