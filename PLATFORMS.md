@@ -205,6 +205,21 @@ shared server through `/daemon` and check again; connected sessions may be inter
   `~/.local/bin` (pager was present, so only its skip path ran), and the next
   `ai/scripts/bootstrap.sh` printed `Registered gaebu MCP server (user scope)`.
 
+### Verified on 2026-11-05
+
+- macOS, pager 0.6.0 and gaebu 0.2.2, `lib/agent-clis.sh` under
+  `set -euo pipefail`: both skip paths print the release; a pre-0.6.0 pager
+  falls back to its path; `ensure_pager`'s build path, into a temporary
+  `LOCAL_BIN` with `~/.local/bin` off PATH, printed
+  `pager built (pager 0.6.0 (v0.0.0-20261104113355-d9af85d00cb9))`.
+  `ensure_gaebu` warned against a copy whose `plugin.json` said 0.2.1, stayed
+  quiet at 0.2.2 and with no `plugin.json`, and never aborted the shell.
+- macOS, pwsh 7 with `$ErrorActionPreference = 'Stop'`: `install-gaebu.ps1
+  -BinDir <temp>` ran its skip path and warned only for a binary reporting
+  0.2.1. `install-pager.ps1`'s final probe and its replaced-release capture
+  ran against pager 0.6.0 and a pre-0.6.0 binary, which got the one-line
+  warning and did not stop the script.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
@@ -238,7 +253,18 @@ cannot run something; remove it in the commit that records the result.
       MCP server`. On Windows 2026-11-04 only the skip path and the missing-tool
       warnings of `lib/agent-clis.sh` ran; `install-gaebu.ps1` ran its build,
       `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
-      (see Verified on 2026-11-04); pager's build path and Linux remain.
+      (see Verified on 2026-11-04) and on 2026-11-05 pager's build path, into a
+      temporary `LOCAL_BIN` (see Verified on 2026-11-05); Linux remains.
+- [ ] **Windows (Windows PowerShell 5.1)** — run `install-pager.ps1` over a
+      pager from before 0.6.0: the skip path must end in the one-line `version`
+      warning, not a throw (5.1 turns captured stderr into errors; pwsh 7 on
+      macOS does not, so it could not show this), and `-Force` must print
+      `built ... (replaced a pager before 0.6.0)` then
+      `pager version -> pager <current release> (...)`.
+      Run `install-gaebu.ps1` with an installed gaebu whose version differs from
+      `claude/mods/gaebu/.claude-plugin/plugin.json` and check the drift warning.
+- [ ] **Linux (Arch)** — run `buu` and check the pager step ends in
+      `<release before> → <release after>`.
 - [ ] **macOS and Linux (zsh)** — `zsh/.zshrc` puts `~/.local/bin` on PATH
       (`[ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"` in the
       `# $PATH` block), so the hooks find a bare `pager` and `gaebu`; check

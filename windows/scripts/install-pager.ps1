@@ -73,6 +73,15 @@ if ((Test-Path $exe) -and -not $Force) {
             $env:PAGER_DB = Join-Path $stage 'smoke.db'
             $smoke = (& $new who 2>&1 | Out-String).Trim()
             $smokeExit = $LASTEXITCODE
+
+            # The release this build replaces, for the line after the swap.
+            # pager before 0.6.0 has no `version`, which writes to stderr - one
+            # more reason this sits under Continue.
+            $was = 'nothing'
+            if (Test-Path $exe) {
+                $was = (& $exe version 2>&1 | Out-String).Trim()
+                if ($LASTEXITCODE -ne 0) { $was = 'a pager before 0.6.0' }
+            }
         } finally {
             $env:PAGER_DB = $prevDb
             $ErrorActionPreference = $prevPref
@@ -97,7 +106,7 @@ if ((Test-Path $exe) -and -not $Force) {
             Add-Warn "pager swap failed ($($_.Exception.Message)) - kept the installed binary"
             return
         }
-        Write-Ok "built $exe"
+        Write-Ok "built $exe (replaced $was)"
 
         # Keep the newest $Backups. One still held by a live session cannot be
         # deleted yet and is left for a later run; so is a pager.exe~ left by
@@ -119,11 +128,21 @@ if (Add-UserPath -Directory $binDir) {
 
 # Prove the binary runs rather than trusting that the file exists: a
 # cross-compiled or truncated build still leaves a plausible-looking .exe.
-# `who` is used because pager has no --version flag and this is its cheapest
-# read-only subcommand - it lists active sessions and exits 0 with none.
-$probe = (& $exe who 2>&1 | Out-String).Trim()
-if ($LASTEXITCODE -eq 0) {
-    Write-Ok "pager who -> $(($probe -split "`n")[0])"
+# `version` (pager 0.6.0 and later) runs it and names the release, as
+# install-gaebu.ps1's `--version` probe does. A present pager from before 0.6.0
+# answers on stderr, so this runs under Continue for the same Windows
+# PowerShell 5.1 reason as the smoke above.
+$prevPref = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $probe = (& $exe version 2>&1 | Out-String).Trim()
+    $probeExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevPref
+}
+if ($probeExit -eq 0) {
+    Write-Ok "pager version -> $probe"
 } else {
-    Add-Warn "pager built but 'who' exited $LASTEXITCODE ($probe)"
+    # Last line only: a pager before 0.6.0 prints its whole usage ahead of the error.
+    Add-Warn "pager present but 'version' exited $probeExit ($(($probe -split "`r?`n")[-1])) - pager before 0.6.0 has none; -Force rebuilds it"
 }

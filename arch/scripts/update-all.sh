@@ -17,10 +17,11 @@
 # at however it was installed — so it updates as a system package here.
 #
 # What omarchy update cannot know about is what this tier builds from source.
-# pager publishes no release binaries, so `make build` IS its update mechanism,
-# which is the same reason windows/scripts/update-all.ps1 rebuilds it rather
-# than version-checking it. Leaving it out would make `buu` mean something
-# narrower here than on the other two platforms.
+# pager publishes no release binaries, and its version is a constant in the
+# source rather than a git tag, so `make build` IS its update mechanism, which
+# is the same reason windows/scripts/update-all.ps1 rebuilds it rather than
+# version-checking it. Leaving it out would make `buu` mean something narrower
+# here than on the other two platforms.
 #
 # Arguments are passed through to omarchy update, so `buu -y` is unattended.
 set -euo pipefail
@@ -48,10 +49,15 @@ if [ ! -d "$PAGER_SRC/.git" ]; then
 elif ! command -v go >/dev/null 2>&1; then
     warn "go not installed — pager left at its current build"
 else
+    # Before and after, so a moved release is visible; its CHANGELOG.md
+    # Upgrading note says what to restart. pager before 0.6.0 has no `version`.
+    was=$(pager version 2>/dev/null) || was="no pager, or one before 0.6.0"
     git -C "$PAGER_SRC" pull --ff-only --quiet || warn "pager: git pull failed, building what is on disk"
     # make build runs its own smoke check and swaps the binary atomically, which
     # matters because live sessions' hooks are already calling it.
     make -C "$PAGER_SRC" build || warn "pager: make build failed"
+    now=$(pager version 2>/dev/null) || now="no pager with a version"
+    echo "$was → $now"
 fi
 
 # ── summary ─────────────────────────────────────────────────────────────────
