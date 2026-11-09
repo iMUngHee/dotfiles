@@ -304,6 +304,11 @@ cannot run something; remove it in the commit that records the result.
       `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
       (see Verified on 2026-11-04) and on 2026-11-05 pager's build path, into a
       temporary `LOCAL_BIN` (see Verified on 2026-11-05); Linux remains.
+- [ ] **macOS and Linux** — after `ai/scripts/bootstrap.sh`, check that
+      `~/.claude/rules/code-quality.md` matches `ai/rules/code-quality.md`,
+      that `~/.codex/AGENTS.md` contains its body, and that the `tidy` skill
+      is listed in both tools (deployed and checked only on Windows
+      2026-11-10).
 - [ ] **macOS and Linux** — a changed `.md` under the tiers now selects the
       config-audit Go suite, whose `TestRepoFrontmatterParses` parses every
       tier frontmatter. Run `node --test ai/lib/stop-hooks.test.mjs` (its

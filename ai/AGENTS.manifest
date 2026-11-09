@@ -7,6 +7,7 @@ PERSONAL.md
 guardrails.md
 
 # Rules (alphabetical by topic)
+rules/code-quality.md
 rules/code-review.md
 rules/diagnostics.md
 rules/gaebu.md
@@ -27,6 +28,7 @@ memory/feedback_memory_english.md
 memory/feedback_global_memory_path.md
 memory/feedback_pager_poll_during_long_turns.md
 memory/feedback_commit_message_style.md
+memory/feedback_code_quality_rule_tournament.md
 
 # Private memory is deliberately absent: memory/private/ is gitignored, so naming
 # a file here makes this tracked manifest reference a path that only one machine

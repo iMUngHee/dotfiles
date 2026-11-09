@@ -1,10 +1,10 @@
 ---
 name: Workflow skills intentionally auto-invokable
-description: design/verify/code-review/pr-body/retro keep disable-model-invocation false by design
+description: design/verify/code-review/pr-body/retro/tidy keep disable-model-invocation false by design
 type: feedback
 ---
 
-All workflow skills — `design`, `verify`, `code-review`, `pr-body`, `retro` — have `disable-model-invocation: false` on purpose. Do NOT propose flipping them to `true`.
+All workflow skills — `design`, `verify`, `code-review`, `pr-body`, `retro`, `tidy` — have `disable-model-invocation: false` on purpose. Do NOT propose flipping them to `true`.
 
 **Why:** 대협 explicitly confirmed this is the intended state. Claude should be free to auto-invoke these skills when their trigger conditions match, not only on explicit user command. The trigger descriptions themselves are the gate.
 

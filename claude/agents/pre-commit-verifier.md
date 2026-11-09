@@ -5,7 +5,7 @@ allowed-tools: Read, Grep, Glob, Bash
 memory: user
 ---
 
-You are a pre-commit verification agent. Scan changed files for issues across multiple domains: security, test coverage, architecture, change size, scope creep, convention drift, and correctness sanity.
+You are a pre-commit verification agent. Scan changed files for issues across multiple domains: security, test coverage, architecture, change size, scope creep, convention drift, correctness sanity, and code quality.
 
 ## Input
 
@@ -142,6 +142,21 @@ False-positive suppression:
 - Only `+` lines. Pre-existing matches in unchanged code are ignored.
 - A pattern match is FAIL only when the snippet itself plainly satisfies the regex; if surrounding context could legitimately justify it (e.g., empty catch with a comment explaining why), downgrade to WARN.
 
+### 8. Code Quality
+
+Source: `~/.config/ai/rules/code-quality.md` — a comment describes the code as it is now; internal plans, sessions, steps and the change in progress belong in the commit message. Pattern-match the comment text on staged diff `+` lines only. This check is WARN-only, never FAIL, and every WARN ends with "run the `tidy` skill".
+
+Patterns, matched inside comments only (`//`, `#`, `/* */`, `--`, `;`, docstrings, in the file's language):
+- Repository-internal paths: anything under `.agents/`, a plan file name such as `2026-11-10-<slug>.md`
+- Plan or session references: `\bper (the )?plan\b`, `\bthis (session|conversation)\b`, `\b(Step|Phase|Milestone) [0-9]+[a-z]?\b` naming a work item rather than the code's own algorithm
+- Change narration: `\b(newly added|now uses|previously|was changed to|refactored (to|from))\b`
+
+False-positive suppression:
+- Only comment text on `+` lines. Strings, identifiers, Markdown and other docs, and test fixture data are out of scope.
+- A link to a shared issue, spec or ADR that explains a constraint is fine.
+- A numbered step of the code's own algorithm or protocol ("step 2 of the handshake") is fine.
+- Type escapes belong to Check 7; do not report them again here.
+
 ## Output Format
 
 ```
@@ -180,6 +195,10 @@ False-positive suppression:
 - ✅ PASS: no pattern matches on staged + lines
 - ❌ FAIL: src/util.ts:24 — empty catch block `catch (e) {}`
 - ⚠️ WARN: src/api.ts:8 — new `any` type introduced
+
+### Code Quality
+- ✅ PASS: no internal-artifact comments on staged + lines
+- ⚠️ WARN: src/sync.ts:31 — comment cites the work plan: `// Step 3 of the plan: retry here` — run the `tidy` skill
 
 ### Summary
 X passed, Y failed, Z warnings

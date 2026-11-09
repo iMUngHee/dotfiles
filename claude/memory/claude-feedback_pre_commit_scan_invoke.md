@@ -12,6 +12,6 @@ Claude-specific implementation for the shared pre-commit sensitive-info scan rul
 
 **How to apply:**
 - Triggered by the same phrases as the shared rule: "커밋 ㄱㄱ", "push 해줘", "PR 올려", explicit commit/PR requests.
-- The `pre-commit-verifier` agent runs read-only, returns FAIL/WARN/PASS per check (security/test/architecture/change-size/scope-creep/convention/correctness).
+- The `pre-commit-verifier` agent runs read-only, returns FAIL/WARN/PASS per check (security/test/architecture/change-size/scope-creep/convention/correctness/code-quality).
 - Surface its findings in your response before running `git commit`. If FAIL on the sensitive-info check, pause and ask 대협 for direction.
 - If WARN appears on any non-security check, mention it but do not block (대협's call).
