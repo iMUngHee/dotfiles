@@ -239,11 +239,11 @@ shared server through `/daemon` and check again; connected sessions may be inter
   probe output started going through `ConvertTo-StderrText`
   (`windows/lib/common.ps1`): a build printed cargo's progress with no
   `NativeCommandError` block, and a bad `-Git` or `-Toolchain` still ended in
-  its warning. A `gaebu.exe` that writes `fake: boom` to stderr and exits 1 made
-  5.1's final `--version` probe throw under Stop before the change; after it,
-  both shells printed `WARN gaebu installed but '--version' exited 1
-  (fake: boom)` and went on, and the same fake as `pager.exe` gave the
-  one-line `version` warning.
+  its warning. A `gaebu.exe` that writes `fake: boom` to stderr and exits 1
+  made 5.1's final `--version` probe throw under Stop before the change;
+  after it, both shells printed `WARN gaebu installed but '--version'
+  exited 1 (fake: boom)` and went on, and the same fake as `pager.exe` gave
+  the one-line `version` warning.
 
 ## Pending checks
 
