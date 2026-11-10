@@ -96,3 +96,12 @@ test("CLI walks supported source files, deduplicates paths and skips dependency 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("eight-digit colours in XAML-family code are read alpha first", () => {
+  const { categories } = census([
+    { path: "view.cs", text: 'var veil = "#59FFFFFF";' },
+    { path: "view.xaml", text: '<Border Background="#59FFFFFF" />' },
+    { path: "view.css", text: "a { color: #ffffff59; }" },
+  ]);
+  assert.deepEqual(categories.colors.map(entry => [entry.value, entry.count]), [["#ffffff59", 3]]);
+});
