@@ -4,7 +4,7 @@ Summarize a Windows window's UI Automation row deltas and off-window elements as
 .EXAMPLE
 pwsh -NoProfile -File measure-uia.ps1 -ProcessId 1234
 .EXAMPLE
-pwsh -NoProfile -File measure-uia.ps1 -WindowTitle '*Nestory*'
+pwsh -NoProfile -File measure-uia.ps1 -WindowTitle '*Notepad*'
 .EXAMPLE
 pwsh -NoProfile -File measure-uia.ps1 -ProcessId 1234 -Full
 .NOTES
