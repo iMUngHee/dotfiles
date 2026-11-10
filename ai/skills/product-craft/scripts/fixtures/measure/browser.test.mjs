@@ -162,8 +162,13 @@ test('relative PNG and HTML candidates open without edits; F toggles native imag
   assert.ok(native.scrollHeight > native.viewportHeight);
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'f' });
   assert.equal(await evaluate("document.querySelector('#fit').getAttribute('aria-pressed')"), 'true');
+  assert.ok(await evaluate("document.querySelector('aside').classList.contains('fit')"));
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'r' });
+  assert.ok(await evaluate("document.querySelector('aside').scrollWidth === document.querySelector('aside').clientWidth && document.querySelector('aside').scrollHeight === document.querySelector('aside').clientHeight"));
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'r' });
   assert.ok(await evaluate("document.querySelector('#image').scrollHeight === document.querySelector('#image').clientHeight"));
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'f' });
+  assert.equal(await evaluate("document.querySelector('aside').classList.contains('fit')"), false);
   assert.equal(await evaluate("document.querySelector('#image img').width"), 1280);
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: '2' });
   assert.ok(await evaluate("document.querySelector('iframe').src.endsWith('/clean.html')"));
