@@ -13,6 +13,11 @@ Run the real build with realistic fixtures. Capture every screen and every state
 contract names, at the medium's extremes (`media.md`), into `.agents/design/review/`.
 Screens you could not capture are listed as not reviewed — never passed over in silence.
 
+Menus, flyouts, tooltips, dropdowns and many dialogs are separate windows or layers that a
+window capture leaves out. Open each one and capture the screen region that contains it, so
+the reviewer sees them. Capture at the display scale the machine has and record it; do not
+change system settings to reach another scale — list other scales as not reviewed.
+
 ## 1. Tiles — see real pixels
 
 ```bash
@@ -42,6 +47,7 @@ toolbar, list row, dialog and form. In each, check:
 - **Windows desktop**: `pwsh -NoProfile -File scripts/measure-uia.ps1 -ProcessId <pid>` (or
   `-WindowTitle '<pattern>'`) reads the accessibility tree and prints rows whose centre
   lines differ and elements outside the window; `-Full` adds every element's rectangle.
+  Prefer `-ProcessId`: a title pattern often matches more than one window.
 - **Elsewhere**: use the toolkit's inspector or accessibility tree to read rectangles for
   each row of controls and compare centre lines yourself. When the surface exposes nothing
   (custom drawing), say so; tiles are then the only check.
@@ -95,6 +101,8 @@ what was intended is exactly what must be absent. Give it only:
 - the screenshots and tiles,
 - the reference screenshots,
 - one line on what the app is for,
+- any capture caveats that would otherwise read as defects (a focus ring from keyboard
+  driving, a strip of desktop outside the window),
 - this brief: *"You are seeing this product for the first time. List everything that looks
   wrong, unfinished, inconsistent or confusing, most costly first. For each: where it is,
   what is wrong, and what you expected instead. Do not praise. Do not explain what the
@@ -118,8 +126,10 @@ Record each finding as:
   misaligned icon, a mid-word break, three greys for one role, a missing rename.
 - **polish**: a competent reviewer would mention it but not mind.
 
-Fix blocks and degrades and run the affected steps again. Three rounds at most; after that,
-or when nothing above polish remains, stop and report.
+Fix blocks and degrades and run the affected steps again. A round is: capture, steps 1–5
+on what changed, and a **new** separate-context reviewer who has seen neither the code nor
+the earlier rounds. Your own re-check does not close a round. Three rounds at most; after
+that, or when a round ends with nothing above polish, stop and report.
 
 ## Reporting
 

@@ -22,6 +22,10 @@ over without loss.
   spacing step. This is what keeps secondary text the same grey on every screen.
 - **Use the values exactly.** Do not round a 13px size to 14 or swap a reference colour for
   the toolkit's nearest default because it is handier.
+- **A shared value changes every screen that uses it.** When the work alters app-wide
+  tokens, theme resources or a shared component, every other screen is now part of the
+  change: capture and review them too, and restyle the shared pieces they show — dialogs,
+  notifications, menus — so the old look does not survive in them.
 - **Build each component kind once** and reuse it. Two hand-written versions of a list row
   are how inconsistency starts.
 - **Use the component library** for anything it provides, themed to the direction's values.

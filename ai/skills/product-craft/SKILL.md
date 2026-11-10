@@ -47,7 +47,10 @@ rewriting its older sections.
 
 ## The loop
 
-Each step has one reference file. Read it when you reach the step, not before.
+Each step has one reference file. Read it when you reach the step, not before. Each of steps
+1–4 ends by writing its result into `design-contract.md` before the next begins — the matrix
+and journeys exist in the contract before anything is built, because they are what the build
+and the review are checked against. Written afterwards, they only describe what was made.
 
 ### 1. Frame
 

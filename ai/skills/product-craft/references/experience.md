@@ -19,7 +19,9 @@ export, pin, archive, retry).
 
 Each cell is one of:
 
-- `yes` — with where it lives (toolbar, context menu, hover action, shortcut).
+- `yes` — with where it lives **on screen**: a button, a menu item, a visible per-item
+  action, a mode the screen offers. A shortcut or modifier-click may be an additional route,
+  never the only one: an action the user cannot find by looking does not count as `yes`.
 - `no — <reason>` — a deliberate omission the owner would agree with ("no reorder: list is
   always newest first").
 
