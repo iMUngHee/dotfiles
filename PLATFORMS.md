@@ -244,6 +244,17 @@ shared server through `/daemon` and check again; connected sessions may be inter
   after it, both shells printed `WARN gaebu installed but '--version'
   exited 1 (fake: boom)` and went on, and the same fake as `pager.exe` gave
   the one-line `version` warning.
+- macOS, after the post-merge bootstrap of `d0d196c`:
+  `~/.claude/rules/code-quality.md` is a symlink to `ai/rules/code-quality.md`
+  (`cmp` identical), `~/.codex/AGENTS.md` contains the rule's whole body, and
+  `tidy` is listed in both tools: in a live Claude Code 2.1.319 session's
+  skill list, and in Codex CLI 0.167.0's `codex debug prompt-input` together
+  with the `# Code Quality` section.
+- macOS, Node 24.22.1 with `/usr/bin/grep` (BSD grep 2.6.0-FreeBSD):
+  `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` passed 7
+  tests with zero failures and zero skips, including the exact `SHA-256`
+  exception, a later ticket, token detection, staged-only and filename
+  findings.
 
 ### Verified on Windows 2026-11-10: Codex desktop Pager names
 
@@ -291,9 +302,10 @@ cannot run something; remove it in the commit that records the result.
       exercise the new stdio fallback with the CLI daemon stopped. The current
       fallback and executable-lookup fixtures were executed only on Windows.
 
-- [ ] **macOS and Linux** — run
+- [ ] **Linux** — run
       `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` to verify the
-      exact hash-algorithm exception and retained findings on the local grep.
+      exact hash-algorithm exception and retained findings on the local grep
+      (macOS's BSD grep passed 2026-11-10; see Verified on 2026-11-10).
 
 - [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
       `bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'`
@@ -304,11 +316,11 @@ cannot run something; remove it in the commit that records the result.
       `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
       (see Verified on 2026-11-04) and on 2026-11-05 pager's build path, into a
       temporary `LOCAL_BIN` (see Verified on 2026-11-05); Linux remains.
-- [ ] **macOS and Linux** — after `ai/scripts/bootstrap.sh`, check that
+- [ ] **Linux** — after `ai/scripts/bootstrap.sh`, check that
       `~/.claude/rules/code-quality.md` matches `ai/rules/code-quality.md`,
       that `~/.codex/AGENTS.md` contains its body, and that the `tidy` skill
-      is listed in both tools (deployed and checked only on Windows
-      2026-11-10).
+      is listed in both tools (checked on Windows 2026-11-10; macOS: see
+      Verified on 2026-11-10).
 - [ ] **macOS and Linux** — a changed `.md` under the tiers now selects the
       config-audit Go suite, whose `TestRepoFrontmatterParses` parses every
       tier frontmatter. Run `node --test ai/lib/stop-hooks.test.mjs` (its
