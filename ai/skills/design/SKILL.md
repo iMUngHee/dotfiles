@@ -31,65 +31,27 @@ dedicated worktree, stage the approved plan under that reservation, then call
 seeds the worktree execution pointer, and selects or safely parks it in main. Standalone
 plans use the same worktree and plan transaction without a backlog item.
 
-## Product-Surface Gate Integration
+## Product-Surface Integration
 
-When a request also matches `product-craft`, close the smallest applicable product-surface
-gates before drafting the technical implementation plan:
+When the request is for a new or materially changed client surface, `product-craft` comes
+first: it settles the references, the direction, the object × action matrix and the journeys
+in `design-contract.md`. PR/diff feedback stays with `code-review` and completed-feature
+confirmation with `verify`.
 
-1. PR/diff/review feedback remains owned by `code-review`; completed-feature confirmation
-   remains owned by `verify`. Neither enters this planning path through product-craft.
-2. New or materially changed client surfaces start with `product-craft`, which selects
-   Seed, Focused Delta, or Full and obtains the required Experience and Interface gates.
-3. After `READY FOR BUILD`, this skill owns technical planning whenever its independent
-   trigger applies at any depth — including every expected three-or-more-file change.
-4. Durable UI writes require both the applicable product-craft authorization and this
-   skill's persisted active plan. A routine no-contract change still uses this skill when
-   the normal design trigger applies.
-5. Contract gaps return to `experience-design` or `interface-design` through
-   `product-craft`; technical planning must not invent the missing design decision.
+This skill then plans the technical change whenever its own trigger applies — including every
+expected three-or-more-file change:
 
-`design-contract.md` remains the product-surface authority. This plan records how the
-approved contract will be implemented and verified; it does not replace or silently
-amend the contract.
-
-### Durable Product Proof Handoff
-
-When product-craft supplies approved surface records:
-
-1. Require its repo-relative Durable contract path, the approved `Surface Obligations` rows,
-   the `## Artifact Ledger` entry for any selected artifact, and the approval tokens
-   (`experience_approved`, `direction_selected`, `build_authorized` as applicable). Resolve
-   the path inside the execution root and verify the same records are persisted under that
-   contract's `## Decision Log & Open Questions`.
-2. Reject a missing/escaping path, absent durable packet, duplicate/unknown/unmapped row,
-   GAP, or incomplete required approval. A generic criterion such as “mobile tests pass”
-   cannot replace a material row or its specimen evidence.
-3. In the technical plan, create this exact section and copy the approved rows and packet
-   verbatim:
-
-   ```markdown
-   ## Product Surface Proof Obligations
-
-   Durable contract: <repo-relative design-contract.md path>
-
-   <exact Surface Obligations rows>
-
-   <exact Artifact Ledger rows, when an artifact was selected>
-
-   <approval tokens with the user evidence recorded for each>
-   ```
-
-4. Copy the approval tokens and their user evidence verbatim. Technical planning cannot
-   infer, add, or remove a token — least of all `direction_selected`, which only the user
-   can produce.
-5. Turn every applicable experience and interface obligation into a goal-level Verifiable
-   Success Criterion with a concrete code, assertion, or inspected-render observable.
-   Preserve `OBL-NNN` ids and their `Derives from` links so `verify` can walk the chain
-   later.
-
-`design` never writes implementation evidence or the Implementation Bridge section. If a required active
-plan has a missing Durable contract path or cannot preserve the rows exactly, the product
-surface portion of planning is `BLOCKED`.
+1. Name the contract's repo-relative path in the plan. The contract stays the authority on
+   what the surface is and how it looks; the plan records how the change is built and
+   verified, and never restates or amends the contract.
+2. Turn every journey in the contract, and every object × action cell marked `yes` that this
+   change must deliver, into a goal-level Verifiable Success Criterion with a concrete
+   observable. Add one criterion that the `product-craft` review of the built surface ends
+   with nothing open above polish.
+3. When planning exposes a missing or contradictory design decision, return it to
+   `product-craft`; technical planning does not invent it.
+4. A routine change with no UX or visual decision needs no contract and still uses this
+   skill when the normal trigger applies.
 
 ## Execution Bootstrap (before Context Discovery)
 
@@ -202,9 +164,8 @@ files_affected:
 the execution mapping and dedicated worktree.
 
 Follow with Goal, Approach, Decisions, Verifiable Success Criteria, Risks, Implementation
-Steps, and the empty Post-Implementation Notes section. For product-surface work, insert
-`## Product Surface Proof Obligations` before Verifiable Success Criteria and retain its
-exact rows/path/packet. Pipe the complete bytes to the stage without a second persistent
+Steps, and the empty Post-Implementation Notes section. For product-surface work, name the
+contract path under Decisions. Pipe the complete bytes to the stage without a second persistent
 input file:
 
 ```bash

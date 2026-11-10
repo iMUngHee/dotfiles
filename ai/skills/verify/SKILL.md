@@ -40,67 +40,27 @@ If found, compare planned vs actual:
 If the session is unbound, do not inspect main launcher state. Use an explicit plan/goal
 when supplied; otherwise skip this section entirely.
 
-## Product-surface proof (when applicable)
+## Product-surface check (when applicable)
 
-Before deriving a READY truth condition for product-surface work, resolve exactly one
-durable carrier:
+When a `design-contract.md` governs the changed surface — the plan names its path, or one
+sits beside the changed UI code — verify the surface against it as well as against the plan:
 
-- Plan-required work uses the validated active plan's
-  `## Product Surface Proof Obligations`. Require matching execution root/branch/base, the
-  approved `Surface Obligations` rows, any `## Artifact Ledger` entry, the approval tokens,
-  and one repo-relative Durable contract path.
-- Work below the independent design trigger uses the explicit no-plan handoff. Require
-  `plan_requirement: not required`, no invented plan, a git execution root, the exact
-  contained contract path, and the same packet already persisted under Decision Log.
+1. **Journeys.** Replay each journey in the contract's UX Model on the running build, step
+   by step. A step that cannot be performed, or does not show what the journey says, fails
+   the goal. A journey that could not be replayed is reported as not verified, not passed.
+2. **Matrix.** For each object × action cell marked `yes` that the change touches, perform it
+   once, by pointer and by keyboard where the cell says both.
+3. **Review findings.** Read the latest review produced by `product-craft` (captures and
+   findings under the project's `.agents/design/review/`, or the review in the change's
+   report). Any finding still open at `blocks` or `degrades` fails the goal. If no review
+   was run, say so and treat the surface as not verified; do not substitute a glance at a
+   screenshot.
+4. **Contract and build agree.** A test or behaviour that contradicts the contract is a
+   failure even when the test passes. Where the contract is silent, that is not a failure.
 
-Reject a missing/escaping contract path, unbound required route, unexpected plan
-substitution, absent durable packet, or generic technical summary replacing rows. Read
-the exact contract and require:
-
-1. The approved `Surface Obligations` rows, the `## Artifact Ledger` entries, and the
-   approval tokens under `## Decision Log & Open Questions`.
-2. Exactly one `## Implementation Bridge`, carrying the implementation-stage obligations and
-   their evidence.
-3. Unique known row IDs, complete coverage, truth-table-valid classification/status pairs,
-   affirmative code/test/render evidence for every PASS, and a repeated concrete reason for
-   every N/A.
-
-**Coverage walks the ancestor chain.** An implementation obligation covers every obligation
-it derives from, and theirs in turn — follow `Derives from` upward rather than expecting a
-direct link. An applicable experience or interface obligation with no implementation
-obligation among its descendants is uncovered, and uncovered is not READY.
-
-Where an artifact carries the visual decision, recompute its revision. A mismatch, an
-external reference, or an artifact contradicting an approved decision is `ARTIFACT DRIFT` and
-blocks READY.
-
-A material `Craft Findings` entry — `unusable` or `degrades the task` — blocks READY even
-when every obligation row passes. Contract-row closure is not the same as a sound surface.
-
-Always recheck Required approvals and Recorded approvals before READY. Every required token must
-be recorded, unique, and supported by explicit user evidence. Approval prose cannot
-replace a missing token, and coverage PASS cannot authorize a stage.
-
-Recompute the outcome from the obligation rows without mutating them:
-
-- Any Experience/Interface GAP or Implementation contract gap -> `BLOCKED` and the exact
-  design owner.
-- Otherwise any implementation FAIL, NOT VERIFIED, remaining PENDING, duplicate,
-  unknown, sourceless, unmapped row, incomplete evidence, or unjustified N/A ->
-  `Design-Fit Outcome: NOT VERIFIED`.
-- Only complete aligned applicable PASS proof plus justified non-applicable rows ->
-  `Design-Fit Outcome: READY`.
-
-A completed proof explicitly presented to this skill keeps structured `owner: verify`
-while it classifies missing render evidence, invalid N/A, or final readiness. Only a
-contract gap changes owner to the exact design owner; do not rewrite owner to
-`ui-engineering` merely because correction may follow.
-
-A passing test that asserts behavior contrary to approved intent is contract drift +
-FAIL. Document-level or page-level substitutes do not prove a more specific contracted
-component transformation. Product-surface goal verification cannot pass unless this
-durable aggregation is READY. This skill remains read-only and persists no record or
-lifecycle change.
+Contracts written in the earlier format carry obligation tables and approval records; read
+them as evidence of intent and do not require or extend them. This skill stays read-only: it
+changes neither the contract nor any lifecycle state.
 
 ## Optional acceleration — `verifier` subagent
 
