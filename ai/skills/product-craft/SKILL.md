@@ -1,191 +1,161 @@
 ---
 name: product-craft
-description: "Route UX planning, interface planning, and durable UI implementation for new or materially changed client surfaces. Use for pages, apps, dashboards, workflows, navigation or state models, reusable component families, visual systems, redesigns, UX/UI audits, and design-contract.md work. Skip routine frontend edits with no UX/UI decision, PR review, and completed-feature verification."
-argument-hint: "[product-surface request]"
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep
+description: "Design and build client surfaces that look current and miss nothing basic: pages, apps, dashboards, desktop and mobile windows, terminal UIs, decks. Sources real references, a design system and assets before designing, derives UX checks from the app's own objects, and reviews the render with crops, measurement and a separate reviewer. Use for new or materially changed surfaces, redesigns, UX/UI audits, and design-contract.md work. Skip routine frontend edits with no UX/UI decision, PR review, and completed-feature verification."
+argument-hint: "[audit] [surface request]"
 disable-model-invocation: false
 ---
 
 # Product Craft
 
-Own the product-surface pipeline while loading only the smallest useful stage context:
+Make the surface the owner would have asked for if they had time to specify it: it looks like
+a current, well-made product of its kind, every object on it can be handled the way people
+expect, and nothing on screen is misaligned, clipped, or inconsistent.
 
-1. `experience-design` defines what users need, how the surface is organized, and how workflows recover.
-2. `interface-design` defines how the approved experience is composed, expressed, and adapted.
-3. `ui-engineering` implements the approved contract and verifies the rendered result.
+Task: $ARGUMENTS (if empty, infer the surface and outcome from the request)
 
-Keep one canonical `design-contract.md`. Planning proposals stay outside it until their applicable gate is approved.
+Three habits produce generic, gap-ridden surfaces. Each step below exists to break one:
 
-Task: $ARGUMENTS (if empty, infer the requested product surface and desired outcome)
+- **Designing from principles instead of from a reference.** A finished product is thousands
+  of decisions that already fit together. Start from one and carry its values.
+- **Deriving UX from the request instead of from the objects.** Nobody asks for rename,
+  delete, or syntax highlighting. They are owed anyway.
+- **Reviewing by glancing at a whole screenshot you built yourself.** A downscaled window
+  hides a 3px offset, and the builder sees what they meant to make.
 
-## Routing Precedence
+## When to use
 
-Apply this order without exception. Parallel sub-agents are an execution modifier beneath the selected owner; they never change ownership.
+- New or materially changed surface, redesign, or a `design-contract.md` to write or update →
+  run the loop.
+- "Review / audit this UI" on an existing surface → **Audit mode** below.
+- PR or diff review → `code-review`. Confirming a finished feature meets its goal → `verify`.
+- A routine edit with no UX or visual decision → no contract needed; just do it, then run the
+  review step on what you touched.
 
-1. PRs, branch diffs, and review feedback → `code-review`. Stop product-craft routing.
-2. Confirmation that a completed feature meets its goal → `verify`. It may consume UI-engineering evidence.
-3. Read-only IA/workflow/recovery audit → `experience-design audit`.
-4. Read-only composition/visual-system/craft audit → `interface-design audit`.
-5. Read-only accessibility/motion/implementation/contract-drift audit → `ui-engineering audit`.
-6. New or materially changed product surface → continue through this router.
-7. Routine frontend edit with no UX/UI decision → report `no contract needed` and use the ordinary implementation path.
+## Depth
 
-Whenever the independent `design` trigger applies at any depth, including every expected three-or-more-file change, close the required product-craft surface gates first. Then hand off to `design`; durable writes require its persisted active plan. `design` does not replace experience or interface approval.
+Pick the lightest that fits and say which.
 
-## Choose Contract Depth
-
-Use the lightest depth that can guide the work without guessing.
-
-| Depth | Use when | Required path |
+| Depth | When | What runs |
 | --- | --- | --- |
-| Seed | A bounded surface change has no applicable contract and product intent is sufficiently clear. | Disclose a compact inferred experience baseline, resolve material ambiguity, then run the interface gate. |
-| Focused Delta | An approved contract exists and named sections must change. | Route only changed sections to their sole owner; preserve every unaffected section. |
-| Full | A new app, multi-route workflow, redesign, inconsistent system, or explicit full design needs complete decisions. | Approve Experience, then Interface, then authorize build. |
+| Touch-up | One component or state on a surface that already has a look | Experience check for the touched objects, build, review |
+| Screen | A new or reworked screen inside an existing product | Whole loop, materials limited to what the product does not already settle |
+| App | New product, multi-screen flow, or redesign | Whole loop |
 
-Do not inflate Seed into a design system. Do not use Focused Delta to smuggle changes into unapproved sections.
+An existing `design-contract.md` is evidence at every depth: read the nearest one first, keep
+what it settles, and write new entries in the lean form of `references/contract.md` without
+rewriting its older sections.
 
-## Orchestration
+## The loop
 
-1. Locate the nearest applicable `design-contract.md`; a repository-root contract is a base and a nearer app contract overrides only its declared sections.
-2. **Declare the medium** (see below) and read `references/contract-schema.md`, `references/quality-floor.md`, and `references/output-formats.md`. Read `references/craft-review.md` when a render will be judged. Read `taste-profile.md` so its values can be offered as marked defaults.
-3. Record scope, contract depth, declared medium, inherited evidence, proposed sections, and owner for each proposal.
-4. Run `experience-design` when experience-owned decisions are missing or changing. Pass only Product Context, UX Model, Data & State Model, Interaction Model, and Microcopy plus relevant evidence. Require its experience-stage obligations before considering `READY FOR INTERFACE`.
-5. Validate unique ids, material obligation coverage, evidence, depth scope, and `experience_approved`.
-6. Continue to `interface-design` only after `READY FOR INTERFACE`. Pass the approved experience sections and their obligations, surface scope, and the shared quality floor.
-7. Validate that every applicable experience obligation is covered, that artifact evidence was actually inspected, and that `direction_selected` carries the user's own words, before considering `READY FOR BUILD`.
-8. On the applicable user approval, persist the obligation rows, `## Artifact Ledger` entries, approval tokens, and their user evidence under the durable contract's `## Decision Log & Open Questions`.
-9. Continue toward implementation only after `READY FOR BUILD`. If `design` independently triggers, pass the exact records and contract path so its technical plan can preserve them; persist and activate that plan before `ui-engineering` writes.
-10. Run `ui-engineering` with the approved contract and build authorization. It writes implementation evidence only under Implementation Bridge. Route any gap back to its sole owner; never let implementation invent the answer.
+Each step has one reference file. Read it when you reach the step, not before.
 
-For Seed, an explicit build request may auto-chain disclosed compact experience and interface inferences when none is materially ambiguous. For Focused Delta, every changed section requires approval. Full requires separate Experience and Interface approvals plus explicit implementation authorization.
+### 1. Frame
 
-## Medium
+State in a few lines: the medium (web, desktop, mobile, terminal, CLI output, deck, print),
+the toolkit, the kind of app it is, who uses it and for what, and the depth. Then find the
+**host ceiling** — what this toolkit or host cannot draw (no custom colours, no blur, fixed
+pane width, no font weight). Read `references/media.md` for the medium. If the ceiling makes
+the requested quality impossible, say so now rather than redesigning three times inside it.
 
-Every surface has a medium — web, TUI, CLI, desktop GUI, mobile GUI, deck, or print — and it
-decides units, capabilities, which states exist, and how a candidate is inspected. The medium
-is **declared, not offered as a choice**, and it is never one of the axes a selection page
-presents.
+### 2. Materials — `references/materials.md`
 
-1. Repository evidence first.
-2. Otherwise the request, or whatever plan or artifact the request already produced. At least
-   one of these always exists, so no detection machinery is needed.
-3. When substrate and medium diverge, the medium wins — Electron and Tauri render DOM but are
-   desktop GUI products.
-4. Still ambiguous → `CONTRACT GAP`. A misread medium is a gate, not one more axis; adding an
-   axis to paper over it is the failure this rule exists to stop.
+Before any layout or colour decision, collect:
 
-Pass the declared medium to every leaf. `interface-design/references/medium-profiles.md` holds
-its substrate, mechanisms, craft defaults, purpose calibration, and differentiation vocabulary.
+- **References**: real products of the same kind and medium, captured as screenshots.
+- **A design system or component library** when the stack has one and the project does not.
+- **An asset inventory**: every icon, app icon, illustration, placeholder and empty-state image
+  the surface needs, each with a source.
 
-## Selection Pages
+No reference, no direction. A direction that cannot point at what it was taken from is a
+default in disguise.
 
-Bring the open decisions into one surface the owner can see at once, instead of scattering them
-through prose across a conversation.
+### 3. Experience — `references/experience.md`
 
-- `references/decision-dashboard.html` — per-surface, at a glance. Tier 1 picks a base
-  candidate whole; tier 2 toggles only genuinely open axes **within that base**; tier 3 carries
-  the questions the experience stage still owes.
+Derive what the surface owes from the app itself:
 
-  Two different things get called "settled" and they behave oppositely. An axis the **contract
-  or captured evidence** decided is not offered at all — flipping it is a contract change, not a
-  preference. An axis the **profile** decided is always shown, pre-selected and marked, because
-  that is the only way it stays flippable and the only way the overturn counter can ever move;
-  a profile default that disappears makes the anti-ossification rule dead code. Profile defaults
-  do not count against the cap of four, because they are disclosed answers rather than
-  questions.
+- An **object × action matrix**: every object a user sees, against what people expect to do
+  to it. Each cell is `yes`, or `no` with a reason.
+- **Journeys**: the few paths that matter, written as steps that can be replayed on the build.
+- **States** each screen can be in, and the **component baselines** from
+  `references/component-baselines.md` for every component kind in use.
 
-  So the page shrinks with use: the same medium starts with a similar menu drawn from its
-  differentiation vocabulary, and each recurring answer moves from the question list to the
-  marked-default list.
-- `references/taste-tournament.html` — cross-project, forced pairwise choice, used to collect
-  the durable taste profile.
+Anything you decided without the owner goes into one short **Decided for you** list that
+leads your report. It is never recorded as settled.
 
-Both pages are HTML whatever the product's medium is: they are choosers, not artifacts. A
-non-web medium embeds its own capture — the terminal run, both stream forms, the rendered unit
-or page, or a screenshot explicitly labeled a mock.
+### 4. Direction — `references/interface.md`
 
-Both pages always show **"축이 이게 아님 · 다시 그려"**. That is a redraft signal, not a
-selection: it records no approval token. Selecting from the wrong axes produces confident
-choices and a surface that still misses, with an approval token laundering the bad frame — the
-escape exists to prevent exactly that.
+Turn the materials into one committed look: concrete values (palette, type, radius, spacing
+rhythm, density, icon style, motion) taken from the chosen reference, each with its source.
 
-Moving an element from one base into another is not an override. It is a signal to redraw the
-candidates, because two bases mixed at the element level is how candidates collapse into
-palette swaps.
+- **Owner present** → show two or three candidates in `references/candidate-viewer.html` and
+  let them answer with a number.
+- **Owner away** → see *When the owner is away*.
 
-## Canonical Contract Rules
+### 5. Build — `references/build.md`
 
-- `references/contract-schema.md` is the only normative schema.
-- Each section has one writer. Product-craft coordinates updates but does not invent leaf-owned content.
-- The accessibility floor outranks an approved contract. The contract outranks stage defaults. Implementation constraints may expose a gap but cannot rewrite intent.
-- `[captured]` and `[proposed]` are proposal annotations only. Remove them when approved values enter the canonical contract; preserve rationale in Decision Log.
-- `design-contract.md` describes how a product surface works and feels. `.agents/plans/*.md` describes how a technical change will be executed.
-- Never create or edit a contract, specimen, or product source without user authorization.
+Build from the contract. Use the library's components, carry the reference's values exactly,
+produce every asset in the inventory, and cover every `yes` cell and every state. When a
+toolkit skill is installed for the stack, load it before writing UI code and follow it on
+toolkit facts.
 
-## Taste Profile
+### 6. Review — `references/review.md`
 
-`taste-profile.md` carries the owner's durable design preferences across projects, so the same
-choices are not re-elicited every session. It is read before candidates are drawn and written
-only through the two rules below.
+Run the review on the running build: native-resolution tiles, geometry measurement, a style
+census of the source, the journeys replayed, the result beside its reference, and a reviewer
+in a separate context who has not seen the code. Fix what is found and run it again. Stop
+when nothing above polish remains, or after three rounds — then report exactly what is left.
 
-- A `taste` payload never writes directly. Produce the proposed diff, show it, and commit only
-  on explicit approval. This bounds repository churn and stops a misread click from hardening
-  into a durable preference.
-- A profile value appears in a selection page **pre-selected and marked as profile-supplied**,
-  so it can always be seen and flipped. A silent default is the same defect as an undisclosed
-  inference. A value with fewer than three confirmations is shown but never pre-selected.
-- Three consecutive overturns of an axis retire its value to `uncertain` and return the axis to
-  the next tournament.
+Do not report the surface as done on the strength of having built it. The review output is
+the evidence.
 
-The `Note` column holds the owner's words verbatim and is the one place Korean is expected in
-this family; do not translate it and do not flag it in a language sweep.
+## When the owner is away
 
-## Gate Protocol
+Delegation ("do it your way", "I'm away") is not permission to skip a step. It changes who
+picks, nothing else.
 
-Use the exact records in `references/output-formats.md`.
+1. Materials and the experience work still happen in full.
+2. Pick the direction yourself: the reference that best matches what the owner has said about
+   their taste, in this request or in the project's contract and history. When their words
+   point nowhere, pick the most accomplished reference, not the safest one. "Conservative
+   because nobody was there to object" is the failure this rule exists to stop.
+3. Build that one direction properly rather than several mocks nobody will look at.
+4. Leave the reference board — the captured references and the built result — in the viewer,
+   so the owner can redirect with one sentence.
+5. Record one line in the contract's Decision Log: what you chose, from which reference, and
+   why. Lead your report with the **Decided for you** list.
 
-- `READY FOR INTERFACE` — produced by experience-design; consumed by interface-design. Continue only when jobs, IA/flow, visible states, recovery, and material questions are resolved for the selected depth, every applicable EXP obligation has one valid PASS row, and Required approvals are present in Recorded approvals.
-- `READY FOR BUILD` — produced by interface-design; consumed by design or ui-engineering. Continue only when composition, art direction, component presentation, adaptation behavior, and accessibility values are concrete for the selected depth, every EXP row is mapped, required specimens were inspected, every INT row is valid, and Required approvals are present in Recorded approvals.
-- `EXPERIENCE DELTA REQUIRED` — produced by interface-design or ui-engineering when an experience-owned section must change. Stop the affected path and return to experience-design.
-- `INTERFACE DELTA REQUIRED` — produced by ui-engineering when an interface-owned section must change. Stop the affected path and return to interface-design.
-- `CONTRACT GAP` — produced by a leaf when required intent is absent or conflicting and ownership cannot safely be bypassed. Product-craft routes it; the affected path stays stopped.
+## What to record
 
-## Surface Obligations Lifecycle
+`design-contract.md` is a working document, not a ledger. It holds what the next agent needs
+in order to continue the surface without re-deriving it: the frame, the references and the
+values carried from them, the matrix, the journeys, the asset inventory, and the decision
+log. Template and rules: `references/contract.md`.
 
-Use `Surface Obligations`, `Approvals`, `Craft Findings`, and `ARTIFACT DRIFT` from
-`references/output-formats.md`, and `## Artifact Ledger` from `references/contract-schema.md`.
+Write it only where the owner has asked for the surface to be built or the contract to be
+written. An audit writes nothing.
 
-1. Leaves allocate `OBL-NNN` in one namespace and link upward with `Derives from`. Coverage
-   follows the ancestor chain: a downstream row covers everything above it.
-2. Any `GAP` blocks its gate. `PENDING` marks a stage that has not produced its rows yet and
-   never yields readiness.
-3. Approvals are `experience_approved`, `direction_selected`, and `build_authorized`, each
-   recorded only from explicit user evidence. `direction_selected` belongs to the user —
-   record their own words and the chosen `ART-NNN`. Never select on their behalf.
-4. When a design artifact carries the visual decision, record it in the contract's
-   `## Artifact Ledger` with path, revision, coverage, and reviewed state and adaptation scope.
-   Inside that reviewed scope the selected artifact outranks written decisions.
-5. On approval, persist the obligations, ledger rows, and approvals under the durable
-   contract's `## Decision Log & Open Questions`, keeping the path inside the execution root.
-6. After implementation, consume both the contract comparison and the `Craft Findings`. A
-   material craft finding blocks readiness even when no obligation row mentions it.
-7. Route a recomputed-revision mismatch, an external artifact reference, or an
-   artifact-versus-decision conflict as `ARTIFACT DRIFT` to its owning skill.
+## Audit mode
 
-## Carriers and Ownership
+Read-only. Run step 3 against the existing surface (which cells are empty, which journeys
+break, which baselines are missing) and step 6 against its render. Report findings ranked by
+what they cost the user, each with evidence and one fix. Change nothing; a later request
+turns accepted findings into work.
 
-For a bounded Seed auto-chain, `product-craft` owns the evaluation through `READY FOR BUILD`.
-For a Full `READY FOR BUILD` handoff whose technical trigger applies, ownership moves to
-`design`.
+## Working with other skills
 
-For no-plan Seed or Focused work below the independent design trigger, the records persisted
-under Decision Log are the durable carrier. The approved in-session handoff names that
-contained contract path explicitly; it never invents or implies an active plan.
+- **`design`** plans the technical change when it spans files or needs architecture. Settle
+  the contract here first; the plan then cites the contract path and turns each journey and
+  required matrix cell into a success criterion.
+- **`verify`** confirms the finished feature against the plan; it replays the journeys.
+- **Toolkit skills** (for example a WinUI skill) own toolkit facts: which control, which API,
+  which pitfalls. This skill owns what the surface should be and whether it turned out well.
+  Where a look decision and a toolkit rule collide, keep the look and pay the cost the
+  toolkit skill names (keyboard, accessibility, contrast themes) — or change the look, but
+  decide it, do not drift.
+- **An installed web-page design skill** with its own themes and checks may run steps 4–5 for
+  a marketing or content page. Steps 2, 3 and 6 still run here.
 
-## Handoff Boundaries
+## Reporting
 
-`experience-design` owns jobs, IA, routes, screen inventory, content priority, workflows, visible states, recovery, and microcopy. `interface-design` owns macrostructure, composition, hierarchy, art direction, visual systems, component appearance, adaptive presentation, and interface accessibility values. `ui-engineering` owns durable UI code, Implementation Bridge, and render-grounded evidence.
-
-Interface planning produces design artifacts that carry the visual decision. A selected
-artifact is durable reference — recorded in `## Artifact Ledger` and read by implementation —
-not a disposable specimen. Only ui-engineering writes product source.
+Lead with what the owner can look at: the build, and the result beside its reference. Then
+the **Decided for you** list, then what the review still shows. Keep process out of it.

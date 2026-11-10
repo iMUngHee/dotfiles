@@ -155,7 +155,7 @@ ART-001 is an experience-structure artifact (structure, not interface direction)
 
 ## Implementation Bridge
 
-<!-- Written by ui-engineering after build authorization. -->
+<!-- Written during the build. -->
 
 2026-10-09 — Console and chat rooms, built on `agent/claude-mods-app-redesign` (plan `.agents/plans/2026-10-09-claude-mods-app-redesign.md`).
 
