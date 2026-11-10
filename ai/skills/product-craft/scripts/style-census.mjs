@@ -2,8 +2,8 @@ import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const extensions = new Set([".css", ".scss", ".sass", ".less", ".js", ".jsx", ".ts", ".tsx", ".html", ".vue", ".svelte", ".xaml", ".slint", ".rs", ".go"]);
-const skipped = new Set(["node_modules", ".git", "target", "dist", "build", ".agents"]);
+const extensions = new Set([".css", ".scss", ".sass", ".less", ".js", ".jsx", ".ts", ".tsx", ".html", ".vue", ".svelte", ".xaml", ".axaml", ".slint", ".rs", ".go", ".cs", ".swift", ".kt", ".dart", ".py", ".qml"]);
+const skipped = new Set(["node_modules", ".git", "target", "dist", "build", "bin", "obj", ".agents"]);
 
 export function census(sources) {
   const buckets = Object.fromEntries(["colors", "fontSizes", "fontWeights", "radii", "spacing"].map(key => [key, new Map()]));
@@ -29,7 +29,7 @@ export function census(sources) {
       if (literal.startsWith("#")) {
         let hex = literal.slice(1).toLowerCase();
         if (hex.length === 3 || hex.length === 4) hex = [...hex].map(c => c + c).join("");
-        if (hex.length === 8 && extname(path).toLowerCase() === ".xaml") hex = hex.slice(2) + hex.slice(0, 2);
+        if (hex.length === 8 && [".xaml", ".axaml"].includes(extname(path).toLowerCase())) hex = hex.slice(2) + hex.slice(0, 2);
         value = `#${hex.endsWith("ff") && hex.length === 8 ? hex.slice(0, 6) : hex}`;
       } else {
         const parts = literal.slice(literal.indexOf("(") + 1, -1).trim().split(/[\s,/]+/);
@@ -41,7 +41,21 @@ export function census(sources) {
       }
       add("colors", value, match.index);
     }
-    const declarations = /\b["']?((?:font[-_]?(?:size|weight)|border[\w-]*radius|corner[-_]?radius|radius|(?:margin|padding)[\w-]*|(?:row|column)[-_]?gap|gap|(?:horizontal|vertical)?spacing))["']?\s*[:=]\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^;,{}\n<>]+))/gi;
+    for (const match of source.matchAll(/\bColor\.From(Argb|Rgb)\s*\(([^()]*)\)/gi)) {
+      const parts = match[2].split(",").map(p => p.trim());
+      const hasAlpha = match[1].toLowerCase() === "argb";
+      if (parts.length !== (hasAlpha ? 4 : 3) || parts.some(p => !/^(?:0x[\da-f]+|\d+)$/i.test(p))) continue;
+      const channels = parts.map(Number);
+      if (channels.some(n => n > 255)) continue;
+      const alpha = hasAlpha ? channels.shift() : 255;
+      add("colors", `#${[...channels, ...(alpha === 255 ? [] : [alpha])].map(n => n.toString(16).padStart(2, "0")).join("")}`, match.index);
+    }
+    for (const match of source.matchAll(/\bnew\s+(?:\w+\.)*(Thickness|CornerRadius)\s*\(([^()]*)\)/gi)) {
+      const parts = match[2].split(",").map(p => p.trim());
+      if (![1, 2, 4].includes(parts.length) || parts.some(p => !/^-?(?:\d*\.)?\d+$/.test(p))) continue;
+      for (const part of parts) add(match[1].toLowerCase() === "thickness" ? "spacing" : "radii", String(Number(part)), match.index);
+    }
+    const declarations = /\b["']?((?:font[-_]?(?:size|weight)|border[\w-]*radius|corner[-_]?radius|radius|(?:margin|padding)[\w-]*|(?:row|column)[-_]?gap|gap|(?:horizontal|vertical|row|column)?spacing))["']?\s*[:=]\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^;,{}\n<>]+))/gi;
     for (const match of source.matchAll(declarations)) {
       const name = match[1].replace(/[-_]/g, "").toLowerCase();
       let category;
@@ -49,10 +63,11 @@ export function census(sources) {
       else if (name === "fontweight") category = "fontWeights";
       else if (/^(?:border.*radius|cornerradius|radius)$/.test(name)) category = "radii";
       else if (/^(?:margin|padding)(?:top|right|bottom|left|inline|block|inlinestart|inlineend|blockstart|blockend)?$/.test(name) ||
-        /^(?:gap|rowgap|columngap|spacing|horizontalspacing|verticalspacing)$/.test(name)) category = "spacing";
+        /^(?:gap|rowgap|columngap|spacing|horizontalspacing|verticalspacing|rowspacing|columnspacing)$/.test(name)) category = "spacing";
       if (!category) continue;
       let value = (match[2] ?? match[3] ?? match[4]).trim();
       if (category === "fontWeights") {
+        value = value.replace(/^FontWeights\./, "");
         value = ({ normal: "400", regular: "400", medium: "500", semibold: "600", bold: "700", black: "900", light: "300", thin: "100" })[value.toLowerCase()] ?? value;
       }
       if (!/^-?(?:\d*\.)?\d+(?:px|pt|em|rem|%|vh|vw)?(?:[\s,]+-?(?:\d*\.)?\d+(?:px|pt|em|rem|%|vh|vw)?)*$/i.test(value)) continue;
@@ -86,12 +101,14 @@ export function census(sources) {
   return { files: sources.map(s => s.path), categories, nearDuplicates, singletons };
 }
 
-async function main(paths) {
-  if (!paths.length) throw new Error("Usage: node style-census.mjs path [path ...]");
-  if (paths.length === 1 && paths[0] === "--help") {
-    console.log("Usage: node style-census.mjs path [path ...]\nReports hex/rgb(a) colours and literal font sizes, weights, radii and spacing. Near-duplicate thresholds: RGB distance <= 12 (same alpha); numeric difference <= 1 (same unit). Source heuristics do not resolve expressions, tokens or inherited/computed styles.");
+async function main(args) {
+  const usage = "Usage: node style-census.mjs [--json] path [path ...]";
+  if (args.length === 1 && args[0] === "--help") {
+    console.log(`${usage}\nDefault: category counts and up to 20 near-duplicates/singletons each (first location). --json: all findings and locations.\nReports hex/rgb(a)/Color.FromArgb colours, literal style assignments, Thickness and CornerRadius constructors. Near-duplicate thresholds: RGB distance <= 12 (same alpha); numeric difference <= 1 (same unit). Source heuristics do not resolve expressions, tokens or inherited/computed styles.`);
     return;
   }
+  const paths = args.filter(arg => arg !== "--json");
+  if (!paths.length || paths.some(arg => arg.startsWith("--"))) throw new Error(usage);
   const files = new Set();
   const visit = async path => {
     const stat = await lstat(path);
@@ -102,7 +119,24 @@ async function main(paths) {
   };
   for (const path of paths) await visit(resolve(path));
   const sources = await Promise.all([...files].sort().map(async path => ({ path, text: await readFile(path, "utf8") })));
-  console.log(JSON.stringify(census(sources), null, 2));
+  const report = census(sources);
+  if (args.includes("--json")) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log(`Files: ${report.files.length} (literal source scan; tokens and computed styles unresolved)`);
+    for (const [category, values] of Object.entries(report.categories)) {
+      console.log(`${category}: ${values.map(({ value, count }) => `${value} ×${count}`).join(", ") || "—"}`);
+    }
+    console.log(`nearDuplicates (${report.nearDuplicates.length}):`);
+    for (const entry of report.nearDuplicates.slice(0, 20)) console.log(`  ${entry.category}: ${entry.values.join(" ≈ ")} (distance ${entry.distance})`);
+    if (report.nearDuplicates.length > 20) console.log(`  ${report.nearDuplicates.length - 20} more; use --json`);
+    console.log(`singletons (${report.singletons.length}):`);
+    for (const entry of report.singletons.slice(0, 20)) {
+      const { path, line, column } = entry.locations[0];
+      console.log(`  ${entry.category}: ${entry.value} — ${path}:${line}:${column}`);
+    }
+    if (report.singletons.length > 20) console.log(`  ${report.singletons.length - 20} more; use --json`);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

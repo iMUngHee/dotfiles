@@ -40,21 +40,55 @@ test("comments, dynamic values and unrelated source numbers are excluded", () =>
   for (const values of Object.values(report.categories)) assert.deepEqual(values, []);
 });
 
+test("code-built UI assignments, geometry constructors and ARGB colours are counted", () => {
+  const report = census([{ path: "LibraryView.cs", text: `
+    var title = new TextBlock { FontSize = 12, Spacing = 8, FontWeight = FontWeights.SemiBold };
+    panel.Padding = new Thickness(8, 0, 8, 0);
+    border.CornerRadius = new CornerRadius(8);
+    var ink = Color.FromArgb(255, 17, 19, 31);
+    var alpha = Windows.UI.Color.FromArgb(0x80, 0x11, 0x13, 0x1f);
+    var dynamic = Color.FromArgb(255, theme.Red, 19, 31);
+    panel.Margin = new Thickness(theme.Gap);
+  ` }]);
+  assert.equal(report.categories.fontSizes[0].value, "12");
+  assert.equal(report.categories.fontWeights[0].value, "600");
+  assert.equal(report.categories.spacing.find(x => x.value === "8").count, 3);
+  assert.equal(report.categories.spacing.find(x => x.value === "0").count, 2);
+  assert.equal(report.categories.radii[0].value, "8");
+  assert.deepEqual(report.categories.colors.map(x => x.value), ["#11131f", "#11131f80"]);
+});
+
 test("CLI walks supported source files, deduplicates paths and skips dependency folders", async () => {
   const dir = await mkdtemp(join(tmpdir(), "craft-census-"));
   try {
     await mkdir(join(dir, "node_modules"));
     await writeFile(join(dir, "a.css"), "a { color: #888; padding: 8px; }");
     await writeFile(join(dir, "b.tsx"), 'const s = { color: "#898989", fontSize: 16 };');
+    for (const extension of ["cs", "swift", "kt", "dart", "py", "qml", "axaml"]) {
+      await writeFile(join(dir, `native.${extension}`), "FontSize = 12; Spacing = 8;");
+    }
     await writeFile(join(dir, "notes.md"), "color: #ffffff");
     await writeFile(join(dir, "node_modules", "ignored.css"), "a { color: #ffffff; }");
+    for (const folder of ["bin", "obj"]) {
+      await mkdir(join(dir, folder));
+      await writeFile(join(dir, folder, "Generated.cs"), "FontSize = 999;");
+    }
     const run = (...args) => spawnSync(process.execPath, [fileURLToPath(new URL("style-census.mjs", import.meta.url)), ...args], { encoding: "utf8" });
-    const output = run(dir, join(dir, "a.css"));
+    const output = run("--json", dir, join(dir, "a.css"));
     assert.equal(output.status, 0, output.stderr);
     const report = JSON.parse(output.stdout);
-    assert.equal(report.files.length, 2);
+    assert.equal(report.files.length, 9);
     assert.equal(report.categories.colors.length, 2);
     assert.equal(report.categories.colors[0].count, 1);
+    assert.equal(report.categories.fontSizes.find(x => x.value === "12").count, 7);
+    const summary = run(dir);
+    assert.equal(summary.status, 0, summary.stderr);
+    assert.match(summary.stdout, /colors: #888888 ×1, #898989 ×1/);
+    assert.match(summary.stdout, /fontSizes: 12 ×7, 16 ×1/);
+    assert.match(summary.stdout, /nearDuplicates/);
+    assert.match(summary.stdout, /singletons/);
+    assert.match(summary.stdout, /a\.css:1:/);
+    assert.ok(summary.stdout.length < output.stdout.length / 2);
     const bad = run(join(dir, "missing"));
     assert.notEqual(bad.status, 0);
     assert.match(bad.stderr, /ENOENT/);
