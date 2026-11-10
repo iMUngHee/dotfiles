@@ -29,7 +29,8 @@ export function census(sources) {
       if (literal.startsWith("#")) {
         let hex = literal.slice(1).toLowerCase();
         if (hex.length === 3 || hex.length === 4) hex = [...hex].map(c => c + c).join("");
-        if (hex.length === 8 && [".xaml", ".axaml"].includes(extname(path).toLowerCase())) hex = hex.slice(2) + hex.slice(0, 2);
+        // XAML-family toolkits and QML write eight-digit colours alpha first, in markup and in code strings.
+        if (hex.length === 8 && [".xaml", ".axaml", ".cs", ".qml"].includes(extname(path).toLowerCase())) hex = hex.slice(2) + hex.slice(0, 2);
         value = `#${hex.endsWith("ff") && hex.length === 8 ? hex.slice(0, 6) : hex}`;
       } else {
         const parts = literal.slice(literal.indexOf("(") + 1, -1).trim().split(/[\s,/]+/);
