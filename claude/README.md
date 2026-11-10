@@ -18,7 +18,7 @@ claude/
 ├── hooks/                      # PreToolUse, PostToolUse, UserPromptSubmit, Stop, etc. — see Hooks section
 │   └── lib/                    # Shared helpers
 ├── agents/                     # Subagent definitions (pre-commit-verifier, reviewer, verifier)
-├── mods/                       # Function-hook mods (pm-band, pager-view) — see Mods section
+├── mods/                       # Function-hook mods (pm-band, pager-view, gaebu) — see Mods section
 ├── workflows/                   # Reusable dynamic-workflow scripts — see Measuring a rule
 ├── commands/                   # Slash command definitions
 ├── keybindings.json            # Overrides of default keybindings only (tmux-safe ctrl+x chords)
@@ -132,10 +132,13 @@ Mods are Claude Code plugins built on function hooks (2.1.287+, early access: th
 API moves between releases). Each folder under `mods/` is one plugin; bootstrap
 links `~/.claude/mods` to this directory, and `settings.json`
 `env.CLAUDE_CODE_PLUGIN_DIRS` loads them in every session, the desktop app's
-Code tab included. Both are read-only: they run the pm and pager CLIs and draw.
+Code tab included. Their panes browse the pm, pager and gaebu CLIs; mutations
+remain in those engines. Gaebu's event hooks also record session heartbeats and
+composer evidence.
 
 | Mod | Draws | Reads |
 |-----|-------|-------|
+| `gaebu` | Native operations desk: attention queue, selected inspector, nested units and full duty contracts. `o/g/d` switch views, `j/k` navigate, `f` filters attention, `r` refreshes and `h` opens help. Narrow panes stack; wide panes split. | `gaebu me`, `gaebu board`, `gaebu duty show` |
 | `pm-band` | One band line above the prompt — the bound plan's id, a meter with a segment per step (`▰` done, a hollow `▱` for the current one) and the current step (`○ no plan` when unbound), with `steps` and `graph` controls pinned right that open `/pm` on that tab. `/pm` opens a pane under a tab strip: steps (status chip, gauge, a `NOW` card with the current step in full, then every step), backlog (a section per task, priority chips, `⤷ needs X` / `⤷ after X` before the title), and a force-directed dependency graph on a pannable canvas (drag a node, click or arrows to pick, drag empty space or shift+arrows to pan, `+`/`-` zoom, `0` fit; the desktop places each run of the drawing at its cell; VS Code and mobile get the backlog list). | `ai/lib/worktree.mjs resolve-session`, the plan file, `pm-roadmap.ts list --json --all` (pane open only) |
 | `pager-view` | `✉ <name>`, a `N new` chip and the last message under the pm line, the live count pinned right — mail since this session last opened `/pager`. `/pager` opens the chats: a two-line row per peer this session has talked with (newest first, with its unread count); peers without messages are not listed. `j`/`k` and `o` (or a click on a name) open a room drawn as a transcript — the peer's runs under a `● name  HH:MM` line, this session's beside a `▎` bar, bodies in Markdown, a `new` rule above the first unread message, where the room opens; the newest and unread messages are whole and older ones fold past 8 lines (`e` unfolds them all); `b` in the bottom bar goes back. | `pager whoami`, `pager ls --session` (ID column only), `pager export`, `pager who` |
 
@@ -170,7 +173,7 @@ watched, so saving into main reloads every live session at once.
 claude plugin validate claude/mods/pm-band      # what the engine would refuse
 claude plugin test claude/mods/pm-band          # *.test.ts against the engine
 tsc -p claude/mods/pm-band                      # after one load lays .claude-plugin/types/
-claude --plugin-dir claude/mods/pm-band --plugin-dir claude/mods/pager-view
+claude --plugin-dir claude/mods/pm-band --plugin-dir claude/mods/pager-view --plugin-dir claude/mods/gaebu
 ```
 
 `.claude-plugin/types/` is written by the engine on every load and is git-ignored.

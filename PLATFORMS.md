@@ -7,6 +7,17 @@ each platform does differently, and which checks are still owed.
 
 ## After a pull, on any machine
 
+The copied Gaebu mod and shared rule now come from Gaebu 0.3.0 (`82c772f`).
+Upgrade an existing binary explicitly: Windows uses
+`pwsh -File ~/.config/windows/scripts/install-gaebu.ps1 -Force`; macOS/Linux use
+`cargo install --git https://github.com/iMUngHee/gaebu --locked --force --root ~/.local gaebu`.
+Restart sessions hosting `gaebu mcp` after the upgrade so both the process and
+its tool catalog use the new release. The first runtime write migrates schema
+1/2 to schema 3 and keeps the original backup; older binaries cannot read it.
+Windows GNU build/install and the copied mod's 25 native engine tests passed
+on 2026-11-11. Run those mod tests on Linux/macOS after pulling; physical
+terminal fonts, theme contrast and focus behavior remain pending.
+
 The post-merge hook (post-rewrite after a rebase pull) re-runs bootstrap and
 syncs vendored entries that `vendor.sh check` reports as `update` or `missing`,
 but it installs no npm dependencies. On a
