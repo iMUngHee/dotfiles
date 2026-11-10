@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Candidates</title>
+<!-- Open ?c=a.png&c=b.html&reference=ref.png (paths relative to this viewer).
+     Images open at 100% with scrolling; F toggles fit. HTML uses a sandboxed iframe.
+     Alternatively replace CANDIDATES with JSON-encoded {html: "..."} entries.
+     Escape < as \u003c when embedding generated HTML inside the configuration script.
+     The page needs no server, packages or external assets.
+     Candidates run in opaque sandbox origins; never add allow-same-origin. -->
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #16191d; color: #fff; font: 16px/1.4 sans-serif; }
+  header { height: 48px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+  button { min-width: 44px; height: 44px; padding: 0 12px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  button[aria-current="true"] { background: #fff; color: #16191d; text-decoration: underline; text-underline-offset: 4px; }
+  button:focus-visible { outline: 2px solid #80c8ff; outline-offset: -3px; }
+  button:disabled { opacity: .3; cursor: default; }
+  main { height: calc(100dvh - 48px); display: grid; grid-template-columns: minmax(0, 1fr); }
+  main.split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+  .candidate { min-width: 0; min-height: 0; overflow: hidden; }
+  #image { width: 100%; height: 100%; overflow: auto; }
+  #image img { display: block; max-width: none; }
+  #image.fit { display: grid; place-items: center; }
+  #image.fit img { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+  [hidden] { display: none !important; }
+  button svg { width: 20px; height: 20px; vertical-align: middle; }
+  aside { overflow: auto; border-left: 1px solid #555; }
+  aside[hidden] { display: none; }
+  aside img { display: block; max-width: none; }
+</style>
+<header aria-label="Candidate controls">
+  <button id="previous" aria-label="Previous candidate" title="Previous (Left arrow)">←</button>
+  <nav aria-label="Candidates"></nav>
+  <button id="next" aria-label="Next candidate" title="Next (Right arrow)">→</button>
+  <button id="compare" aria-label="Compare with reference" title="Reference (R)" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor"><rect x="2" y="3" width="16" height="14"/><path d="M10 3v14"/></svg></button>
+  <button id="fit" aria-label="Fit image to window" title="Fit / 100% (F)" aria-pressed="false" disabled><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor"><path d="M2 7V2h5M13 2h5v5M18 13v5h-5M7 18H2v-5"/></svg></button>
+</header>
+<main>
+  <section class="candidate" aria-label="Candidate">
+    <iframe sandbox="allow-scripts" title="Candidate 1"></iframe>
+    <div id="image" hidden><img alt="Candidate 1"></div>
+  </section>
+  <aside aria-label="Reference" hidden><img alt="Reference"></aside>
+</main>
+<script>
+const CANDIDATES = [
+  {html: '<!doctype html><style>body{margin:0;background:#f5efe4;display:grid;grid-template-columns:26% 1fr;min-height:100vh}aside{background:#1c413c}main{padding:8vw;display:grid;gap:5vh}i{display:block;background:#d4c09d;height:10vh;border-radius:4px}i:first-child{background:#b45b3a;height:30vh}</style><aside></aside><main><i></i><i></i><i></i></main>'},
+  {html: '<!doctype html><style>body{margin:0;background:#131f35;min-height:100vh}header{height:16vh;background:#ebd7b8}main{padding:8vw;display:grid;grid-template-columns:1fr 1fr;gap:5vw}i{display:block;height:42vh;background:#628b9d;border-radius:100px 100px 0 0}i+ i{background:#c67c60}</style><header></header><main><i></i><i></i></main>'}
+];
+const REFERENCE = '';
+const parameters = new URLSearchParams(location.search);
+const candidates = parameters.getAll('c').map(path => {
+  const url = new URL(path, location.href);
+  if (!['file:', 'https:', 'http:'].includes(url.protocol)) throw new Error('Candidate URLs must use file, https or http');
+  return { url: url.href, image: /\.(png|jpe?g|webp|gif|avif|svg)$/i.test(url.pathname) };
+});
+if (!candidates.length) candidates.push(...CANDIDATES);
+const frame = document.querySelector('iframe');
+const imagePanel = document.querySelector('#image');
+const candidateImage = imagePanel.querySelector('img');
+const fit = document.querySelector('#fit');
+const main = document.querySelector('main');
+const reference = document.querySelector('aside');
+const compare = document.querySelector('#compare');
+const referenceURL = parameters.get('reference') || REFERENCE;
+reference.querySelector('img').src = referenceURL;
+compare.disabled = !referenceURL;
+let current = 0;
+const navigation = document.querySelector('nav');
+candidates.forEach((candidate, index) => {
+  const button = document.createElement('button');
+  button.textContent = index + 1;
+  button.setAttribute('aria-label', `Candidate ${index + 1}`);
+  button.onclick = () => show(index);
+  navigation.append(button);
+});
+// Keys in an opaque iframe do not bubble to the viewer. Relay only navigation keys;
+// the parent checks the source window, and editing controls keep their own keystrokes.
+const bridge = `<script>addEventListener('keydown',event=>{
+  if(event.altKey||event.ctrlKey||event.metaKey||event.target.closest('input,textarea,select,[contenteditable]'))return;
+  if(/^[1-9rRfF]$/.test(event.key)||event.key==='ArrowLeft'||event.key==='ArrowRight'){
+    event.preventDefault();parent.postMessage({candidateKey:event.key},'*');
+  }
+});<\/script>`;
+function show(index) {
+  current = (index + candidates.length) % candidates.length;
+  const candidate = candidates[current];
+  frame.hidden = Boolean(candidate.image);
+  imagePanel.hidden = !candidate.image;
+  fit.disabled = !candidate.image;
+  if (candidate.image) {
+    frame.removeAttribute('srcdoc');
+    frame.src = 'about:blank';
+    candidateImage.src = candidate.url;
+    candidateImage.alt = `Candidate ${current + 1}`;
+    imagePanel.scrollTo(0, 0);
+  } else if (candidate.url) {
+    frame.removeAttribute('srcdoc');
+    frame.src = candidate.url;
+  } else {
+    frame.removeAttribute('src');
+    frame.srcdoc = candidate.html + bridge;
+  }
+  frame.title = `Candidate ${current + 1}`;
+  document.documentElement.dataset.candidate = current + 1;
+  [...navigation.children].forEach((button, number) => button.setAttribute('aria-current', String(number === current)));
+}
+function key(key) {
+  if (key === 'ArrowLeft') show(current - 1);
+  else if (key === 'ArrowRight') show(current + 1);
+  else if (/^[1-9]$/.test(key) && Number(key) <= candidates.length) show(Number(key) - 1);
+  else if (key.toLowerCase() === 'r' && !compare.disabled) compare.click();
+  else if (key.toLowerCase() === 'f' && !fit.disabled) fit.click();
+}
+document.querySelector('#previous').onclick = () => show(current - 1);
+document.querySelector('#next').onclick = () => show(current + 1);
+compare.onclick = () => {
+  const split = compare.getAttribute('aria-pressed') !== 'true';
+  compare.setAttribute('aria-pressed', String(split));
+  reference.hidden = !split;
+  main.classList.toggle('split', split);
+};
+fit.onclick = () => {
+  const fitted = fit.getAttribute('aria-pressed') !== 'true';
+  fit.setAttribute('aria-pressed', String(fitted));
+  imagePanel.classList.toggle('fit', fitted);
+};
+// URL frames cannot relay keys across their sandbox boundary. Keep their previews
+// view-only so a click inside them does not consume the chooser's keyboard shortcuts.
+addEventListener('blur', () => setTimeout(() => {
+  if (candidates[current].url && document.activeElement === frame) navigation.children[current].focus({ preventScroll: true });
+}, 0));
+addEventListener('keydown', event => {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.target.closest('input,textarea,select,[contenteditable]')) return;
+  if (/^[1-9rRfF]$/.test(event.key) || ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    event.preventDefault();
+    key(event.key);
+  }
+});
+addEventListener('message', event => {
+  if (event.source === frame.contentWindow && typeof event.data?.candidateKey === 'string') key(event.data.candidateKey);
+});
+show(0);
+</script>
+</html>

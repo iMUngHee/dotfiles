@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Planted geometry defects</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 24px; font: 16px/24px sans-serif; }
+  .row { display: flex; align-items: center; gap: 16px; }
+  button { height: 48px; padding: 12px; }
+  #offset { transform: translateY(3px); }
+  #wrapped { display: block; width: 70px; margin-top: 20px; }
+  #overflow { width: 100px; margin-top: 20px; }
+  #overflow div { width: 220px; }
+  #clipped { width: 75px; white-space: nowrap; overflow: hidden; }
+</style>
+<div class="row"><button>Open</button><button id="offset">Save</button></div>
+<label id="wrapped">Library collection name</label>
+<div id="overflow"><div>Outside the container</div></div>
+<p id="clipped">This text is clipped by its container.</p>
