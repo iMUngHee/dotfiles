@@ -15,8 +15,17 @@ Screens you could not capture are listed as not reviewed — never passed over i
 
 Menus, flyouts, tooltips, dropdowns and many dialogs are separate windows or layers that a
 window capture leaves out. Open each one and capture the screen region that contains it, so
-the reviewer sees them. Capture at the display scale the machine has and record it; do not
+the reviewer sees them — cropped or masked to the app's own windows, so nothing else on the
+desktop ends up in the capture. Capture at the display scale the machine has and record it; do not
 change system settings to reach another scale — list other scales as not reviewed.
+
+Look at every capture yourself before using it. Automation produces its own defects — a
+leftover dialog over seven screens, a state that never loaded — and a reviewer will report
+them as the app's. A capture set that turns out to be invalid is redone, and the review of
+it does not count as a round.
+
+Replays act on throwaway fixtures only, never the owner's real data. Note anything a replay
+leaves outside the fixture (files in the system trash, a file manager window).
 
 ## 1. Tiles — see real pixels
 
@@ -103,6 +112,8 @@ what was intended is exactly what must be absent. Give it only:
 - one line on what the app is for,
 - any capture caveats that would otherwise read as defects (a focus ring from keyboard
   driving, a strip of desktop outside the window),
+- content notes the screens assume: what the fixture items are, the reading direction, what
+  a count is counting,
 - this brief: *"You are seeing this product for the first time. List everything that looks
   wrong, unfinished, inconsistent or confusing, most costly first. For each: where it is,
   what is wrong, and what you expected instead. Do not praise. Do not explain what the
@@ -131,7 +142,9 @@ Record each finding as:
   misaligned icon, a mid-word break, three greys for one role, a missing rename.
 - **polish**: a competent reviewer would mention it but not mind.
 
-Fix blocks and degrades and run the affected steps again. A round is: capture, steps 1–5
+Fix blocks and degrades that fall inside the work's scope and run the affected steps again.
+Findings about screens the work only touched through shared values — their own layout, their
+own controls — are reported as out of scope with their severity, not fixed and not hidden. A round is: capture, steps 1–5
 on what changed, and a **new** separate-context reviewer who has seen neither the code nor
 the earlier rounds. Your own re-check does not close a round. Three rounds at most; after
 that, or when a round ends with nothing above polish, stop and report.
