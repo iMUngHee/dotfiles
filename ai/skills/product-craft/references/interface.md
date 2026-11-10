@@ -23,8 +23,16 @@ Take from the chosen reference, measured rather than estimated:
 | Motion | What moves, for how long, and what never moves |
 | Signature | The one or two details that make the reference feel finished, and how this app will have its own equivalent |
 
-Every value names where it came from (reference and screen). A value with no source is a
-default; replace it or find its source.
+Every value says how it was arrived at, as one of:
+
+- `from <reference, screen>` — taken from the reference as measured;
+- `derived: <how>` — worked out from reference values where the reference shows nothing (a
+  light theme from a dark capture, a size between two measured ones);
+- `departure: <reason>` — deliberately different (the product's own accent, a typeface that
+  sets Korean well).
+
+A value with none of these is a default; replace it or account for it. Do not invent a
+source to make a value look measured.
 
 Then adapt structure to this app: its objects and journeys decide what dominates the window,
 what is persistent, and what appears on demand. Do not pour this app's content into the
@@ -53,7 +61,8 @@ and character rather than in tint. Same screen, same realistic content in each.
   one `c` parameter per candidate, in order — screenshots or HTML files, by relative path:
   `candidate-viewer.html?c=one.png&c=two.png&c=three.html&reference=ref.png`. The file
   itself is not edited. Number keys and arrows switch, `F` toggles fit and actual size, `R`
-  shows the reference beside the candidate.
+  shows the reference beside the candidate. Save that address as a one-line `board.html`
+  beside it that redirects there, so the board opens with a double-click.
 - Say which you would pick, in one sentence, in the conversation — not on the page.
 - The owner answers with a number. "2, but with the list from 1" is a request to redraw 2,
   not to splice.

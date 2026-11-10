@@ -73,7 +73,9 @@ foreach ($group in ($elements | Where-Object { $null -ne $_.CenterY -and -not $_
         foreach ($other in $siblings) {
             if ($assigned.Contains($other.Index)) { continue }
             $overlap = [Math]::Min($anchor.Y + $anchor.Height, $other.Y + $other.Height) - [Math]::Max($anchor.Y, $other.Y)
-            if ($overlap -ge [Math]::Min($anchor.Height, $other.Height) / 2) {
+            # Rows are runs of similar-height controls; a pane beside a list is layout, not a row.
+            $similar = [Math]::Max($anchor.Height, $other.Height) -le 3 * [Math]::Min($anchor.Height, $other.Height)
+            if ($similar -and $overlap -ge [Math]::Min($anchor.Height, $other.Height) / 2) {
                 $members.Add($other)
                 [void]$assigned.Add($other.Index)
             }

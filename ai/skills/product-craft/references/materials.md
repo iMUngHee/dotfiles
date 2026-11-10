@@ -20,6 +20,9 @@ press kit or repository README. Good places to look by medium are listed in `med
 - When the owner has other apps of their own, look at them too: they are the sibling products
   this one should feel related to, and the source of features they will assume exist.
 - Make the three differ from each other in structure, so the choice between them is real.
+- Do not let what is easiest to fetch choose for you. Vendor screenshots, store listings,
+  press kits, documentation and review articles all carry full-size captures of products
+  you cannot install; say which strong candidates you could not capture and why.
 
 **Capture them.** Save screenshots under `.agents/design/refs/` in the project, named for the
 product and the screen, at the largest size you can get. For a live web product, capture it
