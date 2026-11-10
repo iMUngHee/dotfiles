@@ -108,6 +108,11 @@ what was intended is exactly what must be absent. Give it only:
   what is wrong, and what you expected instead. Do not praise. Do not explain what the
   design intends."*
 
+With many captures, split them between two reviewers by area (main screens; states and
+overlays) rather than handing one reviewer everything; each sees fewer images more closely.
+Check each reported finding against the capture before accepting it: a reviewer who cannot
+see a control in a still may report it missing.
+
 Where the session can drive the app, also ask that reviewer to attempt the journeys from
 their one-line titles alone and report where it got stuck or expected something that was
 not there.

@@ -298,6 +298,13 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **macOS, Linux** — run `node --test ai/skills/product-craft/scripts/*.test.mjs`
+      and, with a Chromium browser installed (or `MEASURE_BROWSER` set),
+      `node --test ai/skills/product-craft/scripts/fixtures/measure/browser.test.mjs`.
+      Both passed on Windows 2026-11-11 (Node 26.12.1, Edge). The browser test
+      kills its browser with `SIGKILL` off Windows and reads the endpoint from
+      `DevToolsActivePort`; neither path has run there. `measure-uia.ps1` is
+      Windows-only by design.
 - [ ] **macOS** — run the Codex pager-name SessionStart integration
       on Codex 0.167.0 with Node 22 or later. Review the changed hook in `/hooks`,
       start/resume a session, then `/rename other` and send a prompt. Verify
