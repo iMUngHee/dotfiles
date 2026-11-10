@@ -250,6 +250,13 @@ shared server through `/daemon` and check again; connected sessions may be inter
   `tidy` is listed in both tools: in a live Claude Code 2.1.319 session's
   skill list, and in Codex CLI 0.167.0's `codex debug prompt-input` together
   with the `# Code Quality` section.
+- Linux (the VM, after its own config repo took a port of `0e28fca` and ran
+  the post-merge bootstrap): the same three checks held. The rule's symlink is
+  `cmp` identical, `~/.codex/AGENTS.md` (35063 B) contains its whole body, and
+  `tidy` is listed by Claude Code 2.1.306 (`claude -p`) and in Codex CLI
+  0.165.0's `codex debug prompt-input` with the `# Code Quality` section.
+  Windows was checked on 2026-11-10 when `0e28fca` was made, so this check
+  is done on all three platforms.
 - macOS, Node 24.22.1 with `/usr/bin/grep` (BSD grep 2.6.0-FreeBSD):
   `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` passed 7
   tests with zero failures and zero skips, including the exact `SHA-256`
@@ -316,11 +323,6 @@ cannot run something; remove it in the commit that records the result.
       `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
       (see Verified on 2026-11-04) and on 2026-11-05 pager's build path, into a
       temporary `LOCAL_BIN` (see Verified on 2026-11-05); Linux remains.
-- [ ] **Linux** — after `ai/scripts/bootstrap.sh`, check that
-      `~/.claude/rules/code-quality.md` matches `ai/rules/code-quality.md`,
-      that `~/.codex/AGENTS.md` contains its body, and that the `tidy` skill
-      is listed in both tools (checked on Windows 2026-11-10; macOS: see
-      Verified on 2026-11-10).
 - [ ] **macOS and Linux** — a changed `.md` under the tiers now selects the
       config-audit Go suite, whose `TestRepoFrontmatterParses` parses every
       tier frontmatter. Run `node --test ai/lib/stop-hooks.test.mjs` (its
