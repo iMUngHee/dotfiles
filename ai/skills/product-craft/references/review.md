@@ -35,11 +35,13 @@ toolbar, list row, dialog and form. In each, check:
 
 ## 2. Measure — do not trust the eye for geometry
 
-- **Web and web-based shells**: run `scripts/measure-dom.js` in the page. It reports rows
-  whose children's centre lines differ, text that wraps where a single line was intended,
-  overflow and clipping, and undersized targets.
-- **Windows desktop**: `scripts/measure-uia.ps1` reads the accessibility tree and reports
-  the same from bounding rectangles.
+- **Web and web-based shells**: evaluate the contents of `scripts/measure-dom.js` in the
+  page (browser console or the session's page-script tool). It returns rows whose children's
+  centre lines differ, text that wraps where a single line was intended, overflow and
+  clipping, and undersized targets.
+- **Windows desktop**: `pwsh -NoProfile -File scripts/measure-uia.ps1 -ProcessId <pid>` (or
+  `-WindowTitle '<pattern>'`) reads the accessibility tree and prints rows whose centre
+  lines differ and elements outside the window; `-Full` adds every element's rectangle.
 - **Elsewhere**: use the toolkit's inspector or accessibility tree to read rectangles for
   each row of controls and compare centre lines yourself. When the surface exposes nothing
   (custom drawing), say so; tiles are then the only check.
@@ -56,7 +58,9 @@ node <skill>/scripts/style-census.mjs <ui source paths...>
 It lists every distinct colour, font size, weight, radius and spacing value in the UI
 source, how often each is used, and which are near-duplicates of each other. Three greys a
 shade apart, a size used once, a radius that appears on one card only — each is either a
-deliberate token or an inconsistency. Fold the accidents into the direction's values.
+deliberate token or an inconsistency. Fold the accidents into the direction's values. A
+value defined once in a theme or token file is a definition, not a finding; a literal used
+once in UI code usually is one. `--json` gives every location.
 
 Then compare screens with each other: the same kind of thing (section header, secondary
 text, list row, primary button) looks the same everywhere it appears.
