@@ -25,9 +25,11 @@ Take from the chosen reference, measured rather than estimated:
 
 Every value says how it was arrived at, as one of:
 
-- `from <reference, screen>` — taken from the reference as measured;
+- `from <reference, screen>` — taken from the reference as measured (colours sampled, or
+  sizes read from its styles or from a capture at known scale);
 - `derived: <how>` — worked out from reference values where the reference shows nothing (a
-  light theme from a dark capture, a size between two measured ones);
+  light theme from a dark capture, a size between two measured ones, a size estimated from
+  a capture at unknown scale);
 - `departure: <reason>` — deliberately different (the product's own accent, a typeface that
   sets Korean well).
 

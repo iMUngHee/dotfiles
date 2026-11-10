@@ -22,6 +22,9 @@ Each cell is one of:
 - `yes` — with where it lives **on screen**: a button, a menu item, a visible per-item
   action, a mode the screen offers. A shortcut or modifier-click may be an additional route,
   never the only one: an action the user cannot find by looking does not count as `yes`.
+  In the keyboard column, `yes` means reachable by focus and a key, with the key shown
+  somewhere (menu, tooltip, key list). An undo the operating system provides (the system
+  trash) is `no — <where it can be recovered>` unless the screen offers the way back.
 - `no — <reason>` — a deliberate omission the owner would agree with ("no reorder: list is
   always newest first").
 
