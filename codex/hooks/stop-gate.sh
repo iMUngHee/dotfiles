@@ -115,7 +115,7 @@ if [[ "$project_root" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
     run_suite "pm-context tests" ai/skills/pm-context npm test --silent
   fi
   if grep -qE '^ai/skills/product-craft/scripts/' <<< "$changed_files"; then
-    run_suite "product-craft script tests" . bash -c 'node --test ai/skills/product-craft/scripts/*.test.mjs'
+    run_suite "product-craft script tests" . bash -c 'shopt -s failglob; node --test ai/skills/product-craft/scripts/*.test.mjs'
   fi
   # Any .md under the tiers too: TestRepoFrontmatterParses is the only strict
   # YAML parse memory, rule and agent frontmatter gets.

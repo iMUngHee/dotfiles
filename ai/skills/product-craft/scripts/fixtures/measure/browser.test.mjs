@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -15,7 +15,7 @@ let browser;
 for (const candidate of candidates) {
   try { await access(candidate); browser = candidate; break; } catch {}
 }
-assert.ok(browser, 'Set MEASURE_BROWSER to an installed Chromium executable');
+const skip = browser ? false : 'no Chromium browser found; set MEASURE_BROWSER';
 let child, profile, socket, sessionId;
 let sequence = 0;
 const pending = new Map();
@@ -41,19 +41,19 @@ async function navigate(url) {
   throw new Error(`Navigation did not finish: ${url}`);
 }
 before(async () => {
+  if (skip) return;
   profile = await mkdtemp(join(tmpdir(), 'craft-geometry-'));
   child = spawn(browser, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { windowsHide: true });
-  const endpoint = await new Promise((resolve, reject) => {
-    let output = '';
-    const timer = setTimeout(() => reject(new Error('Browser did not expose CDP')), 15000);
-    child.once('error', reject);
-    child.stderr.on('data', data => {
-      output += data;
-      const match = output.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-      if (match) { clearTimeout(timer); resolve(match[1]); }
-    });
-  });
+    '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+  // The browser writes its endpoint here; its stderr is not reliably connected under every runner.
+  let endpoint;
+  for (let attempt = 0; attempt < 150 && !endpoint; attempt++) {
+    try {
+      const [port, path] = (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split(/\r?\n/);
+      if (port && path) endpoint = `ws://127.0.0.1:${port}${path}`;
+    } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
+  }
+  assert.ok(endpoint, 'Browser did not expose CDP');
   socket = new WebSocket(endpoint);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   socket.onmessage = ({ data }) => {
@@ -69,18 +69,23 @@ before(async () => {
   ({ sessionId } = await call('Target.attachToTarget', { targetId, flatten: true }));
   await call('Page.enable');
   await call('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-});
+}, { timeout: 30000 });
 after(async () => {
   if (socket?.readyState === WebSocket.OPEN) {
     await call('Browser.close', {}, null);
     socket.close();
   }
   if (child?.exitCode === null) await new Promise(resolve => { child.once('exit', resolve); setTimeout(resolve, 2000); });
+  // A browser that ignored the close request would keep the test process alive through its pipes.
+  if (child?.exitCode === null) {
+    if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']);
+    else child.kill('SIGKILL');
+  }
   if (profile) await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 });
 const directory = fileURLToPath(new URL('.', import.meta.url));
 const measureSource = await readFile(new URL('../../measure-dom.js', import.meta.url), 'utf8');
-test('planted 3px offset, wrapped label, overflow and clipped text are measured', async () => {
+test('planted 3px offset, wrapped label, overflow and clipped text are measured', { skip, timeout: 30000 }, async () => {
   await navigate(pathToFileURL(join(directory, 'defects.html')).href);
   const report = await evaluate(measureSource);
   assert.ok(report.findings.some(item => item.kind === 'alignment' && item.delta === 3), JSON.stringify(report));
@@ -89,13 +94,13 @@ test('planted 3px offset, wrapped label, overflow and clipped text are measured'
   }
   console.log('planted findings:', JSON.stringify(report.findings));
 });
-test('clean layout, multiline prose and deliberate scrolling are not findings', async () => {
+test('clean layout, multiline prose and deliberate scrolling are not findings', { skip, timeout: 30000 }, async () => {
   await navigate(pathToFileURL(join(directory, 'clean.html')).href);
   const report = await evaluate(measureSource);
   assert.deepEqual(report.findings, []);
   console.log('clean findings:', JSON.stringify(report.findings));
 });
-test('intent overrides, hidden subtrees and associated labels avoid false positives', async () => {
+test('intent overrides, hidden subtrees and associated labels avoid false positives', { skip, timeout: 30000 }, async () => {
   await navigate(pathToFileURL(join(directory, 'clean.html')).href);
   await evaluate(`document.body.insertAdjacentHTML('beforeend',
     '<label data-measure-wrap="allow" style="width:100px">An allowed multi line label</label>' +
@@ -106,7 +111,7 @@ test('intent overrides, hidden subtrees and associated labels avoid false positi
   assert.deepEqual(report.findings.map(item => [item.kind, item.element]), [['target-size', '#tiny']]);
   assert.deepEqual(await evaluate('measureDOM({minTargetSize:0}).findings'), []);
 });
-test('viewer keeps full-size isolated frames and switches with keys, including iframe focus', async () => {
+test('viewer keeps full-size isolated frames and switches with keys, including iframe focus', { skip, timeout: 30000 }, async () => {
   const viewer = new URL('../../../references/candidate-viewer.html', import.meta.url);
   await navigate(viewer.href);
   const state = await evaluate(`({index:document.documentElement.dataset.candidate,
@@ -144,7 +149,7 @@ test('viewer keeps full-size isolated frames and switches with keys, including i
   assert.equal(await evaluate("document.querySelector('iframe').getBoundingClientRect().width"), 640);
   console.log('viewer: 1280x752 isolated frame; arrows, digits, iframe-focus keys and reference split passed');
 });
-test('relative PNG and HTML candidates open without edits; F toggles native image size', async () => {
+test('relative PNG and HTML candidates open without edits; F toggles native image size', { skip, timeout: 30000 }, async () => {
   const viewer = new URL('../../../references/candidate-viewer.html', import.meta.url);
   const { data } = await call('Page.captureScreenshot', { format: 'png' });
   const png = join(profile, 'candidate.png');

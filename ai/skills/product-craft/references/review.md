@@ -40,11 +40,11 @@ toolbar, list row, dialog and form. In each, check:
 
 ## 2. Measure — do not trust the eye for geometry
 
-- **Web and web-based shells**: evaluate the contents of `scripts/measure-dom.js` in the
+- **Web and web-based shells**: evaluate the contents of `<skill>/scripts/measure-dom.js` in the
   page (browser console or the session's page-script tool). It returns rows whose children's
   centre lines differ, text that wraps where a single line was intended, overflow and
   clipping, and undersized targets.
-- **Windows desktop**: `pwsh -NoProfile -File scripts/measure-uia.ps1 -ProcessId <pid>` (or
+- **Windows desktop**: `pwsh -NoProfile -NonInteractive -File <skill>/scripts/measure-uia.ps1 -ProcessId <pid>` (or
   `-WindowTitle '<pattern>'`) reads the accessibility tree and prints rows whose centre
   lines differ and elements outside the window; `-Full` adds every element's rectangle.
   Prefer `-ProcessId`: a title pattern often matches more than one window.
