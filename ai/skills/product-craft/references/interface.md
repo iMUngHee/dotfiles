@@ -49,7 +49,11 @@ and character rather than in tint. Same screen, same realistic content in each.
 - Render each and look at it before showing it. Fix what is broken first; a candidate with
   clipped text is not a candidate.
 - Put them in `candidate-viewer.html`: one per screen at full size, the reference available
-  beside it, no descriptions. A name per candidate is enough.
+  beside it, no descriptions. Copy the viewer next to the candidate files and open it with
+  one `c` parameter per candidate, in order — screenshots or HTML files, by relative path:
+  `candidate-viewer.html?c=one.png&c=two.png&c=three.html&reference=ref.png`. The file
+  itself is not edited. Number keys and arrows switch, `F` toggles fit and actual size, `R`
+  shows the reference beside the candidate.
 - Say which you would pick, in one sentence, in the conversation — not on the page.
 - The owner answers with a number. "2, but with the list from 1" is a request to redraw 2,
   not to splice.
