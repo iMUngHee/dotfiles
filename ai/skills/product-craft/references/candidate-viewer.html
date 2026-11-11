@@ -3,8 +3,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Candidates</title>
-<!-- Open ?c=a.png&c=b.html&reference=ref.png (paths relative to this viewer).
-     Images open at 100% with scrolling; F toggles fit. HTML uses a sandboxed iframe.
+<!-- Open ?c=a.png&c=b.html&reference=a-ref.png&reference=b-ref.png (paths relative to
+     this viewer). Repeat `reference` once per candidate, in the same order; a single
+     `reference` is shown beside every candidate.
+     Candidate images open at 100% with scrolling; the reference is scaled down to the
+     width of its pane. F toggles fitting both to the window. HTML uses a sandboxed iframe.
      Alternatively replace CANDIDATES with JSON-encoded {html: "..."} entries.
      Escape < as \u003c when embedding generated HTML inside the configuration script.
      The page needs no server, packages or external assets.
@@ -29,7 +32,7 @@
   button svg { width: 20px; height: 20px; vertical-align: middle; }
   aside { overflow: auto; border-left: 1px solid #555; }
   aside[hidden] { display: none; }
-  aside img { display: block; max-width: none; }
+  aside img { display: block; max-width: 100%; height: auto; }
   aside.fit { display: grid; place-items: center; min-width: 0; min-height: 0; }
   aside.fit img { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
 </style>
@@ -67,10 +70,19 @@ const fit = document.querySelector('#fit');
 const main = document.querySelector('main');
 const reference = document.querySelector('aside');
 const compare = document.querySelector('#compare');
-const referenceURL = parameters.get('reference') || REFERENCE;
-const referenceAllowed = /^(?:file:|https?:|data:image\/)/.test(new URL(referenceURL || 'about:blank', location.href).href);
-if (referenceAllowed) reference.querySelector('img').src = referenceURL;
-compare.disabled = !referenceAllowed;
+// Resolved once here so a malformed reference fails on load, not in the middle of a switch.
+const given = parameters.getAll('reference');
+const references = (given.some(Boolean) ? given : [REFERENCE].filter(Boolean)).map(path => /^(?:file:|https?:|data:image\/)/.test(new URL(path, location.href).href) ? path : '');
+const referenceImage = reference.querySelector('img');
+// One reference serves every candidate; several are matched to candidates by position.
+function referenceFor(index) {
+  return (references.length === 1 ? references[0] : references[index]) || '';
+}
+function layout() {
+  const split = !compare.disabled && compare.getAttribute('aria-pressed') === 'true';
+  reference.hidden = !split;
+  main.classList.toggle('split', split);
+}
 let current = 0;
 const navigation = document.querySelector('nav');
 candidates.forEach((candidate, index) => {
@@ -93,6 +105,13 @@ function show(index) {
   const candidate = candidates[current];
   frame.hidden = Boolean(candidate.image);
   imagePanel.hidden = !candidate.image;
+  const referenceURL = referenceFor(current);
+  compare.disabled = !referenceURL;
+  if (referenceURL && referenceImage.getAttribute('src') !== referenceURL) {
+    referenceImage.src = referenceURL;
+    reference.scrollTo(0, 0);
+  }
+  layout();
   fit.disabled = !candidate.image && !referenceURL;
   if (candidate.image) {
     frame.removeAttribute('srcdoc');
@@ -121,10 +140,8 @@ function key(key) {
 document.querySelector('#previous').onclick = () => show(current - 1);
 document.querySelector('#next').onclick = () => show(current + 1);
 compare.onclick = () => {
-  const split = compare.getAttribute('aria-pressed') !== 'true';
-  compare.setAttribute('aria-pressed', String(split));
-  reference.hidden = !split;
-  main.classList.toggle('split', split);
+  compare.setAttribute('aria-pressed', String(compare.getAttribute('aria-pressed') !== 'true'));
+  layout();
 };
 fit.onclick = () => {
   const fitted = fit.getAttribute('aria-pressed') !== 'true';

@@ -60,11 +60,15 @@ and character rather than in tint. Same screen, same realistic content in each.
   clipped text is not a candidate.
 - Put them in `candidate-viewer.html`: one per screen at full size, the reference available
   beside it, no descriptions. Copy the viewer next to the candidate files and open it with
-  one `c` parameter per candidate, in order — screenshots or HTML files, by relative path:
-  `candidate-viewer.html?c=one.png&c=two.png&c=three.html&reference=ref.png`. The file
-  itself is not edited. Number keys and arrows switch, `F` toggles fit and actual size, `R`
-  shows the reference beside the candidate. Save that address as a one-line `board.html`
-  beside it that redirects there, so the board opens with a double-click.
+  one `c` parameter per candidate, in order — screenshots or HTML files, by relative path —
+  and one `reference` per candidate in the same order, since each candidate comes from its
+  own reference:
+  `candidate-viewer.html?c=one.png&c=two.html&reference=one-ref.png&reference=two-ref.png`.
+  A single `reference` is shown beside every candidate; a reference wider than its pane is
+  scaled down to fit it. The file itself is not edited. Number keys and arrows switch, `F`
+  toggles fit and actual size, `R` shows the reference beside the candidate. Save that
+  address as a one-line `board.html` beside it that redirects there, so the board opens
+  with a double-click.
 - Say which you would pick, in one sentence, in the conversation — not on the page.
 - The owner answers with a number. "2, but with the list from 1" is a request to redraw 2,
   not to splice.
