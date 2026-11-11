@@ -311,6 +311,10 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **macOS, Linux** — run `node --test ai/lib/worktree.test.mjs`: `stage-plan`
+      now reads `--input -` and `--input /dev/stdin` from descriptor 0 so Windows
+      can stage a piped plan. The new test and the whole `ai/lib` suite passed on
+      Windows 2026-11-12 (Node 26.12.1).
 - [ ] **macOS** — run the Codex pager-name SessionStart integration
       on Codex 0.167.0 with Node 22 or later. Review the changed hook in `/hooks`,
       start/resume a session, then `/rename other` and send a prompt. Verify

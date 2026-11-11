@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   chmod,
   cp,
@@ -1667,7 +1668,10 @@ export async function main(argv = process.argv.slice(2)) {
   else if (command === "cancel-provisional") result = await cancelProvisional({ root, id: options.id });
   else if (command === "stage-plan") {
     if (!options.id || !options.input) throw new Error("stage-plan needs --id and --input");
-    result = await stagePlan({ root, id: options.id, content: await readFile(resolve(options.input), "utf8") });
+    // Descriptor 0 is the only spelling of standard input that Windows can open.
+    const fromStdin = options.input === "-" || options.input === "/dev/stdin";
+    const content = fromStdin ? readFileSync(0, "utf8") : await readFile(resolve(options.input), "utf8");
+    result = await stagePlan({ root, id: options.id, content });
   }
   else if (command === "validate") result = await validateManagedWorktrees(root, { all: Boolean(options.all) });
   else if (command === "prune" && options.provisional) {
