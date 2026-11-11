@@ -147,6 +147,10 @@ test('viewer keeps full-size isolated frames and switches with keys, including i
   await navigate(viewer.href);
   await evaluate("document.querySelector('#compare').click()");
   assert.equal(await evaluate("document.querySelector('iframe').getBoundingClientRect().width"), 640);
+  await evaluate("new Promise(resolve => { const image = document.querySelector('aside img'); image.onload = resolve; image.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2880\" height=\"1800\"/>'); })");
+  assert.ok(await evaluate("document.querySelector('aside').scrollWidth === document.querySelector('aside').clientWidth && document.querySelector('aside img').width <= 640"), 'a reference wider than its pane is scaled down to it');
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight' });
+  assert.equal(await evaluate("document.querySelector('aside').hidden"), false, 'a single reference stays beside every candidate');
   console.log('viewer: 1280x752 isolated frame; arrows, digits, iframe-focus keys and reference split passed');
 });
 test('relative PNG and HTML candidates open without edits; F toggles native image size', { skip, timeout: 30000 }, async () => {
@@ -156,7 +160,9 @@ test('relative PNG and HTML candidates open without edits; F toggles native imag
   await writeFile(png, Buffer.from(data, 'base64'));
   viewer.searchParams.append('c', relative(fileURLToPath(new URL('.', viewer)), png).replaceAll('\\', '/'));
   viewer.searchParams.append('c', '../scripts/fixtures/measure/clean.html');
-  viewer.searchParams.set('reference', '../scripts/fixtures/measure/candidate.svg');
+  viewer.searchParams.append('reference', '../scripts/fixtures/measure/candidate.svg');
+  viewer.searchParams.append('reference', 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"/>'));
+  viewer.searchParams.append('c', '../scripts/fixtures/measure/defects.html');
   await navigate(viewer.href);
   const native = await evaluate(`({width:document.querySelector('#image img').width,
     height:document.querySelector('#image img').height,
@@ -177,6 +183,13 @@ test('relative PNG and HTML candidates open without edits; F toggles native imag
   assert.equal(await evaluate("document.querySelector('#image img').width"), 1280);
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: '2' });
   assert.ok(await evaluate("document.querySelector('iframe').src.endsWith('/clean.html')"));
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'r' });
+  assert.ok(await evaluate("document.querySelector('aside img').src.startsWith('data:image/svg+xml') && !document.querySelector('aside').hidden"), 'the second candidate shows the second reference');
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: '3' });
+  assert.ok(await evaluate("document.querySelector('#compare').disabled && document.querySelector('aside').hidden"), 'a candidate without its own reference shows none');
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: '2' });
+  assert.equal(await evaluate("document.querySelector('aside').hidden"), false);
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'r' });
   await call('Input.dispatchMouseEvent', { type: 'mousePressed', x: 600, y: 300, button: 'left', clickCount: 1 });
   await call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 600, y: 300, button: 'left', clickCount: 1 });
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -185,5 +198,5 @@ test('relative PNG and HTML candidates open without edits; F toggles native imag
   }
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: '1' });
   assert.equal(await evaluate('document.documentElement.dataset.candidate'), '1');
-  console.log('file candidates: native PNG 1280x800 scrolls; F fits/restores; relative HTML and reference paths resolve; URL frame keeps chooser shortcuts');
+  console.log('file candidates: native PNG 1280x800 scrolls; F fits/restores; relative HTML and reference paths resolve; each candidate shows its own reference; URL frame keeps chooser shortcuts');
 });
