@@ -249,17 +249,18 @@ export function renderDesk(
     const selectedIndex = Math.max(0, ordered.findIndex(row => row.id === selected?.id))
     let start = 0
     let cost = 0
+    const rowCost = (row: WorkRow | undefined) => 1 + (row && ATTENTION.has(row.stage) && row.reason ? 1 : 0)
     for (let index = 0; index <= selectedIndex; index += 1) {
-      cost += 1 + (ATTENTION.has(ordered[index]?.stage) && ordered[index]?.reason ? 1 : 0)
+      cost += rowCost(ordered[index])
       while (cost > budget && start < index) {
-        cost -= 1 + (ATTENTION.has(ordered[start].stage) && ordered[start].reason ? 1 : 0)
+        cost -= rowCost(ordered[start])
         start += 1
       }
     }
     const shown: WorkRow[] = []
     cost = 0
     for (const row of ordered.slice(start)) {
-      const next = 1 + (ATTENTION.has(row.stage) && row.reason ? 1 : 0)
+      const next = rowCost(row)
       if (cost + next > budget) break
       shown.push(row); cost += next
     }

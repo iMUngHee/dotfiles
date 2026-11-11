@@ -49,9 +49,9 @@ async function activate($: Ctx): Promise<void> {
   generation += 1
   flight = null
   composeStamped = { session: '', at: 0 }
-  await update($, snapshot, () => ({ card: null, board: null, text: '', health: { phase: 'loading', error: null, last_success: null, session: next } }))
+  await update($, snapshot, () => ({ card: null, board: null, text: '', health: { phase: 'loading' as const, error: null, last_success: null, session: next } }))
   await update($, detail, () => ({ selected: null, duties: [], loading: false, error: null }))
-  await update($, view, () => ({ tab: 'overview', selected: null, attention: false }))
+  await update($, view, () => ({ tab: 'overview' as const, selected: null, attention: false }))
 }
 
 function announce($: Ctx, before: CardView | null, after: CardView) {
@@ -75,7 +75,7 @@ async function refreshSnapshot($: Ctx, capturedSession: string, capturedGenerati
     await update($, snapshot, state => !current() ? state : ({
       ...state,
       ...(notMember ? { card: null, board: null, text: '' } : {}),
-      health: { phase: notMember ? 'not_member' : before === null ? 'error' : 'stale',
+      health: { phase: notMember ? 'not_member' as const : before === null ? 'error' as const : 'stale' as const,
         error: result.ok ? '잘못된 개부 조회 응답' : result.message,
         last_success: previousHealth.last_success, session: capturedSession },
     }))
@@ -243,9 +243,9 @@ export const register: Register = on => {
         const rows = workRows(state.card, state.board)
         await update($, view, previous => {
           const eligible = previous.attention ? attentionRows(rows) : rows
-          if (!eligible.length) return previous
           const index = eligible.findIndex(row => row.id === previous.selected)
-          return { ...previous, selected: eligible[(Math.max(0, index) + delta + eligible.length) % eligible.length].id }
+          const target = eligible[(Math.max(0, index) + delta + eligible.length) % eligible.length]
+          return target ? { ...previous, selected: target.id } : previous
         })
         if ((await read($, view)).tab === 'detail') await loadDetail($)
       },
