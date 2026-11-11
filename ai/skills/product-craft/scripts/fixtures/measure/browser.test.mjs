@@ -9,7 +9,7 @@ import { after, before, test } from 'node:test';
 // Uses an installed Chromium browser; no browser or package is downloaded.
 const candidates = [process.env.MEASURE_BROWSER,
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  '/usr/bin/chromium', '/usr/bin/google-chrome',
+  '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].filter(Boolean);
 let browser;
 for (const candidate of candidates) {
@@ -106,7 +106,7 @@ test('intent overrides, hidden subtrees and associated labels avoid false positi
     '<label data-measure-wrap="allow" style="width:100px">An allowed multi line label</label>' +
     '<div data-measure-ignore><button style="height:10px;width:10px;padding:0">x</button></div>' +
     '<input id="check" type="checkbox"><label for="check">A generous clickable label</label>' +
-    '<button id="tiny" style="width:12px;height:12px;padding:0;font-size:8px">x</button>')`);
+    '<button id="tiny" style="width:12px;height:12px;padding:0;font-size:8px;line-height:1">x</button>')`);
   const report = await evaluate(measureSource);
   assert.deepEqual(report.findings.map(item => [item.kind, item.element]), [['target-size', '#tiny']]);
   assert.deepEqual(await evaluate('measureDOM({minTargetSize:0}).findings'), []);

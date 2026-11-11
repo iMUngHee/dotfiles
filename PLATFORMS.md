@@ -71,6 +71,8 @@ shared server through `/daemon` and check again; connected sessions may be inter
   it does not work yet: the profile starts as workspace-write, but all three
   socket paths return EPERM because its allowlist never reaches Seatbelt
   (openai/codex#25416; the template comment has the details).
+- The product-craft script tests and `fixtures/measure/browser.test.mjs` passed
+  here on 2026-11-11 (Node 24.22.1, Chrome).
 
 ## Linux
 
@@ -78,6 +80,11 @@ shared server through `/daemon` and check again; connected sessions may be inter
 - The same Unix-only tests as macOS run here. Run the suite as a normal user:
   `vendor.test.mjs` skips its unreadable-manifest test under root, where mode
   000 does not stop a read.
+- The product-craft script tests and `fixtures/measure/browser.test.mjs` passed
+  on a RHEL 9-compatible VM (Node 24.22.1, Chromium 156 at
+  `/usr/bin/chromium-browser`) on 2026-11-11. A fixture that must not overflow
+  sets its own `line-height`: the default line box depends on the installed
+  font and was taller on that VM than on macOS.
 
 ## Windows
 
@@ -300,13 +307,10 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
-- [ ] **macOS, Linux** — run `node --test ai/skills/product-craft/scripts/*.test.mjs`
-      and, with a Chromium browser installed (or `MEASURE_BROWSER` set),
-      `node --test ai/skills/product-craft/scripts/fixtures/measure/browser.test.mjs`.
-      Both passed on Windows 2026-11-11 (Node 26.12.1, Edge). The browser test
-      kills its browser with `SIGKILL` off Windows and reads the endpoint from
-      `DevToolsActivePort`; neither path has run there. `measure-uia.ps1` is
-      Windows-only by design.
+- [ ] **Windows** — rerun
+      `node --test ai/skills/product-craft/scripts/fixtures/measure/browser.test.mjs`:
+      the `#tiny` fixture gained `line-height:1` after it and the script tests
+      passed there on 2026-11-11 (Node 26.12.1, Edge).
 - [ ] **macOS** — run the Codex pager-name SessionStart integration
       on Codex 0.167.0 with Node 22 or later. Review the changed hook in `/hooks`,
       start/resume a session, then `/rename other` and send a prompt. Verify
