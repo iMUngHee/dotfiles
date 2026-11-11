@@ -41,6 +41,11 @@ Pick the lightest that fits and say which.
 | Screen | A new or reworked screen inside an existing product | Whole loop, materials limited to what the product does not already settle |
 | App | New product, multi-screen flow, or redesign | Whole loop |
 
+At Touch-up and Screen depth the product's identity is already settled: keep its palette,
+accent and typeface, and take only structure, density and component shape from references.
+Shared tokens and other screens change only when the owner asks for it; a better palette you
+found is a proposal for the report, not a change.
+
 An existing `design-contract.md` is evidence at every depth: read the nearest one first, keep
 what it settles, and write new entries in the lean form of `references/contract.md` without
 rewriting its older sections.

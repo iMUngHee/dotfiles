@@ -48,7 +48,9 @@ is what it turns into when it has been kept.
 **What you may carry and what you may not.** Carry look and structure: palette relationships,
 type scale, spacing, component shapes, layout patterns. Do not carry logos, product names,
 brand marks, proprietary illustrations, icon sets whose licence does not allow reuse, or a
-signature screen reproduced whole. The result should be recognisably of that quality and
+signature screen reproduced whole. Inside an existing product, the product's own palette,
+accent and typeface outrank the reference's: carry layout, density and component shape, and
+map the reference's colour roles onto the colours the product already has. The result should be recognisably of that quality and
 family, and recognisably its own product.
 
 ## Design system or component library
