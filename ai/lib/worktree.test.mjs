@@ -290,6 +290,21 @@ test("raw CLI executes through a symlinked runtime parent exactly once", async (
   assert.equal(JSON.parse(output).status, "empty");
 });
 
+test("stage-plan reads the plan from standard input on every platform", async (t) => {
+  const { root } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await ensureManagedWorktree({ root, id: "stdin-plan", base: "main" });
+  const runtimePath = fileURLToPath(new URL("./worktree.mjs", import.meta.url));
+  // Windows has no /dev/stdin to open, so both spellings must mean the process's own input.
+  for (const [spelling, content] of [["/dev/stdin", "---\nid: stdin-plan\n---\nfirst\n"], ["-", "---\nid: stdin-plan\n---\nsecond\n"]]) {
+    const output = execFileSync(process.execPath, [
+      runtimePath, "stage-plan", "--root", root, "--id", "stdin-plan", "--input", spelling,
+    ], { encoding: "utf8", input: content });
+    const staged = JSON.parse(output);
+    assert.equal(await readFile(staged.stage, "utf8"), content, `--input ${spelling} stages standard input`);
+  }
+});
+
 test("session bindings isolate exact plans by tool, repository, and session", async (t) => {
   const first = await fixture();
   const second = await fixture();
