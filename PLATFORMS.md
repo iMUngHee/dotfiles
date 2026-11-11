@@ -112,6 +112,10 @@ shared server through `/daemon` and check again; connected sessions may be inter
 - Older deploys left copied skills; bootstrap moves them to
   `~/.claude/skill-backups/` and `~/.agents/skill-backups/`. Delete those once
   they hold nothing you need.
+- The product-craft script tests (11) and `fixtures/measure/browser.test.mjs`
+  (5, including a reference per candidate and the `#tiny` fixture's
+  `line-height:1`) passed here on 2026-11-12 (Node 26.12.1, Edge). The Gaebu
+  mod's 25 engine tests passed the same day with the type fixes from `5a8a929`.
 
 ### Verified on Windows 2026-11-03
 
@@ -307,10 +311,6 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
-- [ ] **Windows** — rerun
-      `node --test ai/skills/product-craft/scripts/fixtures/measure/browser.test.mjs`:
-      the `#tiny` fixture gained `line-height:1` after it and the script tests
-      passed there on 2026-11-11 (Node 26.12.1, Edge).
 - [ ] **macOS** — run the Codex pager-name SessionStart integration
       on Codex 0.167.0 with Node 22 or later. Review the changed hook in `/hooks`,
       start/resume a session, then `/rename other` and send a prompt. Verify
