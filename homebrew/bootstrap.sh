@@ -7,6 +7,7 @@
 #   - rust-analyzer rustup component  (lib/rust-analyzer.sh)
 #   - pager + gaebu into ~/.local/bin (lib/agent-clis.sh)
 #   - gremlins into ~/.local/bin      (lib/go-tools.sh)
+#   - aws-cli, pinned, macOS only     (lib/aws-cli.sh)
 #   - macOS app-menu shortcut overrides (defaults write)
 #
 # This is the macOS package layer. Linux reaches it only on a Linuxbrew box
@@ -37,6 +38,8 @@ have() { command -v "$1" >/dev/null 2>&1; }
 . "$ROOT_DIR/lib/agent-clis.sh"
 # shellcheck source=../lib/go-tools.sh
 . "$ROOT_DIR/lib/go-tools.sh"
+# shellcheck source=../lib/aws-cli.sh
+. "$ROOT_DIR/lib/aws-cli.sh"
 
 # ── brew 경로 감지 (zsh/.zshrc:7-10 패턴) ──────────────────────
 if [ -x /opt/homebrew/bin/brew ]; then
@@ -70,6 +73,7 @@ ensure_rust_analyzer
 ensure_pager
 ensure_gaebu
 ensure_gremlins
+ensure_aws_cli
 
 # ── 2+3. shell environment (shared with the Arch path) ────────
 ensure_zshenv
