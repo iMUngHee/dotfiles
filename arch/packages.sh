@@ -48,6 +48,7 @@ PACMAN_CLI=(
     uv                  # brew "uv"
     python-pipx         # brew "pipx"
     python-pipenv       # brew "pipenv"
+    aws-cli-v2          # brew "awscli" — the .lock_version pin (lib/aws-cli.sh) is macOS only
     jq                  # REQUIRED by claude/scripts/bootstrap.sh (settings.json merge)
     # go-yq is installed by install_go_yq below, not here — see the note there.
     ripgrep             # bundled with Claude Code, but not on PATH for hooks/scripts

@@ -41,7 +41,8 @@ $Cli = @(
     @{ id = 'ajeetdsouza.zoxide';             note = 'brew "zoxide"' },
     @{ id = 'Schniz.fnm';                     note = 'brew "fnm"' },
     @{ id = 'astral-sh.uv';                   note = 'brew "uv"' },
-    @{ id = 'JernejSimoncic.Wget';            note = 'brew "wget"' }
+    @{ id = 'JernejSimoncic.Wget';            note = 'brew "wget"' },
+    @{ id = 'Amazon.AWSCLI';                  note = 'brew "awscli" - the .lock_version pin (lib/aws-cli.sh) is macOS only' }
 )
 
 # -- Languages / runtimes - mirrors the Brewfile runtimes block --------------

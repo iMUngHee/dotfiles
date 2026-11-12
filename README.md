@@ -45,6 +45,12 @@ All four are absent by default and silent when missing, so a fresh clone works
 with none of them. On Omarchy they are where the theme wiring lives, which is
 why macOS keeps Catppuccin while that machine follows the system theme.
 
+One marker works by presence instead of content: an empty `.lock_version` at
+the repo root pins aws-cli on that Mac. `homebrew/Brewfile` then skips `awscli`
+and `lib/aws-cli.sh` installs the release it pins; without the marker the Mac
+gets Homebrew's latest. Like the files above it stays untracked, since the root
+`.gitignore` is an allowlist.
+
 One case the seam cannot cover: Omarchy's display text size slider rewrites
 `font-size` in `ghostty/config` at a path it hardcodes, so moving the line out
 would make the slider silently do nothing. That one line is normalized on its

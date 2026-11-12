@@ -1,13 +1,18 @@
 #!/bin/bash
 # lib/aws-cli.sh — AWS CLI v2 at a pinned version under ~/.local/opt, linked into
-# ~/.local/bin, for the macOS package layer.
+# ~/.local/bin, for the macOS package layer, on a machine holding the marker.
 #
 # Sourced, not executed. Same shape as lib/rust-analyzer.sh.
 #
-# Not from Homebrew, which carries only the latest release: the S3-compatible
-# store this CLI is used against supports 2.17.21 on macOS and warns that other
-# releases may fail. That build is x86_64 only, so Apple Silicon runs it under
-# Rosetta 2. The official .pkg installs for the current user only (-target
+# The marker is an empty, untracked ~/.config/.lock_version (the root
+# .gitignore is an allowlist, so it never gets committed). It goes on a machine
+# whose S3-compatible store supports only 2.17.21 on macOS and warns that other
+# releases may fail; Homebrew carries only the latest. Without the marker this
+# does nothing but drop a pinned link left from before, and homebrew/Brewfile
+# installs Homebrew's awscli; with it the Brewfile skips awscli.
+#
+# The 2.17.21 build is x86_64 only, so Apple Silicon runs it under Rosetta 2.
+# The official .pkg installs for the current user only (-target
 # CurrentUserHomeDirectory plus a choices file naming the folder), so no sudo;
 # the download is checked against a pinned sha256 on top of the package's own
 # Developer ID signature. Install only when absent; moving the pin is a
@@ -26,6 +31,17 @@ ensure_aws_cli() {
     [ "$(uname -s)" = Darwin ] || return 0
     local bin="${LOCAL_BIN:-$HOME/.local/bin}"
     local dest="$HOME/.local/opt/aws-cli-$AWS_CLI_VERSION"
+    if [ ! -e "$HOME/.config/.lock_version" ]; then
+        # ~/.local/bin precedes Homebrew on PATH, so a leftover link would
+        # shadow the awscli the Brewfile installs when the marker is absent.
+        case "$(readlink "$bin/aws" 2>/dev/null)" in
+        "$HOME/.local/opt/aws-cli-"*)
+            rm -f "$bin/aws"
+            echo "aws-cli: no .lock_version — removed the pinned link, Homebrew's awscli applies"
+            ;;
+        esac
+        return 0
+    fi
     if [ -x "$dest/aws-cli/aws" ]; then
         echo "aws-cli $AWS_CLI_VERSION present — skip ($dest)"
     else
