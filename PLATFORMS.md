@@ -341,6 +341,15 @@ shared server through `/daemon` and check again; connected sessions may be inter
 - A payload with `context_window.used_percentage` 20.3 and
   `total_input_tokens` 203000 piped into `claude/extensions/statusline.sh`
   ended the context segment in `203k`.
+- `ai/lib/shell-env.test.mjs` passed 10: `ensure_zshenv` rewrites an old
+  managed block in place through a symlink with its mode kept, leaves a block
+  without an end marker or an unwritable home unchanged with a warning, and
+  `zsh/.zshenv` puts the shims right after the command-wrappers even behind a
+  prepended directory. The four fixes it covers failed first. On this machine a
+  non-interactive `zsh -c`, a bash it spawns, and one with `/usr/lib/git-core`
+  prepended as git does for hooks resolve node to the mise shim (v26.13.1, was
+  `/usr/bin/node` 26.12.0) while `claude` and `codex` stay on mise's
+  command-wrappers; the interactive PATH order is unchanged.
 
 ## Pending checks
 
@@ -351,6 +360,13 @@ cannot run something; remove it in the commit that records the result.
       now reads `--input -` and `--input /dev/stdin` from descriptor 0 so Windows
       can stage a piped plan. The new test and the whole `ai/lib` suite passed on
       Windows 2026-11-12 (Node 26.12.1) and Linux 2026-11-13 (Node 26.12.0).
+- [ ] **macOS** — run `homebrew/bootstrap.sh` (or source `lib/shell-env.sh` and
+      call `ensure_zshenv`): the existing `~/.zshenv` managed block must be
+      refreshed to source `zsh/.zshenv`, and with no mise installed
+      `zsh -c 'whence -p node'` must still give fnm's or Homebrew's node.
+      Also run `node --test ai/lib/shell-env.test.mjs` (BSD awk and grep); on
+      Windows (Git Bash) its zsh cases skip and the `ensure_zshenv` ones must pass.
+      Verified on Linux 2026-11-13.
 - [ ] **macOS / Windows (Git Bash)** — run `node --test ai/lib/stop-hooks.test.mjs`
       for `claude Stop formats a tracked Unicode filename`: `stop-handler.sh`
       now lists changed paths with `core.quotePath=false`. Passed on Linux

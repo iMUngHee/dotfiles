@@ -49,6 +49,7 @@ fcitx5/*
 # zsh
 zsh/*
 !zsh/.zshrc
+!zsh/.zshenv
 !zsh/custom
 zsh/**/.git
 
