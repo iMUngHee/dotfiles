@@ -146,26 +146,32 @@ test("Stop hook registrations outlive the suite budget", () => {
   }
 });
 
-test("codex Stop formats a tracked Unicode filename", () => {
-  const f = fixture("codex");
-  const name = "한글.lua";
-  const file = join(f.root, name);
-  writeFileSync(file, "before\n");
-  for (const args of [["add", name], ["commit", "-qm", "unicode fixture"]]) {
-    const r = spawnSync("git", args, { cwd: f.root, env: f.env, encoding: "utf8" });
-    assert.equal(r.status, 0, r.stderr);
-  }
-  writeFileSync(file, "after\n");
-  const stylua = join(f.home, "bin", "stylua");
-  writeFileSync(stylua, '#!/bin/bash\nprintf formatted > "$1"\n');
-  chmodSync(stylua, 0o755);
-  const result = f.run();
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(file, "utf8"), "formatted");
-  assert.deepEqual(JSON.parse(result.stdout), {
-    systemMessage: "[codex final-gate] auto-formatted 1 file(s)",
+for (const tool of ["codex", "claude"]) {
+  test(`${tool} Stop formats a tracked Unicode filename`, () => {
+    const f = fixture(tool);
+    const name = "한글.lua";
+    const file = join(f.root, name);
+    writeFileSync(file, "before\n");
+    for (const args of [["add", name], ["commit", "-qm", "unicode fixture"]]) {
+      const r = spawnSync("git", args, { cwd: f.root, env: f.env, encoding: "utf8" });
+      assert.equal(r.status, 0, r.stderr);
+    }
+    writeFileSync(file, "after\n");
+    const stylua = join(f.home, "bin", "stylua");
+    writeFileSync(stylua, '#!/bin/bash\nprintf formatted > "$1"\n');
+    chmodSync(stylua, 0o755);
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(file, "utf8"), "formatted");
+    if (tool === "codex") {
+      assert.deepEqual(JSON.parse(result.stdout), {
+        systemMessage: "[codex final-gate] auto-formatted 1 file(s)",
+      });
+    } else {
+      assert.match(result.stdout, /\[final-gate\] auto-formatted 1 file\(s\)/);
+    }
   });
-});
+}
 
 test("codex Stop preserves stderr blocking and allows stop after two retries", () => {
   const f = fixture("codex");
