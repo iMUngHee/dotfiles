@@ -26,6 +26,9 @@ brew "fnm"
 brew "uv"
 brew "pipx"
 brew "ccusage"  # Claude Code usage CLI
+# A machine holding the empty marker ~/.config/.lock_version gets a pinned
+# aws-cli from lib/aws-cli.sh instead, so only one `aws` is on PATH.
+brew "awscli" unless File.exist?(File.join(Dir.home, ".config", ".lock_version"))
 
 # ── Languages / runtimes / build ─────────────────────────────
 brew "luajit"   # neovim runtime dep, pinned explicitly
