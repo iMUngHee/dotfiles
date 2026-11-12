@@ -306,6 +306,25 @@ shared server through `/daemon` and check again; connected sessions may be inter
   `SHA-256` notation passes while later ticket identifiers, filename findings,
   staged-only findings and token detection remain covered.
 
+### Verified on Linux 2026-11-13: Codex runtime
+
+- Codex CLI 0.167.2 and Node 26.13.1: the Pager, Stop and sensitive-info
+  suites passed 73 tests with 12 intentional GNU-timeout skips. The scanner's
+  three additional regressions failed before the NUL-delimited path fix and
+  passed after it: all 10 scanner tests pass, including secrets in Unicode,
+  quote and newline filenames.
+- Renamed the live Codex thread, then invoked the naming adapter: both the
+  normal proxy and a forced proxy failure restored the Pager alias with exit
+  0 and empty stderr. The fallback used the real stdio app-server; the shared
+  daemon stayed running.
+- The actual Stop hook ran the selected repository checks and returned exit 0
+  in 1.95 seconds with empty stdout and stderr.
+- Codex bootstrap succeeded. Deployed hook registrations match the template;
+  `hooks/list` reports all 11 enabled and trusted. Generated `AGENTS.md` matches
+  its sources, includes the gaebu and code-quality rules, and the deployed
+  `tidy` skill resolves to the shared source. `codex debug prompt-input` includes
+  both rules and the `tidy` skill in the model-visible prompt.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
@@ -332,15 +351,16 @@ cannot run something; remove it in the commit that records the result.
       directory; a stub proxy that ignores EOF ended at the 3 s timeout
       (3096 ms) and outlived the hook.
       The TUI `/rename` was then restored to the pager name on the next prompt
-      (observed by the person, 2026-11-08), so Windows is done. On Linux and
-      macOS, rerun `node --test codex/hooks/pager-session-name.test.mjs` and
+      (observed by the person, 2026-11-08), so Windows is done. On macOS,
+      rerun `node --test codex/hooks/pager-session-name.test.mjs` and
       exercise the new stdio fallback with the CLI daemon stopped. The current
-      fallback and executable-lookup fixtures were executed only on Windows.
+      fallback and executable-lookup fixtures passed on Windows and Linux.
 
-- [ ] **Linux** — run
-      `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` to verify the
-      exact hash-algorithm exception and retained findings on the local grep
-      (macOS's BSD grep passed 2026-11-10; see Verified on 2026-11-10).
+- [ ] **macOS / Windows (Git Bash)** — run
+      `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` for the
+      NUL-delimited staged-path fix. Unicode filenames run on both platforms;
+      quote and newline filenames are unsupported and skipped on Windows.
+      All 10 cases passed on Linux 2026-11-13.
 
 - [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
       `bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'`

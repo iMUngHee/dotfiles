@@ -22,9 +22,9 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 staged_files=()
-while IFS= read -r staged_file; do
+while IFS= read -r -d '' staged_file; do
   staged_files+=("$staged_file")
-done < <(git diff --cached --name-only --diff-filter=ACMRT)
+done < <(git diff --cached --name-only --diff-filter=ACMRT -z)
 
 if [[ ${#staged_files[@]} -eq 0 ]]; then
   echo "PASS SensitiveInfo: no staged files"
