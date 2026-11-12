@@ -325,15 +325,36 @@ shared server through `/daemon` and check again; connected sessions may be inter
   `tidy` skill resolves to the shared source. `codex debug prompt-input` includes
   both rules and the `tidy` skill in the model-visible prompt.
 
+### Verified on Linux 2026-11-13: Claude Stop and pending suites
+
+- Node 26.12.0: `ai/lib/stop-hooks.test.mjs` passed 50 with 12 intentional
+  GNU-timeout skips, including the three-suite `go` recorder assertion. The
+  new `claude Stop formats a tracked Unicode filename` case failed against the
+  old `stop-handler.sh`, which listed `한글.lua` octal-quoted, and passed once
+  its git calls took `-c core.quotePath=false` like `stop-gate.sh`.
+- `worktree` (40), `raw-tool-input-hooks` (41), `bootstrap-deploy` (14) and
+  `sync-back-manifest` (6) passed with no failures; the whole `ai/lib` suite
+  passed 232 with 12 skips.
+- `go test -v -run TestRepoFrontmatterParses .` from
+  `~/.claude/skills/config-audit/scripts` reported PASS, not SKIP, through the
+  symlink.
+- A payload with `context_window.used_percentage` 20.3 and
+  `total_input_tokens` 203000 piped into `claude/extensions/statusline.sh`
+  ended the context segment in `203k`.
+
 ## Pending checks
 
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
-- [ ] **macOS, Linux** — run `node --test ai/lib/worktree.test.mjs`: `stage-plan`
+- [ ] **macOS** — run `node --test ai/lib/worktree.test.mjs`: `stage-plan`
       now reads `--input -` and `--input /dev/stdin` from descriptor 0 so Windows
       can stage a piped plan. The new test and the whole `ai/lib` suite passed on
-      Windows 2026-11-12 (Node 26.12.1).
+      Windows 2026-11-12 (Node 26.12.1) and Linux 2026-11-13 (Node 26.12.0).
+- [ ] **macOS / Windows (Git Bash)** — run `node --test ai/lib/stop-hooks.test.mjs`
+      for `claude Stop formats a tracked Unicode filename`: `stop-handler.sh`
+      now lists changed paths with `core.quotePath=false`. Passed on Linux
+      2026-11-13.
 - [ ] **macOS** — run the Codex pager-name SessionStart integration
       on Codex 0.167.0 with Node 22 or later. Review the changed hook in `/hooks`,
       start/resume a session, then `/rename other` and send a prompt. Verify
@@ -371,11 +392,11 @@ cannot run something; remove it in the commit that records the result.
       `-Force` swap and skip paths. On macOS 2026-11-04 the gaebu half passed
       (see Verified on 2026-11-04) and on 2026-11-05 pager's build path, into a
       temporary `LOCAL_BIN` (see Verified on 2026-11-05); Linux remains.
-- [ ] **macOS and Linux** — a changed `.md` under the tiers now selects the
+- [ ] **macOS** — a changed `.md` under the tiers now selects the
       config-audit Go suite, whose `TestRepoFrontmatterParses` parses every
       tier frontmatter. Run `node --test ai/lib/stop-hooks.test.mjs` (its
-      fixture's `go` recorder and the three-suite assertion ran only on
-      Windows 2026-11-10), and `go test -v -run TestRepoFrontmatterParses .`
+      fixture's `go` recorder and the three-suite assertion ran on
+      Windows 2026-11-10 and Linux 2026-11-13), and `go test -v -run TestRepoFrontmatterParses .`
       from `~/.claude/skills/config-audit/scripts`: it must PASS, not SKIP,
       through the symlink.
 - [ ] **Linux (Arch)** — run `buu` and check the pager step ends in
@@ -385,19 +406,6 @@ cannot run something; remove it in the commit that records the result.
       `# $PATH` block), so the hooks find a bare `pager` and `gaebu`; check
       `command -v gaebu` in a new terminal.
 
-- [ ] **Linux (Bash)** — pipe a sample payload with
-      `context_window.total_input_tokens` into `claude/extensions/statusline.sh`
-      and check the context segment ends in an absolute size such as `203k`
-      (verified on macOS and Windows 2026-10-28).
-- [ ] **Linux (Bash)** — run the local private-memory cases in
-      `ai/lib/bootstrap-deploy.test.mjs` (verified on macOS 2026-10-26): token
-      expansion, frontmatter stripping, filenames with spaces, manifest
-      deduplication, repeat deploys, and an absent private-memory directory.
-      Also run `ai/lib/sync-back-manifest.test.mjs`, where an unlisted
-      private file is not manifest drift (also verified on Windows 2026-10-28).
-- [ ] **Linux** — run the PostToolUse JSON feedback cases and Stop
-      formatting/retry regressions in `ai/lib/{raw-tool-input-hooks,stop-hooks}.test.mjs`,
-      which passed on Windows 2026-10-28.
 - [ ] **Windows / Linux** — verify live hook completion and model-visible
       checker feedback after reviewing hook trust locally. Automated Windows
       coverage does not establish that a live host trusts or runs those hooks.

@@ -66,8 +66,9 @@ fi
 
 cd "$PROJECT_ROOT" || run_notify_and_exit
 
-TRACKED_FILES=$(git diff --name-only 2>/dev/null; git diff --cached --name-only 2>/dev/null)
-CHANGED_FILES=$(printf '%s\n' "$TRACKED_FILES"; git ls-files --others --exclude-standard 2>/dev/null)
+# Keep Unicode filenames literal so file checks, formatters and suite triggers see real paths.
+TRACKED_FILES=$(git -c core.quotePath=false diff --name-only 2>/dev/null; git -c core.quotePath=false diff --cached --name-only 2>/dev/null)
+CHANGED_FILES=$(printf '%s\n' "$TRACKED_FILES"; git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null)
 if [[ -z "$CHANGED_FILES" ]]; then
   # No modified files — read-only session, skip gate
   rm -f "$COUNTER_FILE"
