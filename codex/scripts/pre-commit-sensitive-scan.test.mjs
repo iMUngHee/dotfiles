@@ -53,6 +53,17 @@ test("token detection remains fatal after an allowed hash algorithm", async (t) 
   assert.match(result.stdout, /token-like secret/);
 });
 
+for (const filename of ["검증.md", 'quote"notes.md', "line\nnotes.md"]) {
+  test(`token detection reads a quoted staged path: ${JSON.stringify(filename)}`, {
+    skip: process.platform === "win32" && /["\n]/.test(filename) && "filename is not supported on Windows",
+  }, async (t) => {
+    const f = await fixture(t, "AKIA" + "A".repeat(16) + "\n", filename);
+    const result = f.run();
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /token-like secret/);
+  });
+}
+
 test("ticket detection reads the index rather than unstaged content", async (t) => {
   const f = await fixture(t, `${ticket}\n`);
   await writeFile(join(f.root, "notes.md"), "SHA-256\n");
