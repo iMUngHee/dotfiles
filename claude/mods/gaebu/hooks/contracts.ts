@@ -65,6 +65,11 @@ function schedule(value: unknown): value is ScheduleView | null | undefined {
     if (!manager || !['member', 'alias', 'state'].every(key => typeof manager[key] === 'string') || !['commander', 'delegated'].includes(String(manager.mode))) return false
   }
   if (entry.viewer !== undefined && !ref(entry.viewer)) return false
+  // retired is the archive row count; it can exceed the displayed item count.
+  if (entry.counts !== undefined) {
+    const counts = object(entry.counts)
+    if (!counts || !Object.values(counts).every(count => typeof count === 'number' && Number.isInteger(count) && count >= 0)) return false
+  }
   return ['schedule_id', 'path'].every(key => optionalText(entry[key])) && (entry.revision === undefined || typeof entry.revision === 'number')
 }
 
