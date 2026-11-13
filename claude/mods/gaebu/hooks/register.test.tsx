@@ -635,6 +635,22 @@ test('completed dispatch detail loads the full persisted brief and caches it unt
   await ui.unmount()
 })
 
+test('cancelled schedule work keeps its live duty out of standalone working rows', async ($, on) => {
+  const linked = { ...duty('d-cancelled-live', 'working', '진행'), outcome: 'standalone duplicate must stay hidden' }
+  const schedule = { ...SCHEDULE, counts: { total: 1, cancelled: 1, retired: 44 }, items: [{ ...SCHEDULE.items[0],
+    id: 'w-cancelled', title: 'cancelled work needing cleanup', stage: 'cancelled', stage_label: '취소',
+    next_action: '남은 소임과 자원을 정리한다', dispatches: [{ key: 'cleanup', token: 'x-1',
+      assignee: { runtime_id: 'runtime-1', team: 't-1', id: 'm-3' }, duty: linked.id, status: 'accepted' }] }] }
+  mountedWith(on, { run: argv => argv.includes('me') && argv.includes('--json')
+    ? ran(JSON.stringify({ ...CARD, duties: [linked], schedule })) : operationsRun(argv) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', key: 'select-w-cancelled' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'select-d-cancelled-live' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /남은 소임과 자원을 정리한다/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('detail scroll controls keep the selected contract instead of changing tasks', async ($, on) => {
   mountedWith(on, { run: argv => operationsRun(argv) })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
