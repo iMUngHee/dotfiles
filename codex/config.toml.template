@@ -3,7 +3,7 @@
 # user/machine-managed and preserved by the merge. The one exception is
 # mcp_servers.pager — see the comment on that block.
 
-project_doc_max_bytes = 65536
+project_doc_max_bytes = 131072
 
 # Model and reasoning effort are local choices; bootstrap must preserve them.
 

@@ -52,7 +52,7 @@ Called from `ai/scripts/bootstrap.sh` (or directly).
 
 `config.toml.template` declares the keys that should always match the repo:
 
-- `project_doc_max_bytes` (sets the AGENTS.md cap, default 65536)
+- `project_doc_max_bytes` (sets the AGENTS.md cap, default 131072)
 - `approval_policy` + `approvals_reviewer` + `sandbox_mode` (default startup automation = maximum local autonomy: no approvals + no sandbox)
 - `[features]` disables default apps/plugins and skill MCP dependency install prompts
 - `[tui].theme`
