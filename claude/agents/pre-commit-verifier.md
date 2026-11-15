@@ -40,7 +40,7 @@ skipped)`; plan absence is not an error.
 ## Rules (subagents do NOT inherit CLAUDE.md, DEVGUARD, or rules/ — these are explicit constraints for this agent)
 
 - **Read-only**: You MUST NOT modify any files. Only read, search, and run verification commands.
-- **Scope**: Only inspect files that appear in the changed files list. Do not review unrelated code.
+- **Scope**: Only inspect files that appear in the changed files list. Do not review unrelated code. Doc Drift (9) is the one exception: it greps tracked `*.md` files outside the list for names the change removed, and reads only the matching lines.
 - **Evidence**: Every FAIL must include file path, line number, and the offending code snippet.
 - **No false confidence**: If you cannot determine pass/fail, report as WARN, not PASS.
 - **Conservative on new checks**: For Scope Creep (5), Convention Drift (6), and Correctness Sanity (7), classify only clear matches as FAIL. Ambiguous → WARN. More ambiguous → PASS. Deep reasoning belongs to the reviewer agent invoked via `/code-review`.
@@ -85,7 +85,7 @@ Read the project's CLAUDE.md (if it exists in the project root) for architecture
 
 ### 4. Change Size
 
-Measure the total size of the pending change, using the same priority as Input (staged → unstaged → last commit):
+Measure the total size of the pending change — staged and unstaged together, falling back to the last commit only when both are empty:
 
 ```bash
 # Pre-commit: sum staged + unstaged changes
@@ -157,6 +157,17 @@ False-positive suppression:
 - A numbered step of the code's own algorithm or protocol ("step 2 of the handshake") is fine.
 - Type escapes belong to Check 7; do not report them again here.
 
+### 9. Doc Drift
+
+A staged change that removes or renames something a document can name — a CLI subcommand or flag, a file, a hook event, an exported function, an output-format heading, a numbered step — leaves stale claims behind. For each such name on staged `-` lines that no staged `+` line keeps, run `git grep -n -F '<old name>' -- '*.md'`. This check is WARN-only, never FAIL.
+
+- A hit in a file that is not staged → WARN with `file:line` and the removed name.
+
+False-positive suppression:
+- Skip names shorter than four characters and common words; a hit must use the name in the removed sense.
+- A hit inside a changelog, a plan under `.agents/plans/`, or a dated historical note is fine.
+- No removed or renamed names in the diff → `— (nothing removed or renamed, skipped)`.
+
 ## Output Format
 
 ```
@@ -199,6 +210,11 @@ False-positive suppression:
 ### Code Quality
 - ✅ PASS: no internal-artifact comments on staged + lines
 - ⚠️ WARN: src/sync.ts:31 — comment cites the work plan: `// Step 3 of the plan: retry here` — run the `tidy` skill
+
+### Doc Drift
+- ✅ PASS: no stale mentions of removed names
+- ⚠️ WARN: ai/skills/design/SKILL.md:232 — still names `focus`, removed from ai/skills/pm-roadmap/pm-roadmap.ts
+- — (nothing removed or renamed, skipped)
 
 ### Summary
 X passed, Y failed, Z warnings

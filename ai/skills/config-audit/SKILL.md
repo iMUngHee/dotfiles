@@ -1,19 +1,23 @@
 ---
 name: config-audit
-description: "Audit ~/.config/{ai,claude,codex}/ and the deployed tool home (~/.claude or ~/.codex) for 3-tier structure compliance: layout, prefix convention, AGENTS.manifest sync, deploy-model integrity, generated-file protection. Use after creating, editing, or moving files there. Skip project-local .claude/ config and unrelated dotfiles."
+description: "Audit ~/.config/{ai,claude,codex}/ and the deployed tool home (~/.claude or ~/.codex) for 3-tier structure compliance: layout, prefix convention, AGENTS.manifest sync, deploy-model integrity, generated-file protection. With the `content` argument, also check that what these files claim matches the code and each other. Use after creating, editing, or moving files there. Skip project-local .claude/ config and unrelated dotfiles."
+argument-hint: "[content [path]]"
 allowed-tools: Bash, Read, Grep, Glob
 disable-model-invocation: false
 ---
 
 Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier layout rules.
 
+Arguments: $ARGUMENTS — empty runs the structural checks below; `content [path]` runs only
+the content-consistency pass at the end of this file, over the whole tree or the given path.
+
 ## Checks (tool-agnostic)
 
 ### 1. Tier violation
-- A file in `claude/` whose body has NO Claude-specific dependency (no slash commands, no `Agent(subagent_type=...)`, no `EnterPlanMode`/`EnterWorktree`, no `~/.claude/`-only paths, no Claude hooks/extensions, no settings.json permissions) → suggest moving to `ai/`.
+- A file in `claude/` whose body has NO Claude-specific dependency (no custom slash commands — `/<name>` naming a skill does not count, no `Agent(subagent_type=...)`, no `EnterPlanMode`/`EnterWorktree`, no `~/.claude/`-only paths, no Claude hooks/extensions, no settings.json permissions) → suggest moving to `ai/`.
 - A file in `codex/` whose body has NO Codex-specific dependency (no sandbox modes, no `codex exec`, no `~/.agents/skills/`, no `config.toml [mcp_servers.*]`-only refs) → suggest moving to `ai/`.
-- A file in `ai/` whose body uses tool-only tokens or systems → split the tool-specific portion into the tool's directory. Exception: naming both tools side by side, where the file depends on neither — `ai/README.md`'s deploy tables, `PERSONAL.md` giving each tool its own phrasing of one instruction, a memory note recording that a hook exists on one tool and not the other. **The test: delete one tool from the file.** If the advice still stands for the tool that remains, the mention is descriptive and belongs in `ai/`; if it collapses, it is a dependency and belongs in that tool's directory.
-- A file in `ai/` containing a literal `~/.claude/` or `~/.codex/` path (instead of the `{{TOOL_HOME}}` token) → FAIL (a literal tool path silently breaks the other tool). Exceptions: `ai/README.md`, `ai/skills/config-audit/SKILL.md`, and `ai/memory/feedback_ai_config_structure.md` — these describe the deploy model itself and must name both tools' literal targets. The rule targets *operational* paths (command/ls/script targets), not prose that documents deploy structure.
+- A file in `ai/` whose body uses tool-only tokens or systems → split the tool-specific portion into the tool's directory. Exception: naming both tools side by side, where the file depends on neither — `ai/README.md`'s deploy tables, `PERSONAL.md` giving each tool its own phrasing of one instruction, a memory note recording that a hook exists on one tool and not the other, `/<name>` written as shorthand for a shared skill. **The test: delete one tool from the file.** If the advice still stands for the tool that remains, the mention is descriptive and belongs in `ai/`; if it collapses, it is a dependency and belongs in that tool's directory.
+- A file in `ai/` containing a literal `~/.claude/` or `~/.codex/` path (instead of the `{{TOOL_HOME}}` token) → FAIL (a literal tool path silently breaks the other tool). Exceptions: `ai/README.md`, `ai/skills/config-audit/SKILL.md`, and `ai/memory/feedback_ai_config_structure.md` — these describe the deploy model itself and must name both tools' literal targets — plus the deploy tooling (`ai/scripts/`, `ai/lib/`, `ai/AGENTS.manifest`), which exists to write or check both tools' targets and cannot use a per-tool token. The rule targets *operational* paths (command/ls/script targets), not prose that documents deploy structure.
 
 ### 2. Prefix violation
 - File or skill directory directly under `claude/{rules,memory,skills}/` without `claude-` prefix → FAIL (move with rename).
@@ -63,6 +67,41 @@ Audit `~/.config/{ai,claude,codex}/` structure for compliance with the 3-tier la
 - `~/.agents/.codex/state/current.txt` exists and is non-empty → WARN (legacy tool-specific state pointer; current shared state is repo-local `.agents/state/current.txt`).
 - Any legacy `~/.agents/.codex/plans/*.md` frontmatter has `status: draft` or `status: active` → WARN (old Codex plan namespace may conflict with shared plan/state expectations).
 - `~/.agents/skills/<name>` symlinks resolve under `ai/skills/` or `codex/skills/`, or under the vendor root for a vendored `skill` entry (same rule as Claude) → FAIL on broken.
+
+## Content consistency (only with the `content` argument)
+
+The structural checks pass while a document states something false. This pass reads what
+the tracked files under `ai/`, `claude/` and `codex/` claim and checks each claim against
+the thing that decides it. It is judgment work and costs far more than the checks above, so
+it never runs by default.
+
+A claim worth checking is one that can be wrong:
+
+- a command, subcommand, flag, file, path, hook event or exit code that is said to exist;
+- a step number, section name or output format in another skill or agent;
+- what a skill hands to another skill, agent or script, and what that side expects back;
+- a guarantee: "enforced", "atomic", "always", "never", "only", "refuses";
+- a count, range or list presented as current ("C1 through C15", "three sections").
+
+Procedure:
+
+1. Take the file list from `git ls-files`. Group it by the code it describes (root
+   documents with rules, memory, scripts and hooks; the pm skills with their modules; the
+   workflow skills with the agents they dispatch; the rest), and give each group to a separate
+   read-only reviewer when the tool can run several, otherwise go group by group.
+2. For every claim, open the code or the other document that decides it. Where the claim is
+   about behaviour and the tool is cheap to run, run it — a tool's `--help` is a claim too,
+   not evidence.
+3. For every handoff, read both ends: the caller's arguments and expectations against the
+   callee's inputs and output format.
+4. Re-open each finding yourself before reporting it. A reviewer's report is a lead; drop a
+   finding when both statements can hold at once, and say which ones were dropped and why.
+
+Report each finding with the claim's `file:line`, the evidence (`file:line` or the command
+and its output), and which side is wrong — or `decision needed` when either the document or
+the code could be the intended one. Separate what you confirmed from what a reviewer
+reported and you did not re-open. Leave out style, omissions, and a dated measurement that
+is not presented as current. End with `N confirmed, M unverified, K dropped`.
 
 ## Output
 
