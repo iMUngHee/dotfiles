@@ -9,6 +9,7 @@ Apply these rules when Gaebu records place your session in a team, or when the h
 - Update the canonical Schedule through CLI/MCP and preserve PM lifecycle and runtime duty status in their own sources.
 - Treat worker completion as awaiting task-master review, and release dependent work only after explicit Schedule acceptance.
 - Recover an uncertain dispatch by its existing token instead of creating replacement work because a session is quiet or a response was lost.
+- Continue another team's whole canonical Schedule with `schedule adopt` instead of recreating its items.
 - Use atomic unit formation for a head and selected workers, and inspect historical duty origins and holds when reusing people.
 - Turn the human's plain-word team requests (가절월, 속관, 부, 소임, 멈춰) into the matching `gaebu` command from `gaebu --help`, quoting their current prompt as `--evidence` when it is a root directive.
 - Pass `--explicit` to a root operation only when the human's words name both the action and its target.
