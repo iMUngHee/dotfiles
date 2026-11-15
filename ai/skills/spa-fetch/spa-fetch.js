@@ -73,7 +73,13 @@ function ensureChromium() {
     fs.accessSync(p);
   } catch {
     console.error("[spa-fetch] Chromium not found, installing...");
-    execSync("npx playwright install chromium", { stdio: "inherit" });
+    // Run from the script directory so npx resolves the bundled Playwright;
+    // from any other cwd it fetches the latest release, whose browser build
+    // differs from the one this version launches.
+    execSync("npx playwright install chromium", {
+      stdio: "inherit",
+      cwd: __dirname,
+    });
   }
 }
 
