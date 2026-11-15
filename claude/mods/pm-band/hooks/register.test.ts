@@ -23,6 +23,7 @@ const SESSION = { surface: 'terminal' as const, isInteractive: true, cwd: '/work
 
 const BAND: RenderPropsOf['AbovePrompt'] = {
   hasSurvey: false,
+  isCollapsed: false,
   isWorking: false,
   maxRows: 6,
   bodyColumns: 100,
@@ -273,7 +274,8 @@ describe('register', () => {
     w.beneath = '✉ wogi · 2 new'
     await started($, w)
 
-    expect(await bandText($)).toBe('▶ demo  ▰▰▱▱ 2/4  pm-band plan.ts\n\nstepsgraph\n\n✉ wogi · 2 new')
+    // The engine wraps the band row in a Box of its own, which textOf counts as one more line break.
+    expect(await bandText($)).toBe('▶ demo  ▰▰▱▱ 2/4  pm-band plan.ts\n\nstepsgraph\n\n\n✉ wogi · 2 new')
     expect(await bandText($, { ...BAND, hasSurvey: true })).toBe('✉ wogi · 2 new')
   })
 
