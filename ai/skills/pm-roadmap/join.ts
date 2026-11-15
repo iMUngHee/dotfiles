@@ -271,7 +271,7 @@ export function buildNextPrompt(v: ItemView, inbox = 0): string {
   }
   if (v.memory.length) {
     L.push("## Task memory (decisions / things to remember)");
-    for (const m of v.memory) { const note = getField(m, "Note"); const by = getField(m, "By"); L.push(`- ${m.title}${note ? `: ${note}` : ""}${by ? ` _(by ${by})_` : ""}`); }
+    for (const m of v.memory) { const note = getField(m, "Note"); const by = getField(m, "By"); L.push(`- ${m.title || m.id}${note ? `: ${note}` : ""}${by ? ` _(by ${by})_` : ""}`); }
     L.push("");
   }
   if (v.siblings.length) {

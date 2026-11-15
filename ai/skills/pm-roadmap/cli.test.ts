@@ -199,7 +199,7 @@ async function main() {
     assert.equal((await cli("reclassify", "RECLASS", "reclass-cli", "--plan", reclassPlan, "--status", "dropped", "--reason", "   ")).code, 1, "dropped rejects whitespace Reason");
     assert.ok((await cli("bogus")).out.includes("reclassify"), "default usage lists reclassify");
 
-    // retro durable-decision sink: memory <KEY> add → upsert a note via ops (lock+CAS)
+    // retro durable-decision sink: memory <KEY> add → upsert a note via ops (lock + atomic write)
     assert.equal((await cli("memory", "ALPHA", "add", "lock-policy", "--note", "writes go through ops", "--date", "2026-06-22")).code, 0);
     let mem = await readFile(join(root, ".agents/tasks/ALPHA/memory.md"), "utf8");
     assert.ok(mem.includes("- **lock-policy**") && mem.includes("Note: writes go through ops") && mem.includes("Date: 2026-06-22"), "memory note written");

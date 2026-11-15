@@ -477,7 +477,7 @@ async function _itemSetStatus(root: string, key: string, id: string, status: str
   await writeBlocks(taskFile(root, key, "backlog.md"), f.title, f.blocks);
 }
 
-async function _itemClose(root: string, key: string, id: string, o: { status: "done" | "dropped"; reason?: string; closedDate: string; plan?: string; closedBy?: string }): Promise<void> {
+async function _itemClose(root: string, key: string, id: string, o: { status: "done" | "dropped"; reason?: string; closedDate: string; plan?: string; closedBy?: string; planlessOnly?: boolean }): Promise<void> {
   if (o.status !== "done" && o.status !== "dropped") throw new OpError(`close status must be 'done' or 'dropped' (got '${o.status}')`);
   if (o.status === "dropped" && !o.reason) throw new OpError("drop requires a Reason");
   const bl = await loadBlocks(taskFile(root, key, "backlog.md"));
@@ -486,6 +486,8 @@ async function _itemClose(root: string, key: string, id: string, o: { status: "d
   const it = bl.blocks[idx];
   const plan = o.plan ?? getField(it, "Plan") ?? "-";
   if (o.status === "done" && (plan === "-" || !plan)) throw new OpError(`planless item '${id}' cannot be done`);
+  // Closing only the item would leave its plan draft/active with no open item behind it.
+  if (o.planlessOnly && plan && plan !== "-") throw new OpError(`item '${id}' carries plan ${plan}; drop it with 'complete --status dropped' so the plan closes too`);
   bl.blocks.splice(idx, 1);
   const cl = await loadBlocks(taskFile(root, key, "closed.md"));
   const cb: Block = { id, title: it.title, fields: [] };
@@ -586,6 +588,7 @@ async function _triage(root: string, id: string, toKey: string): Promise<void> {
     { path: inboxPath(root), title: inbox.title || "_INBOX — Inbox", blocks: inbox.blocks },
     { path: taskFile(root, toKey, "backlog.md"), title: bl.title || `${toKey} — Backlog`, blocks: bl.blocks },
   ]);
+  await reopenIfDone(root, toKey, today());
 }
 
 async function _setPlanStatus(root: string, planRel: string, status: string): Promise<void> {
@@ -776,8 +779,8 @@ export const itemClose = (root: string, key: string, id: string, opt: { status: 
 // only the plan guard; the existence and DependsOn guards always apply (D2).
 export const itemExpunge = (root: string, key: string, id: string, o: { force?: boolean } & LockOpts = {}) =>
   withLock(root, "itemExpunge", () => _itemExpunge(root, key, id, o.force === true), o);
-export const dropItem = (root: string, key: string, id: string, opt: { reason: string; closedBy?: string } & LockOpts) =>
-  withLock(root, "dropItem", () => _itemClose(root, key, id, { status: "dropped", reason: opt.reason, closedDate: today(), closedBy: opt.closedBy }), opt);
+export const dropItem = (root: string, key: string, id: string, opt: { reason: string; closedBy?: string; planlessOnly?: boolean } & LockOpts) =>
+  withLock(root, "dropItem", () => _itemClose(root, key, id, { status: "dropped", reason: opt.reason, closedDate: today(), closedBy: opt.closedBy, planlessOnly: opt.planlessOnly }), opt);
 
 export const harvest = (root: string, key: string, deferred: Deferred[], o: { nowDate?: string } & LockOpts = {}) =>
   withLock(root, "harvest", async () => { await _harvestPreflight(root, deferred); await _harvestApply(root, key, deferred, o.nowDate ?? today()); }, o);

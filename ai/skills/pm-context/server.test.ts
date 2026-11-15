@@ -127,6 +127,8 @@ async function main() {
     assert.equal((r.json as any).contextLinks[0].label, "W", "join projects link label");
     assert.equal((r.json as any).contextMemory[0].title, "n1", "join projects memory title");
     assert.equal((r.json as any).siblingsTotal, 0, "join exposes siblingsTotal");
+    r = await handle(root, "GET", "/api/roadmap/a-1/next", P, undefined);
+    assert.match(r.text ?? "", /^- n1: hi$/m, "next prompt names each memory note by its title");
     r = await handle(root, "GET", "/api/roadmap/validate", P, undefined);
     assert.ok(Array.isArray((r.json as any).errors));
 
@@ -170,6 +172,16 @@ async function main() {
     // planless drop through ops
     r = await handle(root, "POST", "/api/roadmap/a-1/drop", P, { reason: "no" });
     assert.equal((r.json as any).dropped, true);
+    // a planned item is refused here: its plan would stay draft/active behind a closed item
+    const plannedRel = ".agents/plans/2026-06-21-a-planned.md";
+    await writeFile(join(root, plannedRel), `---\nid: a-planned\nstatus: draft\npm_loop: true\n---\n# a-planned\n`);
+    await ops.itemAdd(root, { task: "ALPHA" }, { id: "a-planned", title: "AP" }, { retries: 0 });
+    await ops.itemSetPlan(root, "ALPHA", "a-planned", plannedRel, { retries: 0 });
+    r = await handle(root, "POST", "/api/roadmap/a-planned/drop", P, { reason: "no" });
+    assert.equal(r.status, 409, "GUI drop refuses an item that carries a plan");
+    r = await handle(root, "GET", "/api/roadmap/a-planned/join", P, undefined);
+    assert.equal((r.json as any).closed, false, "the refused item stays open");
+    await ops.dropItem(root, "ALPHA", "a-planned", { reason: "fixture cleanup", retries: 0 }); // the lower-level op stays unrestricted
 
     // ── D7/D9: a rejected PUT writes nothing at all ──
     // The handler replaces links and memory through two separate ops calls, links first. A

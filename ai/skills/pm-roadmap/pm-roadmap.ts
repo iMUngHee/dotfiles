@@ -398,7 +398,7 @@ export async function runCli(root: string, argv: string[]): Promise<{ out: strin
       await ops.addTaskMemory(root, key, { title, note: str(opts.note), date: str(opts.date), by: await collabBy(root, key, opts) });
       return { out: `memory ${key}: + ${title}`, code: 0 };
     }
-    // pm-context link writes route here (single write path; lock+CAS via ops).
+    // pm-context link writes route here (single write path; lock + atomic write via ops).
     case "links": {
       const [key, sub] = pos;
       if (sub === "add") {

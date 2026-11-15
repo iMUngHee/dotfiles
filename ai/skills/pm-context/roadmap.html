@@ -512,7 +512,7 @@ function updateShell() {
   const actor = state.actor;
   actorChip.replaceChildren(el("span", { class: `status-dot ${actor?.actor ? "" : "warning"}` }), el("span", {}, actor?.actor || "Actor unavailable", actor?.source ? el("span", { class: "actor-source", text: ` · ${actor.source}` }) : null));
   const errors = state.validation?.errors?.length ?? null;
-  const warnings = state.validation?.warnings?.length ?? null;
+  const warnings = state.validation?.warns?.length ?? null;
   const healthClass = state.errors.validation || errors ? "danger" : warnings ? "warning" : "";
   healthChip.replaceChildren(el("span", { class: `status-dot ${healthClass}` }), el("span", { text: state.errors.validation ? "Health unavailable" : errors ? `${errors} errors` : warnings ? `${warnings} warnings` : "Healthy" }));
   const project = state.roadmap?.project || "PM store";
@@ -594,11 +594,11 @@ async function renderNow() {
   else {
     const eligible = filterItems(next?.eligible || []);
     const blocked = filterItems(next?.blocked || []);
-    workspace.append(sectionHead("Eligible next", `${eligible.length} candidates`), eligible.length ? workList(eligible, { simple: true }) : emptyState("No eligible work", searchInput.value ? "No candidate matches the active search." : "Create an Item or resolve a blocker to continue.", "pm item add <TASK> <id> --title <title>"));
+    workspace.append(sectionHead("Eligible next", `${eligible.length} candidates`), eligible.length ? workList(eligible, { simple: true }) : emptyState("No eligible work", searchInput.value ? "No candidate matches the active search." : "Create an Item or resolve a blocker to continue.", "pm add <id> <title> --task <TASK>"));
     workspace.append(sectionHead("Blocked", `${blocked.length} items`), blocked.length ? workList(blocked, { simple: true, blocked: true }) : emptyState("No blocked work", "Dependency checks found no blocked Items."));
   }
   workspace.append(sectionHead("Desk health"), el("div", { class: "summary-grid" },
-    stat("Open Items", roadmap?.open?.length ?? "—"), stat("Inbox", state.inbox?.length ?? next?.inbox ?? "—"), stat("Validation", state.errors.validation ? "Unavailable" : `${state.validation?.errors?.length || 0} / ${state.validation?.warnings?.length || 0}`, "errors / warnings")));
+    stat("Open Items", roadmap?.open?.length ?? "—"), stat("Inbox", state.inbox?.length ?? next?.inbox ?? "—"), stat("Validation", state.errors.validation ? "Unavailable" : `${state.validation?.errors?.length || 0} / ${state.validation?.warns?.length || 0}`, "errors / warnings")));
   const linkedTask = roadmap?.currentPlan?.state === "linked" ? (roadmap.currentPlan.item.task || roadmap.currentPlan.item.key) : null;
   await renderContextFor(linkedTask);
 }
@@ -628,7 +628,7 @@ function workList(items, options = {}) {
 }
 function workRow(item, options = {}) {
   const task = item.task || item.key;
-  const blockedBy = item.blockedBy?.length ? item.blockedBy : item.dependsOn?.filter((id) => options.blocked);
+  const blockedBy = item.blockedBy?.length ? [].concat(item.blockedBy) : item.dependsOn?.filter((id) => options.blocked);
   return el("article", { class: `work-row ${blockedBy?.length ? "blocked" : ""}` },
     priorityMark(item.priority),
     el("span", { class: "mono muted", text: item.id }),
@@ -829,19 +829,19 @@ async function renderPeople() {
   const collabItems = (state.roadmap?.open || []).filter((item) => item.owner || item.mode === "collab");
   const collabTasks = state.tasks.filter((task) => task.mode === "collab" || task.collaborators?.length);
   workspace.replaceChildren(pageHead("People", "A lightweight owner board for collaborative Tasks. Forced reassignment remains CLI-only."), el("div", { class: "panel" }, el("p", { class: "eyebrow", text: "Resolved actor" }), el("h2", { text: state.actor?.actor || "Unavailable" }), el("p", { class: "muted", text: state.actor?.source ? `Source: ${state.actor.source}` : "Set PM_ACTOR, state/actor.txt, or git user.email before claiming work." })));
-  if (!collabTasks.length && !collabItems.length) workspace.append(emptyState("No collaboration data", "People appears automatically when a Task or Item has collaboration metadata.", "pm task mode <TASK> collab"));
+  if (!collabTasks.length && !collabItems.length) workspace.append(emptyState("No collaboration data", "People appears automatically when a Task or Item has collaboration metadata.", "pm task set-mode <TASK> collab"));
   else {
     const grouped = new Map();
     for (const item of collabItems) { const owner = item.owner || "Unassigned"; if (!grouped.has(owner)) grouped.set(owner, []); grouped.get(owner).push(item); }
     workspace.append(sectionHead("Owner board", `${collabItems.length} items`), el("div", { class: "owner-groups" }, [...grouped.entries()].map(([owner, items]) => el("section", { class: "owner-card" }, el("h2", { text: `${owner} · ${items.length}` }), ...items.map((item) => el("div", { class: "context-item" }, el("a", { href: routeHref("item", { item: item.id }), dataset: { route: "" }, text: item.id }), el("p", { text: `${item.title} · ${item.task}` }), item.ownerNote ? el("p", { text: `Handoff: ${item.ownerNote}` }) : null))))));
   }
-  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Collaboration boundary" }), el("h2", { text: "Safe, explicit ownership" }), el("p", { class: "muted", text: "Claim, release, and handoff check the rendered owner. Roster changes and forced overwrite stay in the CLI." }), el("div", { class: "cli", text: "pm item owner set <TASK> <id> <actor> --force" }));
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Collaboration boundary" }), el("h2", { text: "Safe, explicit ownership" }), el("p", { class: "muted", text: "Claim, release, and handoff check the rendered owner. Roster changes and forced overwrite stay in the CLI." }), el("div", { class: "cli", text: "pm assign <TASK> <id> <actor> --force" }));
 }
 
 async function renderHealth() {
   workspace.replaceChildren(pageHead("Inbox / Health", "Read project intake and validation without turning the dashboard into an administration console.", el("button", { class: "btn", type: "button", text: "Refresh checks", onclick: renderRoute })));
   const errors = state.validation?.errors || [];
-  const warnings = state.validation?.warnings || [];
+  const warnings = state.validation?.warns || [];
   workspace.append(el("div", { class: "health-list" },
     healthRow("Server", state.errors.roadmap ? "Partial read" : "Connected", state.errors.roadmap?.message || "Roadmap and navigation state loaded."),
     healthRow("Actor", state.actor?.actor || "Unavailable", state.actor?.source ? `Resolved from ${state.actor.source}.` : "Set PM_ACTOR, state/actor.txt, or git user.email."),
@@ -853,7 +853,7 @@ async function renderHealth() {
   workspace.append(sectionHead("Inbox", `${state.inbox?.length || 0}`));
   if (!state.inbox?.length) workspace.append(emptyState("Inbox is empty", "New intake will appear here for read-only inspection."));
   else workspace.append(el("div", { class: "work-list" }, state.inbox.map((item) => el("article", { class: "work-row" }, priorityMark(item.priority), el("span", { class: "mono muted", text: item.id }), el("div", { class: "work-title" }, el("strong", { text: item.title }), el("small", { text: item.note || "No note" })), el("span", { class: "work-owner", text: "Needs CLI triage" }), el("div")))));
-  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Recovery commands" }), el("h2", { text: "Authoritative CLI" }), contextItem("Validate", "pm validate"), contextItem("Triage inbox", "pm inbox triage <id> --task <KEY>"), contextItem("Inspect current plan", "pm current-plan"));
+  contextRail.replaceChildren(el("p", { class: "eyebrow", text: "Recovery commands" }), el("h2", { text: "Authoritative CLI" }), contextItem("Validate", "pm validate"), contextItem("Triage inbox", "pm triage <id> <KEY>"), contextItem("Inspect current plan", "pm current-plan"));
 }
 function formatIssue(issue) { return typeof issue === "string" ? issue : JSON.stringify(issue); }
 function healthRow(label, value, note) { return el("div", { class: "health-row" }, el("strong", { text: label }), el("div", {}, el("div", { text: value }), el("div", { class: "muted", text: note }))); }

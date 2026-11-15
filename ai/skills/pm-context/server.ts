@@ -128,7 +128,7 @@ export async function handle(root: string, method: string, pathname: string, par
   if (drop && method === "POST") {
     const key = await findTask(root, drop[1]);
     if (!key) return { status: 404, json: { error: "item not found" } };
-    try { await ops.dropItem(root, key, drop[1], { reason: (body && body.reason) || "dropped via GUI" }); return { status: 200, json: { id: drop[1], dropped: true } }; }
+    try { await ops.dropItem(root, key, drop[1], { reason: (body && body.reason) || "dropped via GUI", planlessOnly: true }); return { status: 200, json: { id: drop[1], dropped: true } }; }
     catch (e: any) { return { status: 409, json: { error: e?.message ?? String(e) } }; }
   }
 

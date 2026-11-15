@@ -578,6 +578,11 @@ async function main() {
     await ops.taskDone(root, "ALPHA", O);
     await ops.itemAdd(root, { task: "ALPHA" }, { id: "revive-1", title: "R" }, O);
     assert.equal(getFmField(parseFrontmatter((await readStamped(taskFile(root, "ALPHA", "task.md")))!.content).fields, "status"), "active", "adding an item reopens a done task");
+    for (const id of await ids(BL("ALPHA"))) await ops.dropItem(root, "ALPHA", id, { reason: "c", ...O });
+    await ops.taskDone(root, "ALPHA", O);
+    await ops.itemAdd(root, { inbox: true }, { id: "revive-2", title: "R2" }, O);
+    await ops.triage(root, "revive-2", "ALPHA", O);
+    assert.equal(getFmField(parseFrontmatter((await readStamped(taskFile(root, "ALPHA", "task.md")))!.content).fields, "status"), "active", "triaging an item in reopens a done task");
 
     // ── collaboration mode ──
     const FM = async (k: string, f: string) => getFmField(parseFrontmatter((await readStamped(taskFile(root, k, "task.md")))!.content).fields, f);
