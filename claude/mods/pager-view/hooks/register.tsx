@@ -14,7 +14,6 @@ import {
   clockOf,
   conversationOf,
   dayOf,
-  exportedOf,
   flatOf,
   foldOf,
   inboundOf,
@@ -28,11 +27,12 @@ import {
   revealOf,
   roomsOf,
   rosterOf,
+  rowOf,
   runStartsOf,
   seenOf,
   unreadOf,
 } from './pager'
-import type { Room, Run } from './pager'
+import type { Exported, Failure, Room, Run } from './pager'
 
 export const PANE = 'pager'
 const POLL_MS = 5_000
@@ -82,12 +82,60 @@ const folds = atom({ plugin: 'pager-view', key: 'folds' } as const, {})
 const baselineKey = (sessionId: string) => `baseline:${sessionId}`
 const seenKey = (sessionId: string) => `seen:${sessionId}`
 
+const RUN_TIMEOUT_MS = 10_000
+
 async function run($: Engine, argv: string[]): Promise<Run> {
   try {
-    return await $.process.run(argv, { timeoutMs: 10_000 })
+    return await $.process.run(argv, { timeoutMs: RUN_TIMEOUT_MS })
   } catch (error) {
     return { exitCode: -1, stdout: '', stderr: error instanceof Error ? error.message : String(error) }
   }
+}
+
+/**
+ * The rows of `pager export` that `isKept` wants, read as a stream. The command
+ * dumps the whole database and takes no filter, so `$.process.run` would stop at
+ * its 4 MiB stdout cap (near 2,200 messages at ~1.9 KB each) and fail every
+ * refresh from then on; a stream holds only this session's share.
+ */
+async function exported($: Engine, isKept: (row: Exported) => boolean): Promise<Exported[] | Failure> {
+  const child = $.process.spawn({ argv: ['pager', 'export'] })
+  // Closing the stream before its end rejects `result`.
+  child.result.catch(() => {})
+  const reading = (async (): Promise<Exported[] | Failure> => {
+    const rows: Exported[] = []
+    let rest = ''
+    let stderr = ''
+    for await (const piece of child) {
+      if (piece.stream === 'stderr') {
+        stderr = (stderr + piece.text).slice(-2_000)
+        continue
+      }
+      const lines = (rest + piece.text).split('\n')
+      rest = lines.pop() ?? ''
+      for (const line of lines) {
+        const row = rowOf(line)
+        if (row === null) continue
+        if ('error' in row) return row
+        if (isKept(row)) rows.push(row)
+      }
+    }
+    const { code } = await child.result
+    if (code !== 0) return { error: stderr.trim().split('\n').at(-1) || `exit ${code}` }
+    const last = rowOf(rest)
+    if (last !== null && 'error' in last) return last
+    if (last !== null && isKept(last)) rows.push(last)
+    return rows
+  })().catch((error: unknown): Failure => ({ error: error instanceof Error ? error.message : String(error) }))
+  // A spawn has no timeout of its own, and a child that writes nothing never wakes the loop.
+  let timer = { cancel: () => {} }
+  const expiry = new Promise<Failure>(resolve => {
+    timer = $.clock.after(RUN_TIMEOUT_MS, () => resolve({ error: 'pager export timed out' }))
+  })
+  const outcome = await Promise.race([reading, expiry])
+  timer.cancel()
+  if (!Array.isArray(outcome)) void child.return(undefined as never).catch(() => {})
+  return outcome
 }
 
 // Module state: a reload starts it over, as it does $.clock timers. `generation`
@@ -173,16 +221,7 @@ async function refreshOnce($: Engine): Promise<void> {
 
   const inbound = inboundOf(await run($, ['pager', 'ls', '--session', sessionId]))
   if ('error' in inbound) return failed(inbound.error)
-  // `pager export` dumps the whole database and takes no arguments -- it says
-  // so itself, pointing at jq -- so this grows with the message count rather
-  // than with this session's share of it. Measured at ~1.9 KB a message
-  // against $.process.run's 4 MiB stdout cap, which is a ceiling somewhere
-  // near 2,200 messages. Past it `failureOf` answers 'output truncated' every
-  // refresh and the band holds its last good line with a dim `?`, for good:
-  // the database only grows back. The pane spells the reason out (`⚠ pager:
-  // output truncated`), which is the only warning there is. A real fix needs
-  // a filter on `pager export`, not a change here.
-  const rows = exportedOf(await run($, ['pager', 'export']))
+  const rows = await exported($, row => row.sender_session === sessionId || inbound.has(row.id!))
   if ('error' in rows) return failed(rows.error)
   const isSeen = await isPaneOpen($)
   // A room on screen reads its mail as it lands.

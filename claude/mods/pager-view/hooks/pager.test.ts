@@ -7,7 +7,6 @@ import {
   clockOf,
   conversationOf,
   dayOf,
-  exportedOf,
   flatOf,
   foldOf,
   inboundOf,
@@ -21,6 +20,7 @@ import {
   revealOf,
   roomsOf,
   rosterOf,
+  rowOf,
   runStartsOf,
   seenOf,
   unreadOf,
@@ -58,6 +58,15 @@ wogi  claude  /Users/u/.config             live  just now
 boje  codex   /Users/u/Documents/Codex/x   gone  28m ago
 `
 
+/** Every version-1 row of an export, as the stream reader keeps them line by line. */
+function rowsOf(text: string) {
+  return text.split('\n').flatMap(line => {
+    const row = rowOf(line)
+    if (row !== null && 'error' in row) throw new Error(row.error)
+    return row === null ? [] : [row]
+  })
+}
+
 describe('pager', () => {
   test('the name is the whoami name line, or null without one', () => {
     expect(nameOf(ok(WHOAMI))).toBe('wogi')
@@ -84,8 +93,7 @@ describe('pager', () => {
   })
 
   test('the conversation is inbound by id plus what this session sent, oldest first', () => {
-    const rows = exportedOf(ok(EXPORT))
-    if ('error' in rows) throw new Error(rows.error)
+    const rows = rowsOf(EXPORT)
     const inbound = inboundOf(ok(LS)) as Set<number>
     const entries = conversationOf(rows, inbound, 'sid-a')
 
@@ -104,8 +112,7 @@ describe('pager', () => {
 
   test('a body past the cap is kept up to the cap, its full length remembered', () => {
     const long = 'ㄱ'.repeat(BODY_CAP + 500)
-    const rows = exportedOf(ok(row({ id: 149, created_at: '2026-10-07T05:00:00.000Z', alias: 'wogi', sender_session: 'sid-buni', sender_label: 'buni', body: long })))
-    if ('error' in rows) throw new Error(rows.error)
+    const rows = rowsOf(row({ id: 149, created_at: '2026-10-07T05:00:00.000Z', alias: 'wogi', sender_session: 'sid-buni', sender_label: 'buni', body: long }))
     const [entry] = conversationOf(rows, new Set([149]), 'sid-a')
     expect(entry?.body.length).toBe(BODY_CAP)
     expect(entry?.length).toBe(BODY_CAP + 500)
@@ -133,7 +140,8 @@ vatu  claude  C:\\Users\\uu\\x           gone  2m ago
   })
 
   test('a broken export line is an error, not a partial conversation', () => {
-    expect(exportedOf(ok(`${EXPORT}\n{not json`))).toEqual({ error: 'unreadable export line' })
+    expect(rowOf('{not json')).toEqual({ error: 'unreadable export line' })
+    expect(() => rowsOf(`${EXPORT}\n{not json`)).toThrow('unreadable export line')
   })
 
   test('peers read the who table', () => {

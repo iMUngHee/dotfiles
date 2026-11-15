@@ -68,7 +68,7 @@ export function inboundOf(run: Run): Set<number> | Failure {
   return ids
 }
 
-type Exported = {
+export type Exported = {
   v?: number
   id?: number
   created_at?: string
@@ -79,21 +79,15 @@ type Exported = {
   body?: string
 }
 
-/** `pager export` JSONL, the rows of version 1. */
-export function exportedOf(run: Run): Exported[] | Failure {
-  const failure = failureOf(run)
-  if (failure) return { error: failure }
-  const rows: Exported[] = []
-  for (const line of run.stdout.split('\n')) {
-    if (line.trim() === '') continue
-    try {
-      const row = JSON.parse(line) as Exported
-      if (row.v === 1 && typeof row.id === 'number') rows.push(row)
-    } catch {
-      return { error: 'unreadable export line' }
-    }
+/** One line of `pager export` JSONL: its version-1 row, or null for a blank line or another version. */
+export function rowOf(line: string): Exported | null | Failure {
+  if (line.trim() === '') return null
+  try {
+    const row = JSON.parse(line) as Exported
+    return row.v === 1 && typeof row.id === 'number' ? row : null
+  } catch {
+    return { error: 'unreadable export line' }
   }
-  return rows
 }
 
 /** The most of a body kept and drawn; the rest is named, with the way to read it. */

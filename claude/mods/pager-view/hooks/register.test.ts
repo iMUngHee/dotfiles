@@ -9,6 +9,7 @@ const SESSION = { surface: 'terminal' as const, isInteractive: true, cwd: '/work
 
 const BAND: RenderPropsOf['AbovePrompt'] = {
   hasSurvey: false,
+  isCollapsed: false,
   isWorking: false,
   maxRows: 6,
   bodyColumns: 100,
@@ -58,7 +59,11 @@ function world(on: On, store: Record<string, unknown> = {}, env: Record<string, 
     messages: [] as Message[],
     isInstalled: true,
     panes: [] as string[],
-    runs: [] as Args<'process.run'>[],
+    runs: [] as (Args<'process.run'> | Args<'process.spawn'>)[],
+    /** How many characters of the export arrive at a time. */
+    pieceSize: 37,
+    exportFails: false,
+    exportHangs: false,
     /** Set to hold the next export until the test lets it go. */
     hold: null as null | Promise<void>,
     beneath: null as null | string,
@@ -94,9 +99,18 @@ function world(on: On, store: Record<string, unknown> = {}, env: Record<string, 
         ['ID    INBOX  FROM  STATE      BODY', ...mine.map(m => `#${m.id}  ${m.to}  ${m.from}  delivered  ${m.body}`)].join('\n'),
       )
     }
-    if (sub === 'export') {
-      const held = w.hold
-      const lines = w.messages.map(m =>
+    if (sub === 'who') {
+      return exited(0, w.who)
+    }
+    return exited(2, '', 'unexpected')
+  })
+  // `pager export` is read as a stream: the store's rows in pieces that cut lines apart.
+  on('process.spawn', async function* ($, e) {
+    w.runs.push(e)
+    if (!w.isInstalled) throw new Error('spawn pager ENOENT')
+    const held = w.hold
+    const text = w.messages
+      .map(m =>
         JSON.stringify({
           v: 1,
           id: m.id,
@@ -108,13 +122,14 @@ function world(on: On, store: Record<string, unknown> = {}, env: Record<string, 
           body: m.body,
         }),
       )
-      if (held) await held
-      return exited(0, lines.join('\n'))
+      .join('\n')
+    if (held) await held
+    if (w.exportHangs) await new Promise(() => {})
+    for (let at = 0; at < text.length; at += w.pieceSize) {
+      yield { stream: 'stdout' as const, text: text.slice(at, at + w.pieceSize) }
     }
-    if (sub === 'who') {
-      return exited(0, w.who)
-    }
-    return exited(2, '', 'unexpected')
+    if (w.exportFails) yield { stream: 'stderr' as const, text: 'pager: store locked\n' }
+    return { value: { code: w.exportFails ? 1 : 0, signal: null } }
   })
   return w
 }
@@ -172,6 +187,45 @@ describe('band', () => {
     w.messages.push(MAIL(12), MAIL(13))
     await w.clock.advance(POLL)
     expect(await bandText($)).toBe('✉ wogi   2 new   ← buni 47m  mail 13')
+  })
+
+  test('an export past the 4 MiB a single run returns still draws this session\'s mail', async ($, on) => {
+    const w = world(on)
+    w.pieceSize = 64_000
+    const filler = 'x'.repeat(2_000)
+    for (let id = 1; id <= 2_400; id++) w.messages.push({ id, to: 'other', from: 'x', fromSession: 'sid-x', body: filler })
+    w.messages.push(MAIL(2_401))
+    await started($, w)
+    expect(await bandText($)).toContain('mail 2401')
+  })
+
+  test('a failed export keeps the last good line and marks it', async ($, on) => {
+    const w = world(on)
+    w.messages = [MAIL(10)]
+    await started($, w)
+    const good = await bandText($)
+    w.exportFails = true
+    w.messages.push(MAIL(11))
+    await w.clock.advance(POLL)
+    const band = await bandText($)
+    expect(band).not.toContain('mail 11')
+    expect(band).toContain('mail 10')
+    expect(band).not.toBe(good)
+  })
+
+  test('an export that never writes is given up on, and the next refresh still runs', async ($, on) => {
+    const w = world(on)
+    w.messages = [MAIL(10)]
+    await started($, w)
+    w.exportHangs = true
+    w.messages.push(MAIL(11))
+    await w.clock.advance(POLL)
+    await w.clock.advance(10_000)
+    expect(await bandText($)).toBe('✉ wogi  ← buni 50m  mail 10 ?')
+    // A poll that came due meanwhile started another export, hung as well; let that one expire too.
+    w.exportHangs = false
+    await w.clock.advance(10_000 + POLL)
+    expect(await bandText($)).toContain('mail 11')
   })
 
   test('/pager clears the badge, and mail arriving while it is open stays read', async ($, on) => {
