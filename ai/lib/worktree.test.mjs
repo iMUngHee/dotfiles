@@ -619,6 +619,21 @@ test("ensure-current fails closed for ambiguous candidates and partial topology 
   assert.equal(await readFile(join(root, mismatch), "utf8"), mismatchBefore);
 });
 
+test("ensure-session keeps a failed checkout-local adoption as a typed failure", async (t) => {
+  const { root } = await fixture();
+  const storeRoot = await mkdtemp(join(tmpdir(), "session-store-typed-"));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(storeRoot, { recursive: true, force: true })]));
+  const ambiguous = await writeLegacyPlan(root, "session-ambiguous");
+  const first = await createCandidate(root, "feature/session-ambiguous-a", "session-ambiguous-a", ambiguous);
+  await createCandidate(root, "feature/session-ambiguous-b", "session-ambiguous-b", ambiguous);
+
+  const direct = await ensureCurrent({ root: first });
+  const result = await ensureSession({ root: first, tool: "codex", sessionId: "typed", storeRoot });
+  assert.equal(direct.status, "legacy_unmapped");
+  assert.equal(result.status, "legacy_unmapped");
+  assert.equal(result.failure_code, direct.failure_code);
+});
+
 test("ensure-current returns typed no-write failures for dirty main and blocked main selection", async (t) => {
   const { root } = await fixture();
   t.after(() => rm(root, { recursive: true, force: true }));

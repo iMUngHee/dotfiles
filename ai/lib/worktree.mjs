@@ -893,8 +893,13 @@ export async function ensureSession({ root = process.cwd(), tool, sessionId, sto
   }
 
   if (state.result.status === "unbound" && !samePath(state.result.checkout_root, state.result.main_root)) {
-    await ensureCurrent({ root: state.result.checkout_root });
+    const adoption = await ensureCurrent({ root: state.result.checkout_root });
     state = await resolveSessionState({ root: state.result.checkout_root, tool, sessionId, storeRoot });
+    // A refused adoption must reach the prompt adapter as its typed failure; resolving again
+    // would report the same checkout as plainly unbound.
+    if (adoption.status === "legacy_unmapped" && state.result.status === "unbound") {
+      return { ...adoption, tool, session_id: sessionId, binding_status: "unbound" };
+    }
   }
   return state.result;
 }
