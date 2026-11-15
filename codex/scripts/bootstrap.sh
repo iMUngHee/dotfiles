@@ -95,9 +95,9 @@ trap 'rm -f "$TEMPLATE_EXPANDED"' EXIT
 sed "s|tmux-__UID__|tmux-$(id -u)|g" "$TEMPLATE" > "$TEMPLATE_EXPANDED"
 TEMPLATE="$TEMPLATE_EXPANDED"
 
-# pager is an external binary this repo installs only on Windows, so declaring
-# [mcp_servers.pager] unconditionally makes every Codex session on a fresh
-# macOS/Linux machine try to spawn a missing command. Mirror the Claude surface,
+# pager is an external binary the platform bootstraps build, and a build can be
+# skipped (no Go toolchain), so declaring [mcp_servers.pager] unconditionally
+# makes every Codex session on such a machine try to spawn a missing command. Mirror the Claude surface,
 # which registers it only when the binary is present. Stripping the template
 # alone is not enough — the deep merge keeps target-only keys, so an entry a
 # previous deploy wrote would survive; DEL_KEYS removes it from the result too.

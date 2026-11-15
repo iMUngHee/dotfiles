@@ -1,6 +1,6 @@
 ---
 name: ask-codex
-description: "Delegate a free-form instruction to Codex CLI in read-only headless mode and surface its answer when the user explicitly wants a second opinion from Codex. Skip when Claude should answer directly, when the question depends on unseen session state, for trivial lookups, and while another skill is mid-flight."
+description: "Delegate a free-form instruction to Codex CLI in read-only headless mode and surface its answer when the user explicitly wants a second opinion from Codex. Skip when Claude should answer directly, when the question depends on unseen session state, for trivial lookups, and while another skill is mid-flight, except a plan-review reviewer round."
 argument-hint: "<free-form instruction for Codex>"
 allowed-tools: Bash
 disable-model-invocation: false

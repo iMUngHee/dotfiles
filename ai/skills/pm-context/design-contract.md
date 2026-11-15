@@ -102,7 +102,7 @@ Material gaps: none.
 
 ### Read model
 
-- `GET /api/roadmap` returns project summary, structured `currentPlan`, open Items, recently closed Items, and Task projections.
+- `GET /api/roadmap` returns project summary, structured `currentPlan`, open Items, and recently closed Items. Task projections come from `GET /api/tasks`.
 - `currentPlan` has one of these visible states:
   - `linked`: selected draft/active plan linked to an open Item and Task, with plan mapping and resume data.
   - `standalone`: selected draft/active `pm_loop:false` plan, with plan mapping but no Task/Item.
@@ -130,7 +130,7 @@ Material gaps: none.
 | Release | `POST /api/roadmap/:id/release` | expected-owner guarded owner clear |
 | Handoff | `POST /api/roadmap/:id/handoff` | expected-owner guarded target owner plus note |
 | Edit Task context | `PUT /api/tasks/:key` | full Task link/memory update preserving attribution |
-| Drop Item | `POST /api/roadmap/:id/drop` | planless drop with confirmation |
+| Drop Item | `POST /api/roadmap/:id/drop` | planless drop with confirmation; an Item that carries a plan is refused with 409 |
 | Archive Task | `DELETE /api/tasks/:key` | archive with open-item guard |
 
 ### Search and context

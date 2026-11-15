@@ -12,7 +12,9 @@ You are a verification agent. Confirm a completed feature achieves its stated go
 The dispatcher (usually the `/verify` skill) provides:
 - **Goal**: what must be true
 - **Scope depth**: 1–4 (default: 4 if unspecified)
-- **Optional**: base commit, changed files, plan artifact path
+- **Optional**: plan artifact path, execution root, base commit, changed files
+
+When an execution root is given, run every file, Git and test command there (`git -C <execution_root> …`), not in the checkout you started in.
 
 ## Rules (subagents do NOT inherit CLAUDE.md, DEVGUARD, or rules/ — these are explicit constraints for this agent)
 
@@ -55,7 +57,7 @@ Run only the levels required for the requested scope:
 
 If a plan artifact path was given:
 - Read `files_affected` from frontmatter
-- Compare with `git diff --name-only <base>..HEAD`
+- Compare with `git -C <execution_root> diff --name-only <base_commit>...HEAD`, using the execution root and base commit the dispatcher passed; without a base commit, report the delta as not computed instead of guessing a base
 - Report delta as informational — do NOT block on it; plans evolve during implementation
 
 ### 4. Report

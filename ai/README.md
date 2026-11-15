@@ -20,6 +20,9 @@ ai/
 │   ├── vendor.sh               # Run by hand and after every pull — checks / syncs vendored code (archify, rea, eli5) outside the repo
 │   └── vendor.manifest         # What vendor.sh manages; machine-only entries live outside the repo
 └── lib/
+    ├── worktree.mjs            # Managed-worktree and session-binding engine (worktree skill, prompt hooks)
+    ├── owner-lock.mjs          # Token-owned directory lock shared by the engine and the pm-roadmap store
+    ├── *.test.mjs              # Contract and engine tests (`node --test ai/lib/*.test.mjs`)
     ├── verify-no-residual-tokens.sh
     └── verify-agents-md-size.sh
 ```
@@ -40,7 +43,7 @@ Files under `ai/` use double-mustache placeholders for tool-varying paths/names.
 
 Codex's AGENTS.md is built by sed-expanding these tokens at concat time (decisive). Claude's deploy keeps tokens intact and the model handles substitution in-context (live-validated 5/5 on tool calls).
 
-Shared skill artifacts use repo-local `.agents/plans`, `.agents/state`, and `.agents/tasks/<KEY>/` (per-task backlog/closed/links/memory — the task-first pm model; gitignored). Codex skill discovery uses `.agents/skills`; keep all of these as siblings, never inside `.agents/skills`.
+Shared skill artifacts use repo-local `.agents/plans`, `.agents/state`, and `.agents/tasks/<KEY>/` (per-task backlog/closed/links/memory — the task-first pm model; kept out of git). Codex skill discovery uses `.agents/skills`; keep all of these as siblings, never inside `.agents/skills`.
 
 ## Project-management loop (pm-*)
 
@@ -52,7 +55,7 @@ Four shared skills form one project-management system over those `.agents/` arti
         retro closes the loop: plan done → close backlog item, harvest defers + decisions
 ```
 
-`pm-context` owns per-task links (`.agents/tasks/<KEY>/links.md`), `pm-roadmap` owns the task-first backlog (`.agents/tasks/<KEY>/{backlog,closed}.md`, derived cross-task views — no single ROADMAP.md), `retro` owns per-task memory (`.agents/tasks/<KEY>/memory.md`) and the done transition, `design` reads all three and owns the plan. All `tasks/*` writes go through the `pm-roadmap` CLI → ops (lock + CAS). The `pm-context` GUI (`manage`) serves a unified dashboard (backlog + tasks + inline link editing) and reuses `pm-roadmap`'s TS modules.
+`pm-context` owns per-task links (`.agents/tasks/<KEY>/links.md`), `pm-roadmap` owns the task-first backlog (`.agents/tasks/<KEY>/{backlog,closed}.md`, derived cross-task views — no single ROADMAP.md), `retro` owns per-task memory (`.agents/tasks/<KEY>/memory.md`) and the done transition, `design` reads all three and owns the plan. All `tasks/*` writes go through the `pm-roadmap` CLI → ops (lock + atomic write). The `pm-context` GUI (`manage`) serves a unified dashboard (backlog + tasks + inline link editing) and reuses `pm-roadmap`'s TS modules.
 
 ## Deploy model
 
@@ -91,7 +94,8 @@ acceptable.
 Measured 2026-08-18: of the six deployed rules, the two carrying `paths:`
 (`rationalization.md`, `testing.md`) were absent from a Claude session whose changed files
 were only `.md` and `.manifest`, while the four without it were present. Both bodies were
-in `AGENTS.md`, with zero surviving `paths:` blocks.
+in `AGENTS.md`, with zero surviving `paths:` blocks. (`ai/rules/` holds eight rules now, and
+`portability.md` is a third path-scoped one; the measurement itself has not been repeated.)
 
 ## Skill naming
 
@@ -114,8 +118,8 @@ Local `ai/memory/private/*.md` files are discovered automatically after the mani
 
 When adding new content, decide where it belongs:
 
-- `ai/`: tool-agnostic. No slash commands, no subagent dispatch, no `EnterPlanMode`/`EnterWorktree`, no `~/.claude/`-only paths.
-- `claude/`: depends on Claude-specific systems (subagents, slash commands, hooks, settings.json permissions). Files use `claude-` prefix.
+- `ai/`: tool-agnostic. No dependence on one tool's own systems: custom slash commands (`claude/commands/`), subagent dispatch, `EnterPlanMode`/`EnterWorktree`, `~/.claude/`-only paths. Two things are not dependencies: `/<name>` written as shorthand for a shared skill (read it as "the `<name>` skill" on either tool), and a per-tool note beside a tool-neutral instruction — config-audit's test is to delete one tool from the file and see whether the advice still stands.
+- `claude/`: depends on Claude-specific systems (subagents, custom slash commands, hooks, settings.json permissions). Files use `claude-` prefix.
 - `codex/`: depends on Codex-specific systems (sandbox modes, `codex exec`, `~/.agents/skills/` discovery, `[mcp_servers.*]`). Files use `codex-` prefix.
 
 If unsure, default to `ai/` and tokenize tool-specific paths/names.
@@ -149,7 +153,7 @@ vendor.sh sync --all
 
 Machine-only entries — internal hosts, MCP servers carrying local patches — go in `~/.local/share/ai-vendor/private.manifest`: same format, outside this repo on purpose, so nothing in it can be committed by accident. vendor.sh never changes an existing `source` checkout: `sync` only runs its build there, and `check` reads it with lock-free, read-only git.
 
-`bootstrap.sh` never calls it, so deploys stay offline-safe. Every pull does: `githooks/post-merge` (and `post-rewrite` after a rebase pull) runs `check`, prints the table and syncs the `update` and `missing` rows by name. A pinned entry moves only when the manifest does; an `upstream moved` or `latest` note in its row is the cue to edit the manifest. An automatic rea update therefore runs `setup --yes` unreviewed too, and without `GHIDRA_INSTALL_DIR`, `JAVA_HOME` and `REA_JADX_MCP_JAR` exported (see step 3 below). A new machine needs the entries synced once after bootstrap; until then the diagram router falls back to Mermaid and eli5 and rea are simply absent. `sync --all` includes rea, whose `setup --yes` edits `~/.claude.json` and `~/.codex/config.toml` with no review step — to look first, sync the others by name and preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (a positive whole number, default 20) and print `unreachable` instead of hanging; `AI_VENDOR_DIR` must be absolute. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
+`bootstrap.sh` never calls it, so deploys stay offline-safe. Every pull does: `githooks/post-merge` (and `post-rewrite` after a rebase pull) runs `check`, prints the table and syncs the `update` and `missing` rows by name. A pinned entry moves only when the manifest does, with one exception: when upstream re-points the pinned tag itself the row reads `update (tag moved)` and the hook syncs it like any other update. Otherwise an `upstream moved` or `latest` note in its row is the cue to edit the manifest. An automatic rea update therefore runs `setup --yes` unreviewed too, and without `GHIDRA_INSTALL_DIR`, `JAVA_HOME` and `REA_JADX_MCP_JAR` exported (see step 3 below). A new machine needs the entries synced once after bootstrap; until then the diagram router falls back to Mermaid and eli5 and rea are simply absent. `sync --all` includes rea, whose `setup --yes` edits `~/.claude.json` and `~/.codex/config.toml` with no review step — to look first, sync the others by name and preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (a positive whole number, default 20) and print `unreachable` instead of hanging; `AI_VENDOR_DIR` must be absolute. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
 
 ### Bringing another machine up to date
 

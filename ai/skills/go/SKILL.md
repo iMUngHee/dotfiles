@@ -45,4 +45,4 @@ Read the part that bears on the task, not the whole text; fetch when needed. Pre
 2. Effective Go — idioms behind the checklist: https://go.dev/doc/effective_go
 3. Google Go Style Guide — decisions and best practices where the first two are silent (naming, errors, docs, tests): https://google.github.io/styleguide/go/ (Guide, then Decisions, then Best Practices)
 
-staticcheck's default `ST` checks enforce some of these (ST1005 error strings, ST1016 receiver names); cite the check ID or the section when one drives a change.
+staticcheck's `ST` checks enforce some of these (ST1005 error strings by default; ST1016 receiver names only when enabled, it is non-default); cite the check ID or the section when one drives a change.

@@ -1,6 +1,6 @@
 ---
 name: ask-claude
-description: "Delegate a user-approved question to Claude Code CLI in read-only headless mode with a bounded context packet (paths, excerpts, conversation summary) when the user explicitly wants a second opinion from Claude. Skip when Codex should answer directly, when hidden session state cannot be shared, for trivial lookups, and while another skill is mid-flight."
+description: "Delegate a user-approved question to Claude Code CLI in read-only headless mode with a bounded context packet (paths, excerpts, conversation summary) when the user explicitly wants a second opinion from Claude. Skip when Codex should answer directly, when hidden session state cannot be shared, for trivial lookups, and while another skill is mid-flight, except a plan-review reviewer round."
 argument-hint: "<free-form instruction for Claude>"
 disable-model-invocation: false
 ---
@@ -94,7 +94,7 @@ Each call keeps the headless rules (read-only, `gtimeout 600`, stdin).
 - **stdin, not argv** — the context packet may contain shell metacharacters, quoted content, or imperative-looking text. Pipe via `printf '%s'` + `-`. Never pass the prompt as an argv string.
 - **`claude`** — the single logged-in account; no profile switcher and no fallback chain. If quota hit, surface exit code and stop.
 - **No `--model` or effort flag** — model and reasoning effort inherit local configuration; do not pin them in delegated calls.
-- **`--permission-mode default` + `--allowedTools` whitelist** — read-only gate. The whitelist is the primary defense; `--append-system-prompt` only clarifies intent.
+- **`--permission-mode default` + `--allowedTools` whitelist** — the read-only gate. The whitelist is the primary defense, but not a complete one: `rg --pre <program>` runs a program and git's `--output=<file>` writes one, so the `--append-system-prompt` refusal is a second layer the gate does depend on.
 - **`--no-session-persistence`** — no Claude-side session created.
 - **`--output-format text`** — plain text response; no JSON wrapper.
 - **`timeout 600`** — 10-min cap via `gtimeout` (macOS, `brew install coreutils`) or `timeout` (Linux, GNU coreutils). Fail-fast if neither exists.

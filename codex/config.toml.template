@@ -75,9 +75,11 @@ extends = ":workspace"
 # hand on the Mac, absent on every new machine, with nothing to notice the gap.
 # The deep-merge enforces only this key, so node_repl and cua_repl survive.
 #
-# pager itself is NOT installed by this repo on macOS/Linux — only
-# windows/scripts/install-pager.ps1 builds it (upstream: github.com/iMUngHee/pager,
-# `make build` → ~/.local/bin/pager). So this block is conditional at deploy time:
+# pager is built from source by the platform bootstraps (upstream:
+# github.com/iMUngHee/pager → ~/.local/bin/pager): ensure_pager in
+# lib/agent-clis.sh on macOS/Linux, windows/scripts/install-pager.ps1 on Windows.
+# A build can still be skipped (no Go toolchain) or the AI deploy run on its own,
+# so this block is conditional at deploy time:
 # codex/scripts/bootstrap.sh drops it when the binary is absent, mirroring the
 # `command -v pager` guard claude/scripts/bootstrap.sh applies on the Claude side.
 [mcp_servers.pager]
@@ -128,7 +130,7 @@ command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bas
 statusMessage = "pager delivery"
 
 # gaebu: team position cards and user-prompt evidence (github.com/iMUngHee/gaebu).
-# Same three events as pager plus Stop, where gaebu only stamps the turn end
+# Same two events as pager, plus Stop, where gaebu only stamps the turn end
 # and prints nothing (Codex ignores additionalContext on Stop anyway).
 [[hooks.UserPromptSubmit.hooks]]
 type = "command"
@@ -166,7 +168,7 @@ command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bas
 statusMessage = "pager delivery"
 
 # gaebu: team position cards and user-prompt evidence (github.com/iMUngHee/gaebu).
-# Same three events as pager plus Stop, where gaebu only stamps the turn end
+# Same two events as pager, plus Stop, where gaebu only stamps the turn end
 # and prints nothing (Codex ignores additionalContext on Stop anyway).
 [[hooks.SessionStart.hooks]]
 type = "command"
@@ -185,7 +187,7 @@ command_windows = "pwsh.exe -NoProfile -File \"$HOME/.config/codex/hooks/run-bas
 statusMessage = "codex final gate"
 
 # gaebu: team position cards and user-prompt evidence (github.com/iMUngHee/gaebu).
-# Same three events as pager plus Stop, where gaebu only stamps the turn end
+# Same two events as pager, plus Stop, where gaebu only stamps the turn end
 # and prints nothing (Codex ignores additionalContext on Stop anyway).
 [[hooks.Stop.hooks]]
 type = "command"

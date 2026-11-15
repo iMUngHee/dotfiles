@@ -8,7 +8,7 @@ disable-model-invocation: false
 
 Analyze the recent work and close the loop — consolidate learnings into the task store, not accumulate.
 
-Range: $ARGUMENTS (if empty, default to HEAD~5)
+Range: $ARGUMENTS (if empty, default to HEAD~5..HEAD)
 
 ## System — role in the pm-* loop
 
@@ -20,7 +20,7 @@ Range: $ARGUMENTS (if empty, default to HEAD~5)
         retro: on a landed plan → close the pm-roadmap item, harvest follow-up workable units → backlog, harvest durable decisions → that task's MEMORY
 ```
 
-So retro feeds **memory** and **backlog** back into the loop. The close is **one atomic transaction** — the `pm-roadmap.ts complete` CLI (→ `completePlanFromRetro`): plan → terminal status, the backlog item → `closed.md`, the plan's structured `## Deferred` block harvested into the task backlog, and the `current.txt`/`focus` pointers cleared, all-or-nothing. Memory (durable per-task decisions/learnings) is **retro's domain — retro is its primary writer** — distinct from `pm-context`'s links and from a plan's Post-Impl Notes. Stored per-task at `.agents/tasks/<KEY>/memory.md`, written through the `pm-roadmap.ts memory add` CLI (lock+CAS via ops) — **never hand-edited**; the `pm-context` manage GUI is the other writer.
+So retro feeds **memory** and **backlog** back into the loop. The close is **one atomic transaction** — the `pm-roadmap.ts complete` CLI (→ `completePlanFromRetro`): plan → terminal status, the backlog item → `closed.md`, the plan's structured `## Deferred` block harvested into the task backlog, and the matching `current.txt` pointers cleared, all-or-nothing. Memory (durable per-task decisions/learnings) is **retro's domain — retro is its primary writer** — distinct from `pm-context`'s links and from a plan's Post-Impl Notes. Stored per-task at `.agents/tasks/<KEY>/memory.md`, written through the `pm-roadmap.ts memory add` CLI (lock + atomic write via ops) — **never hand-edited**; the `pm-context` manage GUI is the other writer.
 
 ## Current Context
 - Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
@@ -95,7 +95,7 @@ CLI setup (one block; `<id>` = the plan's frontmatter `id`):
 repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
 (cd $HOME/.config/ai/skills/pm-roadmap && [[ -d node_modules ]] || npm install)
 pm() { PM_ROOT="$repo_root" $HOME/.config/ai/skills/pm-roadmap/node_modules/.bin/tsx $HOME/.config/ai/skills/pm-roadmap/pm-roadmap.ts "$@"; }
-pm get <id>   # resolves the owning task KEY + confirms the item is still open (linked path)
+pm get <id>   # resolves the owning task KEY; `"closed": false` in the output means the item is still open (linked path)
 ```
 
 `## Deferred` block grammar (harvested by `complete`; ids must be fresh kebab-case — a collision aborts the whole close):
@@ -113,24 +113,25 @@ pm get <id>   # resolves the owning task KEY + confirms the item is still open (
   pm complete <KEY> <id> --plan <plan-path> --status done       # done path
   pm complete <KEY> <id> --plan <plan-path> --status dropped --reason "<why abandoned>"   # dropped path
   ```
-  `complete` journals plan status, item close, and Deferred harvest together, then
-  clears exact matching pointers best-effort. **Do NOT hand-edit plan status or
+  `complete` journals plan status, item close, Deferred harvest, and the exact matching
+  pointer clears in one transaction. **Do NOT hand-edit plan status or
   current.** Preconditions fail before the journal is prepared.
 - **Standalone (`pm_loop:false`)**:
   ```bash
   pm complete --standalone --plan <plan-path> --status done
-  pm complete --standalone --plan <plan-path> --status dropped --reason "<why abandoned>"
+  pm complete --standalone --plan <plan-path> --status dropped
   ```
-  This journals the plan-only transition and performs the same exact all-worktree
+  A standalone plan has no backlog item to carry a `Reason`, so `--reason` is ignored
+  here — record why it was abandoned in `## Post-Implementation Notes`. This journals the plan-only transition and performs the same exact all-worktree
   pointer cleanup. Never edit status or current directly.
 
 **Harvest durable decisions → task memory**: for each decision/gotcha worth recalling next session, write it to the task's memory store via the CLI (a separate write, outside the close transaction):
 ```bash
 pm memory <KEY> add "<note title>" --note "<one-line decision>" --date <YYYY-MM-DD>
 ```
-This upserts (by title) `.agents/tasks/<KEY>/memory.md` through ops (lock+CAS) — **never hand-edit it**. Surfaced in `pm next` prompts and item context.
+This upserts (by title) `.agents/tasks/<KEY>/memory.md` through ops (lock + atomic write) — **never hand-edit it**. Surfaced in `pm next` prompts and item context.
 
-**Harvest review lessons → repo lessons file**: task memory is scoped to one task, but a critique about *how code is written* outlives it. Hand those to the `review-lessons` skill, which owns `.agents/review-lessons.md`:
+**Harvest review lessons → repo lessons file**: task memory is scoped to one task, but a critique about *how code is written* outlives it. Hand those to the `review-lessons` skill, which owns `.agents/review-lessons.md` in the main checkout:
 
 - **LOCAL entries** — anything the user critiqued about the code this session that would change how future code is written (a naming rule, a missed guard, a util that should have been reused). Record the reasoning they gave, not just the instruction. Skip one-off corrections tied to a line that will never recur.
 - **Collection refresh** — if the file is missing, or its `Collected` date is over 30 days old, run a full collection: PRs from this work have since been reviewed, and the skill re-evaluates existing entries in the same pass.

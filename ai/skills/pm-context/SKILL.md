@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Manage per-task document links. **Project-scoped**: stored per task at `<git-root>/.agents/tasks/<KEY>/links.md`, where the git root is `git rev-parse --show-toplevel`. Refuse outside a git repo. There is no pm-context-owned active-task pointer — an agent's **current Task** is derived from its validated session-bound plan, while `pm-roadmap.ts current-task` remains a launcher/dashboard projection only.
 
-`.agents/tasks/` is **gitignored** (task links may carry internal URLs); the gitignore line is ensured by the pm-roadmap store, not by this skill. **All writes to `links.md` go through the pm-roadmap CLI → ops (lock + CAS) — never hand-edit the markdown.** pm-context's job is the fetch + trigger/summary extraction; it then persists the result via `links <KEY> add|remove`.
+`.agents/tasks/` must stay **out of git** (task links may carry internal URLs). This skill does not write the ignore entry: `pm-roadmap`'s `migrate --apply` (`.agents/.gitignore`) and the worktree engine's `ensure` (the Git-common `info/exclude`) do, so in a repo that used neither, confirm `.agents/tasks/` is ignored before the first `add`. **All writes to `links.md` go through the pm-roadmap CLI → ops (lock + atomic write) — never hand-edit the markdown.** pm-context's job is the fetch + trigger/summary extraction; it then persists the result via `links <KEY> add|remove`.
 
 CLI setup (one block; capture the git root, install once):
 
@@ -94,7 +94,7 @@ Add a single link to a task without starting the GUI, then auto-fetch its Summar
 
    On fetch failure (network, permission, 404): Summary `(fetch 실패)`, Triggers empty.
 
-6. Persist the entry through the CLI (single write path — lock + CAS via ops; never hand-edit `links.md`):
+6. Persist the entry through the CLI (single write path — lock + atomic write via ops; never hand-edit `links.md`):
 
    ```bash
    pm links <KEY> add "<LABEL>" --url "<URL>" --triggers "<comma-separated keywords>" --summary "<one-line summary>"
@@ -181,7 +181,7 @@ Open the web GUI for full link management (Label, URL, Triggers, Summary).
    ```bash
    kill $(lsof -ti:8484 2>/dev/null) 2>/dev/null
    ```
-7. Reconcile: for each task, walk entries with empty Summary OR empty Triggers and run the `annotate <KEY>` flow. Per `annotate` rules, only empty fields are filled — populated Triggers stay intact.
+7. Reconcile: for each task, walk entries with empty Summary OR empty Triggers and run the `annotate <KEY>` flow. Per `annotate` rules, Summary is always replaced with the fresh one, while populated Triggers stay intact.
 
 ## Fetch Routing
 
@@ -217,7 +217,7 @@ A task's context has **two parts**: external **Links** (`links.md`, this skill) 
 ```
 
 **Field rules:**
-- `Label`: required, **case-insensitive unique** within file (the CLI upserts by case-folded label), max 80 char, used as the block id / join key — free of `*` and newlines (the CLI rejects those)
+- `Label`: required, **case-insensitive unique** within file (the CLI upserts by case-folded label), used as the block id / join key — free of `*` and newlines (the CLI rejects those)
 - `URL`: required, must match `https?://` (the CLI rejects non-http), **unique within file** (the CLI rejects a URL already linked under another label)
 - `Triggers`: optional, comma-separated keyword list (5-13 recommended — see `add` step 5)
 - `Summary`: optional, single-line
@@ -228,7 +228,7 @@ A task's context has **two parts**: external **Links** (`links.md`, this skill) 
 - Sub-bullet `  - Key: Value` populates a field (Key is case-insensitive, value is trimmed)
 - Unknown sub-bullet keys are ignored (forward compatibility)
 - Sub-bullets without a parent are ignored
-- The `add`/`remove`/`annotate` subcommands (including the `manage` reconcile pass, which reuses `annotate`) match **link entries only**, and **all of their writes go through `pm links <KEY> add|remove`** (lock + CAS via ops) — never a direct markdown edit. Memory is a separate file with its own writers (/retro, GUI).
+- The `add`/`remove`/`annotate` subcommands (including the `manage` reconcile pass, which reuses `annotate`) match **link entries only**, and **all of their writes go through `pm links <KEY> add|remove`** (lock + atomic write via ops) — never a direct markdown edit. Memory is a separate file with its own writers (/retro, GUI).
 
 ## Current task (no pm-context pointer)
 
@@ -237,9 +237,9 @@ For agent flows, the current Task is **derived** from the validated session-boun
 ## Rules
 
 - All Bash commands are pre-authorized via `allowed-tools` frontmatter — no user confirmation needed
-- **Never hand-edit `tasks/<KEY>/links.md` — every write goes through `pm links <KEY> add|remove` (lock + CAS via ops).** That is the single write path; the GUI `manage` is the other writer (also via ops)
+- **Never hand-edit `tasks/<KEY>/links.md` — every write goes through `pm links <KEY> add|remove` (lock + atomic write via ops).** That is the single write path; the GUI `manage` is the other writer (also via ops)
 - The web GUI in `manage` writes the full schema (Label/URL/Triggers/Summary). The skill's `add` auto-extracts both Summary and Triggers from page content; the user can refine Triggers in the GUI afterward
 - `annotate` overwrites Summary unconditionally. Triggers are auto-extracted only when empty; populated Triggers are preserved unless `--regen-triggers` is passed
 - Task keys: uppercase alphanumeric, underscores, hyphens (`^[A-Z0-9_-]+$`) — enforced at every entry surface (skill subcommands, the CLI/ops, server API endpoints, GUI forms) before filesystem access
 - On fetch failure, write `(fetch 실패)` as the Summary — never skip the entry
-- Label/URL uniqueness is enforced by the `links add` CLI → ops (case-insensitive label upsert, unique URL per task — throws on a cross-label URL dup) and pre-checked by the skill's `add` (suggests a `Wiki-2` suffix on collision). The GUI `manage` is a full-state editor (links + memory written together via `ops.updateTaskLinks`); there is no per-link HTTP 409 in the new model
+- Label/URL uniqueness is enforced by the `links add` CLI → ops (case-insensitive label upsert, unique URL per task — throws on a cross-label URL dup) and pre-checked by the skill's `add` (suggests a `Wiki-2` suffix on collision). The GUI `manage` is a full-state editor: one save validates links and memory together, then writes them as two separate locked ops (`ops.updateTaskLinks`, then `ops.updateTaskMemory`), and it does not apply the `links add` http(s) or uniqueness checks; there is no per-link HTTP 409 in the new model

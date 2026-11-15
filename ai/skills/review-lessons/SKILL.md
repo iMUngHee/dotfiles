@@ -1,6 +1,6 @@
 ---
 name: review-lessons
-description: "Own .agents/review-lessons.md: record a LOCAL lesson, collect review feedback from the user's own past PRs, and re-evaluate every existing entry so the file stays current without anyone curating it. TRIGGER: from /retro — always for LOCAL harvest, and for a full collection when the file is missing or its Collected date is over 30 days old. SKIP: a consumer that only needs to read the file, a session with no code and no critique, gh unauthenticated."
+description: "Own .agents/review-lessons.md: record a LOCAL lesson, collect review feedback from the user's own past PRs, and re-evaluate every existing entry so the file stays current without anyone curating it. TRIGGER: from /retro — always for LOCAL harvest, and for a full collection when the file is missing or its Collected date is over 30 days old. SKIP: a consumer that only needs to read the file, a session with no code and no critique, a collection while gh is unauthenticated (a LOCAL record needs no network)."
 allowed-tools: Bash, Read, Write, Edit
 disable-model-invocation: false
 ---
@@ -30,8 +30,12 @@ Stop with a plain message if any of these fail — never write a partial file.
 
 ```bash
 git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "not in a git repo"; exit 1; }
-gh auth status >/dev/null 2>&1        || { echo "gh not authenticated"; exit 1; }
+gh auth status >/dev/null 2>&1        || { echo "gh not authenticated"; exit 1; }   # collection only
 ```
+
+Recording a `LOCAL` entry touches no network: it needs only the git check, then goes straight
+to §6 and §7. The `gh` check and §2–§5 belong to a collection run; when `gh` is
+unauthenticated, still record the LOCAL entries and report the collection as skipped.
 
 Derive every identifier from the remote rather than hardcoding it — this skill lives in a
 public repository and must carry no organisation-specific host, slug, account, or PR number,
@@ -150,11 +154,20 @@ marked `Source: LOCAL`.
 
 ## 7. Write the output
 
-Path: `<repo-root>/.agents/review-lessons.md`. This sits under the gitignored `.agents/`
-directory, so it stays local and per-repo. It may contain internal PR numbers and reviewer
-names; the skill itself must not.
+Path: `<main-root>/.agents/review-lessons.md`, where `<main-root>` is the main checkout, not
+the worktree the session happens to run in — one file per repository, read the same from
+every worktree:
 
-Three sections, so a collected point is not silently promoted into a standing rule:
+```bash
+main_root="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+git -C "$main_root" check-ignore -q .agents/review-lessons.md || echo "not ignored"
+```
+
+The file may contain internal PR numbers and reviewer names (the skill itself must not), so
+it must stay out of git. Nothing here adds the ignore entry: when the check prints
+`not ignored`, write the file and tell the user it needs one.
+
+Four sections, so a collected point is not silently promoted into a standing rule:
 
 - **Adopted** — consumers apply these. An entry lands here on its own evidence, without
   waiting for approval:
@@ -198,6 +211,10 @@ Excluded: bot accounts (<list>)
 
 ### <suggestion> — rejected in #<num>
 - Why: <the reasoning that settled it>
+
+## Superseded
+
+- <one-line lesson> → <path of the project rule that now owns it>
 ```
 
 Classify every entry, because frequency alone does not make a point correct — a defect raised
@@ -233,7 +250,7 @@ Then, on each run:
 | `Verify` returns N > 0 | `active` — record the count. A large count is the strongest priority signal the file carries |
 | `Verify: none`, absent from the new sample | **Keep as is.** Silence may mean it is followed, or that nobody touched that code. Never delete on absence alone |
 | The same point is raised again in new PRs | Increment `Seen in`; recompute the Adopted bar |
-| A written project rule now covers it (`grep -rn '<lesson keyword>' ai/rules/`) | `superseded` — replace the body with a one-line pointer to the rule. The rule is authoritative; a duplicate lesson competes with it |
+| A written project rule now covers it (`grep -rn '<lesson keyword>'` over this repository's own rule and convention files — its instructions file, `rules/`, `CONVENTIONS.md`, lint config) | `superseded` — replace the body with a one-line pointer to the rule. The rule is authoritative; a duplicate lesson competes with it |
 | The API or structure it depended on is gone | Remove, naming what disappeared |
 | New evidence contradicts it | Narrow the condition or move it to `open`. Never overwrite quietly |
 

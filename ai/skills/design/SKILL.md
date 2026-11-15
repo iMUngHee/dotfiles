@@ -225,17 +225,17 @@ PLAN
 
 ### 6. Backlog linkage invariants
 
-Step 5.5 already wrote the linkage; these are the rules it satisfies — all enforced by ops (a violation throws, it is never silently written):
+Step 5.5 already wrote the linkage; these are the rules it satisfies. Ops enforce the 1:1 link, id reuse and inbox rules (a violation throws, it is never silently written); the status mirror is kept by the lifecycle commands and checked by `pm validate` (C4); `id == plan slug` is the persist convention and nothing checks it, so the lower-level `plan` command can break it:
 
 - **id == plan slug**, and **one item per plan path** (`Plan:` 1:1 across every task's backlog + closed). `persist`/`plan` reject a duplicate plan link or a reused id.
 - The backlog item **Status mirrors the plan** (`draft` at persist; `active` after `승인`).
-- A **real task `<KEY>` is required** — an inbox item is untriaged and cannot carry a plan or be made in-flight. Triage it first (`pm triage <id> <KEY>`); `persist`/`plan`/`focus` reject inbox items.
+- A **real task `<KEY>` is required** — an inbox item is untriaged and cannot carry a plan or be made in-flight. Triage it first (`pm triage <id> <KEY>`); `persist`/`plan` reject inbox items.
 
 Skip for a standalone (`pm_loop: false`) plan — it has no backlog item.
 
 ### 7. Archive aged plans
 
-**After** linkage (the new plan is current + linked and won't be touched), run the deterministic archiver to keep `{{PLAN_DIR}}/` small. It moves **terminal** (`done`/`dropped`) plans **≥ 30 days old** that are **unreferenced** (not named by `current.txt`, not any backlog item's `Plan:`) into `{{PLAN_DIR}}/archive/`, and rewrites each task's `closed.md` `Plan:` pointer so closed-join / GUI still resolve. Reference-protected and idempotent (safe to re-run; recovers a crash between move and pointer rewrite). The just-saved `draft` plan is never archived (it is current + non-terminal). No-ops on a repo with no task store.
+**After** linkage (the new plan is current + linked and won't be touched), run the deterministic archiver to keep `{{PLAN_DIR}}/` small. It moves **terminal** (`done`/`dropped`) plans **≥ 30 days old** that are **unreferenced** (not named by `current.txt`, not any backlog item's `Plan:`) into `{{PLAN_DIR}}/archive/`, and rewrites each task's `closed.md` `Plan:` pointer so closed-join / GUI still resolve. Reference-protected and idempotent (safe to re-run; recovers a crash between move and pointer rewrite). The just-saved `draft` plan is never archived (it is current + non-terminal). A repo with no task store still gets its aged terminal plans moved; only the pointer rewrite has nothing to do.
 
 ```bash
 repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
@@ -306,7 +306,7 @@ After this session is bound to a `draft` plan, watch for explicit user replies t
 Standalone plans use `pm approve --standalone --plan <path>` and
 `pm complete --standalone --plan <path> --status dropped`. Both use the shared journal.
 
-> The `done` transition is **delegated to `/retro`**. `/retro` Phase 5 closes the plan + item via the `complete` transaction together with `## Post-Implementation Notes`. Do NOT add a `완료` / `done` natural-language trigger here.
+> The `done` transition is **delegated to `/retro`**. `/retro` step 4 (Apply) closes the plan + item via the `complete` transaction together with `## Post-Implementation Notes`. Do NOT add a `완료` / `done` natural-language trigger here.
 
 > A parked plan becomes eligible through explicit `pm select --plan <path>` after its
 > mapped target current is validated. Never hand-edit the launcher pointer.

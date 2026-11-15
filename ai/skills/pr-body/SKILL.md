@@ -56,7 +56,7 @@ Fallback for unusual merge topology:
 git log --no-merges --oneline <base>..HEAD
 ```
 
-These are the ONLY commits to consider. A massive `git show <merge-commit>` diff is sync-merged code from base — SKIP it (do not summarize it).
+These are the ONLY commits to consider. `git show <merge-commit>` prints a combined diff: only lines that differ from both parents, which is what the merge itself authored (a conflict resolution) — review those. The full sync-merged diff (`git show -m` or `--first-parent -p`) is code from base — SKIP it (do not summarize it).
 
 ### 4. Review per-commit changes
 

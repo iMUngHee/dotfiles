@@ -5,7 +5,9 @@ looked at by the agent that built it catches almost nothing: the image reaches y
 down, so a few pixels of misalignment vanish, and you see what you intended. Every step here
 exists to get around one of those two limits.
 
-Scripts are in `../scripts/` relative to this file. They have no dependencies beyond Node.
+Scripts are in `../scripts/` relative to this file. The `.mjs` scripts have no dependencies
+beyond Node; `measure-dom.js` runs inside the page, and `measure-uia.ps1` needs PowerShell
+(`pwsh`) on Windows.
 
 ## 0. Capture
 
@@ -70,7 +72,8 @@ at that spot in a tile.
 node <skill>/scripts/style-census.mjs <ui source paths...>
 ```
 
-It lists every distinct colour, font size, weight, radius and spacing value in the UI
+It lists every distinct colour written as a hex, `rgb()`/`rgba()` or `Color.FromArgb`/`FromRgb`
+literal (named colours, `hsl()` and the like are not seen), font size, weight, radius and spacing value in the UI
 source, how often each is used, and which are near-duplicates of each other. Three greys a
 shade apart, a size used once, a radius that appears on one card only — each is either a
 deliberate token or an inconsistency. Fold the accidents into the direction's values. A

@@ -67,10 +67,10 @@ changes neither the contract nor any lifecycle state.
 **All verification runs inline by default** — including 5+ truth conditions and Level 3/4 depth. The steps below are self-contained; you never *need* a subagent, and there is no loss of coverage when running inline.
 
 As an **optional** speed-up, if a `verifier` subagent is installed in your environment you may offload broad verification to it purely to keep the main context clean — useful when verification would otherwise read many files or run a long test suite (goal spans multiple modules, Level 3/4 grep across 10+ files, etc.):
-- **Claude Code**: `Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Changed files: <optional>.")` — **only if that agent is present** (pm-skills does not bundle it).
-- **Codex CLI**: spawn a `codex exec` subprocess with the same focused prompt (Goal / Depth / Plan path / Changed files).
+- **Claude Code**: `Agent(subagent_type: "verifier", description: "<short>", prompt: "Goal: <...>. Depth: <1-4>. Plan path: <optional>. Execution root: <execution_root, when a plan resolved>. Base commit: <base_commit, when a plan resolved>. Changed files: <optional>.")` — **only if that agent is present** (pm-skills does not bundle it).
+- **Codex CLI**: spawn a `codex exec` subprocess with the same focused prompt (Goal / Depth / Plan path / Execution root / Base commit / Changed files).
 
-If no such agent is available, run every step inline — that is the default path. When you do dispatch, pass the plan path so the agent seeds truth conditions from the plan's `## Verifiable Success Criteria` (same as inline Step 1), and return its report directly — do NOT re-run checks inline after dispatch.
+If no such agent is available, run every step inline — that is the default path. When you do dispatch, pass the plan path with the resolved `execution_root` and `base_commit` — the agent starts in the caller checkout and cannot resolve the session itself — so the agent seeds truth conditions from the plan's `## Verifiable Success Criteria` (same as inline Step 1), and return its report directly — do NOT re-run checks inline after dispatch.
 
 ## Approach: Goal-backward
 

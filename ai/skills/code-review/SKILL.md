@@ -61,7 +61,7 @@ Fallback: if the branch has unusual merge topology and raw merge commits still a
 git log --no-merges --oneline <base>..HEAD
 ```
 
-These are the ONLY commits to review. When `git show <merge-commit>` produces a massive diff, that diff is the sync-merged code from base — SKIP it (per Step 5 Cross-verify).
+These are the ONLY commits to review. `git show <merge-commit>` prints a combined diff: only lines that differ from both parents, which is what the merge itself authored (a conflict resolution) — review those. The full sync-merged diff (`git show -m` or `--first-parent -p`) is code from base — SKIP it (per Step 5 Cross-verify).
 
 ### 2. Context Preflight
 
@@ -78,7 +78,7 @@ Convention source inventory
 - <source-id>: locator=<repository path> content=<compact relevant convention excerpt>
 ```
 
-Read available user scope, PR/Jira requirements, active-plan criteria, repository-local AGENTS/rules, and relevant project patterns. Add no network authority; record unavailable remote context instead. If `.agents/review-lessons.md` exists, read it as past review evidence, NOT as convention: its `Adopted` entries rank below every written project rule and never override one, `Candidates` are context only, and `Rejected points` must not be re-raised as findings. Its absence is recorded as absent — never a reason to collect, which is `/review-lessons`, the only network-touching step in that loop. Use code-graph support when available, falling back to repository search and language-native tools. Keep discovery relevant to the unique changed surfaces rather than auditing the whole repository.
+Read available user scope, PR/Jira requirements, active-plan criteria, repository-local AGENTS/rules, and relevant project patterns. Add no network authority; record unavailable remote context instead. If `.agents/review-lessons.md` exists in the main checkout (`$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")` — the repository root itself unless the review runs in a worktree), read it as past review evidence, NOT as convention: its `Adopted` entries rank below every written project rule and never override one, `Candidates` are context only, and `Rejected points` must not be re-raised as findings. Its absence is recorded as absent — never a reason to collect, which is `/review-lessons`, the only network-touching step in that loop. Use code-graph support when available, falling back to repository search and language-native tools. Keep discovery relevant to the unique changed surfaces rather than auditing the whole repository.
 
 Present the result before findings:
 

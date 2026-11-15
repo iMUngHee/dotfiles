@@ -41,7 +41,7 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
   state/  current.txt  actor.txt
 ```
 
-- **task.md**: `status: active | done | archived`. `done` when all items closed; auto-reopens
+- **task.md**: `status: active | done | archived`. `done` is set by `task done` (refused while items are open) or by `migrate` for a task with no open item; auto-reopens
   to `active` when a new item is added. `archived` = torn down (dir moved to `archive/`).
   `mode: solo | collab` (absence → solo; **always written** on create) + optional
   `collaborators:` (comma roster) — see Collaboration mode.
@@ -62,7 +62,9 @@ A **task** (`<KEY>`) is a first-class record — an epic/feature with a lifecycl
 ## Single write path
 
 **All mutations go through `pm-roadmap.ts` (CLI) → `ops.ts` (atomic, lock-guarded) → `store.ts`.**
-Skills/design/retro/GUI never hand-edit the markdown. Run the CLI:
+Skills/design/retro/GUI never hand-edit the markdown. One exception: the plan archiver
+(`archive.ts`) rewrites `closed.md` `Plan:` pointers directly, outside ops and its lock, in
+active and archived tasks alike. Run the CLI:
 
 ```bash
 repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
@@ -140,13 +142,13 @@ launcher/dashboard callers that do not claim ownership for an agent session.
   recorded path **or** `.agents/plans/archive/<basename>`, because the archiver rewrites that
   pointer *after* moving the file); and no other item's `DependsOn` may name it. `--force`
   relaxes **only** the plan guard — needed because `plan` cannot unlink a closed item, which
-  would otherwise strand it forever. Irreversible, and `tasks/` is gitignored: copy the file
+  would otherwise strand it forever. Irreversible, and `tasks/` is not in git: copy the file
   aside first. **Archived tasks are refused**, like every other item mutator — `archive/` is a
-  read-only tombstone. An id inside an archived task is still reserved, so to free it restore,
+  read-only tombstone (the plan archiver's `Plan:` pointer rewrite aside). An id inside an archived task is still reserved, so to free it restore,
   expunge, then re-archive: `task restore <KEY>` → `expunge <KEY> <id>` → `task archive <KEY>`
   (re-archiving requires the backlog to be empty, which it is if you only expunged).
-- **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock+CAS via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
-- **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock+CAS via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
+- **memory `<KEY> add <title>` [`--note T`] [`--date D`] [`--by W`]** — upsert a durable-decision note into `tasks/<KEY>/memory.md` (upsert by title; lock + atomic write via ops). The non-GUI memory write path — **/retro's durable-decision sink** (the GUI `manage` is the other writer). Date defaults to today. On **collab** tasks a `By` publisher is stamped from the resolved actor (`--by` overrides; collab + unresolvable identity → stop); solo tasks get no `By`.
+- **links `<KEY> add <label>` `--url U` [`--triggers C`] [`--summary S`] [`--by W`]** / **links `<KEY> remove <match>`** — upsert/remove a task's external link in `tasks/<KEY>/links.md` (case-insensitive label upsert; URL unique per task; lock + atomic write via ops). The **/pm-context** write path (the GUI `manage` is the other writer); pm-context does fetch + trigger/summary extraction, then persists via this CLI. On **collab** tasks a `By` publisher is stamped (same rule as memory); the GUI PUT preserves existing `By` (it doesn't author it).
 - **current-task** — read-only launcher/dashboard projection: prints the KEY linked to that checkout's selected launcher plan. Empty for no selection, standalone plans, stale plans, and terminal plans. Interactive agent consumers use `resolve-session` plus `pm get <plan-id>` instead; they never use this command as a session fallback.
 - **manage** — open the dashboard GUI (see below).
 
@@ -162,8 +164,10 @@ launcher/dashboard callers that do not claim ownership for an agent session.
 
 ## Invariants (validate)
 
-Errors: **C1** through **C15** preserve the existing id, plan-link, status, pointer,
-collaboration, and dependency contracts. **C16** rejects duplicate non-terminal worktree
+Errors: **C1**–**C7**, **C9**, **C11**, **C12**, **C14** and **C15** preserve the existing id,
+plan-link, status, pointer, collaboration, and dependency contracts (there is no C8).
+Warnings: **C10** (a duplicated `Order` within a task) and **C13** (an owner missing from
+the collaborators roster). **C16** rejects duplicate non-terminal worktree
 ownership and main-checkout execution mappings. **C17** reports any line in
 `backlog.md`/`closed.md`/`links.md`/`memory.md`/`_inbox.md` that belongs to no item block —
 including a heading superseded by a later `# ` — because the parser drops it and the next
@@ -197,7 +201,7 @@ TASK_CONTEXT_ROOT="$repo_root" ./node_modules/.bin/tsx server.ts   # run_in_back
 ```
 
 Then open `http://localhost:8484`. The dashboard derives its view from `tasks/*`; all its
-writes route through ops (planless drop, task links/memory edit, delete=archive). A
+writes route through ops (planless drop — an item that carries a plan is refused, task links/memory edit, delete=archive). A
 task-centric UI redesign is tracked separately (backlog `pm-dashboard-task-centric`).
 
 ## Collaboration mode
@@ -211,8 +215,8 @@ fields, lossless).
 **Identity.** Attribution resolves a person, precedence most-specific first:
 `--actor/--by flag > PM_ACTOR env > state/actor.txt (pm whoami) > git config user.email`. A collab
 operation that *requires* identity (claim, set-mode→collab, By/ClosedBy stamping) **stops with an
-error** when nothing resolves — it never writes an anonymous record. Identity is resolved by the
-**CLI only**; `ops.ts` stays pure (it receives a string), and `join.ts` never sees identity. On that
+error** when nothing resolves — it never writes an anonymous record. Identity is resolved at the
+**entry surface** — the CLI, and the `pm-context` server for a GUI claim; `ops.ts` stays pure (it receives a string), and `join.ts` never sees identity. On that
 stop, confirm the intended actor and re-run with `--actor <name>` (or set the identity once via the
 equivalent env/whoami step for your tool).
 
@@ -248,10 +252,10 @@ canonicalize shared writes to main as required.
   belongs in `.agents/plans/*.md`**, which has no grammar constraint; a task-memory note keeps
   a one-line summary plus the plan reference. This applies to the dashboard's memory/summary
   textareas too — a multi-line note there returns 409 with the reason.
-- **Never hand-edit `tasks/*` markdown — always go through the CLI/ops.** That is the single write path (lock + CAS + lossless serialize).
+- **Never hand-edit `tasks/*` markdown — always go through the CLI/ops.** That is the single write path (lock + atomic write + lossless serialize).
   One sanctioned exception: repairing C17 damage. A document that already carries lines outside
   any item block is refused by every writer (so the CLI cannot repair it), which makes that file
   read-only until a human folds the stranded text back into a field or moves it to a plan.
   Confirm the repair with `pm validate`. Other documents and tasks stay writable.
 - Reads (`list`/`tree`/`get`/`next`/`recent`/`validate`) are safe to auto-invoke; mutations come from lifecycle gates or explicit subcommands.
-- `tasks/` is gitignored (durability is the files themselves, not git).
+- `tasks/` is meant to stay out of git (durability is the files themselves, not git). Only `migrate --apply` (`.agents/.gitignore`) and the worktree engine's `ensure` (the Git-common `info/exclude`) write the ignore entry; a repo that used neither must ignore `.agents/tasks/` itself.

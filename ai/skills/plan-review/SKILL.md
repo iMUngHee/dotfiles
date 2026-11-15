@@ -72,6 +72,8 @@ Prefer a different model from the author session:
 3. If cross-model review is unavailable, use a same-tool fresh subagent/session when the environment supports one.
 4. If no automatic fresh reviewer can run, emit a manual handoff prompt.
 
+A plan-review run is itself the explicit request for a second opinion, so calling `ask-codex` or `ask-claude` from here is the one sanctioned use of those skills while another skill is mid-flight.
+
 Do not silently fall back to same-conversation self-review.
 
 ## Reviewer Verdict Template
