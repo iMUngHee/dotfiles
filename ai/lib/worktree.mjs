@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
@@ -871,7 +871,21 @@ export async function unbindSession({ root = process.cwd(), tool, sessionId, sto
 }
 
 export async function ensureSession({ root = process.cwd(), tool, sessionId, storeRoot } = {}) {
-  let state = await resolveSessionState({ root, tool, sessionId, storeRoot });
+  let state;
+  try {
+    state = await resolveSessionState({ root, tool, sessionId, storeRoot });
+  } catch (error) {
+    // Prompt adapters run in every directory a session opens, and outside a repository
+    // there is no plan to route. resolve-session fails there on purpose: the pm-band
+    // pane hides itself on that failure. LC_ALL=C keeps git's message untranslated. Only
+    // the "(or any parent ...)" form means no repository was found; a linked worktree whose
+    // gitdir is gone also says "not a git repository" and stays a visible failure.
+    const probe = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: root, encoding: "utf8", env: { ...process.env, LC_ALL: "C" } });
+    if (probe.status !== 0 && /not a git repository \(or any (of the )?parent/.test(probe.stderr ?? "")) {
+      return unboundSessionResult({ checkout: null, main: null, tool, sessionId, reason: "not_a_git_checkout" });
+    }
+    throw error;
+  }
   if (state.result.status === "ok") {
     const ensured = await ensureMappedCurrent({ result: state.result });
     return { ...ensured, tool, session_id: sessionId, binding_status: state.result.binding_status, binding_source: state.result.binding_source };

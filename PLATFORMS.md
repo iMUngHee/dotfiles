@@ -524,3 +524,10 @@ cannot run something; remove it in the commit that records the result.
       run it through bootstrap.ps1 under 5.1 in particular, since 5.1 turns a
       native command's stderr into errors under Stop and the guards around
       `rustup` and the version probe were checked only by reading.
+- [ ] **Linux / Windows (Git Bash)** — run `node --test ai/lib/worktree.test.mjs
+      ai/lib/inject-context-hooks.test.mjs` for the outside-git cases:
+      `ensure-session` answers `unbound` (`not_a_git_checkout`) only when git,
+      under `LC_ALL=C`, says `not a git repository (or any … parent …)`; a
+      missing root and a linked worktree whose gitdir is gone stay failures, and
+      both prompt adapters show the plain unbound block with the guard. Passed
+      on macOS 2026-11-16 (Node 24.22.1, Apple Git 2.50.1).

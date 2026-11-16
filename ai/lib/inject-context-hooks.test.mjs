@@ -100,6 +100,16 @@ for (const kind of ["claude", "codex"]) {
     assert.match(context, /resolve-session --root/);
     assertCanonicalGuard(context, `${kind} internal_error`);
   });
+
+  test(`${kind} adapter reports a directory outside git as plainly unbound`, async (t) => {
+    const outside = await mkdtemp(join(tmpdir(), "inject-context-outside-git-"));
+    t.after(() => rm(outside, { recursive: true, force: true }));
+
+    const context = runHook(kind, outside, { storeRoot: outside });
+    assert.match(context, /^ℹ️ session plan: unbound\n/);
+    assert.doesNotMatch(context, /routing error|recovery:/);
+    assertCanonicalGuard(context, `${kind} outside git`);
+  });
 }
 
 for (const kind of ["claude", "codex"]) {

@@ -92,7 +92,9 @@ non-main checkout whose local pointer resolves back to itself may supply plan co
 An unbound main checkout is always plan-free: its `current.txt` is launcher-only and is
 never an implicit session owner. `ensure-session` may normalize an unambiguous legacy plan
 only from that non-main local checkout. Ambiguous, dirty, detached, occupied,
-foreign-owned, malformed, or staged-residual states remain typed failures. Direct
+foreign-owned, malformed, or staged-residual states remain typed failures. Outside a
+git repository `ensure-session` answers `unbound` with reason `not_a_git_checkout`, so
+the adapter shows the plain unbound block; `resolve-session` still fails there. Direct
 `resolve-session` and `resolve-current` remain physically read-only.
 
 Session binding files are ephemeral and private. Their identity is the strict tool,

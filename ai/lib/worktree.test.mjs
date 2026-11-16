@@ -369,6 +369,31 @@ test("unbound main is plan-free while an execution checkout keeps local routing"
   assert.equal(rooted.route_required, false);
 });
 
+test("ensure-session is plainly unbound outside a git repository", async (t) => {
+  const outside = await mkdtemp(join(tmpdir(), "session-outside-git-"));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+
+  const ensured = await ensureSession({ root: outside, tool: "claude", sessionId: "fresh", storeRoot: outside });
+  assert.deepEqual(
+    { status: ensured.status, reason: ensured.reason, binding_status: ensured.binding_status, main_root: ensured.main_root },
+    { status: "unbound", reason: "not_a_git_checkout", binding_status: "unbound", main_root: null },
+  );
+  // Match the engine's own prefix: a git built with translations words the rest in the locale.
+  const gitFailure = /git rev-parse --show-toplevel failed/;
+  await assert.rejects(resolveSession({ root: outside, tool: "claude", sessionId: "fresh", storeRoot: outside }), gitFailure);
+  await assert.rejects(ensureSession({ root: join(outside, "missing"), tool: "claude", sessionId: "fresh", storeRoot: outside }));
+
+  const orphan = join(outside, "orphan");
+  await mkdir(orphan);
+  await writeFile(join(orphan, ".git"), `gitdir: ${join(outside, "gone", ".git", "worktrees", "orphan")}\n`);
+  await assert.rejects(ensureSession({ root: orphan, tool: "claude", sessionId: "fresh", storeRoot: outside }), gitFailure);
+
+  // /dev is its own file system, so git there stops "up to mount point" instead.
+  if (process.platform !== "win32") {
+    assert.equal((await ensureSession({ root: "/dev", tool: "claude", sessionId: "fresh", storeRoot: outside })).reason, "not_a_git_checkout");
+  }
+});
+
 test("ensure-session prunes only its exact stale binding", async (t) => {
   const { root } = await fixture();
   const foreign = await fixture();
