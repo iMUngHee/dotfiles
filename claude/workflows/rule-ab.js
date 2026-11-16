@@ -15,7 +15,7 @@ export const meta = {
 //     runs: 2
 //   }})
 //
-// Origin: built for the Pre-Implementation Gate A/B (907a85f), which found
+// Origin: built for the Pre-Implementation Gate A/B (c170712), which found
 // over-built 83%->0%, LOC -21%, and one safety regression that produced the
 // rule's delegation clause. Method follows ponytail's published benchmark:
 // real tickets containing a genuine over-build trap, n runs per arm, and a

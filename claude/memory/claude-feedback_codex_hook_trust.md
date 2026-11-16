@@ -11,4 +11,4 @@ Codex records a trust hash for every hook position, `[hooks.state."<config path>
 **How to apply:**
 - After deploying a Codex hook, map each hook position to its trust state (parse `config.toml` with `tomllib`: positions under `hooks.<Event>[group].hooks[index]` against `hooks.state` keys) before reading the hook's own code.
 - Ask the person to approve in the Codex TUI with `/hooks`; then re-check `trusted_hash` and run one `codex exec` turn to confirm the hook's effect.
-- A hook that runs through `codex/hooks/run-bash-hook.ps1` on Windows must read stdin as UTF-8 (fixed in dotfiles `96c3cd5`); verify non-ASCII input, not just ASCII.
+- A hook that runs through `codex/hooks/run-bash-hook.ps1` on Windows must read stdin as UTF-8 (fixed in dotfiles `4f0df81`); verify non-ASCII input, not just ASCII.

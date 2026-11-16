@@ -122,7 +122,7 @@ Staged, unstaged, and untracked files select suites; only tracked changes may be
 | `claude/mods/**` | `claude plugin test` per mod | 1s |
 | `nvim/**` | `inline_review_spec.lua` (headless) | 20s |
 
-Instruction files are asserted by exact string match in `ai/lib/*.test.mjs`, and no type checker runs at all — so without the first stage a rule can be edited out while its suite goes red unnoticed. That happened once (`6f9b845`).
+Instruction files are asserted by exact string match in `ai/lib/*.test.mjs`, and no type checker runs at all — so without the first stage a rule can be edited out while its suite goes red unnoticed. That happened once (`1851931`).
 
 The last two stages were added after the same gap opened twice more: mods and the Lua are `.ts`/`.tsx`/`.lua`, which the instruction trigger's `\.(md|sh)$` does not match and no type checker reaches, so five consecutive commits to `graph.tsx` and four to `inline_review/` ran no suite at all — `nvim/README.md` documented its command and nothing called it.
 
@@ -193,7 +193,7 @@ Workflow({ scriptPath: "~/.config/claude/workflows/rule-ab.js", args: {
 }})
 ```
 
-Pick tickets that contain a genuine over-build trap (a native feature already covers the need) and whose deliverable is code the agent can write from the brief alone. It found the Pre-Implementation Gate's delegation loophole (`907a85f`).
+Pick tickets that contain a genuine over-build trap (a native feature already covers the need) and whose deliverable is code the agent can write from the brief alone. It found the Pre-Implementation Gate's delegation loophole (`c170712`).
 
 **It does not fit every question.** An instruction that depends on repo state, git, or worktrees cannot be isolated this way — attempting it on `design/SKILL.md` module splitting produced 0% completion on both arms and no signal.
 

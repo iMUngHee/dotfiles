@@ -74,7 +74,7 @@ since AeroSpace has no include to put them in a private file.
 Bootstrap registers the filter as `required`, with a smudge beside it:
 `required` covers checkouts too, and with no smudge to run every checkout of a
 filtered file aborts with `smudge filter machine-local failed`. A machine that
-ran bootstrap after c240add but before 942bb12 has `required` without the
+ran bootstrap after 50d31bd but before 8c0cfb7 has `required` without the
 smudge, so the pull that brings the fix can stop there. Run
 `git -C ~/.config config filter.machine-local.smudge cat` once, then pull again.
 

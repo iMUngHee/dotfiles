@@ -7,7 +7,7 @@ each platform does differently, and which checks are still owed.
 
 ## After a pull, on any machine
 
-The copied Gaebu mod and shared rule now come from Gaebu 0.9.0 (`0add48c`).
+The copied Gaebu mod and shared rule now come from Gaebu 0.9.0 (`c70d586`).
 Gaebu 0.9.0 reads `pager who --all` and sends notices with pager's `--event`
 and `--kind` (`gaebu stalled --notify` also with `--automation`), so upgrade
 pager to 0.8.0 or later first. pager 0.8.0
@@ -127,7 +127,7 @@ shared server through `/daemon` and check again; connected sessions may be inter
 
 ### Verified on Windows 2026-11-03
 
-- Pulled dotfiles through `bac5838`; the post-merge bootstrap regenerated the
+- Pulled dotfiles through `781b5df`; the post-merge bootstrap regenerated the
   tool homes. Template-owned Codex hooks match after excluding machine-managed
   `hooks.state`; Claude's mod paths resolve after expanding `~`.
 - `stop-hooks.test.mjs`: 29 passed, 16 skipped with platform reasons. Native
@@ -140,7 +140,7 @@ shared server through `/daemon` and check again; connected sessions may be inter
   pm-context suites passed 11 and 2 test files respectively; pager-view and
   pm-band passed 51 and 46 cases, and both mods typechecked. Vendor check
   passed after syncing the newly referenced pinned `rust-guidelines` checkout.
-- Pager `65515fe`: `go test ./...` and `go vet ./...` passed. The installed
+- Pager `61038ad`: `go test ./...` and `go vet ./...` passed. The installed
   binary's native Codex loop smoke passed: 47 working messages, 46 causal hops,
   idle wake suppression, important release delivery and duplicate protection;
   all 62 accepted records remained. This used isolated state and a local model
@@ -149,7 +149,7 @@ shared server through `/daemon` and check again; connected sessions may be inter
 
 ### Verified on 2026-10-28
 
-- Synced through `ecaa264` and deployed with `windows/scripts/deploy-ai.ps1`.
+- Synced through `0d790ed` and deployed with `windows/scripts/deploy-ai.ps1`.
   The generated instruction headers and size, Claude's copied instructions and
   native symlink, Windows Git Bash path, and every template-owned Codex hook
   key were checked. Machine-managed `hooks.state` is preserved by the merge.
@@ -168,8 +168,8 @@ shared server through `/daemon` and check again; connected sessions may be inter
   without stderr. After bootstrap registered the new required smudge filter,
   real `git checkout-index` calls for `ghostty/config` and
   `aerospace/aerospace.toml` reproduced the working files.
-- Pager upstream `ad6a9f4` passed `go test ./...`, `go vet ./...`, and the Windows
-  installer smoke before local changes. Fix `4b46b64` then passed the same checks
+- Pager upstream `cc0e844` passed `go test ./...`, `go vet ./...`, and the Windows
+  installer smoke before local changes. Fix `2c0f00a` then passed the same checks
   and was reinstalled from its clean commit with Go 1.27.0. New ephemeral
   app-server sessions exchanged mail through new MCP processes with correct
   caller identity and inbox isolation; already-read wake prompts were blocked,
@@ -183,7 +183,7 @@ shared server through `/daemon` and check again; connected sessions may be inter
 
 ### Verified on 2026-10-30
 
-- Pager `e3f2312` passed `go test ./...`, `go vet ./...`, and Linux/amd64 and
+- Pager `ed6b0d2` passed `go test ./...`, `go vet ./...`, and Linux/amd64 and
   Darwin/arm64 cross-builds. The Windows installer rebuilt the clean commit;
   installed Go build metadata reports that revision and `vcs.modified=false`.
 - Two fresh persisted Codex threads on desktop host `0.165.0-alpha.1.2` ran real
@@ -201,13 +201,13 @@ shared server through `/daemon` and check again; connected sessions may be inter
   replacement. A standalone helper's reload cannot replace MCP clients owned
   by another running app-server; closing a desktop window is not proof of it.
 
-- Pager `6fedd3e` replaced hourly/hop work quotas with a conservative idle-loop
+- Pager `eec3e39` replaced hourly/hop work quotas with a conservative idle-loop
   wake pause. Both peers must explicitly report fresh idle state with unchanged
   bodies, checkpoints and human epochs for two minutes. Missing/stale signals
   remain unknown and fail open; the guard is cooperative, not semantic proof.
   Result/failure/release events bypass pauses, are prioritized over update
   backlog, and can use event IDs to deduplicate retries. Mail is always stored.
-- The installed clean `6fedd3e` binary passed the native two-thread loop smoke
+- The installed clean `eec3e39` binary passed the native two-thread loop smoke
   test (`scripts/codex-loop-smoke.py`, Codex 0.165.0-alpha.1.2, local deterministic
   Responses provider). Real shell/MCP calls changed an actual artifact across
   47 messages / 46 causal hops without a pause. Idle ping-pong stopped waking
@@ -243,7 +243,7 @@ shared server through `/daemon` and check again; connected sessions may be inter
   `set -euo pipefail`: both skip paths print the release; a pre-0.6.0 pager
   falls back to its path; `ensure_pager`'s build path, into a temporary
   `LOCAL_BIN` with `~/.local/bin` off PATH, printed
-  `pager built (pager 0.6.0 (v0.0.0-20261104113355-d9af85d00cb9))`.
+  `pager built (pager 0.6.0 (v0.0.0-20261104113355-af6fc0ff4948))`.
   `ensure_gaebu` warned against a copy whose `plugin.json` said 0.2.1, stayed
   quiet at 0.2.2 and with no `plugin.json`, and never aborted the shell.
 - macOS, pwsh 7 with `$ErrorActionPreference = 'Stop'`: `install-gaebu.ps1
@@ -256,11 +256,11 @@ shared server through `/daemon` and check again; connected sessions may be inter
 
 - Windows PowerShell 5.1.26100 with `$ErrorActionPreference = 'Stop'`, in a
   temporary `USERPROFILE` with `Add-UserPath` stubbed so the user PATH was not
-  touched: `install-pager.ps1` over pager `65515fe` (before 0.6.0) ran its
+  touched: `install-pager.ps1` over pager `61038ad` (before 0.6.0) ran its
   skip path and ended in the one-line warning
   `'version' exited 1 (pager: unknown command "version")`, not a throw;
   `-Force` printed `built ... (replaced a pager before 0.6.0)` then
-  `pager version -> pager 0.7.2 (v0.0.0-20261109085326-d0c4345946a2)`.
+  `pager version -> pager 0.7.2 (v0.0.0-20261109085326-c18b7d5e52c3)`.
   `install-gaebu.ps1 -BinDir <temp>` warned for gaebu 0.2.1 against
   `plugin.json` 0.2.2 and stayed quiet for 0.2.2.
 - Windows Git Bash, `lib/agent-clis.sh` under `set -euo pipefail` with the
@@ -276,18 +276,18 @@ shared server through `/daemon` and check again; connected sessions may be inter
   after it, both shells printed `WARN gaebu installed but '--version'
   exited 1 (fake: boom)` and went on, and the same fake as `pager.exe` gave
   the one-line `version` warning.
-- macOS, after the post-merge bootstrap of `d0d196c`:
+- macOS, after the post-merge bootstrap of `bbed085`:
   `~/.claude/rules/code-quality.md` is a symlink to `ai/rules/code-quality.md`
   (`cmp` identical), `~/.codex/AGENTS.md` contains the rule's whole body, and
   `tidy` is listed in both tools: in a live Claude Code 2.1.319 session's
   skill list, and in Codex CLI 0.167.0's `codex debug prompt-input` together
   with the `# Code Quality` section.
-- Linux (the VM, after its own config repo took a port of `0e28fca` and ran
+- Linux (the VM, after its own config repo took a port of `1c0cdee` and ran
   the post-merge bootstrap): the same three checks held. The rule's symlink is
   `cmp` identical, `~/.codex/AGENTS.md` (35063 B) contains its whole body, and
   `tidy` is listed by Claude Code 2.1.306 (`claude -p`) and in Codex CLI
   0.165.0's `codex debug prompt-input` with the `# Code Quality` section.
-  Windows was checked on 2026-11-10 when `0e28fca` was made, so this check
+  Windows was checked on 2026-11-10 when `1c0cdee` was made, so this check
   is done on all three platforms.
 - macOS, Node 24.22.1 with `/usr/bin/grep` (BSD grep 2.6.0-FreeBSD):
   `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` passed 7
@@ -453,7 +453,7 @@ cannot run something; remove it in the commit that records the result.
       Windows filter tests and actual checkouts passed 2026-10-28).
 - [ ] **Windows** — test pager's cross-machine relay transport against a real peer.
 - [ ] **macOS / Linux** — run pager's runtime suite and session/MCP flows after
-      `6fedd3e`, including the native loop smoke; this machine only cross-compiled
+      `eec3e39`, including the native loop smoke; this machine only cross-compiled
       those targets.
 - [ ] **macOS / Linux** — open a `/pager` room with unread in a real terminal:
       it opens with the `new` rule on top. That is `$.ui.scroll`, which no kit
@@ -467,9 +467,9 @@ cannot run something; remove it in the commit that records the result.
       bodies matched; the Windows captures of 2026-10-30 predate it.
 - [ ] **macOS** — once a Codex release fixes openai/codex#25416, re-check that
       the `workspace-local-sockets` profile reaches `/tmp/agent-notifier.sock`
-      and the tmux socket (`d9e376d`). On 0.163.0 it does not (see `## macOS`).
+      and the tmux socket (`72d2ba7`). On 0.163.0 it does not (see `## macOS`).
 - [ ] **Windows** — Codex's automatic Stop hook no longer times out at 45 s now
-      that the template says 360 (`d9e376d`); a manual run took 112 s, exit 0.
+      that the template says 360 (`72d2ba7`); a manual run took 112 s, exit 0.
 - [ ] **Arch** — run `arch/bootstrap.sh` (and once with `--dry-run`) and check
       the `lib/rust-analyzer.sh` step adds the component to pacman's rustup, so
       `rust-analyzer --version` answers. Verified on macOS 2026-11-02: present,
