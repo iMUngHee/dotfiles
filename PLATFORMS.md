@@ -7,18 +7,26 @@ each platform does differently, and which checks are still owed.
 
 ## After a pull, on any machine
 
-The copied Gaebu mod and shared rule now come from Gaebu 0.3.0 (`5a8a929`,
-which carries the mod's type fixes; `tsc -p claude/mods/gaebu` reports 0 errors).
-Upgrade an existing binary explicitly: Windows uses
+The copied Gaebu mod and shared rule now come from Gaebu 0.9.0 (`0add48c`).
+Gaebu 0.9.0 reads `pager who --all` and sends notices with pager's `--event`
+and `--kind` (`gaebu stalled --notify` also with `--automation`), so upgrade
+pager to 0.8.0 or later first. pager 0.8.0
+moves its database to schema 6, which older pagers cannot open. Upgrade both
+binaries explicitly: Windows uses
+`pwsh -File ~/.config/windows/scripts/install-pager.ps1 -Force`, then
 `pwsh -File ~/.config/windows/scripts/install-gaebu.ps1 -Force`; macOS/Linux use
+`make reinstall` in a pager checkout (or
+`GOBIN=~/.local/bin go install github.com/iMUngHee/pager/cmd/pager@latest`), then
 `cargo install --git https://github.com/iMUngHee/gaebu --locked --force --root ~/.local gaebu`.
-Restart sessions hosting `gaebu mcp` after the upgrade so both the process and
-its tool catalog use the new release. The first runtime write migrates schema
-1/2 to schema 3 and keeps the original backup; older binaries cannot read it.
-Windows GNU build/install and the copied mod's 25 native engine tests passed
-on 2026-11-11, and the same 25 passed on macOS with gaebu 0.3.0 that day. Run
-those mod tests on Linux after pulling; physical
-terminal fonts, theme contrast and focus behavior remain pending.
+Restart every session hosting `pager mcp` or `gaebu mcp` after both upgrades
+so the processes and their tool catalogs use the new releases. The first gaebu
+runtime write migrates schema 1–5 to schema 6 and keeps the original as
+`state.v<N>.json`; older binaries cannot read it. Archive history above 64 MiB
+per Schedule or team stream is deleted by default (`GAEBU_ARCHIVE_LIMIT_MIB`).
+On macOS (2026-11-16, Claude Code 2.1.325) the copied mod's 26 native engine
+tests pass and `tsc -p claude/mods/gaebu` reports 0 errors. Run those mod
+tests on Linux and Windows after pulling; physical terminal fonts, theme
+contrast and focus behavior remain pending.
 
 The post-merge hook (post-rewrite after a rebase pull) re-runs bootstrap and
 syncs vendored entries that `vendor.sh check` reports as `update` or `missing`,
