@@ -175,6 +175,22 @@ if [ -e "$ROOT_DIR/.git" ] && [ -d "$ROOT_DIR/githooks" ]; then
     fi
 fi
 
+# Commits to github.com/iMUngHee repos carry the personal identity in
+# git/config-personal, whatever the machine's global [user] says. The last
+# value git reads wins, so each includeIf section is removed and appended
+# again at the end of the global file, after [user]; repointing an entry in
+# place would leave one that sits above [user] losing to it.
+if command -v git >/dev/null 2>&1 && [ -f "$ROOT_DIR/git/config-personal" ]; then
+    personal="$ROOT_DIR/git/config-personal"
+    [ "$ROOT_DIR" = "$HOME/.config" ] && personal="~/.config/git/config-personal"
+    for url in https://github.com/iMUngHee/ git@github.com:iMUngHee/ ssh://git@github.com/iMUngHee/; do
+        section="includeIf.hasconfig:remote.*.url:${url}**"
+        git config --global --remove-section "$section" 2>/dev/null || true
+        git config --global "$section.path" "$personal"
+    done
+    echo "Git identity: github.com/iMUngHee remotes → git/config-personal"
+fi
+
 # ── 6. Sanity ──
 "$AI_DIR/lib/verify-no-residual-tokens.sh"
 "$AI_DIR/lib/verify-agents-md-size.sh"

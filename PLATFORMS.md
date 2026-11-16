@@ -28,6 +28,15 @@ tests pass and `tsc -p claude/mods/gaebu` reports 0 errors. Run those mod
 tests on Linux and Windows after pulling; physical terminal fonts, theme
 contrast and focus behavior remain pending.
 
+`ai/scripts/bootstrap.sh` points the global git config's includes for
+`github.com/iMUngHee` remotes (https, scp-style and ssh://) at the tracked
+`git/config-personal`, so commits there are `iMUngHee <unghee66@gmail.com>`
+whatever the machine's own `[user]` says. A `~/.gitconfig-personal` an
+earlier include named is then unused and can be deleted. Check with
+`git var GIT_AUTHOR_IDENT` inside any iMUngHee clone. Verified on macOS on
+2026-11-16 for all three remote forms; Linux and Windows run the same step
+on their next pull.
+
 The post-merge hook (post-rewrite after a rebase pull) re-runs bootstrap and
 syncs vendored entries that `vendor.sh check` reports as `update` or `missing`,
 but it installs no npm dependencies. On a

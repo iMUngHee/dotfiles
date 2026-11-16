@@ -1,0 +1,6 @@
+# Commit identity for github.com/iMUngHee repositories. ai/scripts/bootstrap.sh
+# includes this file from the global git config for https, scp-style and
+# ssh:// remotes, after the machine's own [user], so it wins there.
+[user]
+	name = iMUngHee
+	email = unghee66@gmail.com

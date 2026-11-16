@@ -20,6 +20,7 @@
 !windows/
 !omarchy/
 !fcitx5/
+!git/
 !brave/
 !aerospace/
 !.gitignore
@@ -40,6 +41,10 @@ nvim/lua/private/*
 
 # tmux
 tmux/plugins/
+
+# git — only the personal identity; ignore and anything else here stays machine-local
+git/*
+!git/config-personal
 
 # fcitx5 — only the hotkeys; Omarchy migrations rewrite this file, so a diff
 # here is the signal. profile and conf/ hold machine state (cached layouts).
