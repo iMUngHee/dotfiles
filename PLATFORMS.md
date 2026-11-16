@@ -7,8 +7,8 @@ each platform does differently, and which checks are still owed.
 
 ## After a pull, on any machine
 
-The copied Gaebu mod and shared rule now come from Gaebu 0.9.0 (`c70d586`).
-Gaebu 0.9.0 reads `pager who --all` and sends notices with pager's `--event`
+The copied Gaebu mod and shared rule now come from Gaebu 0.10.0 (`94c6068`).
+Gaebu 0.10.0 reads `pager who --all` and sends notices with pager's `--event`
 and `--kind` (`gaebu stalled --notify` also with `--automation`), so upgrade
 pager to 0.8.0 or later first. pager 0.8.0
 moves its database to schema 6, which older pagers cannot open. Upgrade both
