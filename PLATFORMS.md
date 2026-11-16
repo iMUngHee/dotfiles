@@ -132,7 +132,7 @@ shared server through `/daemon` and check again; connected sessions may be inter
 - The product-craft script tests (11) and `fixtures/measure/browser.test.mjs`
   (5, including a reference per candidate and the `#tiny` fixture's
   `line-height:1`) passed here on 2026-11-12 (Node 26.12.1, Edge). The Gaebu
-  mod's 25 engine tests passed the same day with the type fixes from `5a8a929`.
+  mod's 25 engine tests passed the same day with the type fixes from `5728ef2`.
 
 ### Verified on Windows 2026-11-03
 
