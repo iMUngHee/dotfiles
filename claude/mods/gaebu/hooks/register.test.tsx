@@ -355,6 +355,7 @@ test('prompt.compose stamps the hook only with the card in, at most every ten mi
 
 const BAND = {
   hasSurvey: false,
+  isCollapsed: false,
   isWorking: false,
   maxRows: 6,
   bodyColumns: 100,
