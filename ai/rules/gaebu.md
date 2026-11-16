@@ -27,6 +27,7 @@ Apply these rules when Gaebu records place your session in a team, or when the h
 - Check the applicable PM plan and execution root before editing project files.
 - Give shared files and interfaces an explicit owner and reserve contested paths or resources with a lease before writing or using them.
 - Treat a lease as collision coordination and keep permission decisions within your grant and duty.
+- Before resting on an accepted duty to wait for a lease or a member, record it with `duty wait --lease` or `--member`, and clear it with `duty wait --clear` when you resume.
 - Escalate changes outside your decision rights and continue work that does not depend on the answer.
 - Ask one concrete question per duty, and withdraw it once it is resolved.
 - Review completed work against observable criteria and include verification evidence in the handoff.
