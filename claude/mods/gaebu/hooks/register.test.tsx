@@ -9,7 +9,7 @@ const CARD = {
   team: 'gaebu',
   bu: '좌장군부',
   binding: 'bound',
-  chain: ['대협', '가절월을 받은 승상 gapu', '좌장군 nuzu', '좌장군부 속관 주부 bepo'],
+  chain: ['대협', '가절월을 받은 대장군 gapu', '좌장군 nuzu', '좌장군부 속관 주부 bepo'],
   superior: '좌장군 nuzu',
   duties: [
     {
@@ -40,18 +40,18 @@ const BOARD = {
       id: 't-1',
       name: 'gaebu',
       status: 'active',
-      commander: '가절월을 받은 승상 gapu',
+      commander: '가절월을 받은 대장군 gapu',
       bus: [
         {
           id: 'b-1',
-          name: '승상부',
+          name: '대장군부',
           status: 'open',
-          head: '승상 gapu',
+          head: '대장군 gapu',
           members: [
-            { id: 'm-1', display: '승상 gapu', binding: 'bound', duties: [], leases: [] },
+            { id: 'm-1', display: '대장군 gapu', binding: 'bound', duties: [], leases: [] },
             {
               id: 'm-3',
-              display: '승상부 속관 주부 bepo',
+              display: '대장군부 속관 주부 bepo',
               binding: 'bound',
               // Deliberately out of order: the pane sorts by stage.
               duties: [
@@ -148,7 +148,7 @@ test('the roster pane shows the commander after a refresh', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'nav-organization' })
-  const row = await ui.find({ type: 'Text', text: /승상 gapu/ })
+  const row = await ui.find({ type: 'Text', text: /대장군 gapu/ })
   expect(row).toBeDefined()
   await ui.unmount()
 })
@@ -265,7 +265,7 @@ test('the next board refresh passes the token it holds', async ($, on) => {
   // `unchanged` keeps the board it had.
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'nav-organization' })
-  expect(await ui.find({ type: 'Text', text: /승상 gapu/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /대장군 gapu/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -284,7 +284,7 @@ test('old card-1/board-1 values are discarded', async ($, on) => {
             bus: [
               {
                 id: 'b-1',
-                name: '승상부',
+                name: '대장군부',
                 status: 'open',
                 head: 'x',
                 members: [{ id: 'm-1', display: 'x', binding: 'bound', duties: ['d-1 [accepted] x'], leases: [] }],
@@ -355,7 +355,6 @@ test('prompt.compose stamps the hook only with the card in, at most every ten mi
 
 const BAND = {
   hasSurvey: false,
-  isCollapsed: false,
   isWorking: false,
   maxRows: 6,
   bodyColumns: 100,
@@ -452,7 +451,7 @@ test('operations overview connects selected work to full detail and nested organ
   expect(await ui.find({ type: 'Text', text: /MAP.*search/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /\.agents\/plans\/search.md/ })).toBeDefined()
   await ui.press({ key: 'nav-organization' })
-  expect(await ui.find({ type: 'Button', text: /승상부/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: /대장군부/ })).toBeDefined()
   await ui.press({ key: 'nav-help' })
   expect(await ui.find({ type: 'Text', text: /키보드 \/ 조회 전용/ })).toBeDefined()
   await ui.press({ key: 'back' })
