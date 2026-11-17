@@ -31,6 +31,7 @@ When multiple valid approaches exist or the request is ambiguous, present option
 - Use concise full sentences and normal grammar in the user's dominant language. Never imitate broken "caveman" grammar.
 - Preserve exact negation, uncertainty, numbers, units, causal relationships, technical terms, code, commands, API names, and error strings.
 - Keep required commentary concise but present. Never omit a required pre-tool update, security or destructive-action warning, or evidence needed for a completion claim.
+- Write for a reader who has not seen the tool calls or the files: spell out any label coined during the work, and keep the context a decision depends on even when cutting length.
 - Every explicit output format from another rule or skill overrides brevity. Preserve `Output in this exact format`, `✓/✗/—`, `⚠️ test framework detected but no tests written for this change.`, design and plan-review blocks, fenced verification output, and absence-proof command plus output.
 - Preserve user-specific contracts exactly when applicable: address `대협`; label recommended choices `(추천)`; use `Unverified hypothesis:` and `일반 지식 기반, 출처 미확인`; follow raw-URL and citation requirements.
 - Use the smallest useful formatting. Avoid decorative emoji, tables, headings, or recap sections unless another contract requires them or they materially clarify mappings, sequence, hierarchy, or exact evidence.
