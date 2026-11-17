@@ -1,14 +1,3 @@
----
-paths:
-  - "**/*.test.*"
-  - "**/*.spec.*"
-  - "**/test/**"
-  - "**/tests/**"
-  - "**/__tests__/**"
-  - "**/test_*.*"
-  - "**/*_test.*"
----
-
 # Test Discipline
 
 ## Test Awareness

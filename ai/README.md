@@ -91,11 +91,12 @@ so every manifest entry is unconditionally present in `~/.codex/AGENTS.md`. A pa
 rule is narrow on Claude and always-on for Codex; write one only when that asymmetry is
 acceptable.
 
-Measured 2026-08-18: of the six deployed rules, the two carrying `paths:`
-(`rationalization.md`, `testing.md`) were absent from a Claude session whose changed files
-were only `.md` and `.manifest`, while the four without it were present. Both bodies were
-in `AGENTS.md`, with zero surviving `paths:` blocks. (`ai/rules/` holds eight rules now, and
-`portability.md` is a third path-scoped one; the measurement itself has not been repeated.)
+Measured 2026-11-17: a Claude session that read only `.md` files had the five rules
+without `paths:` (code-quality, code-review, diagnostics, gaebu, pager) and none of the
+three that carried it then (portability, rationalization, testing), while
+`~/.codex/AGENTS.md` held all three bodies and zero `paths:` blocks. `testing.md` has
+since dropped its `paths:` block: its test-awareness warning applies to any changed
+function, and no glob list covers every source extension.
 
 ## Skill naming
 
