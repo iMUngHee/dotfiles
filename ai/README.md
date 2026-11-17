@@ -95,8 +95,9 @@ Measured 2026-11-17: a Claude session that read only `.md` files had the five ru
 without `paths:` (code-quality, code-review, diagnostics, gaebu, pager) and none of the
 three that carried it then (portability, rationalization, testing), while
 `~/.codex/AGENTS.md` held all three bodies and zero `paths:` blocks. `testing.md` has
-since dropped its `paths:` block: its test-awareness warning applies to any changed
-function, and no glob list covers every source extension.
+since dropped its `paths:` block, and `rationalization.md` followed: both apply to any
+change, and no glob list covers every source extension (the source list in
+`rationalization.md` had no `.mjs` or `.ps1`).
 
 ## Skill naming
 
