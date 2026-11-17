@@ -90,7 +90,9 @@ async function refreshOnce($: Engine): Promise<void> {
   const paths = await pathsOf($)
   const resolved = resolvedOf(
     await run($, ['node', paths.resolver, 'resolve-session', '--root', cwd, '--tool', 'claude'], {
-      env: { PM_SESSION_TOOL: 'claude', PM_SESSION_ID: sessionId },
+      // resolvedOf hides the pane on git's English "not a git repository"; a translated
+      // git (a ko_KR Linux, for one) words it otherwise.
+      env: { PM_SESSION_TOOL: 'claude', PM_SESSION_ID: sessionId, LC_ALL: 'C' },
       timeoutMs: 10_000,
     }),
   )

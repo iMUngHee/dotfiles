@@ -210,7 +210,8 @@ describe('register', () => {
     expect(w.reads.map(path => path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, ''))).toEqual([`${MAIN}/${PLAN_REL}`])
     const resolver = w.runs.find(r => r.argv.includes('resolve-session'))
     expect(resolver?.argv[1]).toBe(`${HOME}/.config/ai/lib/worktree.mjs`)
-    expect(resolver?.init?.env).toEqual({ PM_SESSION_TOOL: 'claude', PM_SESSION_ID: 'sid-a' })
+    // resolvedOf hides the pane on git's English "not a git repository"; a translated git words it otherwise.
+    expect(resolver?.init?.env).toEqual({ PM_SESSION_TOOL: 'claude', PM_SESSION_ID: 'sid-a', LC_ALL: 'C' })
   })
 
   test('the band meter fills the done steps and marks the current one hollow in the warning color', async ($, on) => {
