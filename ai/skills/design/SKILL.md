@@ -103,13 +103,13 @@ Propose 2-3 approaches with:
 
 Mark one as recommended.
 
-### 3. Present incrementally
+### 3. Present the design once
 
-Present design section by section with confirmation. Do NOT dump all sections at once. Wait for approval before moving to the next section.
+Present the design and the implementation plan (Step 4) together in one message and ask for one confirmation. Ask a separate question first only for a decision that would change the rest of the design if 대협 overturned it.
 
 ### 4. Implementation plan (presentation only — no execution yet)
 
-After design approval, present the implementation plan as response text. **Do NOT begin executing edits in this step.**
+Present the implementation plan as response text in the same message as the design. **Do NOT begin executing edits in this step.**
 
 Order the plan by revisability: lead with what 대협 is most likely to overturn — data model, type interfaces, anything user-facing — and put mechanical refactoring last. Reading top-down should hit the riskiest decision first, not the safest.
 
@@ -123,7 +123,7 @@ When a decision is visual or structural enough that prose under-specifies it —
 
    Each row must be specific enough for `/verify` to run or observe directly; generic prose or a command that can pass before the implementation exists is not sufficient. These seed `/verify`'s truth conditions — without them verify must re-derive the goal from scratch.
 3. **Risks**: List what could break, what contract might be misread, and how each risk is bounded or mitigated.
-4. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL). During implementation, flip `- [ ]` → `- [x]` in the plan artifact the moment each step meets its PASS output — unconditionally, one step at a time.
+4. **Tasks**: Use `- [ ]` checkboxes. Each step includes expected output (PASS/FAIL). During implementation, check each step off with `pm plan-step check <plan> <number>` the moment it meets its PASS output, one step at a time.
 5. If planned output differs from actual during implementation, investigate
 
 ### 5. Persist plan artifact (BEFORE implementation)
@@ -174,7 +174,7 @@ node "$engine" stage-plan --root "$repo_root" --id <id> --input /dev/stdin <<'PL
 PLAN
 ```
 
-5. **Persist through the CLI.** The id doubles as the backlog item id. Setup:
+4. **Persist through the CLI.** The id doubles as the backlog item id. Setup:
 
    ```bash
    repo_root="$(git rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 1; }
@@ -211,7 +211,7 @@ PLAN
    backlog/closed/deferred item; it still consumes the reservation and seeds the mapped
    target.
 
-6. **The staged content already includes the empty Post-Implementation section:**
+5. **The staged content already includes the empty Post-Implementation section:**
 
 ```markdown
 ## Post-Implementation Notes
@@ -219,13 +219,13 @@ PLAN
 <!-- Filled by /retro if run after implementation -->
 ```
 
-7. **Confirm to the user:** "saved as `<path>` — review and reply with **승인** (active 전환), **취소** (dropped), or further edits. Run `/retro` after implementation to mark the plan `done`." For high-risk, multi-file, architecture, irreversible, or unclear-scope plans, recommend `/plan-review` before `승인`; if review is intentionally skipped for cost, latency, auth, or low-risk reasons, record an explicit `SKIP` in the plan review loop instead of treating the skip as approval.
+6. **Confirm to the user:** "saved as `<path>` — review and reply with **승인** (active 전환), **취소** (dropped), or further edits. Run `/retro` after implementation to mark the plan `done`." For high-risk, multi-file, architecture, irreversible, or unclear-scope plans, recommend `/plan-review` before `승인`; if review is intentionally skipped for cost, latency, auth, or low-risk reasons, record an explicit `SKIP` in the plan review loop instead of treating the skip as approval.
 
 **Status values & lifecycle**: `draft` (just saved) → `active` (in progress) → `done` | `dropped` (terminal).
 
 ### 6. Backlog linkage invariants
 
-Step 5.5 already wrote the linkage; these are the rules it satisfies. Ops enforce the 1:1 link, id reuse and inbox rules (a violation throws, it is never silently written); the status mirror is kept by the lifecycle commands and checked by `pm validate` (C4); `id == plan slug` is the persist convention and nothing checks it, so the lower-level `plan` command can break it:
+Step 5.4 already wrote the linkage; these are the rules it satisfies. Ops enforce the 1:1 link, id reuse and inbox rules (a violation throws, it is never silently written); the status mirror is kept by the lifecycle commands and checked by `pm validate` (C4); `id == plan slug` is the persist convention and nothing checks it, so the lower-level `plan` command can break it:
 
 - **id == plan slug**, and **one item per plan path** (`Plan:` 1:1 across every task's backlog + closed). `persist`/`plan` reject a duplicate plan link or a reused id.
 - The backlog item **Status mirrors the plan** (`draft` at persist; `active` after `승인`).
@@ -247,17 +247,11 @@ Report the archiver's output (moved / skipped). Add `--dry-run` to preview witho
 
 ## Rules
 
-- Do NOT implement until user approves the design
-- **Implement only against an `active` plan.** An explicit build instruction (`승인`/"구현해"/"최대한 작업해"/"ㄱㄱ") IS the `승인` trigger: promote `status: draft → active` (+ `pm approve <KEY> <id>`) first, then implement. A terse go-ahead is no excuse to skip section-by-section approval or a warranted `/grill`.
-- Plan artifact is saved ONLY after explicit design approval (Step 3)
-- **Plan artifact MUST be persisted (Step 5) BEFORE any implementation begins.** Saving the plan after implementation breaks the verify/retro contract (they read the session-bound in-flight plan; the plan id is used for backlog linkage) and loses the pre-drift intent snapshot
-- **ALWAYS check off implementation steps as you go.** The instant a step meets its
-  PASS output, call `pm plan-step check <plan> <number>`; never batch at the end and never
-  hand-edit checkbox lines.
+- **Implement only against an `active` plan.** An explicit build instruction (`승인`/"구현해"/"최대한 작업해"/"ㄱㄱ") IS the `승인` trigger: promote `status: draft → active` (+ `pm approve <KEY> <id>`) first, then implement. A terse go-ahead does not replace a warranted `/grill`.
+- **Write no implementation files before the plan is persisted (Step 5).** Steps 1-4 write nothing except Step 4's optional mockup artifact. Persist only after 대협 confirms the design (Step 3). verify and retro read the session-bound plan and the plan id carries the backlog linkage, so a plan saved after implementation loses the pre-drift intent. If 대협 declines to save, skip Step 5 and the plan stays conversation-only.
+- **Check off each implementation step with `pm plan-step check <plan> <number>` the instant it meets its PASS output.** The command serializes checkbox writes; batching at the end or hand-editing the lines bypasses it. `pm plan-step uncheck <plan> <number>` reverses a wrong check.
 - The plan MUST carry a `## Verifiable Success Criteria` section (goal-level PASS/FAIL conditions). It is the seed `/verify` checks against — a plan whose goal isn't expressed as checkable conditions weakens the design→verify contract.
 - The plan MUST carry a `## Risks` section before `## Implementation Steps`, so known breakage modes and mitigations are visible before implementation starts.
-- No file writes during design exploration (Steps 1-3)
-- If the user declines to save, skip Step 5 — the plan remains conversation-only
 - Frontmatter MUST be English. Body content can be Korean.
 - `base_branch`, `base_commit`, `branch`, and `worktree` are required execution fields
   on every new draft/active plan. Surgical lifecycle updates must preserve them.
@@ -290,7 +284,7 @@ Resume the in-flight plan in THIS session.
    Never consult main launcher state or continue from main.
 2. Branch on frontmatter `status`: `draft` → unapproved, so request `승인` (a draft plan is not implementable per the Rules) and stop / `done` · `dropped` (stale pointer) → report and stop / any other · unknown → report "invalid plan status" and stop.
 3. `active`:
-   - **Unchecked `- [ ]` steps remain** → summarize the done steps, locate the first unchecked step, and resume implementation from there (honor the existing Rules: flip `- [ ]` → `- [x]` as each lands; implement only against the active plan).
+   - **Unchecked `- [ ]` steps remain** → summarize the done steps, locate the first unchecked step, and resume implementation from there (honor the existing Rules: check each step off with `pm plan-step check` as it lands; implement only against the active plan).
    - **No unchecked steps remain** (all `- [x]`) → implementation is complete. Do NOT create new work or re-run steps. Route the user to `/verify` then `/retro` to close it, and stop (the `done` transition is /retro-exclusive per the Rules).
 
 ## Status Update Triggers (post-creation)
@@ -318,5 +312,3 @@ Standalone plans use `pm approve --standalone --plan <path>` and
 - NEVER change status silently. Always confirm in the response: "✅ status: draft → active".
 - Terminal commands clear only pointers whose exact content equals the terminal plan;
   unrelated main/worktree selections survive.
-- During implementation, update checkboxes only with
-  `pm plan-step check|uncheck <plan> <number>`; never edit checkbox lines directly.
