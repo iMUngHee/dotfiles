@@ -14,21 +14,10 @@ Base branch: $ARGUMENTS (if empty, infer from branch naming or ask)
 - Branch: !`git branch --show-current 2>/dev/null || echo "N/A"`
 - Commits on branch: !`git log --oneline main..HEAD 2>/dev/null || git log --oneline -10 2>/dev/null || echo "N/A"`
 
-## When to dispatch to `reviewer` agent
+## Optional — `reviewer` agent
 
-For PRs with many commits or a large diff, spawn the `reviewer` subagent via the Agent tool to keep per-commit analysis out of the main context. Run the steps below inline only for small PRs.
+Review inline by default, at any commit count. Dispatch only when the branch has more than ~1200 changed lines (insertions plus deletions in `git diff --shortstat <base>...HEAD`): a subagent starts from zero and its return has to be validated below, so it costs more than an inline review of a smaller branch.
 
-Use **inline** when:
-- 1–2 unique commits
-- Diff under ~200 lines
-- Review scope is narrow (single feature or fix)
-
-Dispatch to **`reviewer`** when:
-- 3+ unique commits
-- Diff exceeds ~400 lines
-- Multiple modules touched
-
-Dispatch to a separate context to keep the main thread clean:
 - **Claude Code**: `Agent(subagent_type: "reviewer", description: "<short>", prompt: "Base branch: <base>. Focus: <optional>. Branch: <current>. Unique commit/surface inventory: <...>. Requirement/convention source inventory: <...>.")`
 - **Codex CLI**: `codex exec` with the same focused prompt and provenance packet. The `spawn_agent` tool is explicit-request-only (not for auto-dispatch), so use a `codex exec` subprocess instead.
 
