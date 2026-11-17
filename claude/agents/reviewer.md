@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: "Per-commit PR code review by a dedicated agent. Use when /code-review needs deep exploration across multiple commits or a large diff without polluting the main context. NOT used at commit time — pre-commit-verifier handles light scope/convention/sanity checks at the staged stage."
+description: "Per-commit PR code review by a dedicated agent. Use when /code-review dispatches a branch too large to review inline (more than ~1200 changed lines) without polluting the main context. NOT used at commit time — pre-commit-verifier handles light scope/convention/sanity checks at the staged stage."
 allowed-tools: Read, Grep, Glob, Bash
 memory: user
 ---
