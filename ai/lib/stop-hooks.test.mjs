@@ -20,7 +20,7 @@ after(() => {
 
 const repo = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
-function fixture(tool) {
+function fixture(tool, assetOnly = false) {
   const home = tempDir("stop-hook-");
   // The hooks keep their retry counter and checker output at fixed /tmp paths
   // keyed by session id (stop-handler.sh:26/94, stop-gate.sh:18-19), outside
@@ -57,8 +57,14 @@ function fixture(tool) {
   git("config", "user.name", "Fixture");
   writeFileSync(join(root, "ai", "rule.md"), "before\n");
   git("add", "ai/rule.md"); git("commit", "-qm", "fixture");
-  writeFileSync(join(root, "ai", "rule.md"), "after\n");
-  writeFileSync(join(root, "ai", "lib", "untracked.test.mjs"), "fixture\n");
+  if (assetOnly) {
+    const assets = join(root, "ai", "skills", "project-bootstrap", "assets");
+    mkdirSync(assets, { recursive: true });
+    writeFileSync(join(assets, "agents-build.mjs"), "fixture\n");
+  } else {
+    writeFileSync(join(root, "ai", "rule.md"), "after\n");
+    writeFileSync(join(root, "ai", "lib", "untracked.test.mjs"), "fixture\n");
+  }
   const run = (extra = {}) => spawnSync("bash", [join(hookDir, hookName)], {
     cwd: root, env: { ...env, ...extra }, encoding: "utf8",
     input: JSON.stringify({ session_id: sid, cwd: root }),
@@ -67,6 +73,14 @@ function fixture(tool) {
 }
 
 for (const tool of ["codex", "claude"]) {
+  test(`${tool} Stop selects the project builder test for an asset-only edit`, () => {
+    const f = fixture(tool, true);
+    const r = f.run();
+    assert.equal(r.status, 0, r.stderr);
+    const calls = readFileSync(join(f.home, "calls"), "utf8").trim().split(/\r?\n/);
+    assert.deepEqual(calls.filter((call) => call.includes("project-bootstrap.test.mjs")), ["--test ai/lib/project-bootstrap.test.mjs"]);
+  });
+
   test(`${tool} Stop runs contract and untracked tests with a shared suite budget`, () => {
     const f = fixture(tool);
     const r = f.run();

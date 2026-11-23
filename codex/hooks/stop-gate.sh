@@ -107,6 +107,8 @@ if [[ "$project_root" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
   fi
   if grep -qE '^ai/lib/' <<< "$changed_files"; then
     run_suite "ai/lib suite" . bash -c 'node --test ai/lib/*.test.mjs'
+  elif grep -qE '^ai/skills/project-bootstrap/assets/agents-build\.mjs$' <<< "$changed_files"; then
+    run_suite "project-bootstrap builder" . node --test ai/lib/project-bootstrap.test.mjs
   fi
   if grep -qE '^ai/skills/pm-roadmap/' <<< "$changed_files"; then
     run_suite "pm-roadmap tests" ai/skills/pm-roadmap npm test --silent

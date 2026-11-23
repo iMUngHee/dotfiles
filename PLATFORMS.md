@@ -536,3 +536,4 @@ cannot run something; remove it in the commit that records the result.
       pm-band passes `LC_ALL=C` to `resolve-session` for the same reason; on a
       machine whose git is translated, open a Claude session outside git and
       check the band is hidden rather than showing an error.
+- [ ] **macOS and Windows (Git Bash)** — run `node --test ai/lib/stop-hooks.test.mjs ai/lib/project-bootstrap.test.mjs`. Check relative rule/skill links on a symlink-capable filesystem and the handwritten AGENTS.md / CLAUDE.md import layout without symlinks.
