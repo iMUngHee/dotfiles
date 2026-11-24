@@ -1,10 +1,10 @@
 # Stack strictness
 
-Consult this table when an adopted convention needs a mechanical check. Prefer existing configuration and the smallest precise check.
+Consult this table when an adopted convention needs a mechanical check. Prefer existing configuration and the smallest precise check. The tiers below are examples. Place each selected check according to its runtime and prerequisites in this repository ([verification](verification.md)).
 
 Take every command and option from a source for the installed version: the stack's official documentation, else the tool's own `--help` or manual, else its documentation at the pinned release. Many stacks have only community tools; a flag seen in none of these sources is a guess, so leave it out. Run each wired command once and keep its output as evidence that it exists and does what the row asks.
 
-| Capability | Gate tier | Examples |
+| Capability | Example tier | Examples |
 | --- | --- | --- |
 | Formatter that can check without writing | fast | `cargo fmt --check`, `prettier --check`, `gofmt -l`, `ruff format --check` |
 | Linter with warnings as errors | fast | `cargo clippy -- -D warnings`, `eslint --max-warnings 0`, `golangci-lint run`, `ruff check` |
