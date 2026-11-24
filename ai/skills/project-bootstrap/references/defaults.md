@@ -24,4 +24,4 @@ For a new two-tool layout that needs generated surfaces and already supports Nod
 - Run `node scripts/agents-build.mjs`, then `node scripts/agents-build.mjs --check`. The builder creates root instruction files, Claude rule links and both tools' skill links. Edit the sources to change them. The consuming repository owns its builder.
 - When Node or link creation is unavailable use the simple layout. Keep the existing environment sufficient to maintain the project.
 
-Official support indicates a compatible default. A pattern exercised in mu (one source, two tool surfaces, cost-sensitive checks) is a local precedent. Describe a choice as measurably more efficient only with a relevant comparison.
+Official support indicates a compatible default. Describe a choice as measurably more efficient only with a relevant comparison.

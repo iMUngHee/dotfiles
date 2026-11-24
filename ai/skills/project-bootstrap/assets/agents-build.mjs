@@ -37,7 +37,8 @@ function build(check) {
   const project = source(".ai/PROJECT.md");
   const rules = entries(".ai/rules").filter((name) => name.endsWith(".md"));
   const bodies = rules.map((name) => scoped(source(`.ai/rules/${name}`), name));
-  const skills = entries(".ai/skills");
+  // Dotfiles such as macOS .DS_Store are not skills.
+  const skills = entries(".ai/skills").filter((name) => !name.startsWith("."));
   for (const name of skills) {
     entries(`.ai/skills/${name}`, false);
     source(`.ai/skills/${name}/SKILL.md`);

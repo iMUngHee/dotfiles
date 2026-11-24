@@ -48,11 +48,12 @@ test("scope, discovery, exact stale link pruning and preserved foreign links", (
   const f = fixture(t);
   f.put(".ai/rules/cli.md", '---\npaths:\n  - "cli/**"\n---\n# Terminal\n');
   f.put(".ai/skills/release/SKILL.md", "# Release\n");
+  f.put(".ai/skills/.DS_Store", "");
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
   assert.match(fs.readFileSync(f.at("AGENTS.md"), "utf8"), /cli\/\*\*/);
   for (const dir of [".agents/skills", ".claude/skills"]) {
-    assert.equal(fs.realpathSync(f.at(dir + "/release")), f.at(".ai/skills/release"));
+    assert.equal(fs.realpathSync(f.at(dir + "/release")), fs.realpathSync(f.at(".ai/skills/release")));
   }
   fs.symlinkSync("../../.ai/PROJECT.md", f.at(".claude/rules/user.md"));
   fs.rmSync(f.at(".ai/skills/release"), { recursive: true });
