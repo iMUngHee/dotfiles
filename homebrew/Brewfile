@@ -23,6 +23,10 @@ brew "wget"
 brew "yq"
 brew "zoxide"
 brew "fnm"
+# Runtime manager for pinned toolchains only (no shell activation): the
+# statechart skill installs Temurin 25 and the TLA+ tools through it, and
+# bootstrapped repositories pin them in .mise.toml. fnm still owns node.
+brew "mise"
 brew "uv"
 brew "pipx"
 brew "ccusage"  # Claude Code usage CLI

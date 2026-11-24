@@ -62,6 +62,9 @@ $Runtimes = @(
     # nvim/after/lsp/jdtls.lua needs a JDK, and mason installs groovyls/jdtls
     # which both refuse to start without java on PATH.
     @{ id = 'EclipseAdoptium.Temurin.21.JDK';  note = 'JDK for jdtls + groovyls (mason)' },
+    # The statechart skill installs Temurin 25 and the TLA+ tools through mise,
+    # and bootstrapped repositories pin them in .mise.toml.
+    @{ id = 'jdx.mise';                       note = 'pinned toolchains for TLA+ model checking (statechart)' },
     # mason installs fsautocomplete and fantomas from nuget, so the SDK has to
     # be on PATH before either can be fetched. The Mac already has it; Omarchy
     # gets it from pacman dotnet-sdk.
