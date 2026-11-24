@@ -9,6 +9,7 @@ These keep the repository improving after bootstrap. Write them under `.ai/` (or
 - When a change is corrected for a mistake that a machine can catch, make the mistake fail: structure first, then a type, a ban with a message, or a banned-patterns line. Show the check failing on the real mistake before adding it. [unchecked: judged in review; the gate cannot see why a check was added]
 - Put existing occurrences of a newly banned pattern in the ratchet baseline instead of fixing them in the same change, and leave the clean-up to the garden skill. [check: banned patterns]
 - Write prose rules only for decisions that need judgment, and tag every rule with the check that enforces it or the reason none can. [check: rule tags]
+- When asked for a table of rules and what enforces them, the tags in `.ai/rules` are that table; do not keep a second one. [check: rule tags]
 - Never edit a ratchet baseline by hand; regenerate it with `scripts/check.sh --write-baselines`; the gate refuses a baseline that grows relative to the base. [check: banned patterns]
 - A comment states a reason or constraint the code cannot. It never justifies a workaround or points at plans, sessions or review rounds. [check: banned:<the repository's comment pattern ids>]
 
@@ -18,7 +19,7 @@ Create these three in every bootstrapped repository.
 
 ### `<prefix>-code-review`
 
-Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule.
+Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule. Where a reviewer has the `correct` skill, it does the same job across past commits; its rule table is the tags.
 
 ### `<prefix>-rule-docs-sync`
 

@@ -24,6 +24,29 @@ Save every crash a fuzzer finds as a corpus file in the repository before fixing
 
 During bootstrap, report the parts of the repository that fit model checking or proof: state machines and protocols with several actors, retries or concurrency; algorithms where a wrong answer is expensive and tests reach few cases. Name the promise each candidate makes and why tests miss it. Adding a model or proof needs the maintainer's decision, because it brings a toolchain (TLA+ needs Java and the TLA+ tools; Lean needs elan and lake) and a check that must stay in step with the code. A proof covers the model or the bound it states; the integrated behavior still needs runtime verification.
 
+## Adding a formal check
+
+When the maintainer agrees, build it so the repository can run and maintain it without any personal skill:
+
+1. **Pin the toolchain** in `.mise.toml`; contributors run `mise install` once. For TLA+, Temurin 25 and the TLA+ tools at a checksum:
+
+   ```toml
+   [tools]
+   java = "temurin-25"
+   "http:tla2tools" = { version = "1.7.4", url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar", checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88" }
+   ```
+
+   `temurin-25` pins the major version; a repository that must reproduce the patch release enables `mise.lock`.
+2. **Run the tool directly** from one script, such as `scripts/model-check.sh <Spec>` running `mise exec -- java -cp "$(mise where http:tla2tools)/tla2tools.jar" tlc2.TLC -workers auto -metadir "$(mktemp -d)" -config spec/<Spec>.cfg spec/<Spec>.tla`. TLC exits non-zero and prints the shortest counterexample when an invariant breaks.
+3. **Record it** in `scripts/check-data/formal.tsv` ([gate.md](gate.md) contract 7): the command, the code it covers, the commit it was confirmed against, `full` when it is cheap enough for every merge, and the property in one sentence. Show it failing on a broken variant of the code before recording it.
+4. **Seed `.ai/rules/formal.md`**, unconditional, so every agent in the repository reads it whatever skill it runs:
+
+   - The coverage and sync commit of every formal check live only in `scripts/check-data/formal.tsv`; a verify skill names its row and never copies them. [check: formal drift]
+   - After a change to covered code, rerun the check, confirm the model still describes the code, then move `synced` to the commit you checked. [check: formal drift]
+   - A failing check is a finding about the code until a replay of its counterexample shows a step the code cannot take; never weaken the property to make it pass. [unchecked: judged by replaying the counterexample]
+
+When `create-formal-verification-skill`, `maintain-formal-verification-skill` and `statechart` are installed, invoke them by name to choose the target, write the model, generate the project-local verify skill and keep it in step; the seeded rule points their coverage record at `formal.tsv`. The generated skill must also say how to read TLC's own counterexample output, so a contributor without `statechart` can still act on a failure.
+
 ## Runtime verification
 
 For an application with a user interface or a service, keep a feature map: the features a user can reach, named the way users name them, so a request and an agent mean the same thing. Give agents a reusable command-line driver that starts the application, performs an action and saves evidence (a screenshot, a response, a log), so verification costs one command instead of a fresh script each time. These two are the basis of a feature-verify skill.

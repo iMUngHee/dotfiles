@@ -456,3 +456,132 @@ register_checks() {
   assert.equal(r.status, 0, out(r));
   assert.deepEqual(state(), before);
 });
+
+const FORMAL_HEAD = "# name\tcommand\tcovers\tsynced\ttier\tproperty\n";
+
+// A repository whose formal.tsv row covers src/queue/* and is synced at the
+// commit that created the covered code.
+function formalRepo(t, { tier = "manual", command = "true", covers = "src/queue/*" } = {}) {
+  const g = gateRepo(t, { files: { "src/queue/queue.js": "export const q = [];\n", "src/other.js": "x\n" } });
+  const synced = g.git("rev-parse", "HEAD");
+  const row = (sha, extra = {}) =>
+    FORMAL_HEAD + [extra.name ?? "queue", extra.command ?? command, extra.covers ?? covers, sha, extra.tier ?? tier, "no item is lost"].join("\t") + "\n";
+  g.put("scripts/check-data/formal.tsv", row(synced));
+  g.commit("record formal check");
+  return { ...g, synced, row };
+}
+
+test("formal drift fails when covered code changes after the synced commit", async (t) => {
+  await t.test("a committed change", (t) => {
+    const g = formalRepo(t);
+    g.put("src/queue/queue.js", "export const q = [1];\n");
+    g.commit("change queue");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    for (const s of ["queue", "true", "src/queue/queue.js"]) assert.match(out(r), esc(s));
+    assert.match(out(r), new RegExp(g.synced.slice(0, 12)));
+  });
+  await t.test("a working-tree change", (t) => {
+    const g = formalRepo(t);
+    g.put("src/queue/queue.js", "export const q = [2];\n");
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("an untracked file", (t) => {
+    const g = formalRepo(t);
+    g.put("src/queue/new.js", "x\n");
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("a rename out of the covered paths", (t) => {
+    const g = formalRepo(t);
+    g.git("mv", "src/queue/queue.js", "src/moved.js");
+    g.commit("move");
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("a deletion", (t) => {
+    const g = formalRepo(t);
+    g.git("rm", "-q", "src/queue/queue.js");
+    g.commit("delete");
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("a covered path with a space", (t) => {
+    const g = formalRepo(t, { covers: "src/my queue/*" });
+    g.put("src/my queue/a.js", "x\n");
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+});
+
+test("formal drift passes unrelated changes, reverted edits and a synced update", async (t) => {
+  await t.test("an unrelated change", (t) => {
+    const g = formalRepo(t);
+    g.put("src/other.js", "y\n");
+    g.commit("other");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("a staged change reverted in the working tree", (t) => {
+    const g = formalRepo(t);
+    g.put("src/queue/queue.js", "export const q = [3];\n");
+    g.git("add", "src/queue/queue.js");
+    g.put("src/queue/queue.js", "export const q = [];\n");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("updating synced after the covered change", (t) => {
+    const g = formalRepo(t);
+    g.put("src/queue/queue.js", "export const q = [4];\n");
+    g.commit("change queue");
+    g.put("scripts/check-data/formal.tsv", g.row(g.git("rev-parse", "HEAD")));
+    g.commit("resync");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+});
+
+test("formal.tsv rows are validated", async (t) => {
+  const bad = (t, text) => {
+    const g = formalRepo(t);
+    g.put("scripts/check-data/formal.tsv", text(g));
+    return g.run(["--fast"]);
+  };
+  await t.test("an unknown synced commit", (t) => assert.equal(bad(t, (g) => g.row("0".repeat(40))).status, 1));
+  await t.test("a synced commit that is not an ancestor", (t) => {
+    const g = formalRepo(t);
+    g.git("checkout", "-q", "-b", "side");
+    g.put("side.txt", "s\n");
+    g.commit("side");
+    const side = g.git("rev-parse", "HEAD");
+    g.git("checkout", "-q", "main");
+    g.put("scripts/check-data/formal.tsv", g.row(side));
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("a short synced value", (t) => assert.equal(bad(t, (g) => g.row(g.synced.slice(0, 7))).status, 1));
+  await t.test("a repeated name", (t) => assert.equal(bad(t, (g) => g.row(g.synced) + g.row(g.synced).split("\n")[1] + "\n").status, 1));
+  await t.test("an empty field", (t) => {
+    const r = bad(t, (g) => g.row(g.synced, { command: "" }));
+    assert.equal(r.status, 1);
+    assert.match(out(r), /formal\.tsv:2: expected a unique name/);
+    assert.doesNotMatch(out(r), /does not exist/);
+  });
+  await t.test("a bad tier", (t) => assert.equal(bad(t, (g) => g.row(g.synced, { tier: "often" })).status, 1));
+  await t.test("covers of - (a row that can never drift)", (t) => assert.equal(bad(t, (g) => g.row(g.synced, { covers: "-" })).status, 1));
+  await t.test("CRLF lines are fine", (t) => {
+    const r = bad(t, (g) => g.row(g.synced).replaceAll("\n", "\r\n"));
+    assert.equal(r.status, 0, out(r));
+  });
+});
+
+test("a full-tier formal row becomes a full check that rule tags can name", (t) => {
+  const g = formalRepo(t, { tier: "full", command: "touch formal-ran" });
+  g.put(".ai/rules/main.md", "- Keep the queue invariant [check: formal:queue]\n");
+  g.commit("rule");
+  const list = g.run(["--list"]);
+  assert.match(list.stdout, /^formal:queue$/m);
+  assert.match(list.stdout, /^formal drift$/m);
+  let r = g.run(["--fast"]);
+  assert.equal(r.status, 0, out(r));
+  assert.equal(fs.existsSync(g.at("formal-ran")), false);
+  r = g.run();
+  assert.equal(fs.existsSync(g.at("formal-ran")), true, out(r));
+  const manual = formalRepo(t);
+  assert.doesNotMatch(manual.run(["--list"]).stdout, /formal:queue/);
+});

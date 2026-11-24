@@ -262,6 +262,75 @@ write_baselines() {
 	done <"$tmp/ratchet-ids"
 }
 
+# ── formal verification record ──
+
+formal=$data/formal.tsv
+
+# Prints the valid rows of formal.tsv as tab-separated fields. With report=1
+# it also prints to stderr why each other row is invalid and returns 1. awk splits on
+# every tab, so an empty field stays a field instead of shifting the rest.
+formal_rows() {
+	awk -F'\t' -v report="$1" '
+		{ sub(/\r$/, "") }
+		/^#/ || $0 == "" { next }
+		{
+			bad = NF != 6
+			for (i = 1; i <= NF; i++) if ($i == "") bad = 1
+			if ($1 !~ /^[A-Za-z0-9_-]+$/) bad = 1
+			if (length($4) != 40 || $4 ~ /[^0-9a-f]/) bad = 1
+			if ($5 != "full" && $5 != "manual") bad = 1
+			if ($3 == "-") bad = 1
+			if (!bad && seen[$1]++) bad = 1
+			if (bad) {
+				if (report) printf "%s:%d: expected a unique name, command, covers, a 40-digit synced commit, full|manual and a property, separated by tabs\n", FILENAME, FNR > "/dev/stderr"
+				status = 1
+				next
+			}
+			print
+		}
+		END { exit status }' "$formal"
+}
+
+check_formal() {
+	local status=0 rows name command covers synced tier property path changed
+	rows=$(formal_rows 1) || status=1
+	[ -n "$rows" ] || return "$status"
+	while IFS=$'\t' read -r name command covers synced tier property; do
+		if ! git cat-file -e "$synced^{commit}" 2>/dev/null; then
+			echo "formal $name: synced commit $synced does not exist"
+			status=1
+			continue
+		fi
+		if ! git merge-base --is-ancestor "$synced" HEAD; then
+			echo "formal $name: synced commit $synced is not an ancestor of HEAD"
+			status=1
+			continue
+		fi
+		# The synced tree against the working tree (index included, both sides
+		# of a rename, deletions) plus untracked files.
+		{
+			git diff --name-only -z --no-renames "$synced" --
+			git ls-files -z --others --exclude-standard
+		} >"$tmp/changed"
+		changed=""
+		while IFS= read -r -d '' path; do
+			case "$path" in "$data"/*) continue ;; esac
+			if allowed "$path" "$covers"; then
+				changed="$changed
+  $path"
+			fi
+		done <"$tmp/changed"
+		if [ -n "$changed" ]; then
+			echo "formal $name: covered code changed since $synced:$changed"
+			echo "  rerun \`$command\`, confirm the model still describes the code ($property), then set synced in $formal to the commit you checked"
+			status=1
+		fi
+	done <<EOF
+$rows
+EOF
+	return "$status"
+}
+
 # ── rule tags ──
 
 check_rule_tags() {
@@ -336,6 +405,16 @@ fi
 
 if [ -f "$patterns" ]; then
 	check "banned patterns" fast "fix each listed line as its fix says; the patterns are in $patterns" -- check_banned
+fi
+if [ -f "$formal" ]; then
+	check "formal drift" fast "rerun each listed formal check, then update its synced commit in $formal" -- check_formal
+	while IFS=$'\t' read -r f_name f_command _ _ f_tier _; do
+		if [ "$f_tier" = full ]; then
+			check "formal:$f_name" full "the $f_name model or proof failed; read its counterexample in the output above" -- bash -c "$f_command"
+		fi
+	done <<EOF
+$(formal_rows 0 || true)
+EOF
 fi
 register_checks
 if [ -d .ai/rules ]; then
