@@ -292,10 +292,10 @@ formal_rows() {
 }
 
 check_formal() {
-	local status=0 rows name command covers synced tier property path changed
+	local status=0 rows name command covers synced property path changed
 	rows=$(formal_rows 1) || status=1
 	[ -n "$rows" ] || return "$status"
-	while IFS=$'\t' read -r name command covers synced tier property; do
+	while IFS=$'\t' read -r name command covers synced _ property; do
 		if ! git cat-file -e "$synced^{commit}" 2>/dev/null; then
 			echo "formal $name: synced commit $synced does not exist"
 			status=1
