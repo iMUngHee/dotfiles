@@ -1,14 +1,8 @@
 # Stack strictness
 
-Ask for capabilities, not tools. For the repository's stack, find how it provides each capability below and wire what it provides into the gate. The examples are a few known spellings, not a list to pick from; a stack missing from them is handled the same way.
+Consult this table when an adopted convention needs a mechanical check. Prefer existing configuration and the smallest precise check.
 
 Take every command and option from a source for the installed version: the stack's official documentation, else the tool's own `--help` or manual, else its documentation at the pinned release. Many stacks have only community tools; a flag seen in none of these sources is a guess, so leave it out. Run each wired command once and keep its output as evidence that it exists and does what the row asks.
-
-End with one of three outcomes for every capability, and report all of them:
-
-- **Wired**: a tool provides it and the gate runs it.
-- **Stood in for**: no tool provides it, so a repository check covers the risk instead, such as a `banned-patterns.tsv` line for a ban, an import grep for boundaries, a ratcheted `banned-patterns.tsv` line matching suppressions that carry no reason, or a script for an inventory.
-- **Absent**: nothing reasonable covers it. Record it in the development guide with the risk it leaves open, so the gap is known rather than silent, and recheck it when the stack's tools change.
 
 | Capability | Gate tier | Examples |
 | --- | --- | --- |
@@ -24,6 +18,4 @@ End with one of three outcomes for every capability, and report all of them:
 | Dependency advisories and licenses with a reasoned ignore list | full | cargo-deny, `npm audit` with a checked ignore file, govulncheck, pip-audit |
 | Mutation testing on changed files | full, optional | cargo-mutants, Stryker, gremlins, mutmut |
 
-When the stack cannot express a ban, add a line to `scripts/check-data/banned-patterns.tsv` (see [gate.md](gate.md)). Configuration, documentation and comment patterns always go there.
-
-Turn on every rule the existing code already satisfies. A rule the existing code breaks enters through the ratchet: ban it with `mode=ratchet`, write the baseline, and let the garden skill lower it. A linter rule that no line pattern can express enters the same way one step removed: suppress each existing violation with the linter's own line-level suppression naming the rule, then ratchet that suppression comment, so the existing ones are baselined and a new one fails. Record each rule that still waits in the development guide with the reason it waits.
+If the stack lacks a native check, use a banned-pattern row only for a precise line-level violation ([gate.md](gate.md)). Test the closest legitimate look-alike through the real gate. For example, a no-third-party-dependencies policy permits project-local modules and packages, including absolute imports. If the checker cannot distinguish those from installed packages at acceptable cost, keep the dependency policy in review. If a match cannot distinguish them, use a semantic check or record the review decision. Baseline existing violations only for an adopted constraint. Avoid bulk suppressions and unrelated fixes during setup.

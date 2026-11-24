@@ -1,6 +1,8 @@
 # Gate
 
-One script decides whether a change may leave the machine. Pre-push and any CI call it; nothing else holds a second copy of the checks. Install the bundled [`assets/check.sh`](../assets/check.sh) as `scripts/check.sh` and [`assets/pre-push`](../assets/pre-push) as `.githooks/pre-push`, write the repository's own checks in `scripts/check-config.sh`, then run `git config core.hooksPath .githooks` once per clone. Keeping the repository's checks out of `check.sh` lets a newer copy of the asset replace it without losing them, so never edit `check.sh` or `pre-push` in the repository; when the asset lacks something, register a check in `check-config.sh` or report the gap. Inspect any existing destination first and extend an existing gate instead of adding a second one. Both scripts run on the bash 3.2 that macOS ships.
+Use one gate. A clone-local hook can be bypassed; server-side enforcement depends on the existing CI and repository settings. Pre-push and any CI call it; nothing else holds a second copy of the checks. When a gate already runs the repository's checks, keep its implementation and command names. Add a missing tier or selected check in its native form. Do not copy a generic driver just to expose unused flags, records or configuration files. Point the local hook at that gate; the bundled hook assumes the bundled driver's pass-record interface, so adapt the hook to an existing gate instead of replacing the gate to fit the hook.
+
+For a new gate, use the bundled [driver](../assets/check.sh) and [hook](../assets/pre-push) when the repository needs their registration, ratchet or pass-record facilities. Keep custom checks in the consuming repository's check-config.sh. Inspect existing hook configuration before enabling the hook once per clone. A small repository can use its existing test command in both tiers. The contract below describes the bundled implementation.
 
 ## Contract
 
@@ -26,7 +28,7 @@ One script decides whether a change may leave the machine. Pre-push and any CI c
 
 ## Repository checks
 
-Write a check for every rule that a machine can decide. Patterns that recur:
+Select a check when it protects an adopted contract precisely and at reasonable cost. Examples:
 
 - **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
 - **Workaround comments.** A comment that justifies a workaround teaches the next agent the workaround. Ban the workaround itself where the stack can, and the justifying phrase where it cannot.
@@ -36,7 +38,7 @@ Write a check for every rule that a machine can decide. Patterns that recur:
 - **Changelog and version.** Fail when the version owner and the changelog's released sections disagree, or when the unreleased section is missing.
 - **Dependency audit.** Known advisories, unused dependencies and disallowed licenses in `full`. Each ignore entry carries an id, a date and a reason, and a self-test proves the gate fails on an entry that lacks one.
 - **Dead code** in `full`, with the stack's own detector.
-- **Documents stay true.** The entry document's path table matches the tracked top-level paths, decision records carry a status and name their successor when superseded, document links resolve, and every name in `scripts/check.sh --list` appears in the development guide ([documentation.md](documentation.md)).
+- **Documents stay true.** Check an inventory when contributors rely on its completeness, or compare generated text with its source. Review ownership and intent separately ([documentation.md](documentation.md)).
 - **Flaky tests fail.** A test that passes only on retry fails the run.
 
 Every check script that has its own logic gets a self-test the gate runs, so a broken check cannot pass silently.
@@ -48,8 +50,8 @@ When a reviewer or the maintainer corrects the same mistake twice:
 1. Remove the mistake with structure where possible: one owner for each piece of state, one supported way to do a task, internals that cannot be imported.
 2. Otherwise make it fail: a type, the stack's own ban-with-message facility, or a `banned-patterns.tsv` line. Before adding the check, show it failing on the real past mistake or a reproduction of it.
 3. Put existing occurrences into the ratchet baseline and give them a deadline when they are deprecated.
-4. Tag the rule in `.ai/rules` with the check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; its first occurrence lives in `.ai/lessons.md`.
+4. Tag the rule in `.ai/rules` with the check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; record its evidence in the existing review or issue log.
 
 ## Mutation testing
 
-A suite that passes when the code is broken proves nothing. Where the stack has a mutation tool, register it as an optional `full` check limited to the files a change touches, and treat a surviving mutant in changed code as a missing test.
+A suite that passes when the code is broken proves nothing. When an important behavior can break without a failing test and mutation testing is worth its cost, register it as an optional `full` check limited to the files a change touches, and treat a surviving mutant in changed code as a missing test.

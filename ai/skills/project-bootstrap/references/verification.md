@@ -1,8 +1,6 @@
 # Choosing verification
 
-A single passing run proves one case. Pick a method by the risk the code carries and the question that risk asks, then find the stack's tool for that family. The tools named are examples; any method that answers a question below fits the same way.
-
-A stack with no tool for a family still gets the method. A test that loops over inputs from a seeded generator and checks the property is a property-based test without a library; print the seed on failure and save each failing input as a regular test. A directory of hostile inputs that a test replays, grown whenever a crash is found, stands in for fuzzing; where the runtime embeds in a language with a fuzzer, drive the code from there. Model checking of a design needs no support from the code's language at all, so it stays a candidate to report whatever the stack. Name the method that stood in for the missing tool in the development guide and the report.
+Name the observable contract, the harm if it breaks, and the gap in existing evidence. Reuse the cheapest working check. Reach for this table only while that gap remains. Preserve effective suites, crash corpora and formal records. If a necessary method lacks tooling, a small deterministic fixture may suffice; record what it exercises and what remains uncertain.
 
 | Risk | Question | Family |
 | --- | --- | --- |
@@ -18,14 +16,7 @@ A stack with no tool for a family still gets the method. A test that loops over 
 
 ## Choosing cases
 
-A method says how to check; the cases say what. Write these criteria into the development guide and let code review judge new tests against them, because the right cases differ from change to change and no gate can pick them:
-
-1. Every test names the promise it protects: a documented contract or behavior a user or caller can see. A test that protects no promise, or breaks when only internals change, goes.
-2. Every bug that escaped gets a test that fails on the commit that had it, as a saved fuzzing input does.
-3. Cover the edges of each input: empty, one, the maximum, each limit exactly and one past it, and each distinct class of input that the code treats differently.
-4. Cover the failure paths before more of the happy path: a dependency that fails, times out, returns nothing, returns duplicates or answers late.
-5. Add cases where the evidence says tests are weak: mutants that survive in changed files, and unexercised branches in code whose failure is costly.
-6. When the cases cannot be listed by hand, escalate through the table above: from examples to properties, and from properties to model checking when the order of steps is the risk.
+Choose a trigger and an observation at the public boundary. Exercise a meaningful limit or failure path when it changes the outcome. Reproduce an escaped bug before its fix. Skip redundant cases for states the type system rules out. A test should survive a behavior-preserving refactor and fail if its promise breaks. Measure performance claims under a stated representative workload.
 
 ## Where each method runs
 
@@ -37,7 +28,7 @@ Save every crash a fuzzer finds as a corpus file in the repository before fixing
 
 ## Formal verification candidates
 
-During bootstrap, report the parts of the repository that fit model checking or proof: state machines and protocols with several actors, retries or concurrency; algorithms where a wrong answer is expensive and tests reach few cases. Name the promise each candidate makes and why tests miss it, and rank them by the harm a break does, not by how easy they are to verify. A separate model, in TLA+, Quint, PRISM or Lean alike, is a translation of the code that nobody checks, so prefer in this order: a checker or verifier that runs on the code itself; a model of a design question tests cannot ask, such as orderings, possibility or probability, which is worth that gap; and last a proof about a model of one function, which rarely beats property-based tests on the real code unless a differential test ties the model to it. Linear-time checkers such as TLC say what holds on every path; what must stay possible on some path needs CTL, and how often something happens needs a probabilistic checker. Adding a model or proof needs the maintainer's decision, because it brings a toolchain and a check that must stay in step with the code. A proof covers the model or the bound it states; the integrated behavior still needs runtime verification.
+Consider this section only when an uncovered, costly invariant warrants a model or proof. Examples include state machines and protocols with several actors, retries or concurrency; algorithms where a wrong answer is expensive and tests reach few cases. Name the promise each candidate makes and why tests miss it, and rank them by the harm a break does, not by how easy they are to verify. A separate model, in TLA+, Quint, PRISM or Lean alike, is a translation of the code that nobody checks, so prefer in this order: a checker or verifier that runs on the code itself; a model of a design question tests cannot ask, such as orderings, possibility or probability, which is worth that gap; and last a proof about a model of one function, which rarely beats property-based tests on the real code unless a differential test ties the model to it. Linear-time checkers such as TLC say what holds on every path; what must stay possible on some path needs CTL, and how often something happens needs a probabilistic checker. Adding a model or proof needs the maintainer's decision, because it brings a toolchain and a check that must stay in step with the code. A proof covers the model or the bound it states; the integrated behavior still needs runtime verification.
 
 ## Adding a formal check
 
@@ -79,4 +70,4 @@ The development guide carries this procedure (step 6 above). When `formal drift`
 
 ## Runtime verification
 
-For an application with a user interface or a service, keep a feature map: the features a user can reach, named the way users name them, so a request and an agent mean the same thing. Give agents a reusable command-line driver that starts the application, performs an action and saves evidence (a screenshot, a response, a log), so verification costs one command instead of a fresh script each time. These two are the basis of a feature-verify skill.
+For a critical interaction, exercise its normal entrypoint and observe the user-visible outcome. Reuse a feature map or driver where available. Build a reusable driver only when repeated verification justifies its upkeep.

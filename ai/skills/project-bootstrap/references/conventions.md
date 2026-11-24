@@ -9,7 +9,7 @@ A convention is a target, not a description of the code as it stands. Code writt
 3. **Published guides that you fetch and read for this setup** (below). Never take a convention from memory: a remembered rule has no source a reviewer can check and drifts from the version the repository uses.
 4. **The stack's supported defaults** ([defaults.md](defaults.md)).
 
-Observed practice settles only what none of these decides, such as which of two acceptable spellings the repository already uses everywhere. Where the code contradicts the adopted target, the code is the debt: the gate enforces the target on new code and ratchets the existing violations ([stacks.md](stacks.md)), and the garden skill clears them. Keep an observed practice against a guide only when someone can state why; that reason becomes a decision of the first kind and goes into the development guide.
+Observed practice settles only what none of these decides, such as which of two acceptable spellings the repository already uses everywhere. Where the code contradicts the adopted target, the code is the debt: the gate enforces the target on new code and ratchets the existing violations ([stacks.md](stacks.md)), and maintainers clear them as the affected code changes. Keep an observed practice against a guide only when someone can state why; that reason becomes a decision of the first kind and goes into the development guide.
 
 ## Find the guides
 
@@ -32,9 +32,7 @@ Use the version matching the language edition or framework major version the rep
 ## Turn them into rules
 
 1. Open each rule file that a guide governs with a guide header. Name the guides with links and the sections excluded and why. Then state the order above as it applies here.
-2. Write each adopted item as a short rule that cites the guide's rule ID or section, such as `(M-PANIC-ON-BUG)` or `(AIP-158)`, and ends with its tag like any rule.
-3. Cover performance explicitly: allocation and logging on hot paths, blocking in async code, the cost of the chosen data structures, and that a performance claim needs a before-and-after measurement.
-4. Enforce what a tool can: turn on the linter rules that implement a guide item, and ratchet the existing violations. An item no tool can decide stays `[unchecked: reason]`, and code that differs adopts it as that code is touched.
-5. Record in the development guide the reason and link for each adopted item, and each guide item a decision overrides with that decision's reason.
-
-The report lists the guides read, with their versions or retrieval dates, and how many items were adopted, enforced, left unchecked and overridden.
+2. Write each adopted item as a short rule that cites the guide's rule ID or section, such as `(M-PANIC-ON-BUG)` or Google's [pagination guidance](https://google.aip.dev/158), and ends with its tag like any rule.
+3. Start with responsibilities, allowed dependencies, state ownership and the public error contract. For implementation choices consider unnecessary wrappers, traits, dependencies, blocking I/O and data structures against an actual caller and workload. Prefer a borrowed input on a hot path when its lifetime permits; ownership transfer can legitimately need a copy. Require before/after evidence for a performance claim. Install benchmarks only for a concrete cost risk.
+4. Try a type, visibility or API boundary first. Where a violation remains expressible, choose a precise check and ratchet legacy violations if appropriate. Mark review decisions `[unchecked: reason]`; a valid tag alone proves only the check name exists.
+5. Keep the guide section, reason, exceptions and overrides close to the rule or in the existing contributor guide. Record an expensive structural migration as a separate decision.

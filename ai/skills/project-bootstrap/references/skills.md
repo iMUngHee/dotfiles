@@ -1,48 +1,12 @@
-# Seeded rules and project skills
+# Maintenance after bootstrap
 
-These keep the repository improving after bootstrap. Write them under `.ai/` (or the repository's existing agent-guidance source), name skills with the project's prefix, and make every one work with nothing but the repository: no personal skills, home paths or machine details. Adapt the text to the repository's commands and nouns; leave no placeholders.
+Give the repository three maintenance responsibilities. For a small project, put them beside its standard commands in the existing contributor or agent guidance. Create a project skill only when a repeated project-specific procedure benefits from a separate invocation. Reuse the existing layout and expose any shared skill through the project's supported loaders.
 
-## Maintenance rule
+- **Review changes.** Check the public contract, boundaries, ownership and implementation costs. Run the repository gate. Ask whether a new test fails for the promised behavior and permits valid alternatives.
+- **Keep rules and documentation current.** Edit the owning source and regenerate its loaders. Check whether a named check still rejects the failure the rule describes. Update a boundary description or compatibility decision when the contract changes.
+- **Garden recurring mistakes.** Use the existing review or issue log to record the failure, evidence and reason. On recurrence consider changing the structure, adding a precise check, or documenting a judgment for review. Lower an applicable baseline as code is fixed. Retire checks, lessons or prose when the underlying mistake becomes impossible.
 
-`.ai/rules/maintenance.md`, unconditional. Each item ends with its tag (see [gate.md](gate.md) contract 6):
-
-- When a change is corrected for a mistake that a machine can catch, make the mistake fail at the highest level that works: structure first, then a type, a ban whose message names what to use instead or a banned-patterns line, then a test; prose last. Show the check failing on the real mistake before adding it. [unchecked: judged in review; the gate cannot see why a check was added]
-- Put existing occurrences of a newly banned pattern in the ratchet baseline instead of fixing them in the same change, and leave the clean-up to the garden skill. [check: banned patterns]
-- Write prose rules only for decisions that need judgment, and tag every rule with the check that enforces it or the reason none can. [check: rule tags]
-- When asked for a table of rules and what enforces them, the tags in `.ai/rules` are that table; do not keep a second one. [check: rule tags]
-- Never edit a ratchet baseline by hand; regenerate it with `scripts/check.sh --write-baselines`; the gate refuses a baseline that grows relative to the base. [check: banned patterns]
-- A comment states a reason or constraint the code cannot. It never justifies a workaround or points at plans, sessions or review rounds. [check: banned:<the repository's comment pattern ids>]
-- When a correction cannot fail in the gate yet, record it in `.ai/lessons.md` with the reason given and what would enforce it, and read the lessons for an area before changing it. [unchecked: whether a correction was recorded is judged in review]
-- Existing code is not a precedent: follow the rules and their guides, and when nearby code contradicts them, write the new code to the rule and leave the old to the ratchet and the garden skill. [unchecked: judged in review]
-
-## Correction log
-
-`.ai/lessons.md` is the repository's shared memory of corrections the gate cannot catch yet. It stays out of the generated agent files to keep them small; the maintenance rule tells agents to read it. One entry per lesson:
-
-```markdown
-## <one-line lesson>
-- Seen: <date> in <commit, review or change>; again <date> …
-- Why: <the reason the person gave>
-- Enforce: <the ban, lint rule or check that would catch it> | none — <why a machine cannot decide it>
-```
-
-Describe a mistake in words rather than quoting a banned pattern, since the banned-pattern scan reads this file too. A lesson seen twice is promoted: code review turns it into a check where its `Enforce:` names one, otherwise into a tagged rule, and deletes the entry in the same change. The garden skill deletes entries whose mistake the structure now makes impossible.
-
-## Default skills
-
-Create these three in every bootstrapped repository.
-
-### `<prefix>-code-review`
-
-Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. Record in `.ai/lessons.md` each judgment finding that is not yet enforced, and promote any lesson now seen twice. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A lesson promoted without a check becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. A commit that changes a component's ownership, a layer boundary, a flow or an external contract without updating the architecture document, or reverses a recorded decision without a superseding record, is a finding. Judge new tests against the development guide's criteria for choosing cases; a test that still passes when the behavior it names breaks, or fails when only internals change, is a finding too.
-
-### `<prefix>-rule-docs-sync`
-
-Find where rules, generated agent files, the documents in [documentation.md](documentation.md) and the code disagree, and fix the source. Check that every rule's tag still names a check that exists and still enforces it, that the development guide gives the reason for each rule, and that generated files were rebuilt from their sources. List `unchecked` rules that a check could now enforce, and remove a rule whose mistake the structure now makes impossible.
-
-### `<prefix>-garden`
-
-Make one small, behavior-preserving clean-up change at a time. Pick from, in order: a ratchet baseline entry, a lesson whose mistake can no longer happen, a pattern near its deadline, dead code or an unused dependency the full gate reports, an old example of a banned pattern in documentation or tests. Turning an `unchecked` rule into a check is design work, not clean-up; leave it to code review. Fix it, lower the baseline with `scripts/check.sh --write-baselines`, run the gate, and commit the clean-up on its own. Run it on a schedule or at the end of feature work.
+Keep the commands usable by humans and by agents with only the repository. Introduce a dedicated lessons file or maintenance skill when there is an actual entry or workflow to maintain.
 
 ## Conditional skills
 
@@ -52,6 +16,6 @@ Create these only when the repository gives them something concrete to check.
 | --- | --- | --- |
 | `<prefix>-security-review` | The repository has a security boundary: authentication, isolation, secrets, untrusted input crossing into privileged code | Checks a change against each named boundary |
 | `<prefix>-change-checklist` | The repository exposes an inventory that must change together: environment variables, commands, routes, bindings, schema | Lists what else to change when one entry is added or renamed |
-| `<prefix>-feature-verify` | The repository can run its application or service locally | Drives it through the feature map with the reusable driver and keeps the evidence |
+| `<prefix>-feature-verify` | A repeated user journey already has a reusable local driver | Drives it through the feature map with the reusable driver and keeps the evidence |
 
 Mark deployment or production-touching skills as invoked only on request.
