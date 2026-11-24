@@ -5,9 +5,10 @@ looked at by the agent that built it catches almost nothing: the image reaches y
 down, so a few pixels of misalignment vanish, and you see what you intended. Every step here
 exists to get around one of those two limits.
 
-Scripts are in `../scripts/` relative to this file. The `.mjs` scripts have no dependencies
-beyond Node; `measure-dom.js` runs inside the page, and `measure-uia.ps1` needs PowerShell
-(`pwsh`) on Windows.
+Scripts are in `../scripts/` relative to this file. The review `.mjs` scripts have no
+dependencies beyond Node; `measure-dom.js` runs inside the page, and `measure-uia.ps1` needs
+PowerShell (`pwsh`) on Windows. The candidate board (`board.mjs`, `board-panel.jsx`) is not
+a review script; it needs `npm install` in the skill directory (`interface.md`).
 
 ## 0. Capture
 

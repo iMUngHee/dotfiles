@@ -1,0 +1,65 @@
+[
+  {
+    "version": "1.0",
+    "createSurface": {
+      "surfaceId": "candidate-feedback",
+      "catalogId": "product-craft/board/v1",
+      "components": [
+        { "id": "root", "component": "Column", "children": ["title", "hint", "choice", "comment", "actions", "status"] },
+        { "id": "title", "component": "Heading", "text": "시안 채택" },
+        { "id": "hint", "component": "Hint", "text": "어느 시안을 채택할지 골라 주세요." },
+        { "id": "choice", "component": "CandidatePicker", "label": "채택할 시안", "value": { "@path": "/feedback/choice" } },
+        { "id": "comment", "component": "CommentField", "label": "코멘트", "placeholder": "바꿀 점이 있으면 적어 주세요.", "value": { "@path": "/feedback/comment" } },
+        { "id": "actions", "component": "Column", "align": "start", "children": ["decide", "none"] },
+        {
+          "id": "decide",
+          "component": "SubmitButton",
+          "label": "채택해서 보내기",
+          "variant": "primary",
+          "@checks": [
+            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice" } } }, "message": "‘채택할 시안’에서 하나를 골라 주세요." }
+          ],
+          "action": {
+            "event": {
+              "name": "candidate.decide",
+              "context": {
+                "choice": { "@path": "/feedback/choice" },
+                "comment": { "@path": "/feedback/comment" },
+                "adjust": { "@path": "/adjust" },
+                "pins": { "@path": "/pins" },
+                "extra": { "@path": "/extra" }
+              }
+            }
+          }
+        },
+        {
+          "id": "none",
+          "component": "SubmitButton",
+          "label": "다시 그려 주세요",
+          "variant": "secondary",
+          "dropsChoice": true,
+          "@checks": [
+            {
+              "condition": {
+                "@call": "or",
+                "args": { "values": [
+                  { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } },
+                  { "@call": "required", "args": { "value": { "@path": "/pins" } } }
+                ] }
+              },
+              "message": "다시 그려 달라고 하려면 코멘트나 위치 메모를 남겨 주세요."
+            }
+          ],
+          "action": {
+            "event": {
+              "name": "candidate.none",
+              "context": { "comment": { "@path": "/feedback/comment" }, "pins": { "@path": "/pins" } }
+            }
+          }
+        },
+        { "id": "status", "component": "Hint", "text": { "@path": "/status" } }
+      ],
+      "dataModel": { "feedback": { "choice": "", "comment": "" }, "adjust": {}, "pins": [], "extra": {}, "status": "" }
+    }
+  }
+]

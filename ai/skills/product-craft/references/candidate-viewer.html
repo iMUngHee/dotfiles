@@ -15,11 +15,20 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #16191d; color: #fff; font: 16px/1.4 sans-serif; }
-  header { height: 48px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+  header { height: 48px; border-bottom: 1px solid #2f353d; display: flex; align-items: center; justify-content: center; gap: 4px; }
   button { min-width: 44px; height: 44px; padding: 0 12px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-  button[aria-current="true"] { background: #fff; color: #16191d; text-decoration: underline; text-underline-offset: 4px; }
+  button[aria-current="true"] { background: #fff; color: #16191d; }
   button:focus-visible { outline: 2px solid #80c8ff; outline-offset: -3px; }
   button:disabled { opacity: .3; cursor: default; }
+  /* A tool with nothing to act on is left out rather than shown dimmed without a reason. */
+  #compare:disabled, #fit:disabled { display: none; }
+  nav button { position: relative; }
+  nav button[data-chosen] { padding-right: 20px; }
+  /* Set by a host page that tracks a choice (the candidate board). */
+  nav button[data-chosen]::after { content: "✓"; position: absolute; top: 8px; right: 6px; font-size: 11px; line-height: 1; }
+  /* Locked, only the controls that switch candidates dim; compare and fit still work. */
+  html[data-locked] :is(#previous, #next, nav button:not([aria-current="true"])) { opacity: .4; cursor: default; }
+  #width { margin-left: 12px; color: #b8bec6; font-size: 13px; font-variant-numeric: tabular-nums; }
   main { height: calc(100dvh - 48px); display: grid; grid-template-columns: minmax(0, 1fr); }
   main.split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
@@ -42,6 +51,7 @@
   <button id="next" aria-label="Next candidate" title="Next (Right arrow)">→</button>
   <button id="compare" aria-label="Compare with reference" title="Reference (R)" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor"><rect x="2" y="3" width="16" height="14"/><path d="M10 3v14"/></svg></button>
   <button id="fit" aria-label="Fit image to window" title="Fit / 100% (F)" aria-pressed="false" disabled><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor"><path d="M2 7V2h5M13 2h5v5M18 13v5h-5M7 18H2v-5"/></svg></button>
+  <span id="width" title="Preview width"></span>
 </header>
 <main>
   <section class="candidate" aria-label="Candidate">
@@ -100,7 +110,10 @@ const bridge = `<script>addEventListener('keydown',event=>{
     event.preventDefault();parent.postMessage({candidateKey:event.key},'*');
   }
 });<\/script>`;
+// A host page sets data-locked once the choice is sent; the viewer then stays put.
+const locked = () => document.documentElement.hasAttribute('data-locked');
 function show(index) {
+  if (locked()) return;
   current = (index + candidates.length) % candidates.length;
   const candidate = candidates[current];
   frame.hidden = Boolean(candidate.image);
@@ -164,6 +177,10 @@ addEventListener('keydown', event => {
 addEventListener('message', event => {
   if (event.source === frame.contentWindow && typeof event.data?.candidateKey === 'string') key(event.data.candidateKey);
 });
+// The width the candidate is drawn at, which is narrower than its design in a small window.
+const widthLabel = document.querySelector('#width');
+const candidatePane = document.querySelector('.candidate');
+new ResizeObserver(() => { widthLabel.textContent = `${candidatePane.clientWidth}px`; }).observe(candidatePane);
 show(0);
 </script>
 </html>
