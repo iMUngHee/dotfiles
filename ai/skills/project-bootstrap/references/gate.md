@@ -31,11 +31,12 @@ Write a check for every rule that a machine can decide. Patterns that recur:
 - **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
 - **Workaround comments.** A comment that justifies a workaround teaches the next agent the workaround. Ban the workaround itself where the stack can, and the justifying phrase where it cannot.
 - **Surface inventory drift.** Extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when a reference document does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
-- **Layering.** Fail when a module imports across a boundary the architecture forbids. Prefer the stack's dependency-graph or import-restriction tool; fall back to a manifest or import grep.
+- **Layering.** Fail when a module imports across a boundary the architecture document forbids ([documentation.md](documentation.md)); the check reads the allowed dependencies from that document or a data file it links. Prefer the stack's dependency-graph or import-restriction tool; fall back to a manifest or import grep.
 - **Generated sources.** Regenerate and fail when the committed output differs, so edits go to the source.
 - **Changelog and version.** Fail when the version owner and the changelog's released sections disagree, or when the unreleased section is missing.
 - **Dependency audit.** Known advisories, unused dependencies and disallowed licenses in `full`. Each ignore entry carries an id, a date and a reason, and a self-test proves the gate fails on an entry that lacks one.
 - **Dead code** in `full`, with the stack's own detector.
+- **Documents stay true.** The entry document's path table matches the tracked top-level paths, decision records carry a status and name their successor when superseded, document links resolve, and every name in `scripts/check.sh --list` appears in the development guide ([documentation.md](documentation.md)).
 - **Flaky tests fail.** A test that passes only on retry fails the run.
 
 Every check script that has its own logic gets a self-test the gate runs, so a broken check cannot pass silently.
@@ -47,7 +48,7 @@ When a reviewer or the maintainer corrects the same mistake twice:
 1. Remove the mistake with structure where possible: one owner for each piece of state, one supported way to do a task, internals that cannot be imported.
 2. Otherwise make it fail: a type, the stack's own ban-with-message facility, or a `banned-patterns.tsv` line. Before adding the check, show it failing on the real past mistake or a reproduction of it.
 3. Put existing occurrences into the ratchet baseline and give them a deadline when they are deprecated.
-4. Tag the rule in `.ai/rules` with the check. Write prose only for what needs judgment, tagged `unchecked`.
+4. Tag the rule in `.ai/rules` with the check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; its first occurrence lives in `.ai/lessons.md`.
 
 ## Mutation testing
 

@@ -12,6 +12,21 @@ These keep the repository improving after bootstrap. Write them under `.ai/` (or
 - When asked for a table of rules and what enforces them, the tags in `.ai/rules` are that table; do not keep a second one. [check: rule tags]
 - Never edit a ratchet baseline by hand; regenerate it with `scripts/check.sh --write-baselines`; the gate refuses a baseline that grows relative to the base. [check: banned patterns]
 - A comment states a reason or constraint the code cannot. It never justifies a workaround or points at plans, sessions or review rounds. [check: banned:<the repository's comment pattern ids>]
+- When a correction cannot fail in the gate yet, record it in `.ai/lessons.md` with the reason given and what would enforce it, and read the lessons for an area before changing it. [unchecked: whether a correction was recorded is judged in review]
+- Existing code is not a precedent: follow the rules and their guides, and when nearby code contradicts them, write the new code to the rule and leave the old to the ratchet and the garden skill. [unchecked: judged in review]
+
+## Correction log
+
+`.ai/lessons.md` is the repository's shared memory of corrections the gate cannot catch yet. It stays out of the generated agent files to keep them small; the maintenance rule tells agents to read it. One entry per lesson:
+
+```markdown
+## <one-line lesson>
+- Seen: <date> in <commit, review or change>; again <date> …
+- Why: <the reason the person gave>
+- Enforce: <the ban, lint rule or check that would catch it> | none — <why a machine cannot decide it>
+```
+
+Describe a mistake in words rather than quoting a banned pattern, since the banned-pattern scan reads this file too. A lesson seen twice is promoted: code review turns it into a check where its `Enforce:` names one, otherwise into a tagged rule, and deletes the entry in the same change. The garden skill deletes entries whose mistake the structure now makes impossible.
 
 ## Default skills
 
@@ -19,15 +34,15 @@ Create these three in every bootstrapped repository.
 
 ### `<prefix>-code-review`
 
-Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. Judge new tests against the development guide's criteria for choosing cases; a test that still passes when the behavior it names breaks, or fails when only internals change, is a finding too.
+Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. Record in `.ai/lessons.md` each judgment finding that is not yet enforced, and promote any lesson now seen twice. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A lesson promoted without a check becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. A commit that changes a component's ownership, a layer boundary, a flow or an external contract without updating the architecture document, or reverses a recorded decision without a superseding record, is a finding. Judge new tests against the development guide's criteria for choosing cases; a test that still passes when the behavior it names breaks, or fails when only internals change, is a finding too.
 
 ### `<prefix>-rule-docs-sync`
 
-Find where rules, generated agent files and human documentation disagree, and fix the source. Check that every rule's tag still names a check that exists and still enforces it, that the development guide gives the reason for each rule, and that generated files were rebuilt from their sources. List `unchecked` rules that a check could now enforce, and remove a rule whose mistake the structure now makes impossible.
+Find where rules, generated agent files, the documents in [documentation.md](documentation.md) and the code disagree, and fix the source. Check that every rule's tag still names a check that exists and still enforces it, that the development guide gives the reason for each rule, and that generated files were rebuilt from their sources. List `unchecked` rules that a check could now enforce, and remove a rule whose mistake the structure now makes impossible.
 
 ### `<prefix>-garden`
 
-Make one small, behavior-preserving clean-up change at a time. Pick from, in order: a ratchet baseline entry, a pattern near its deadline, dead code or an unused dependency the full gate reports, an old example of a banned pattern in documentation or tests. Turning an `unchecked` rule into a check is design work, not clean-up; leave it to code review. Fix it, lower the baseline with `scripts/check.sh --write-baselines`, run the gate, and commit the clean-up on its own. Run it on a schedule or at the end of feature work.
+Make one small, behavior-preserving clean-up change at a time. Pick from, in order: a ratchet baseline entry, a lesson whose mistake can no longer happen, a pattern near its deadline, dead code or an unused dependency the full gate reports, an old example of a banned pattern in documentation or tests. Turning an `unchecked` rule into a check is design work, not clean-up; leave it to code review. Fix it, lower the baseline with `scripts/check.sh --write-baselines`, run the gate, and commit the clean-up on its own. Run it on a schedule or at the end of feature work.
 
 ## Conditional skills
 
