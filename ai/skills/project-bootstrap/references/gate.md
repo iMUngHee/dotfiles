@@ -1,6 +1,6 @@
 # Gate
 
-One script decides whether a change may leave the machine. Pre-push and any CI call it; nothing else holds a second copy of the checks. Install the bundled [`assets/check.sh`](../assets/check.sh) as `scripts/check.sh` and [`assets/pre-push`](../assets/pre-push) as `.githooks/pre-push`, write the repository's own checks in `scripts/check-config.sh`, then run `git config core.hooksPath .githooks` once per clone. Keeping the repository's checks out of `check.sh` lets a newer copy of the asset replace it without losing them. Inspect any existing destination first and extend an existing gate instead of adding a second one. Both scripts run on the bash 3.2 that macOS ships.
+One script decides whether a change may leave the machine. Pre-push and any CI call it; nothing else holds a second copy of the checks. Install the bundled [`assets/check.sh`](../assets/check.sh) as `scripts/check.sh` and [`assets/pre-push`](../assets/pre-push) as `.githooks/pre-push`, write the repository's own checks in `scripts/check-config.sh`, then run `git config core.hooksPath .githooks` once per clone. Keeping the repository's checks out of `check.sh` lets a newer copy of the asset replace it without losing them, so never edit `check.sh` or `pre-push` in the repository; when the asset lacks something, register a check in `check-config.sh` or report the gap. Inspect any existing destination first and extend an existing gate instead of adding a second one. Both scripts run on the bash 3.2 that macOS ships.
 
 ## Contract
 

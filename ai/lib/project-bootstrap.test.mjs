@@ -288,7 +288,9 @@ test("ratchet identifies violations by content and only moves one way", async (t
   await t.test("replacing one violation with another", (t) => {
     const g = ratchetRepo(t);
     g.put("src/b.txt", "LEGACY(d)\n");
-    assert.equal(g.run().status, 1);
+    const r = g.run();
+    assert.equal(r.status, 1);
+    for (const s of ["src/b.txt:1", "old style", "use the new API"]) assert.match(out(r), esc(s));
   });
   await t.test("duplicating a baselined line", (t) => {
     const g = ratchetRepo(t);

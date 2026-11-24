@@ -143,7 +143,10 @@ scan_patterns() {
 			continue
 		fi
 		: >"$tmp/hits.$id"
-		[ "$rmode" = ratchet ] && echo "$id" >>"$tmp/ratchet-ids"
+		if [ "$rmode" = ratchet ]; then
+			echo "$id" >>"$tmp/ratchet-ids"
+			printf '%s\n%s\n' "$reason" "$fix" >"$tmp/meta.$id"
+		fi
 		# -z ends the path and the line number with NUL, so a path holding ":" stays whole.
 		git grep -z -n -I --untracked -E -e "$ere" -- . ":(exclude)$data" >"$tmp/grep" || true
 		re="check-allow\\($id\\):(.*)until=([0-9]{4}-[0-9]{2}-[0-9]{2})"
@@ -189,7 +192,7 @@ scan_patterns() {
 
 # Compares each ratchet id's hits with its baseline and the baseline with the base.
 check_ratchet() {
-	local status=0 id baseline base resets
+	local status=0 id baseline base resets reason fix
 	[ -s "$tmp/ratchet-ids" ] || return 0
 	if ! base=$(resolve_base 2>/dev/null); then
 		echo "ratchet: no base commit to compare baselines with; set CHECK_BASE to the commit this branch starts from"
@@ -197,16 +200,20 @@ check_ratchet() {
 	fi
 	resets=$(git log --format=%B "$base..HEAD" | sed -n 's/^Ratchet-Reset:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p')
 	while IFS= read -r id; do
+		{
+			IFS= read -r reason
+			IFS= read -r fix
+		} <"$tmp/meta.$id"
 		baseline=$data/ratchet/$id.txt
 		: >"$tmp/empty"
 		[ -f "$baseline" ] || baseline=$tmp/empty
-		if ! awk -F'\t' -v id="$id" '
+		if ! REASON=$reason FIX=$fix awk -F'\t' -v id="$id" '
 			FILENAME == ARGV[1] { base[$1] = $2; next }
 			{ cur[$1]++; where[$1] = where[$1] "\n  " $2 }
 			END {
 				bad = 0
 				for (h in cur) if (cur[h] > (h in base ? base[h] : 0)) {
-					printf "ratchet %s: new violation%s\n", id, where[h]; bad = 1
+					printf "ratchet %s: new violation: %s; fix: %s%s\n", id, ENVIRON["REASON"], ENVIRON["FIX"], where[h]; bad = 1
 				}
 				for (h in base) if ((h in cur ? cur[h] : 0) < base[h]) {
 					printf "ratchet %s: fewer violations than the baseline; lower the baseline with scripts/check.sh --write-baselines\n", id; bad = 1
