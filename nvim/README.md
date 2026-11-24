@@ -142,6 +142,14 @@ Node.js (listed in system dependencies above) covers everything. `typescript-too
 npm install -g typescript
 ```
 
+### Lean / TLA+
+
+Lean needs **elan** on PATH; `lean.nvim` starts the server through `lake serve`, and elan installs the version a project pins in `lean-toolchain`. TLA+ highlighting comes from the treesitter `tlaplus` parser; `:TLC [cfg]` in a `.tla` buffer model-checks it with the TLA+ tools the project pins in `.mise.toml` (`http:tla2tools`, plus Java), against `<spec>.cfg` unless a cfg is given.
+
+```bash
+brew install elan-init mise   # macOS
+```
+
 ## Inline Review
 
 Review comments anchored to code, sent to an AI agent as one prompt, with the agent's response shown back at each location (`lua/inline_review/`; design decisions in its `design-contract.md`).
@@ -186,6 +194,7 @@ lua/
     40_telescope.lua      -- telescope, fzf-native (with runtime case-sensitivity toggle)
     50_treesitter.lua     -- treesitter, treesitter-context, rainbow-delimiters
     60_lsp.lua            -- mason, mason-lspconfig, nvim-lspconfig, roslyn.nvim, typescript-tools, nvim-cmp
+    65_formal.lua         -- lean.nvim (Lean 4 server, infoview, unicode input)
     70_git.lua            -- gitsigns, diffview
     80_formatter.lua      -- mason-tool-installer, nvim-lint, conform.nvim
     90_misc.lua           -- trouble, todo-comments, zen-mode
@@ -201,6 +210,8 @@ after/
     sourcekit.lua         -- swift/objc only (clangd handles c/cpp), shares .build scratch path
     cspell_ls.lua         -- Custom root_dir to avoid attaching to non-project buffers
     jdtls.lua             -- JDK 17+ required; lombok support, jdt:// classfile handler
+  ftplugin/
+    tla.lua               -- :TLC model-checks the current TLA+ spec
 tests/
   inline_review_spec.lua  -- Headless checks for inline_review
 queries/

@@ -27,6 +27,9 @@ brew "fnm"
 # statechart skill installs Temurin 25 and the TLA+ tools through it, and
 # bootstrapped repositories pin them in .mise.toml. fnm still owns node.
 brew "mise"
+# Lean toolchain manager: installs the version a project pins in lean-toolchain;
+# lean.nvim starts the server through it.
+brew "elan-init"
 brew "uv"
 brew "pipx"
 brew "ccusage"  # Claude Code usage CLI

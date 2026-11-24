@@ -40,6 +40,8 @@ return {
         "fsharp",
         "c_sharp",
         "slint",
+        -- Neovim 0.12 maps the tla filetype to this parser on its own.
+        "tlaplus",
       })
 
       vim.treesitter.language.register("bash", "sh")

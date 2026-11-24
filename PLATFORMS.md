@@ -373,6 +373,13 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **Linux / Windows** — install elan (Arch: the `elan` script from
+      https://github.com/leanprover/elan; Windows: its `elan-init.ps1`), then open
+      a `.lean` file in a Lake project: `lean.nvim` must attach `leanls` and report
+      an error for `theorem t : 1 = 2 := rfl`. In a repository whose `.mise.toml`
+      pins `http:tla2tools`, `:TLC` in a `.tla` buffer must finish the model check.
+      Only the Brewfile installs elan so far. Verified on macOS 2026-11-24.
+
 - [ ] **macOS** — run `node --test ai/lib/worktree.test.mjs`: `stage-plan`
       now reads `--input -` and `--input /dev/stdin` from descriptor 0 so Windows
       can stage a piped plan. The new test and the whole `ai/lib` suite passed on
