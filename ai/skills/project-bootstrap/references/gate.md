@@ -38,12 +38,12 @@ Select a check when it protects an adopted contract precisely and at reasonable 
 
 - **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
 - **Surface inventory drift.** Extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when a reference document does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
-- **Layering.** Fail when a module imports across a boundary the architecture document forbids ([documentation.md](documentation.md)); the check reads the allowed dependencies from that document or a data file it links. Prefer the stack's dependency-graph or import-restriction tool; fall back to a manifest or import grep.
+- **Layering.** Fail when a module imports across a boundary the architecture document forbids ([harness](harness.md)); the check reads the allowed dependencies from that document or a data file it links. Prefer the stack's dependency-graph or import-restriction tool; fall back to a manifest or import grep.
 - **Generated sources.** Regenerate and fail when the committed output differs, so edits go to the source.
 - **Changelog and version.** Fail when the version owner and the changelog's released sections disagree, or when the unreleased section is missing.
 - **Dependency audit.** Known advisories, unused dependencies and disallowed licenses in `full`. Each ignore entry carries an id, a date and a reason, and a self-test proves the gate fails on an entry that lacks one.
 - **Dead code** in `full`, with the stack's own detector.
-- **Documents stay true.** Check an inventory when contributors rely on its completeness, or compare generated text with its source. Review ownership and intent separately ([documentation.md](documentation.md)).
+- **Documents stay true.** Check an inventory when contributors rely on its completeness, or compare generated text with its source. Review ownership and intent separately ([harness](harness.md)).
 - **Flaky tests fail.** A test that passes only on retry fails the run.
 
 Keep regression cases for custom check logic where a mistake could hide a violation or reject a legitimate change. Reuse existing coverage for thin wrappers around a tested tool.
@@ -52,11 +52,7 @@ Keep regression cases for custom check logic where a mistake could hide a violat
 
 When a recurring or costly mistake warrants work, use the evidence from the affected change:
 
-1. Remove the mistake with structure where possible: one owner for each piece of state, one supported way to do a task, internals that cannot be imported.
-2. Otherwise make it fail: a type, the stack's own ban-with-message facility, or a `banned-patterns.tsv` line. Before adding the check, show it failing on the real past mistake or a reproduction of it.
+1. Remove the mistake with structure where possible: one owner for each piece of state, one supported way to do a task, internals that cannot be imported, a type that cannot hold the invalid value.
+2. Otherwise make it fail: the stack's own ban-with-message facility, or a `banned-patterns.tsv` line. Before adding the check, show it failing on the real past mistake or a reproduction of it.
 3. Baseline existing occurrences if gradual removal fits the adopted rule. Set a deadline when there is a supported migration and a reason to enforce it.
-4. Tag the rule in its owning guidance with the actual check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; record its evidence in the existing review or issue log.
-
-## Mutation testing
-
-A suite that passes when the code is broken proves nothing. When an important behavior can break without a failing test and mutation testing is worth its cost, register it as an optional `full` check limited to the files a change touches, and assess whether a surviving mutant changes an observable contract before adding a test.
+4. Tag the rule in its owning guidance with the actual check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; record its evidence where [maintenance](maintenance.md#the-correction-loop) says corrections are kept.

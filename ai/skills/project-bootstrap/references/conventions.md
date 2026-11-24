@@ -31,6 +31,20 @@ Use the version matching the language edition or framework major version the rep
 
 ## Turn them into rules
 
-1. Start with architecture, semantics and implementation. Use idiom and format where they keep the code consistent with those decisions. Calibrate consequential choices with the applicable sources above.
-2. Anchor the standard in the owning code, a public contract or a reasoned project decision. For an adopted external rule, cite its section or rule ID. Record the reason for a consequential exclusion or override.
-3. Determine what to keep, redesign or enforce using the [code path and cost comparison](structure.md). Record the standard only where contributors need it. Cite an actual enforcing check or mark the remaining judgment with an unchecked reason.
+Conventions differ in how much they decide. In order of reach:
+
+1. **Architecture**: module responsibility, layering, dependency direction, ownership of state and resources.
+2. **Semantics**: types, error model, API contracts, invariants.
+3. **Implementation**: memory, allocation, concurrency, data structures, the cost of abstraction.
+4. **Idiom**: the language's and standard library's usual way.
+5. **Style**: naming, imports, formatting, file placement.
+
+A formatter and a linter cover most of the last two; the floor's value is in the first three, so spend the effort there and adopt idiom and style where they keep those decisions consistent. For each consequential rule you adopt, know:
+
+- its **source**: the owning code, a public contract, a reasoned project decision, or a guide's section or rule ID;
+- the **failure** it prevents, as a technically working change that would make the code worse, and the legitimate alternative it must keep allowing;
+- **where it goes** by the [decision order](../SKILL.md#where-a-decision-goes) and the [code path and cost comparison](structure.md);
+- its **enforcement**: the compiler, a native lint, a precise check, or the judgment left to review;
+- the **evidence** it needs, such as a measurement before and after a claimed speed-up.
+
+These are questions to settle, not fields to write down. For example, adopting Microsoft's M-HOTPATH for a request path names the failure (per-request allocation, cloning and logging), puts the decision in the API that request handlers call, enforces what a lint can see, and asks for a measurement only when someone claims a speed-up; a rule like "borrow instead of clone" stays a reviewed rule with its source, because no lint decides every case. Record the source and reason of a consequential rule, exclusion or override where contributors read it, and record nothing to pad the document.
