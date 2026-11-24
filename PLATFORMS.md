@@ -373,6 +373,13 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **Windows** and **Linux** — run `node --test ai/skills/product-craft/scripts/*.test.mjs`
+      and, after `npm install --prefix ai/skills/product-craft`, `npm --prefix
+      ai/skills/product-craft test`: the candidate board's path containment uses
+      `path.sep` and `realpathSync`, and its static-file test creates symlinks, which
+      Windows allows only with Developer Mode on. Both passed on macOS 2026-11-24 (Node
+      24.22.1); Codex's workspace-write sandbox there refuses the board's listen with
+      EPERM, so Codex sessions fall back to the viewer and a number.
 - [ ] **macOS** — run `node --test ai/lib/worktree.test.mjs`: `stage-plan`
       now reads `--input -` and `--input /dev/stdin` from descriptor 0 so Windows
       can stage a piped plan. The new test and the whole `ai/lib` suite passed on

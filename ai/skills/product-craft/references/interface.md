@@ -76,6 +76,43 @@ and character rather than in tint. Same screen, same realistic content in each.
 If the owner says none of them is right, ask what is wrong in their words, find a different
 reference, and redraw. Do not adjust the same three.
 
+### The board, when Node can run here
+
+The board puts the viewer beside an A2UI feedback panel and hands the owner's answer back to
+you as data, so they answer on the page instead of in the conversation. It is served by
+`../scripts/board.mjs` (relative to this file); its look and journeys are in
+`../design-contract.md`.
+
+1. Put the candidates, their assets and their references in a directory of their own, such as
+   `.agents/design/board/`. Everything in it except dotfiles and `.board/` is served.
+2. Write `board.json` there: `{"candidates": [{"path": "one.html", "reference": "one-ref.png"},
+   ...], "surface": "surface.json"}`. The order is the numbering. Give either a reference per
+   candidate or one shared `"reference"` at the top, not both.
+3. Copy `feedback-surface.json` beside it as `surface.json`. You may add questions this set of
+   candidates raises — a component bound to `/extra/<key>` and listed in `root`'s children —
+   and they come back in `context.extra`. Keep the ids `choice`, `comment`, `decide` and
+   `none`; the board numbers `choice` itself. Never describe or rank the candidates there.
+4. Run `npm install --prefix <this skill's directory>` once, then start
+   `node <skill>/scripts/board.mjs serve <dir>` as a background process and read its line
+   `board: ready <url> round=<round>`. Give the owner the url.
+5. Run `node <skill>/scripts/board.mjs wait <dir> --round <round>` in the foreground. It
+   prints the answer as one JSON line and exits 0. Exit 3 means no answer yet: run it again;
+   waiting is not delegation. Exit 5 means the round ended without an answer: say so and ask
+   in the conversation.
+
+Read the answer by the rules above. `candidate.decide` with an empty comment takes that
+number as it is. A comment that asks for a change — "2, with the list from 1" — is a request
+to redraw that candidate, not to splice; a comment that only remarks is recorded. For
+`candidate.none`, the comment is the owner's account of what is wrong; when it does not say,
+ask before redrawing. Put the comment into the Decision Log in the owner's words.
+
+Fall back to the viewer and a number in the conversation when Node is missing, `npm install`
+fails, serve ends before printing its ready line (any exit code or signal; a sandbox that
+forbids listening on a port ends it with exit 2), or no ready line appears within ten
+seconds. Each answer closes its
+round; to ask again, start a new serve. If the owner answers in the conversation instead, use
+that answer and run `board.mjs stop <dir> --round <round>`.
+
 ## When the owner is away
 
 Build one direction from the reference that best fits what the owner has said, as

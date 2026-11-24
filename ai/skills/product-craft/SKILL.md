@@ -96,7 +96,8 @@ Turn the materials into one committed look: concrete values (palette, type, radi
 rhythm, density, icon style, motion) taken from the chosen reference, each with its source.
 
 - **Owner present** → show two or three candidates in `references/candidate-viewer.html` and
-  let them answer with a number.
+  let them answer with a number — on the board, which returns their answer to you as data,
+  when Node can run here (`references/interface.md`).
 - **Owner away** → see *When the owner is away*.
 
 ### 5. Build — `references/build.md`

@@ -1,0 +1,74 @@
+[
+  {
+    "version": "1.0",
+    "createSurface": {
+      "surfaceId": "candidate-feedback",
+      "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+      "components": [
+        { "id": "root", "component": "Column", "children": ["hint", "choice", "comment", "actions", "status"] },
+        {
+          "id": "choice",
+          "component": "ChoicePicker",
+          "label": "채택할 시안 (고르면 왼쪽에 그 시안이 나옵니다)",
+          "variant": "mutuallyExclusive",
+          "displayStyle": "chips",
+          "options": [],
+          "value": { "@path": "/feedback/choice" }
+        },
+        {
+          "id": "comment",
+          "component": "TextField",
+          "label": "코멘트",
+          "variant": "longText",
+          "placeholder": "바꿀 점이 있으면 적어 주세요.",
+          "value": { "@path": "/feedback/comment" }
+        },
+        { "id": "hint", "component": "Text", "text": "어느 시안으로 갈지 골라 주세요. 전부 아니면 무엇이 맞지 않는지 코멘트에 적어 주세요." },
+        { "id": "actions", "component": "Row", "align": "center", "children": ["decide", "none"] },
+        {
+          "id": "decide",
+          "component": "Button",
+          "variant": "primary",
+          "child": "decideLabel",
+          "@checks": [
+            {
+              "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice/0" } } },
+              "message": "채택할 시안을 골라 주세요."
+            }
+          ],
+          "action": {
+            "event": {
+              "name": "candidate.decide",
+              "context": {
+                "choice": { "@path": "/feedback/choice/0" },
+                "comment": { "@path": "/feedback/comment" },
+                "extra": { "@path": "/extra" }
+              }
+            }
+          }
+        },
+        { "id": "decideLabel", "component": "Text", "text": "고른 시안으로 보내기" },
+        {
+          "id": "none",
+          "component": "Button",
+          "child": "noneLabel",
+          "@checks": [
+            {
+              "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } },
+              "message": "무엇이 맞지 않는지 적어 주세요."
+            }
+          ],
+          "action": {
+            "event": {
+              "name": "candidate.none",
+              "context": { "comment": { "@path": "/feedback/comment" } }
+            }
+          }
+        },
+        { "id": "noneLabel", "component": "Text", "text": "전부 아님" },
+        { "id": "status", "component": "Text", "text": { "@path": "/status" } }
+      ],
+      "dataModel": { "feedback": { "choice": [], "comment": "" }, "extra": {}, "status": "" }
+    }
+  }
+]
