@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Runs the fast checks before every push. Turn it on once per clone (the
+# setting is shared by every worktree of the clone):
+#
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+# git exports GIT_DIR to a hook run in a linked worktree; under it, git in
+# another checkout acts on the caller's repository instead.
+# shellcheck disable=SC2046 # one variable name per word
+unset $(git rev-parse --local-env-vars)
+cd "$(git rev-parse --show-toplevel)"
+
+# The checks read the working tree, so an uncommitted edit could hide a
+# violation that the pushed commit still has.
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+	echo "pre-push: the working tree has uncommitted changes; commit or clean them before pushing, because the checks read the working tree" >&2
+	exit 1
+fi
+
+# git gives one line per pushed ref: <local ref> <local sha> <remote ref> <remote sha>.
+head=$(git rev-parse HEAD)
+while read -r _ sha _ _; do
+	case "$sha" in *[!0]*) ;; *) continue ;; esac # all zeros: a deletion
+	if [ "$(git rev-parse "$sha^{commit}")" != "$head" ]; then
+		echo "pre-push: refusing to push $sha, which is not HEAD; check it out and push from there so the checks see what is pushed" >&2
+		exit 1
+	fi
+done
+
+if scripts/check.sh --passed; then
+	echo "pre-push: HEAD already passed scripts/check.sh here; skipping the fast check"
+	exit 0
+fi
+exec scripts/check.sh --fast

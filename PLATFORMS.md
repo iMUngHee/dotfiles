@@ -536,4 +536,4 @@ cannot run something; remove it in the commit that records the result.
       pm-band passes `LC_ALL=C` to `resolve-session` for the same reason; on a
       machine whose git is translated, open a Claude session outside git and
       check the band is hidden rather than showing an error.
-- [ ] **macOS and Windows (Git Bash)** — run `node --test ai/lib/stop-hooks.test.mjs ai/lib/project-bootstrap.test.mjs`. Check relative rule/skill links on a symlink-capable filesystem and the handwritten AGENTS.md / CLAUDE.md import layout without symlinks.
+- [ ] **Linux and Windows (Git Bash)** — run `node --test ai/lib/stop-hooks.test.mjs ai/lib/project-bootstrap.test.mjs`. Check relative rule/skill links on a symlink-capable filesystem and the handwritten AGENTS.md / CLAUDE.md import layout without symlinks. The gate tests run the bundled `check.sh` and `pre-push` under `/bin/bash`; on Git Bash also confirm `git grep -z`, `sha256sum` and the pre-push hook behave as on macOS (passed there on bash 3.2.57, 2026-11-24).

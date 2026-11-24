@@ -60,7 +60,7 @@ function fixture(tool, assetOnly = false) {
   if (assetOnly) {
     const assets = join(root, "ai", "skills", "project-bootstrap", "assets");
     mkdirSync(assets, { recursive: true });
-    writeFileSync(join(assets, "agents-build.mjs"), "fixture\n");
+    writeFileSync(join(assets, "check.sh"), "fixture\n");
   } else {
     writeFileSync(join(root, "ai", "rule.md"), "after\n");
     writeFileSync(join(root, "ai", "lib", "untracked.test.mjs"), "fixture\n");

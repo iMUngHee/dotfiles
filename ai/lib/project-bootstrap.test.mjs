@@ -95,3 +95,362 @@ test("symlinked destination parent and input file are rejected before writes", (
   assert.equal(f.run().status, 1);
   assert.equal(fs.existsSync(f.at("AGENTS.md")), false);
 });
+
+// ── gate (assets/check.sh, assets/pre-push) ──
+
+const gateAsset = new URL("../skills/project-bootstrap/assets/check.sh", import.meta.url);
+const hookAsset = new URL("../skills/project-bootstrap/assets/pre-push", import.meta.url);
+// /bin/bash is 3.2 on macOS; the assets must run there.
+const BASH = "/bin/bash";
+const gitVars = {
+  GIT_AUTHOR_NAME: "Fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+  GIT_COMMITTER_NAME: "Fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+  GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null",
+};
+const vars = (extra = {}) => ({ ...process.env, ...gitVars, ...extra });
+
+const PASSING_CONFIG = `tool_versions() { echo fixture-tools; }
+register_checks() {
+  check lint fast "run the linter" -- true
+}
+`;
+
+function gateRepo(t, { config = PASSING_CONFIG, files = {}, branch = "main" } = {}) {
+  const root = fs.mkdtempSync(path.join(tmpdir(), "gate-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const at = (name) => path.join(root, name);
+  const put = (name, data) => {
+    fs.mkdirSync(path.dirname(at(name)), { recursive: true });
+    fs.writeFileSync(at(name), data);
+  };
+  const git = (...args) => {
+    const r = spawnSync("git", args, { cwd: root, env: vars(), encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  git("init", "-q", "-b", branch);
+  put("scripts/check.sh", fs.readFileSync(gateAsset));
+  put(".githooks/pre-push", fs.readFileSync(hookAsset));
+  fs.chmodSync(at("scripts/check.sh"), 0o755);
+  fs.chmodSync(at(".githooks/pre-push"), 0o755);
+  put("scripts/check-config.sh", config);
+  for (const [name, data] of Object.entries(files)) put(name, data);
+  git("add", "-A");
+  git("commit", "-qm", "init");
+  const run = (args = [], extra = {}) =>
+    spawnSync(BASH, [at("scripts/check.sh"), ...args], { cwd: root, env: vars(extra), encoding: "utf8" });
+  const commit = (message) => { git("add", "-A"); git("commit", "-qm", message); };
+  return { root, at, put, git, run, commit };
+}
+
+const out = (r) => r.stdout + r.stderr;
+const esc = (s) => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+test("gate collects every failure with its hint, selects fast checks and lists without running", (t) => {
+  const g = gateRepo(t, {
+    config: `tool_versions() { :; }
+register_checks() {
+  check alpha fast "fix alpha like this" -- false
+  check beta fast "fix beta like that" -- false
+  check gamma full "gamma hint" -- touch ran-full
+}
+`,
+  });
+  const fast = g.run(["--fast"]);
+  assert.equal(fast.status, 1);
+  for (const s of ["alpha", "fix alpha like this", "beta", "fix beta like that"]) assert.match(out(fast), esc(s));
+  assert.equal(fs.existsSync(g.at("ran-full")), false);
+  const list = g.run(["--list"]);
+  assert.equal(list.status, 0, out(list));
+  assert.deepEqual(list.stdout.trim().split("\n"), ["alpha", "beta", "gamma"]);
+  assert.equal(fs.existsSync(g.at("ran-full")), false);
+});
+
+test("pass record needs a clean tree and is keyed by commit, base and date", (t) => {
+  const g = gateRepo(t);
+  g.put("a.txt", "one\n");
+  g.commit("second");
+  g.put("dirt.txt", "x");
+  assert.equal(g.run().status, 0);
+  assert.equal(g.run(["--passed"]).status, 1);
+  fs.unlinkSync(g.at("dirt.txt"));
+  const today = { CHECK_TODAY: "2030-01-01" };
+  assert.equal(g.run([], today).status, 0);
+  assert.equal(g.run(["--passed"], today).status, 0);
+  assert.equal(g.run(["--passed"], { CHECK_TODAY: "2030-01-02" }).status, 1);
+  assert.equal(g.run(["--passed"], { ...today, CHECK_BASE: "HEAD~1" }).status, 1);
+  // The body differs from the commit recorded above, so the amended commit
+  // cannot coincide with it even when both are made within one second.
+  g.git("commit", "-q", "--amend", "-m", "second\n\nbody\n\nRatchet-Reset: x y");
+  assert.equal(g.run([], today).status, 0);
+  g.git("commit", "-q", "--amend", "-m", "second\n\nbody");
+  assert.equal(g.run(["--passed"], today).status, 1);
+});
+
+const TSV_HEAD = "# id\tere\tallow\tmode\tdeadline\treason\tfix\n";
+const tsv = (...rows) => TSV_HEAD + rows.map((r) => r.join("\t")).join("\n") + "\n";
+
+test("an inline exception passes before its date and fails after it on the same HEAD", (t) => {
+  const g = gateRepo(t, {
+    files: {
+      "scripts/check-data/banned-patterns.tsv": tsv(["todo", "TODO", "-", "ban", "-", "no loose ends", "finish it"]),
+      "src/a.txt": "TODO check-allow(todo): waiting on upstream until=2030-01-01\n",
+    },
+  });
+  assert.equal(g.run([], { CHECK_TODAY: "2029-12-31" }).status, 0);
+  const after = { CHECK_TODAY: "2030-01-02" };
+  assert.equal(g.run(["--passed"], after).status, 1);
+  assert.equal(g.run([], after).status, 1);
+});
+
+test("banned patterns report path, id, reason and fix and honour allow globs", (t) => {
+  const g = gateRepo(t, {
+    files: {
+      "scripts/check-data/banned-patterns.tsv": tsv(["effect", "useEffect\\(", "src/framework/*", "ban", "-", "needs nuance", "use the framework hook"]),
+      "src/framework/deep/hook.ts": "useEffect(() => {})\n",
+    },
+  });
+  let r = g.run();
+  assert.equal(r.status, 0, out(r));
+  g.put("src/app/view.ts", "x\nuseEffect(() => {})\n");
+  r = g.run();
+  assert.equal(r.status, 1);
+  for (const s of ["src/app/view.ts:2", "effect", "needs nuance", "use the framework hook"]) assert.match(out(r), esc(s));
+});
+
+test("banned patterns keep a path that contains a colon whole", (t) => {
+  const g = gateRepo(t, {
+    files: {
+      "scripts/check-data/banned-patterns.tsv": tsv(["effect", "useEffect", "keep:*", "ban", "-", "r", "f"]),
+      "keep:a.ts": "useEffect\n",
+      "bad:b.ts": "x\nuseEffect\n",
+    },
+  });
+  const r = g.run();
+  assert.equal(r.status, 1);
+  assert.match(out(r), /bad:b\.ts:2: \[effect\]/);
+  assert.doesNotMatch(out(r), /keep:a\.ts/);
+});
+
+test("allow, deadline, inline exception and ratchet are decided in that order", (t) => {
+  const rows = tsv(
+    ["eff", "EFF", "lib/*", "ban", "-", "r", "f"],
+    ["old", "OLD", "-", "ratchet", "2020-01-01", "r", "f"],
+    ["leg", "LEG", "-", "ratchet", "-", "r", "f"],
+  );
+  const g = gateRepo(t, { files: { "scripts/check-data/banned-patterns.tsv": rows } });
+  // An expired inline exception inside an allow path only warns.
+  g.put("lib/a.txt", "EFF check-allow(eff): stale until=2000-01-01\n");
+  let r = g.run(["--fast"]);
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /redundant check-allow/);
+  // Past the deadline, a valid inline exception does not help.
+  g.put("src/b.txt", "OLD check-allow(old): later until=2099-01-01\n");
+  assert.equal(g.run(["--fast"]).status, 1);
+  fs.unlinkSync(g.at("src/b.txt"));
+  // A baselined violation that gains an inline exception needs the baseline lowered.
+  g.put("src/c.txt", "LEG one\n");
+  assert.equal(g.run(["--write-baselines"]).status, 0);
+  g.commit("baseline");
+  g.put("src/c.txt", "LEG one check-allow(leg): migrating until=2099-01-01\n");
+  r = g.run(["--fast"]);
+  assert.equal(r.status, 1);
+  assert.match(out(r), /lower the baseline/);
+  assert.equal(g.run(["--write-baselines"]).status, 0);
+  r = g.run(["--fast"]);
+  assert.equal(r.status, 0, out(r));
+  // A reasonless or expired inline exception fails.
+  g.put("src/d.txt", "LEG two check-allow(leg): until=2099-01-01\n");
+  assert.equal(g.run(["--fast"]).status, 1);
+  g.put("src/d.txt", "LEG two check-allow(leg): gone until=2000-01-01\n");
+  assert.equal(g.run(["--fast"]).status, 1);
+});
+
+function ratchetRepo(t) {
+  const g = gateRepo(t, {
+    files: {
+      "scripts/check-data/banned-patterns.tsv": tsv(["leg", "LEGACY", "-", "ratchet", "-", "old style", "use the new API"]),
+      "src/a.txt": "LEGACY(a,b)\n",
+      "src/b.txt": "LEGACY(c)\n",
+    },
+  });
+  assert.equal(g.run(["--write-baselines"]).status, 0);
+  g.commit("baseline");
+  g.git("checkout", "-q", "-b", "feat");
+  return g;
+}
+
+test("ratchet identifies violations by content and only moves one way", async (t) => {
+  await t.test("within the baseline", (t) => {
+    const r = ratchetRepo(t).run();
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("replacing one violation with another", (t) => {
+    const g = ratchetRepo(t);
+    g.put("src/b.txt", "LEGACY(d)\n");
+    assert.equal(g.run().status, 1);
+  });
+  await t.test("duplicating a baselined line", (t) => {
+    const g = ratchetRepo(t);
+    g.put("src/c.txt", "LEGACY(c)\n");
+    assert.equal(g.run().status, 1);
+  });
+  await t.test("fewer violations need a lower baseline", (t) => {
+    const g = ratchetRepo(t);
+    fs.unlinkSync(g.at("src/b.txt"));
+    const r = g.run();
+    assert.equal(r.status, 1);
+    assert.match(out(r), /lower the baseline/);
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    assert.equal(g.run().status, 0);
+  });
+  await t.test("the baseline cannot grow relative to the base", (t) => {
+    const g = ratchetRepo(t);
+    g.put("src/c.txt", "LEGACY(c)\n");
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    assert.equal(g.run().status, 1);
+  });
+  await t.test("moving a file passes", (t) => {
+    const g = ratchetRepo(t);
+    g.git("mv", "src/b.txt", "src/moved.txt");
+    const r = g.run();
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("a first baseline passes", (t) => {
+    const g = gateRepo(t, {
+      files: {
+        "scripts/check-data/banned-patterns.tsv": tsv(["leg", "LEGACY", "-", "ratchet", "-", "r", "f"]),
+        "src/a.txt": "LEGACY(a)\n",
+      },
+    });
+    g.git("checkout", "-q", "-b", "feat");
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    const r = g.run();
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("an unresolvable base fails and names CHECK_BASE", (t) => {
+    const g = gateRepo(t, {
+      branch: "trunk",
+      files: {
+        "scripts/check-data/banned-patterns.tsv": tsv(["leg", "LEGACY", "-", "ratchet", "-", "r", "f"]),
+        "src/a.txt": "LEGACY(a)\n",
+      },
+    });
+    const r = g.run();
+    assert.equal(r.status, 1);
+    assert.match(out(r), /CHECK_BASE/);
+  });
+  await t.test("a reformat needs a Ratchet-Reset trailer and cannot add violations", (t) => {
+    const g = ratchetRepo(t);
+    g.put("src/a.txt", "LEGACY(a, b)\n");
+    g.run(["--write-baselines"]);
+    g.commit("reformat");
+    assert.equal(g.run().status, 1);
+    g.git("commit", "-q", "--amend", "-m", "reformat\n\nRatchet-Reset: leg spacing after the formatter upgrade");
+    const r = g.run();
+    assert.equal(r.status, 0, out(r));
+    g.put("src/c.txt", "LEGACY(e)\n");
+    g.run(["--write-baselines"]);
+    g.commit("more");
+    assert.equal(g.run().status, 1);
+  });
+  await t.test("a passed deadline fails baselined lines", (t) => {
+    const g = gateRepo(t, {
+      files: {
+        "scripts/check-data/banned-patterns.tsv": tsv(["old", "OLDAPI", "-", "ratchet", "2020-01-01", "deprecated", "call newApi"]),
+        "src/a.txt": "OLDAPI()\n",
+      },
+    });
+    g.run(["--write-baselines"]);
+    g.commit("baseline");
+    assert.equal(g.run().status, 1);
+  });
+});
+
+test("rule tags", async (t) => {
+  const rules = (t, body) => {
+    const g = gateRepo(t, {
+      files: {
+        "scripts/check-data/banned-patterns.tsv": tsv(["leg", "LEGACY", "-", "ban", "-", "r", "f"]),
+        ".ai/rules/main.md": body,
+      },
+    });
+    return g.run(["--fast"]);
+  };
+  const fails = {
+    "missing": "- Do the thing\n",
+    "unknown name": "- Do the thing [check: nope]\n",
+    "empty reason": "- Do the thing [unchecked: ]\n",
+    "empty check list": "- Do the thing [check: ]\n",
+    "two tags": "- Do the thing [check: lint] [unchecked: why]\n",
+  };
+  for (const [name, body] of Object.entries(fails)) {
+    await t.test(`fails: ${name}`, (t) => assert.equal(rules(t, body).status, 1));
+  }
+  const passes = {
+    "check name": "- Lint everything [check: lint]\n",
+    "banned id": "- No legacy calls [check: banned:leg]\n",
+    "unchecked with reason": "- Name things well [unchecked: needs judgment]\n",
+    "fenced example": "---\npaths:\n  - \"src/**\"\n---\n- Rule [check: lint]\n\n```md\n- not a rule\n```\n",
+    "multi-line item": "- A long rule that\n  continues here [check: lint]\n",
+    "CRLF": "- Rule [check: lint]\r\n- Other [unchecked: judgment]\r\n",
+  };
+  for (const [name, body] of Object.entries(passes)) {
+    await t.test(`passes: ${name}`, (t) => {
+      const r = rules(t, body);
+      assert.equal(r.status, 0, out(r));
+    });
+  }
+});
+
+test("pre-push skips a passed HEAD and refuses other commits and dirty trees", (t) => {
+  const remote = fs.mkdtempSync(path.join(tmpdir(), "gate-remote-"));
+  t.after(() => fs.rmSync(remote, { recursive: true, force: true }));
+  spawnSync("git", ["init", "-q", "--bare", "-b", "main", remote], { env: vars() });
+  const g = gateRepo(t, {
+    config: `tool_versions() { echo t; }
+register_checks() {
+  check marker fast "none" -- touch "$PWD/../fast-ran-$(basename "$PWD")"
+}
+`,
+  });
+  g.git("config", "core.hooksPath", ".githooks");
+  g.git("remote", "add", "origin", remote);
+  const marker = path.join(path.dirname(g.root), `fast-ran-${path.basename(g.root)}`);
+  t.after(() => fs.rmSync(marker, { force: true }));
+  const push = (cwd, ...args) => spawnSync("git", ["push", "origin", ...args], { cwd, env: vars(), encoding: "utf8" });
+
+  assert.equal(g.run().status, 0);
+  fs.rmSync(marker, { force: true });
+  let r = push(g.root, "main");
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /already passed/);
+  assert.equal(fs.existsSync(marker), false);
+
+  g.git("checkout", "-q", "-b", "other");
+  g.put("o.txt", "o\n");
+  g.commit("other");
+  g.git("checkout", "-q", "main");
+  r = push(g.root, "other");
+  assert.notEqual(r.status, 0);
+  assert.match(out(r), /check it out/);
+  assert.equal(fs.existsSync(marker), false);
+
+  g.put("scripts/check-config.sh", fs.readFileSync(g.at("scripts/check-config.sh"), "utf8") + "\n");
+  r = push(g.root, "main");
+  assert.notEqual(r.status, 0);
+  assert.match(out(r), /uncommitted changes/);
+  g.git("checkout", "--", ".");
+
+  const state = () => [
+    g.git("for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/tags"),
+    g.git("config", "--local", "--list"),
+  ];
+  const wt = path.join(path.dirname(g.root), `${path.basename(g.root)}-wt`);
+  t.after(() => fs.rmSync(wt, { recursive: true, force: true }));
+  g.git("worktree", "add", "-q", wt, "-b", "wtb");
+  const before = state();
+  r = push(wt, "wtb");
+  assert.equal(r.status, 0, out(r));
+  assert.deepEqual(state(), before);
+});

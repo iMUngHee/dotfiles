@@ -124,7 +124,7 @@ if [[ "$PROJECT_ROOT" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
   # Shared engine: every .mjs consumer, not just the contract pair.
   if grep -qE '^ai/lib/' <<< "$CHANGED_FILES"; then
     run_suite "ai/lib suite" . bash -c 'node --test ai/lib/*.test.mjs'
-  elif grep -qE '^ai/skills/project-bootstrap/assets/agents-build\.mjs$' <<< "$CHANGED_FILES"; then
+  elif grep -qE '^ai/skills/project-bootstrap/assets/' <<< "$CHANGED_FILES"; then
     run_suite "project-bootstrap builder" . node --test ai/lib/project-bootstrap.test.mjs
   fi
   if grep -qE '^ai/skills/pm-roadmap/' <<< "$CHANGED_FILES"; then
