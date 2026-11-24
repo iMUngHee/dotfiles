@@ -68,9 +68,9 @@ for each round from the catalog. A round shows only the controls its candidates 
 Journeys:
 
 1. **Choose.** Open the board → SubmitButton "고른 시안으로 보내기" is disabled and shows
-   "채택할 시안을 골라 주세요." under it → pick card 2 → the viewer shows candidate 2, card 2
+   "위 카드에서 채택할 시안을 골라 주세요." under it → pick card 2 → the viewer shows candidate 2, card 2
    shows the eye icon and "선택됨" → type a comment → send → the form is replaced by
-   "2번 시안으로 보냈습니다." and the comment → `wait --round <r>` prints `candidate.decide`
+   "시안 2 채택으로 보냈습니다." and the comment → `wait --round <r>` prints `candidate.decide`
    with `choice: "2"` and the comment.
 2. **Reject all.** Open the board → "전부 아님" is disabled with "코멘트나 위치 메모를 남기면 보낼
    수 있습니다." under it → type what is wrong, or pin it → send → `wait` prints `candidate.none`
@@ -149,9 +149,9 @@ of a design-tool inspector.
 | Pin `#ffc24d` disc, `#16191d` letter, 2px `#16191d` ring | derived: a third hue, so a pin never reads as selection or focus; the dark ring keeps it visible on light candidates (letter 10.98:1) |
 | Primary action `#fff`, text `#16191d`, hover `#e3e6ea` | departure: the accent already means "selected"; the main action takes the viewer's white so the two never read alike |
 | Primary hover `#a6d8ff` | derived: the accent one step lighter |
-| Disabled control: transparent, `1px solid #4a5058` border, text `#b8bec6`, opacity .6. The colour swatch keeps its true colour, unfaded, and only its border turns `#4a5058`; the active segment of a disabled AlignPicker is filled `#4a5058` | derived: one look for every disabled control, so nothing reads as live before a candidate is chosen |
+| Disabled control: transparent, `1px solid #4a5058` border, text `#fff`, opacity .6, so a value still reads as a value. The colour swatch keeps its true colour, unfaded, and only its border turns `#4a5058`; the active segment of a disabled AlignPicker is filled `#4a5058`; 초기화 is hidden | derived: one look for every disabled control, so nothing reads as live before a candidate is chosen |
 | "보는 중": a 14px eye icon in the card's top-right corner, `#b8bec6` (`#16191d` on a chosen card); "선택됨": `#80c8ff` fill and tag | derived: viewing is information, not a state to confuse with selection or focus; an icon keeps one tag line per card |
-| Overflow cue: a 24px fade from transparent to `#16191d` above the answer area, and a "아래에 더 있습니다." pill (12px `#b8bec6`, `1px #767d87` border) on the divider at the right; scrolled content fades out under the sticky title over 32px | derived: a dark shadow does not show on the dark panel; text over the content read as a clipped field in review |
+| Overflow cue: a 24px fade from transparent to `#16191d` above the answer area, and the panel's thin scrollbar (`#767d87` thumb) always shown; scrolled content fades out under the sticky title over 32px | derived: a dark shadow does not show on the dark panel, and a label over the content covered controls in review |
 | Input background `#22272e` | derived: one step lighter than the background |
 | Control height 44px, radius 4px | 44px from viewer buttons; radius from the viewer candidates' 4px |
 | Spacing 8 / 16px; inspector rows 8px apart, groups 16px | derived: viewer uses 4px gaps and 12px padding; doubled for a form column |
@@ -166,7 +166,9 @@ of a design-tool inspector.
   - A row of cards, 8px apart. Each card is 60px high, with the number and one reserved tag
     line, so the height does not change. The thumbnail sits above the number when
     `board.json` gives one (max 96px wide).
-  - Unselected: border `#767d87`.
+  - Unselected: border `#767d87`, and "고르기" in `#b8bec6` on the tag line, so a card reads as
+    something to press.
+  - Each card's tooltip is "시안 <n> 채택", since pressing it chooses; the viewer's numbers only view.
   - Viewed: the eye icon in the top-right corner, with the tooltip "보는 중"; the card's
     accessible name includes "보는 중".
   - Selected: `#80c8ff` fill, `#16191d` number and a "선택됨" tag.
@@ -180,7 +182,9 @@ of a design-tool inspector.
     (every check message declared on the surface's buttons, the drop warning and the send
     preview), so the answer area never changes height.
   - A button without `dropsChoice`, once it can send and a candidate is chosen, says what goes:
-    "보낼 내용: 시안 <n> · 조정 <k>개 · 위치 <p>개 · 코멘트", leaving out the parts that are empty.
+    "시안 <n> · 조정 <k>개 · 위치 <p>개 · 코멘트", leaving out the parts that are empty,
+    then, set apart, " — 대비 경고 <c>개" for the colour tokens below 4.5:1 on the chosen candidate.
+  - Pressing a SubmitButton ends pin mode first.
   - `dropsChoice: true` (the default surface sets it on "전부 아님"): while a candidate is
     chosen, the line under the button says "전부 아님을 보내면 시안 <n> 선택과 조정값은 버려집니다.".
     Rejecting is always allowed once the comment or a pin says why (a pin is a located
@@ -188,6 +192,8 @@ of a design-tool inspector.
     disabling.
   - The column that holds the SubmitButtons sticks to the bottom of the panel, full width,
     over a 1px top border, so the answer stays in reach however long the panel grows. The
+    buttons share one row; below it is one line per button, in button order, each naming its
+    button or what it sends. The
     panel has a 200px scroll padding, and the comment and pin note fields scroll themselves
     into view on focus, so a focused field is never under the answer area.
   - While the panel can scroll further down, the answer area shows the overflow cue along its
@@ -196,7 +202,7 @@ of a design-tool inspector.
   on focus; no resize handle.
 - **Token rows (ColorToken, SizeNudge, AlignPicker):**
   - The label shows the human name only. The token name is in the row's tooltip.
-  - 초기화 is an underlined text button in `#b8bec6` that keeps its place while hidden, so the
+  - 초기화 is an underlined text button in `#b8bec6`, hidden while the control is locked, that keeps its place while hidden, so the
     row never changes width.
   - A notice line under the control only for a problem with this token on the chosen
     candidate ("이 시안에는 반영되지 않습니다.", "미리보기 반영 불가.").
@@ -211,14 +217,18 @@ of a design-tool inspector.
     초기화.
   - Contrast: the bridge measures, on the chosen candidate, the lowest contrast between text
     drawn in the token's colour and the background behind it. Below 4.5:1 the row shows
-    "이 색 글자의 배경 대비가 <r>:1입니다. 글자에는 4.5:1 이상이 필요합니다." in `#ffb4a8` (10.37:1 on the
+    "이 색과 배경의 대비가 <r>:1입니다." and, on its own line, "글자에는 4.5:1 이상이 필요합니다." in `#ffb4a8` (10.37:1 on the
     panel). The value is not blocked; the owner may keep it.
+  - Below the warning, "<#hex>로 바꾸기" sets the nearest colour of the same hue and saturation
+    that reaches 4.5:1 on the background behind the least readable text, which the bridge
+    reports with the ratio.
   - The background behind the text is found by compositing each ancestor's translucent
     background colour down to the first opaque one (or the white canvas); a translucent text
     colour is composited over that background.
   - Text with a background image or gradient on the way down cannot be measured. When nothing
-    measured is below 4.5:1 but such text exists, the row shows "이미지·그라디언트 위의 이 색
-    글자는 대비를 재지 못했습니다. 눈으로 확인해 주세요." in `#b8bec6`.
+    measured is below 4.5:1 but such text exists, the row shows "이미지·그라디언트 위
+    글자(“<text>”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요." in `#b8bec6`, naming the first
+    such text (up to 20 characters).
   - Not measured, and not flagged: text over a separately positioned element, ancestor
     `opacity`, `mix-blend-mode` and filters.
   - Invalid hex shows "#rrggbb 형식으로 적어 주세요".
@@ -239,8 +249,11 @@ of a design-tool inspector.
   - Below it, a list of pins. The header row has the number badge, "시안 n · <element text>"
     and 삭제; below it is a note field.
   - On the candidate: a lollipop marker. The 24px lettered disc stands on a 12px amber stem
-    whose 6px end dot is the exact point, so the disc is tied to its point and sits clear of the
-    pinned line; within 40px of the top edge it hangs below the point. The element gets a dashed accent
+    with a 6px end dot. On an element up to 60px high the dot sits on the element's top edge
+    above the click, so neither disc nor stem crosses its text; on a larger one the dot is the
+    click point. Within 40px of the top of the page it hangs below instead (from the bottom
+    edge of a line-sized element), and it also hangs below when its disc would cover an earlier
+    pin's disc. The element gets a dashed accent
     outline only while its note row is hovered or focused.
   - In the panel each pin row shows its number badge and "시안 <c> · <element text>"; the
     summary names it "위치 <L> · 시안 <c> · <element text>". The panel badge is the
@@ -271,24 +284,26 @@ of a design-tool inspector.
   reject rule is said once, under "전부 아님".
 - CandidatePicker label: "채택할 시안". Tag: "선택됨". Eye icon tooltip: "보는 중".
 - Comment label: "코멘트". Placeholder: "바꿀 점이 있으면 적어 주세요."
-- Buttons: "고른 시안으로 보내기" / "전부 아님". Check messages: "채택할 시안을 골라 주세요." /
-  "코멘트나 위치 메모를 남기면 보낼 수 있습니다." (the reject reason is the comment or the pins).
+- Buttons: "고른 시안으로 보내기" / "전부 아님". Check messages: "위 카드에서 채택할 시안을 골라 주세요." /
+  "코멘트나 위치 메모를 남기면 전부 아님을 보낼 수 있습니다." (the reject reason is the comment or the pins).
+  Card tag: "고르기" until chosen.
 - Controls: "초기화", "위치 지정", "지정 취소", "삭제", "시안 <n>에 남깁니다.", "선택한 시안이 아니라서 참고 메모로 보냅니다.",
-  "시안 <n> 보기" (a text button after "조정은 선택한 시안 <n>에만 적용됩니다."), "보낼 내용: …",
-  "전부 아님을 보내면 시안 <n> 선택과 조정값은 버려집니다.", "아래에 더 있습니다.", "위치는 20개까지 남길 수 있습니다.", "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.",
+  "시안 <n> 보기" (a text button after "조정은 선택한 시안 <n>에만 적용됩니다."), the send preview "시안 <n> · …",
+  "전부 아님을 보내면 시안 <n> 선택과 조정값은 버려집니다.", "위치는 20개까지 남길 수 있습니다.", "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.",
   "선택한 시안 <n>에만 적용됩니다.", "조정은 시안 <n>에 바로 반영됩니다.", "이 시안에는 반영되지 않습니다.", "미리보기 반영 불가.",
   "이미지·그라디언트 위의 이 색 글자는 대비를 재지 못했습니다. 눈으로 확인해 주세요.". Pin controls: "위치 <L> 메모",
   "위치 <L> 삭제".
   Every hint is a sentence ending in a period.
 - On the candidate in pin mode: "위치를 눌러 주세요 · Esc 취소".
 - Sent, in this order, each section under its own small heading and left out when empty:
-  - "<n>번 시안으로 보냈습니다." or "전부 아님으로 보냈습니다.";
+  - "시안 <n> 채택으로 보냈습니다." or "전부 아님으로 보냈습니다.";
   - 조정: a line per changed token in its own label, with units and the old value
     ("카드 간격: 16px → 24px", "카드 정렬: 왼쪽 → 가운데");
   - 위치 메모: "위치 A · 시안 1 · <element text>: <note>";
   - 코멘트: "“…”";
-  - "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다."
-  After a send, the viewer shows the sent candidate.
+  - a divider, then "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다."
+  After a send, the viewer shows the sent candidate and locks: its other buttons dim to .4,
+  the sent candidate's tab stays as it was, and neither buttons nor keys switch candidates.
 - Status: "이미 전송했습니다." / "보드가 닫혔습니다. 대화창에서 답해 주세요."
 
 ## Do / Don't
@@ -298,7 +313,11 @@ of a design-tool inspector.
   pin.
 - Don't expose a token control for a token no candidate declares.
 - Don't show token names to the owner; they are for the agent.
-- Do keep the viewer file untouched; the board wraps it.
+- Do keep the viewer working on its own. The board drives it only through attributes the
+  viewer styles and honours: `data-chosen` on a number button (an 11px "✓" in the tab's text colour, tooltip
+  "시안 <n> · 선택됨") and `data-locked` on its root. The viewer leaves out tools with nothing
+  to act on (compare without a reference, fit without an image) and shows the width the
+  candidate is drawn at, which tells a narrowed preview apart from the design.
 
 ## Implementation Bridge
 
@@ -339,6 +358,8 @@ of a design-tool inspector.
 - 2026-11-24 — delegated: focus moves to a white ring so selection, focus and pins are three
   distinct colours; "보는 중" becomes an eye icon so each card keeps one tag line.
 
+- 2026-11-24 — 대협: "후속 없이 이번에 다 좀 끝내라" — the viewer findings are fixed here,
+  through the viewer attributes above, instead of being left out of scope.
 - 2026-11-24 — delegated (대협: "알아서 해도 될것들"): reject-all accepts pins without a
   comment; token controls lock while a non-chosen candidate is on screen; a disabled swatch
   keeps its true colour; a pin on a non-chosen candidate is said to be sent as a reference note.

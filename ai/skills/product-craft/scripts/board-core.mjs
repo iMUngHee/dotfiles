@@ -157,12 +157,14 @@ function sentSummary(action, controls) {
   ].filter(([, lines]) => lines.length);
   const components = [{
     id: "sentHead", component: "Heading",
-    text: action.name === "candidate.decide" ? `${action.context.choice}번 시안으로 보냈습니다.` : "전부 아님으로 보냈습니다.",
+    text: action.name === "candidate.decide" ? `시안 ${action.context.choice} 채택으로 보냈습니다.` : "전부 아님으로 보냈습니다.",
   }];
   sections.forEach(([title, lines], s) => {
     components.push({ id: `sentTitle${s}`, component: "Heading", level: 2, text: title });
     lines.forEach((line, l) => components.push({ id: `sentLine${s}x${l}`, component: "Hint", text: line }));
   });
+  // A rule sets the closing line apart from the last section.
+  components.push({ id: "sentRule", component: "Divider" });
   components.push({ id: "sentNext", component: "Hint", text: "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다." });
   return JSON.stringify([{
     version: "1.0",
@@ -199,7 +201,7 @@ function wrapperPage({ token, round, query, board, controls, support, reasons })
   html, body { height: 100%; margin: 0; }
   body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; background: #16191d; color: #fff; font: 16px/1.4 sans-serif; }
   iframe { display: block; width: 100%; height: 100dvh; border: 0; }
-  aside { height: 100dvh; overflow: auto; scroll-padding-bottom: 200px; border-left: 1px solid #767d87; padding: 16px; word-break: keep-all; font-size: 14px;
+  aside { height: 100dvh; overflow: auto; scroll-padding-bottom: 200px; scrollbar-width: thin; scrollbar-color: #767d87 transparent; border-left: 1px solid #767d87; padding: 16px; word-break: keep-all; font-size: 14px;
     --a2ui-color-background: #16191d; --a2ui-color-surface: #16191d; --a2ui-color-on-surface: #fff;
     --a2ui-color-on-background: #fff; --a2ui-text-color-text: #fff; --a2ui-text-color: #fff;
     --a2ui-color-border: #767d87; --a2ui-border: 1px solid #767d87;

@@ -69,7 +69,7 @@ test("choose: pick 2, answer the added question, comment, send once", async t =>
   await page.getByRole("textbox").fill("리스트는 1처럼");
   assert.equal(await decide.isDisabled(), false);
   await decide.click();
-  await page.getByText("2번 시안으로 보냈습니다.").waitFor();
+  await page.getByText("시안 2 채택으로 보냈습니다.").waitFor();
   await page.getByText("“리스트는 1처럼”", { exact: true }).waitFor();
   assert.equal(await decide.count(), 0, "the form is replaced by what was sent");
 

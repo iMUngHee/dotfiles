@@ -72,6 +72,11 @@
   function measureContrast(names) {
     const values = {};
     const unmeasured = new Set();
+    // The background behind the least readable text, so the panel can suggest a fix, and a
+    // sample of text that could not be measured, so the panel can name it.
+    const backgrounds = {};
+    const samples = {};
+    const hex = rgb => `#${rgb.map(c => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
     for (const name of names) {
       const probe = document.createElement("span");
       probe.style.color = `var(--${name})`;
@@ -90,15 +95,20 @@
         const background = backgroundOf(el);
         if (!background) {
           unmeasured.add(name);
+          samples[name] ??= (el.innerText ?? el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, L.text);
           continue;
         }
         const [a, b] = [luminance(over(text, background)), luminance(background)].sort((x, y) => y - x);
-        lowest = Math.min(lowest, (a + 0.05) / (b + 0.05));
+        const ratio = (a + 0.05) / (b + 0.05);
+        if (ratio < lowest) {
+          lowest = ratio;
+          backgrounds[name] = hex(background);
+        }
       }
       if (Number.isFinite(lowest)) values[name] = Math.round(lowest * 1000) / 1000;
     }
     // Sent even when empty, so ratios from an earlier value do not linger in the panel.
-    post({ type: "contrast", values, unmeasured: [...unmeasured] });
+    post({ type: "contrast", values, unmeasured: [...unmeasured], backgrounds, samples });
   }
 
   function selectorFor(el) {
@@ -145,13 +155,17 @@
       box("position:absolute;bottom:12px;left:12px;padding:6px 12px;border-radius:4px;"
         + "background:#16191d;color:#fff;font:600 13px/1.4 system-ui;box-shadow:0 0 0 1px #80c8ff;", "위치를 눌러 주세요 · Esc 취소"),
     ] : [];
+    // Discs already drawn, so a pin close to another one moves aside instead of covering it.
+    const placed = [];
+    const clash = (x, y) => placed.some(d => Math.abs(d.x - x) < 26 && Math.abs(d.y - y) < 26);
     layer.replaceChildren(...armed, ...pins.flatMap(pin => {
       const el = find(pin.selector);
       let left;
       let top;
       let outline = [];
+      let r;
       if (el) {
-        const r = el.getBoundingClientRect();
+        r = el.getBoundingClientRect();
         left = r.left + pin.ox * r.width;
         top = r.top + pin.oy * r.height;
         // Only the pin whose note the owner is on gets its element outlined.
@@ -163,11 +177,17 @@
         left = pin.x * root.scrollWidth - window.scrollX;
         top = pin.y * root.scrollHeight - window.scrollY;
       }
-      // A lollipop: the lettered disc on a short stem whose end dot is the exact point. The
-      // disc stays tied to its point and clear of the line that was pinned; near the top edge
-      // it hangs below instead.
-      const flip = top < 40;
-      const marker = box(`position:absolute;left:${left - 12}px;top:${flip ? top - 3 : top - 39}px;width:24px;height:42px;`
+      // A lollipop: the lettered disc on a short stem whose end dot marks the pinned place.
+      // On a line-sized element the stem ends on its top edge (bottom edge near the top of the
+      // page), so neither the disc nor the stem crosses the text; elsewhere it ends at the point.
+      const line = r && r.height <= 60;
+      let flip = line ? r.top < 40 : top < 40;
+      const tipFor = f => (line ? (f ? r.bottom : r.top) : top);
+      const discTop = f => (f ? tipFor(f) + 15 : tipFor(f) - 39);
+      if (clash(left, discTop(flip))) flip = !flip;
+      const tip = tipFor(flip);
+      placed.push({ x: left, y: discTop(flip) });
+      const marker = box(`position:absolute;left:${left - 12}px;top:${flip ? tip - 3 : tip - 39}px;width:24px;height:42px;`
         + `display:flex;flex-direction:${flip ? "column-reverse" : "column"};align-items:center;`);
       marker.className = "pcb-pin-marker";
       marker.dataset.n = String(pin.n);

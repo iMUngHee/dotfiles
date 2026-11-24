@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useId, useState } from "react";
 import { createComponentImplementation } from "@a2ui/react";
 import { BOARD_COMPONENT_APIS } from "./board-catalog.mjs";
-import { pinLabel } from "./board-controls.mjs";
+import { pinLabel, readableColour } from "./board-controls.mjs";
 
 export const BoardContext = createContext(null);
 const useBoard = () => useContext(BoardContext);
@@ -20,13 +20,21 @@ function notice(state) {
 
 // 4.5:1 is the WCAG minimum for body-size text. A measured shortfall outranks the notice that
 // some text could not be measured.
-function Contrast({ token }) {
-  const { ratio, unmeasured } = useBoard().contrastFor(token);
-  // Rounded down, so a ratio just under the minimum never displays as 4.5.
+function Contrast({ token, current, onFix }) {
+  const { ratio, background, unmeasured, sample } = useBoard().contrastFor(token);
   if (ratio !== undefined && ratio < 4.5) {
-    return <p className="pcb-note pcb-contrast">이 색 글자의 배경 대비가 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1입니다. 글자에는 4.5:1 이상이 필요합니다.</p>;
+    const fix = background ? readableColour(current, background) : null;
+    return (
+      <div className="pcb-note pcb-contrast">
+        {/* Rounded down, so a ratio just under the minimum never displays as 4.5. */}
+        <p>이 색과 배경의 대비가 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1입니다.<br />글자에는 4.5:1 이상이 필요합니다.</p>
+        {fix && fix !== current ? <button type="button" className="pcb-link pcb-fix" onClick={() => onFix(fix)}>{fix}로 바꾸기</button> : null}
+      </div>
+    );
   }
-  return unmeasured ? <p className="pcb-note pcb-unmeasured">이미지·그라디언트 위의 이 색 글자는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p> : null;
+  if (!unmeasured) return null;
+  const named = sample ? `글자(“${sample.length > 20 ? `${sample.slice(0, 20)}…` : sample}”)` : "글자";
+  return <p className="pcb-note pcb-unmeasured">이미지·그라디언트 위 {named}는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p>;
 }
 
 // A line that keeps the height of the tallest text it can show, so a change of text never
@@ -62,7 +70,7 @@ function TokenRow({ token, label, changed, onReset, children, extra }) {
       <span className="pcb-label">{label}</span>
       <div className="pcb-inline">
         {children(locked)}
-        <button type="button" className="pcb-reset" data-hidden={!changed} tabIndex={changed ? 0 : -1} aria-hidden={!changed} disabled={locked} onClick={onReset}>초기화</button>
+        <button type="button" className="pcb-reset" data-hidden={!changed || locked} tabIndex={changed && !locked ? 0 : -1} aria-hidden={!changed || locked} disabled={locked} onClick={onReset}>초기화</button>
       </div>
       <p className={state === "ok" ? "pcb-note" : "pcb-note pcb-unavailable"}>{notice(state)}</p>
       {extra}
@@ -74,8 +82,9 @@ const UNCHOSEN = "시안을 고르면 색·간격·정렬 같은 값을 조정�
 const notChosen = n => `조정은 선택한 시안 ${n}에만 적용됩니다.`;
 const applied = n => `조정은 시안 ${n}에 바로 반영됩니다.`;
 const show = n => `시안 ${n} 보기`;
-const preview = ({ chosen, adjust, pins, comment }) => ["보낼 내용: 시안 " + chosen, adjust ? `조정 ${adjust}개` : "",
-  pins ? `위치 ${pins}개` : "", comment ? "코멘트" : ""].filter(Boolean).join(" · ");
+// What a send carries, then, set apart, how many colour tokens still fall short of 4.5:1.
+const preview = ({ chosen, adjust, pins, comment, short }) => ["시안 " + chosen, adjust ? `조정 ${adjust}개` : "",
+  pins ? `위치 ${pins}개` : "", comment ? "코멘트" : ""].filter(Boolean).join(" · ") + (short ? ` — 대비 경고 ${short}개` : "");
 const drops = n => `전부 아님을 보내면 시안 ${n} 선택과 조정값은 버려집니다.`;
 
 const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({ props }) => {
@@ -88,13 +97,13 @@ const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({
           const viewed = board.viewed === c.n;
           const chosen = props.value === c.n;
           return (
-            <button key={c.n} type="button" className="pcb-card" data-candidate={c.n} aria-pressed={chosen}
+            <button key={c.n} type="button" className="pcb-card" data-candidate={c.n} aria-pressed={chosen} title={`시안 ${c.n} 채택`}
               aria-label={`시안 ${c.n}${viewed ? " 보는 중" : ""}${chosen ? " 선택됨" : ""}`}
               onClick={() => { props.setValue(c.n); board.showCandidate(c.n); }}>
               {viewed ? <EyeIcon /> : null}
               {c.thumbnail ? <img src={c.thumbnail} alt="" /> : null}
               <span className="pcb-number">{c.n}</span>
-              <span className="pcb-tag">{chosen ? "선택됨" : ""}</span>
+              <span className={chosen ? "pcb-tag" : "pcb-tag pcb-pick"}>{chosen ? "선택됨" : "고르기"}</span>
             </button>
           );
         })}
@@ -120,7 +129,7 @@ const SubmitButton = createComponentImplementation(api("SubmitButton"), ({ props
   // A button that drops the choice warns about it; the one that sends it says what goes.
   const note = !board.chosen ? "" : props.dropsChoice ? drops(board.chosen) : preview(board.sending());
   const longest = props.dropsChoice ? drops(board.candidates.length)
-    : preview({ chosen: board.candidates.length, adjust: board.limits.controls, pins: board.limits.pins, comment: true });
+    : preview({ chosen: board.candidates.length, adjust: board.tokenCount, short: board.colourCount, pins: board.limits.pins, comment: true });
   const texts = [...board.reasons, longest];
   return (
     <div className="pcb-submit-wrap">
@@ -161,7 +170,7 @@ const ColorToken = createComponentImplementation(api("ColorToken"), ({ props }) 
   };
   return (
     <TokenRow token={props.token} label={props.label} changed={props.value != null} onReset={() => props.setValue(null)}
-      extra={<Contrast token={props.token} />}>
+      extra={<Contrast token={props.token} current={current} onFix={commit} />}>
       {locked => <>
         <input type="color" className="pcb-swatch" aria-label={`${props.label} 색 선택`} value={current} disabled={locked} onChange={e => commit(e.target.value)} />
         <input type="text" className="pcb-hex" aria-label={`${props.label} hex`} value={draft} spellCheck={false} disabled={locked}
@@ -296,6 +305,8 @@ export const BOARD_CSS = `
 .pcb-card[aria-pressed="true"] { background: #80c8ff; border-color: #80c8ff; color: #16191d; }
 .pcb-number { font-size: 16px; font-weight: 600; }
 .pcb-tag { font-size: 12px; line-height: 16px; }
+.pcb-pick { color: #b8bec6; }
+.pcb-field > .pcb-reserved { margin-top: 8px; }
 .pcb-submit-wrap { display: grid; gap: 4px; justify-items: start; }
 .pcb-submit { min-height: 44px; padding: 14px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; line-height: 1; white-space: nowrap; }
 .pcb-primary { background: #fff; color: #16191d; border: 1px solid #fff; }
@@ -303,7 +314,7 @@ export const BOARD_CSS = `
 .pcb-secondary { background: transparent; color: #fff; border: 1px solid #767d87; }
 .pcb-secondary:hover:not(:disabled) { background: #22272e; }
 .pcb-submit:disabled, .pcb-toggle:disabled, .pcb-step:disabled, .pcb-segment:disabled, .pcb-hex:disabled, .pcb-number-field:disabled {
-  background: transparent; color: #b8bec6; border-color: #4a5058; opacity: .6; cursor: not-allowed; }
+  background: transparent; color: #fff; border-color: #4a5058; opacity: .6; cursor: not-allowed; }
 .pcb-reason { margin: 0; color: #b8bec6; }
 .pcb-reason:empty { display: none; }
 .pcb-reserved { display: grid; }
@@ -312,6 +323,8 @@ export const BOARD_CSS = `
 .pcb-ghost::before { content: attr(data-text); }
 .pcb-unavailable { color: #b8bec6; }
 .pcb-contrast { color: #ffb4a8; }
+.pcb-contrast p { margin: 0; }
+.pcb-fix { margin-top: 2px; color: #ffb4a8; }
 .pcb-unmeasured { color: #b8bec6; }
 .pcb-comment, .pcb-pin textarea { width: 100%; resize: none; padding: 10px 12px; border: 1px solid #767d87; border-radius: 4px;
   background: #22272e; color: #fff; font: inherit; }
@@ -357,12 +370,17 @@ aside a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading { positi
 aside a2ui-basic-column:has(> a2ui-react-submitbutton) { position: sticky; bottom: -16px; z-index: 1;
   width: calc(100% + 32px); margin: 0 -16px -16px; padding: 12px 16px 16px; --a2ui-column-gap: 8px;
   background: #16191d; border-top: 1px solid #767d87; }
-/* While the panel scrolls further, content is under the answer area: it fades into it, and
-   a label on the divider says so. Scrolled content fades out under the title the same way. */
+/* While the panel scrolls further, content is under the answer area and fades into it; the
+   panel's scrollbar stays visible beside it. Scrolled content fades out under the title too. */
 aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::before { content: ""; position: absolute; left: 0; right: 0; bottom: calc(100% + 2px); height: 24px;
   background: linear-gradient(rgba(22, 25, 29, 0), #16191d); pointer-events: none; }
-aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::after { content: "아래에 더 있습니다."; position: absolute; right: 16px; top: -12px;
-  padding: 2px 8px; border: 1px solid #767d87; border-radius: 999px; background: #16191d; color: #b8bec6; font-size: 12px; line-height: 16px; pointer-events: none; }
+/* The answer buttons share one row; under it, one line for each, which names its button. */
+aside a2ui-basic-column:has(> a2ui-react-submitbutton) { display: grid; grid-template-columns: auto auto 1fr; column-gap: 8px; row-gap: 4px; align-items: start; }
+aside a2ui-basic-column:has(> a2ui-react-submitbutton) .pcb-submit-wrap { display: contents; }
+aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(1) .pcb-submit { grid-area: 1 / 1; }
+aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(2) .pcb-submit { grid-area: 1 / 2; }
+aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(1) .pcb-reason { grid-area: 2 / 1 / 3 / 4; }
+aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(2) .pcb-reason { grid-area: 3 / 1 / 4 / 4; }
 aside[data-scrolled] a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading::after { content: ""; position: absolute; left: 0; right: 0; bottom: -33px; height: 32px;
   background: linear-gradient(#16191d 30%, rgba(22, 25, 29, 0)); pointer-events: none; }
 `;

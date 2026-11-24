@@ -9,6 +9,70 @@ export const ALIGN_OPTIONS = Object.freeze(["start", "center", "end", "stretch"]
 // Pins are lettered A, B, C… in list order so they never read as candidate numbers; the pin
 // limit keeps them within A–T.
 export const pinLabel = index => String.fromCharCode(65 + index);
+
+// WCAG 2 contrast between two #rrggbb colours.
+const channel = v => {
+  const c = v / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+const hexRgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+const rgbHex = rgb => `#${rgb.map(c => Math.round(Math.min(255, Math.max(0, c))).toString(16).padStart(2, "0")).join("")}`;
+const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+export function contrastRatio(a, b) {
+  const [x, y] = [luminance(hexRgb(a)), luminance(hexRgb(b))].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+
+function toHsl([r, g, b]) {
+  const [rr, gg, bb] = [r / 255, g / 255, b / 255];
+  const max = Math.max(rr, gg, bb);
+  const min = Math.min(rr, gg, bb);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === rr ? (gg - bb) / d + (gg < bb ? 6 : 0) : max === gg ? (bb - rr) / d + 2 : (rr - gg) / d + 4;
+  return [h / 6, s, l];
+}
+function fromHsl(h, s, l) {
+  const hue = t => {
+    const u = (t + 1) % 1;
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    if (u < 1 / 6) return p + (q - p) * 6 * u;
+    if (u < 1 / 2) return q;
+    if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
+    return p;
+  };
+  return rgbHex([hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map(v => v * 255));
+}
+
+// The colour of the same hue and saturation, with the lightness nearest to the original,
+// that reaches `min` against `background`; the colour itself when it already does, null
+// when neither black-ward nor white-ward gets there.
+export function readableColour(hex, background, min = 4.5) {
+  if (contrastRatio(hex, background) >= min) return hex;
+  const [h, s, l] = toHsl(hexRgb(hex));
+  let best = null;
+  for (const end of [0, 1]) {
+    if (contrastRatio(fromHsl(h, s, end), background) < min) continue;
+    let near = l;
+    let far = end;
+    for (let i = 0; i < 40; i++) {
+      const mid = (near + far) / 2;
+      if (contrastRatio(fromHsl(h, s, mid), background) >= min) far = mid;
+      else near = mid;
+    }
+    // Rounding to whole channels can fall just short; step on until it passes.
+    let colour = fromHsl(h, s, far);
+    for (let step = 0; contrastRatio(colour, background) < min && step < 100; step++) {
+      far += (end - far) * 0.02;
+      colour = fromHsl(h, s, far);
+    }
+    if (!best || Math.abs(far - l) < best.distance) best = { colour, distance: Math.abs(far - l) };
+  }
+  return best?.colour ?? null;
+}
 const TOKEN_KINDS = { ColorToken: "color", SizeNudge: "size", AlignPicker: "align" };
 const HEX = /^#[0-9a-fA-F]{6}$/;
 // UAX #31 identifiers, as the protocol requires of ids; tokens become CSS custom property names too.

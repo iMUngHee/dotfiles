@@ -17,7 +17,7 @@
           "label": "고른 시안으로 보내기",
           "variant": "primary",
           "@checks": [
-            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice" } } }, "message": "채택할 시안을 골라 주세요." }
+            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice" } } }, "message": "위 카드에서 채택할 시안을 골라 주세요." }
           ],
           "action": {
             "event": {
@@ -47,7 +47,7 @@
                   { "@call": "required", "args": { "value": { "@path": "/pins" } } }
                 ] }
               },
-              "message": "코멘트나 위치 메모를 남기면 보낼 수 있습니다."
+              "message": "코멘트나 위치 메모를 남기면 전부 아님을 보낼 수 있습니다."
             }
           ],
           "action": {

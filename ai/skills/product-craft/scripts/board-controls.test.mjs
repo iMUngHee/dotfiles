@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  LIMITS, extractControls, validateAdjust, validatePins, validateTokenValue, tokenSupport, hasCspMeta,
+  contrastRatio, readableColour, LIMITS, extractControls, validateAdjust, validatePins, validateTokenValue, tokenSupport, hasCspMeta,
 } from "./board-controls.mjs";
 
 const SURFACE_ID = "candidate-feedback";
@@ -102,4 +102,14 @@ test("tokenSupport accepts only tokens declared on :root and not redeclared else
 test("hasCspMeta finds the meta in any case and attribute order", () => {
   assert.equal(hasCspMeta('<META content="x" HTTP-EQUIV="content-security-policy">'), true);
   assert.equal(hasCspMeta('<meta name="viewport" content="width=device-width">'), false);
+});
+
+test("readableColour finds the nearest colour of the same hue that reaches the ratio", () => {
+  assert.equal(readableColour("#1d4ed8", "#ffffff"), "#1d4ed8", "a passing colour is kept");
+  const fixed = readableColour("#a7f3d0", "#ffffff");
+  assert.match(fixed, /^#[0-9a-f]{6}$/);
+  assert.ok(contrastRatio(fixed, "#ffffff") >= 4.5, fixed);
+  assert.ok(contrastRatio(fixed, "#ffffff") < 5, "it stops near the minimum instead of jumping to black");
+  const light = readableColour("#334155", "#111418");
+  assert.ok(contrastRatio(light, "#111418") >= 4.5, "on a dark background it lightens");
 });
