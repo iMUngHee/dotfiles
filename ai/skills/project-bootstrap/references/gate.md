@@ -13,7 +13,7 @@ One script decides whether a change may leave the machine. Pre-push and any CI c
    3. Carries `check-allow(<id>): <reason> until=YYYY-MM-DD` for the same id: exempt while the reason is present and the date has not passed; otherwise fail. An exempt line leaves the ratchet count, so a baselined violation that gains an inline exception needs its baseline lowered in the same change.
    4. `mode=ban`: fail. `mode=ratchet`: counted against the baseline.
 5. **Ratchet baseline.** `scripts/check-data/ratchet/<id>.txt` holds `sha256(line with surrounding whitespace trimmed)<TAB>count<TAB>example path`, one line per distinct content. A violation is its content, not its location, so moving a file passes and replacing one baselined violation with a different one fails.
-   - A content hash counted above its baseline, or absent from it, fails.
+   - A content hash counted above its baseline, or absent from it, fails. The message gives the count against the baseline and lists every line with that content, since content cannot tell the new copy from the old ones.
    - A content hash counted below its baseline fails until the baseline is lowered, so the baseline only shrinks.
    - The baseline file may not gain hashes or counts relative to the same file at the base. A baseline absent at the base is a first adoption and passes.
    - A reformat changes hashes without adding violations. A commit in `base..HEAD` with the trailer `Ratchet-Reset: <id> <reason>` lets that id's hashes change, provided its total count does not exceed the base's total.

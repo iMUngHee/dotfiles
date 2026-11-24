@@ -295,7 +295,11 @@ test("ratchet identifies violations by content and only moves one way", async (t
   await t.test("duplicating a baselined line", (t) => {
     const g = ratchetRepo(t);
     g.put("src/c.txt", "LEGACY(c)\n");
-    assert.equal(g.run().status, 1);
+    const r = g.run();
+    assert.equal(r.status, 1);
+    // Both copies are listed because content is the identity; the counts say
+    // how many are over the baseline.
+    assert.match(out(r), /2 lines where the baseline allows 1/);
   });
   await t.test("fewer violations need a lower baseline", (t) => {
     const g = ratchetRepo(t);

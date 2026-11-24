@@ -212,8 +212,8 @@ check_ratchet() {
 			{ cur[$1]++; where[$1] = where[$1] "\n  " $2 }
 			END {
 				bad = 0
-				for (h in cur) if (cur[h] > (h in base ? base[h] : 0)) {
-					printf "ratchet %s: new violation: %s; fix: %s%s\n", id, ENVIRON["REASON"], ENVIRON["FIX"], where[h]; bad = 1
+				for (h in cur) if (cur[h] > (allowed = (h in base ? base[h] : 0))) {
+					printf "ratchet %s: new violation, %d %s where the baseline allows %d: %s; fix: %s%s\n", id, cur[h], (cur[h] == 1 ? "line" : "lines"), allowed, ENVIRON["REASON"], ENVIRON["FIX"], where[h]; bad = 1
 				}
 				for (h in base) if ((h in cur ? cur[h] : 0) < base[h]) {
 					printf "ratchet %s: fewer violations than the baseline; lower the baseline with scripts/check.sh --write-baselines\n", id; bad = 1

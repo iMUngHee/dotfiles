@@ -19,7 +19,7 @@ Create these three in every bootstrapped repository.
 
 ### `<prefix>-code-review`
 
-Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule. Where a reviewer has the `correct` skill, it does the same job across past commits; its rule table is the tags.
+Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. Where a reviewer has the `correct` skill, it does the same job across past commits; its rule table is the tags.
 
 ### `<prefix>-rule-docs-sync`
 
@@ -27,7 +27,7 @@ Find where rules, generated agent files and human documentation disagree, and fi
 
 ### `<prefix>-garden`
 
-Make one small clean-up change at a time. Pick from, in order: a ratchet baseline entry, a pattern near its deadline, dead code or an unused dependency the full gate reports, an old example of a banned pattern in documentation or tests, an `unchecked` rule a check could enforce. Fix it, lower the baseline with `scripts/check.sh --write-baselines`, run the gate, and commit the clean-up on its own. Run it on a schedule or at the end of feature work.
+Make one small, behavior-preserving clean-up change at a time. Pick from, in order: a ratchet baseline entry, a pattern near its deadline, dead code or an unused dependency the full gate reports, an old example of a banned pattern in documentation or tests. Turning an `unchecked` rule into a check is design work, not clean-up; leave it to code review. Fix it, lower the baseline with `scripts/check.sh --write-baselines`, run the gate, and commit the clean-up on its own. Run it on a schedule or at the end of feature work.
 
 ## Conditional skills
 
