@@ -22,13 +22,13 @@ Save every crash a fuzzer finds as a corpus file in the repository before fixing
 
 ## Formal verification candidates
 
-During bootstrap, report the parts of the repository that fit model checking or proof: state machines and protocols with several actors, retries or concurrency; algorithms where a wrong answer is expensive and tests reach few cases. Name the promise each candidate makes and why tests miss it. Adding a model or proof needs the maintainer's decision, because it brings a toolchain (TLA+ needs Java and the TLA+ tools; Lean needs elan and lake) and a check that must stay in step with the code. A proof covers the model or the bound it states; the integrated behavior still needs runtime verification.
+During bootstrap, report the parts of the repository that fit model checking or proof: state machines and protocols with several actors, retries or concurrency; algorithms where a wrong answer is expensive and tests reach few cases. Name the promise each candidate makes and why tests miss it. Prefer model checking when the risk lives in the order of steps across actors, retries or time, and a proof when the code is a pure function that a proof language can restate almost line for line: the closer the model is to the code, the less a result depends on a translation nobody checks. Adding a model or proof needs the maintainer's decision, because it brings a toolchain (TLA+ needs Java and the TLA+ tools; Lean needs elan and lake) and a check that must stay in step with the code. A proof covers the model or the bound it states; the integrated behavior still needs runtime verification.
 
 ## Adding a formal check
 
 When the maintainer agrees, build it so the repository can run and maintain it without any personal skill:
 
-1. **Pin the toolchain** in `.mise.toml`; contributors run `mise install` once. For TLA+, Temurin 25 and the TLA+ tools at a checksum:
+1. **Pin the toolchain** so contributors install it with one command. For TLA+, `.mise.toml` with Temurin 25 and the TLA+ tools at a checksum, installed by `mise install`:
 
    ```toml
    [tools]
@@ -37,9 +37,13 @@ When the maintainer agrees, build it so the repository can run and maintain it w
    ```
 
    `temurin-25` pins the major version; a repository that must reproduce the patch release enables `mise.lock`.
-2. **Run the tool directly** from one script, such as `scripts/model-check.sh <Spec>` running `mise exec -- java -cp "$(mise where http:tla2tools)/tla2tools.jar" tlc2.TLC -workers auto -metadir "$(mktemp -d)" -config spec/<Spec>.cfg spec/<Spec>.tla`. TLC exits non-zero and prints the shortest counterexample when an invariant breaks.
-3. **Record it** in `scripts/check-data/formal.tsv` ([gate.md](gate.md) contract 7): the command, the code it covers, the commit it was confirmed against, `full` when it is cheap enough for every merge, and the property in one sentence. Show it failing on a broken variant of the code before recording it.
-4. **Seed `.ai/rules/formal.md`**, unconditional, so every agent in the repository reads it whatever skill it runs:
+
+   For Lean, put a Lake project in `spec/lean/` with a `lean-toolchain` file naming the exact release (for example `leanprover/lean4:v4.36.0`); elan reads it and installs that version. mise has no Lean or elan entry, so elan is the one prerequisite contributors install themselves. Start on the core library alone: Mathlib costs gigabytes and minutes of build, and list, arithmetic and permutation lemmas in core cover most properties of application code.
+2. **Run the tool directly** from one script, such as `scripts/model-check.sh <Spec>` running `mise exec -- java -cp "$(mise where http:tla2tools)/tla2tools.jar" tlc2.TLC -workers auto -metadir "$(mktemp -d)" -config spec/<Spec>.cfg spec/<Spec>.tla`. TLC exits non-zero and prints the shortest counterexample when an invariant breaks. For Lean the script runs `lake build` in `spec/lean`, which fails on any unproved theorem; check once with `#print axioms <theorem>` that no proof rests on `sorryAx`.
+3. **Tie the model to the code** with examples the code's own tests already check. Restate a few of those test cases against the model, as `#guard` lines in Lean or, in TLA+, a configuration that fixes a test's inputs and checks its expected result as an invariant, so a model that has drifted from the code fails before any property is trusted.
+4. **Show what it adds.** Break the code in a way the existing tests still pass, mirror the break in the model, and confirm the formal check fails. When no such variant can be found, say so in the report: the check then repeats what the tests already guard.
+5. **Record it** in `scripts/check-data/formal.tsv` ([gate.md](gate.md) contract 7): the command, the code it covers, the commit it was confirmed against, `full` when it is cheap enough for every merge, and the property in one sentence.
+6. **Seed `.ai/rules/formal.md`**, unconditional, so every agent in the repository reads it whatever skill it runs:
 
    - The coverage and sync commit of every formal check live only in `scripts/check-data/formal.tsv`; a verify skill names its row and never copies them. [check: formal drift]
    - After a change to covered code, rerun the check, confirm the model still describes the code, then move `synced` to the commit you checked. [check: formal drift]

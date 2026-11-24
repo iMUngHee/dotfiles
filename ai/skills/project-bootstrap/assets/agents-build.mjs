@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 process.chdir(path.dirname(import.meta.dirname));
 const stat = (file) => fs.lstatSync(file, { throwIfNoEntry: false });
 const read = (file) => fs.readFileSync(file, "utf8");
+const CODEX_DOC_LIMIT = 32768;
 
 function entries(dir, optional = true) {
   const info = stat(dir);
@@ -54,6 +55,11 @@ function build(check) {
     if (info && !info.isFile()) throw new Error(`Conflicting file: ${file}`);
     const old = info ? read(file) : undefined;
     if (info && !old.startsWith(header)) throw new Error(`Handwritten file: ${file}`);
+    // Codex stops reading project instructions at project_doc_max_bytes, 32 KiB by default.
+    const size = Buffer.byteLength(header + body);
+    if (file === "AGENTS.md" && size > CODEX_DOC_LIMIT) {
+      throw new Error(`AGENTS.md would be ${size} bytes; Codex reads ${CODEX_DOC_LIMIT} by default. Shorten .ai/rules and move reasons to the development guide.`);
+    }
     if (old !== header + body) edits.push({ file, content: header + body });
   }
 

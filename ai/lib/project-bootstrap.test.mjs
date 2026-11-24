@@ -79,6 +79,20 @@ test("handwritten collision leaves whole tree intact; incomplete prior build is 
   assert.equal(f.run("--check").status, 0);
 });
 
+test("AGENTS.md over Codex's 32 KiB default fails before any write", (t) => {
+  const f = fixture(t);
+  f.put(".ai/rules/long.md", "x".repeat(32768));
+  const before = snapshot(f.root);
+  for (const args of [["--check"], []]) {
+    const result = f.run(...args);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /AGENTS\.md would be \d+ bytes; Codex reads 32768/);
+    assert.deepEqual(snapshot(f.root), before);
+  }
+  f.put(".ai/rules/long.md", "x".repeat(32000));
+  assert.equal(f.run().status, 0);
+});
+
 test("symlinked destination parent and input file are rejected before writes", (t) => {
   const f = fixture(t);
   const elsewhere = fs.mkdtempSync(path.join(tmpdir(), "bootstrap-user-"));
