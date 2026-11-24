@@ -19,7 +19,7 @@ Create these three in every bootstrapped repository.
 
 ### `<prefix>-code-review`
 
-Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. A test that still passes when the behavior it names breaks, or fails when only internals change, is a finding too.
+Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. Judge new tests against the development guide's criteria for choosing cases; a test that still passes when the behavior it names breaks, or fails when only internals change, is a finding too.
 
 ### `<prefix>-rule-docs-sync`
 

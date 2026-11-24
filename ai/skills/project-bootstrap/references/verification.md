@@ -6,13 +6,24 @@ A single passing run proves one case. Pick a method by the risk the code carries
 | --- | --- | --- |
 | Pure logic with a large input space | Does the property hold for every input? | property-based tests (proptest, fast-check, Hypothesis) |
 | Parsers and decoders of untrusted input, unsafe or FFI code | Does a strange input crash it or corrupt memory? | coverage-guided fuzzing |
-| Several actors, concurrency, distributed state | Does an invariant hold in every order of steps? | model checking of the design (TLA+, Quint) or of the code itself where the stack allows (Stateright or loom for Rust) |
+| Several actors, concurrency, distributed state | Does an invariant hold in every order of steps? | model checking of the design (TLA+, Quint) or of the code itself where the stack allows (loom for Rust threads, Stateright for Rust code written as its actors) |
 | Recovery and escape paths that must stay open | From every state, can the system still reach the state it needs? | branching-time model checking (CTL in nuXmv) |
 | Timeouts, retries, failure rates, latency budgets | How likely is a bad outcome, or how long does it take on average? | probabilistic model checking (PRISM, Storm) fed with measured distributions |
 | A core algorithm whose failure is costly | Is it correct for every case? | proof on the code where the stack has a verifier (Kani or Verus for Rust, Gobra for Go, Dafny for code written in it), otherwise a proof of a model (Lean, or Veil for state machines beyond a model checker's bound) tied to the code by a differential test |
 | Code with a reference implementation | Does it agree with the reference? | differential tests |
 | The tests themselves | Do they catch a broken implementation? | mutation testing |
 | Behavior as integrated | Does the user see the right result? | runtime verification against a feature map |
+
+## Choosing cases
+
+A method says how to check; the cases say what. Write these criteria into the development guide and let code review judge new tests against them, because the right cases differ from change to change and no gate can pick them:
+
+1. Every test names the promise it protects: a documented contract or behavior a user or caller can see. A test that protects no promise, or breaks when only internals change, goes.
+2. Every bug that escaped gets a test that fails on the commit that had it, as a saved fuzzing input does.
+3. Cover the edges of each input: empty, one, the maximum, each limit exactly and one past it, and each distinct class of input that the code treats differently.
+4. Cover the failure paths before more of the happy path: a dependency that fails, times out, returns nothing, returns duplicates or answers late.
+5. Add cases where the evidence says tests are weak: mutants that survive in changed files, and unexercised branches in code whose failure is costly.
+6. When the cases cannot be listed by hand, escalate through the table above: from examples to properties, and from properties to model checking when the order of steps is the risk.
 
 ## Where each method runs
 
