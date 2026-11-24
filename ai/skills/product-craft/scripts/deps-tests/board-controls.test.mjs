@@ -242,7 +242,8 @@ test("reject all says it drops the chosen candidate, and pinning names its targe
   await page.getByText("전부 아님을 보내면 시안 1 선택과 조정값은 버려집니다.").waitFor();
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
-  await page.getByText("시안 2에 참고로 남깁니다.").waitFor();
+  await page.getByText("시안 2에 남깁니다.").waitFor();
+  await page.getByText("선택한 시안이 아니라서 참고 메모로 보냅니다.").waitFor();
 });
 
 test("a colour token warns when the text it colours falls below 4.5:1 on its background", async t => {
@@ -253,7 +254,8 @@ test("a colour token warns when the text it colours falls below 4.5:1 on its bac
   await page.getByLabel("강조색 hex").fill("#1d4ed8");
   await page.getByLabel("강조색 hex").press("Enter");
   await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("price")).color === "rgb(29, 78, 216)");
-  await page.waitForTimeout(300);
+  // The initial green falls short too, so wait for the report on the new value to clear it.
+  await page.waitForFunction(() => !document.querySelector('[data-pcb-control="accent"] .pcb-contrast'));
   assert.equal(await warning.count(), 0, "dark blue on white passes");
   await page.getByLabel("강조색 hex").fill("#a7f3d0");
   await page.getByLabel("강조색 hex").press("Enter");
@@ -450,7 +452,8 @@ test("before a candidate is chosen every token control has the one disabled look
   const hex = page.getByLabel("강조색 hex");
   const swatch = page.getByLabel("강조색 색 선택");
   const active = page.locator('.pcb-segment[aria-checked="true"]');
-  for (const control of [hex, swatch, active]) assert.equal(await style(control, "opacity"), "0.6");
+  for (const control of [hex, active]) assert.equal(await style(control, "opacity"), "0.6");
+  assert.equal(await style(swatch, "opacity"), "1", "the swatch keeps showing its true colour");
   assert.equal(await style(swatch, "borderTopColor"), await style(hex, "borderTopColor"));
   assert.equal(await style(hex, "borderTopColor"), "rgb(74, 80, 88)");
   assert.equal(await style(active, "backgroundColor"), "rgb(74, 80, 88)");
@@ -496,10 +499,13 @@ test("choosing, typing and viewing never move the rows or resize the answer area
     await viewer().locator("nav button").nth(1).click();
     await connected("2");
     await page.getByRole("button", { name: "시안 1 보기" }).waitFor();
+    assert.equal(await page.getByLabel("강조색 hex").isDisabled(), true, "controls lock while another candidate is on screen");
+    assert.equal(await page.locator('[data-pcb-control="accent"] .pcb-reset').isDisabled(), true, "so does their reset");
     await same("viewing 2");
     await page.getByRole("button", { name: "시안 1 보기" }).click();
     await connected("1");
     await same("going back to 1");
+    assert.equal(await page.getByLabel("강조색 hex").isDisabled(), false);
   }
 });
 
@@ -603,4 +609,23 @@ test("a valid contrast report replaces the last one; foreign or malformed ones a
   await page.waitForTimeout(300);
   assert.equal(await unmeasuredNote(page, "accent").count(), 0, "foreign or malformed reports change nothing");
   assert.deepEqual(await page.evaluate(() => window.__pcbErrors ?? []), []);
+});
+
+test("reject all can be sent with only a location note", async t => {
+  const { page, candidate, connected, answer } = await open(t, await fullSurface(), two());
+  await connected("1");
+  const none = page.locator("button.pcb-submit", { hasText: "전부 아님" });
+  assert.equal(await none.isDisabled(), true);
+  await page.getByText("코멘트나 위치 메모를 남기면 보낼 수 있습니다.").waitFor();
+  await pinOnce(page, candidate, "1", "#price");
+  await pinCount(page, 1);
+  await page.waitForFunction(() => !document.querySelector("button.pcb-submit.pcb-secondary").disabled);
+  await page.getByRole("button", { name: "위치 A 삭제" }).click();
+  await page.waitForFunction(() => document.querySelector("button.pcb-submit.pcb-secondary").disabled);
+  await pinOnce(page, candidate, "1", "#price");
+  await page.waitForFunction(() => !document.querySelector("button.pcb-submit.pcb-secondary").disabled);
+  await none.click();
+  const sent = await answer();
+  assert.equal(sent.name, "candidate.none");
+  assert.equal(sent.context.pins.length, 1);
 });

@@ -55,12 +55,14 @@ function EyeIcon() {
 function TokenRow({ token, label, changed, onReset, children, extra }) {
   const board = useBoard();
   const state = board.previewState(token);
+  // Adjustments apply to the chosen candidate, so they lock while it is not the one on screen.
+  const locked = !board.chosen || board.viewed !== board.chosen;
   return (
     <div className="pcb-row" data-pcb-control={token} title={`--${token}`}>
       <span className="pcb-label">{label}</span>
       <div className="pcb-inline">
-        {children(!board.chosen)}
-        <button type="button" className="pcb-reset" data-hidden={!changed} tabIndex={changed ? 0 : -1} aria-hidden={!changed} onClick={onReset}>초기화</button>
+        {children(locked)}
+        <button type="button" className="pcb-reset" data-hidden={!changed} tabIndex={changed ? 0 : -1} aria-hidden={!changed} disabled={locked} onClick={onReset}>초기화</button>
       </div>
       <p className={state === "ok" ? "pcb-note" : "pcb-note pcb-unavailable"}>{notice(state)}</p>
       {extra}
@@ -240,9 +242,9 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
   const unavailable = board.bridgeState(board.viewed) !== "connected";
   const toggle = () => { if (!board.togglePinMode()) setLimitShown(true); };
   // The candidate itself shows the pin-mode instruction, so the panel does not repeat it.
-  const message = limitShown ? `위치는 ${board.limits.pins}개까지 남길 수 있습니다.` : unavailable ? "미리보기 반영 불가." : "";
   // A pin on a candidate other than the chosen one is reference for redrawing the chosen one.
-  const elsewhere = board.chosen && board.viewed !== board.chosen;
+  const elsewhere = board.chosen && board.viewed && board.viewed !== board.chosen ? "선택한 시안이 아니라서 참고 메모로 보냅니다." : "";
+  const message = limitShown ? `위치는 ${board.limits.pins}개까지 남길 수 있습니다.` : unavailable ? "미리보기 반영 불가." : elsewhere;
   return (
     <div className="pcb-field">
       <span className="pcb-label">{props.label}</span>
@@ -250,7 +252,7 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
         <button type="button" className="pcb-toggle" aria-pressed={board.pinMode} disabled={unavailable && !board.pinMode} onClick={toggle}>
           {board.pinMode ? "지정 취소" : "위치 지정"}
         </button>
-        {board.viewed ? <span className="pcb-target">시안 {board.viewed}에 {elsewhere ? "참고로 " : ""}남깁니다.</span> : null}
+        {board.viewed ? <span className="pcb-target">시안 {board.viewed}에 남깁니다.</span> : null}
       </div>
       <p className={limitShown || unavailable ? "pcb-note pcb-unavailable" : "pcb-note"}>{message}</p>
       <ol className="pcb-pins">
@@ -320,7 +322,8 @@ export const BOARD_CSS = `
 .pcb-hex, .pcb-number-field { height: 32px; padding: 0 8px; border: 1px solid #767d87; border-radius: 4px; background: #22272e; color: #fff; font: inherit; }
 .pcb-hex { width: 88px; }
 .pcb-number-field { width: 64px; }
-.pcb-swatch:disabled { border-color: #4a5058; opacity: .6; cursor: not-allowed; }
+.pcb-swatch:disabled { border-color: #4a5058; cursor: not-allowed; }
+.pcb-reset:disabled { color: #b8bec6; opacity: .6; cursor: not-allowed; }
 .pcb-step { width: 32px; height: 32px; border: 1px solid #767d87; border-radius: 4px; background: #16191d; color: #fff; font: inherit; font-size: 16px; cursor: pointer; }
 .pcb-unit { color: #b8bec6; }
 .pcb-segments { display: inline-flex; border: 1px solid #767d87; border-radius: 4px; overflow: hidden; }

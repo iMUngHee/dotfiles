@@ -134,7 +134,8 @@ Read the answer by the rules above:
   chosen candidate are located change requests. Pins on another candidate are notes for
   redrawing the chosen one, not parts to splice in.
 - **Reject all.** For `candidate.none`, the comment and any pins are the owner's account of
-  what is wrong. When they do not say, ask before redrawing.
+  what is wrong; either may be empty, but not both. When they do not say, ask before
+  redrawing.
 - **Decision Log.** Put the comment and the notes into the Decision Log in the owner's words.
 
 Fall back to the viewer and a number in the conversation when any of these happens:

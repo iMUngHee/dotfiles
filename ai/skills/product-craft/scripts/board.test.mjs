@@ -238,6 +238,16 @@ test("the server validates the action before closing the round", async t => {
   assert.equal((await post(running, none("둘 다 너무 차가움"))).status, 200);
 });
 
+test("reject all may carry only pins, since a pin is a located complaint", async t => {
+  const dir = await board();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const running = await serve(dir);
+  t.after(() => running.close());
+  const pin = { candidate: "1", selector: "h1", ox: 0.5, oy: 0.5, x: 0.2, y: 0.1, text: "t", note: "" };
+  assert.equal((await post(running, { ...none(""), context: { comment: "", pins: [] } })).status, 400);
+  assert.equal((await post(running, { ...none(""), context: { comment: "", pins: [pin] } })).status, 200);
+});
+
 test("static files stay inside the board directory and never expose internal files", async t => {
   const dir = await board();
   const outside = await mkdtemp(join(tmpdir(), "board-outside-"));

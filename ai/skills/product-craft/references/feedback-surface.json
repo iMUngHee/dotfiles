@@ -39,7 +39,16 @@
           "variant": "secondary",
           "dropsChoice": true,
           "@checks": [
-            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } }, "message": "전부 아님은 코멘트를 적어야 보낼 수 있습니다." }
+            {
+              "condition": {
+                "@call": "or",
+                "args": { "values": [
+                  { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } },
+                  { "@call": "required", "args": { "value": { "@path": "/pins" } } }
+                ] }
+              },
+              "message": "코멘트나 위치 메모를 남기면 보낼 수 있습니다."
+            }
           ],
           "action": {
             "event": {

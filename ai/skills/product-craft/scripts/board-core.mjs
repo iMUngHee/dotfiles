@@ -130,7 +130,9 @@ function validateAction(action, count, controls) {
   }
   if (action.name === "candidate.none") {
     if (context.adjust !== undefined) return "candidate.none carries no adjustments";
-    return typeof context.comment === "string" && context.comment.trim() ? undefined : "say what is wrong in the comment";
+    // A pin is a located complaint, so pins alone also say what is wrong.
+    const said = (typeof context.comment === "string" && context.comment.trim()) || (Array.isArray(context.pins) && context.pins.length);
+    return said ? undefined : "say what is wrong in the comment or in pins";
   }
   return "name must be candidate.decide or candidate.none";
 }

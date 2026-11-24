@@ -72,9 +72,9 @@ Journeys:
    shows the eye icon and "선택됨" → type a comment → send → the form is replaced by
    "2번 시안으로 보냈습니다." and the comment → `wait --round <r>` prints `candidate.decide`
    with `choice: "2"` and the comment.
-2. **Reject all.** Open the board → "전부 아님" is disabled with "전부 아님은 코멘트를 적어야
-   보낼 수 있습니다." under it → type what is wrong → send → `wait` prints `candidate.none` with that
-   comment.
+2. **Reject all.** Open the board → "전부 아님" is disabled with "코멘트나 위치 메모를 남기면 보낼
+   수 있습니다." under it → type what is wrong, or pin it → send → `wait` prints `candidate.none`
+   with that comment and those pins.
 3. **Keys stay where they belong.** Type "2" into the comment → the viewer still shows the
    same candidate → focus the viewer and press "2" → the viewer shows candidate 2.
 4. **View versus choose.** Choose card 2 → switch the viewer to 1 with its own buttons →
@@ -149,7 +149,7 @@ of a design-tool inspector.
 | Pin `#ffc24d` disc, `#16191d` letter, 2px `#16191d` ring | derived: a third hue, so a pin never reads as selection or focus; the dark ring keeps it visible on light candidates (letter 10.98:1) |
 | Primary action `#fff`, text `#16191d`, hover `#e3e6ea` | departure: the accent already means "selected"; the main action takes the viewer's white so the two never read alike |
 | Primary hover `#a6d8ff` | derived: the accent one step lighter |
-| Disabled control: transparent, `1px solid #4a5058` border, text `#b8bec6`, opacity .6. The colour swatch keeps its colour under the same fade; the active segment of a disabled AlignPicker is filled `#4a5058` | derived: one look for every disabled control, so nothing reads as live before a candidate is chosen |
+| Disabled control: transparent, `1px solid #4a5058` border, text `#b8bec6`, opacity .6. The colour swatch keeps its true colour, unfaded, and only its border turns `#4a5058`; the active segment of a disabled AlignPicker is filled `#4a5058` | derived: one look for every disabled control, so nothing reads as live before a candidate is chosen |
 | "보는 중": a 14px eye icon in the card's top-right corner, `#b8bec6` (`#16191d` on a chosen card); "선택됨": `#80c8ff` fill and tag | derived: viewing is information, not a state to confuse with selection or focus; an icon keeps one tag line per card |
 | Overflow cue: a 24px fade from transparent to `#16191d` above the answer area, and a "아래에 더 있습니다." pill (12px `#b8bec6`, `1px #767d87` border) on the divider at the right; scrolled content fades out under the sticky title over 32px | derived: a dark shadow does not show on the dark panel; text over the content read as a clipped field in review |
 | Input background `#22272e` | derived: one step lighter than the background |
@@ -183,7 +183,8 @@ of a design-tool inspector.
     "보낼 내용: 시안 <n> · 조정 <k>개 · 위치 <p>개 · 코멘트", leaving out the parts that are empty.
   - `dropsChoice: true` (the default surface sets it on "전부 아님"): while a candidate is
     chosen, the line under the button says "전부 아님을 보내면 시안 <n> 선택과 조정값은 버려집니다.".
-    Rejecting is always allowed once the comment says why. 대협 chose a warning over
+    Rejecting is always allowed once the comment or a pin says why (a pin is a located
+    complaint; the server accepts either). 대협 chose a warning over
     disabling.
   - The column that holds the SubmitButtons sticks to the bottom of the panel, full width,
     over a 1px top border, so the answer stays in reach however long the panel grows. The
@@ -202,6 +203,9 @@ of a design-tool inspector.
   - The group states ("시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.", "조정은 선택한
     시안 <n>에만 적용됩니다.", and while the chosen candidate is on screen "조정은 시안 <n>에 바로
     반영됩니다.") show once, under the CandidatePicker.
+  - Token controls are enabled only while the chosen candidate is on screen, so a change is
+    never made where it cannot be seen. While another candidate is viewed they take the
+    disabled style, and the group note offers "시안 <n> 보기" to go back.
 - **ColorToken:**
   - One row: label, a 32px swatch that opens the native picker, a hex field 88px wide, and
     초기화.
@@ -230,8 +234,8 @@ of a design-tool inspector.
     next pin goes to (대협: pins go on the viewed candidate and say so). While pin mode is on, the
     button reads "지정 취소" with a 2px accent border over a 16% accent tint, which a focus ring
     never has. The instruction shows only on the candidate.
-  - While another candidate than the chosen one is on screen, the line reads "시안 <n>에 참고로
-    남깁니다.", which is how the agent reads such pins.
+  - While another candidate than the chosen one is on screen, the note line under the button
+    reads "선택한 시안이 아니라서 참고 메모로 보냅니다.", which is how the agent reads such pins.
   - Below it, a list of pins. The header row has the number badge, "시안 n · <element text>"
     and 삭제; below it is a note field.
   - On the candidate: a lollipop marker. The 24px lettered disc stands on a 12px amber stem
@@ -268,8 +272,8 @@ of a design-tool inspector.
 - CandidatePicker label: "채택할 시안". Tag: "선택됨". Eye icon tooltip: "보는 중".
 - Comment label: "코멘트". Placeholder: "바꿀 점이 있으면 적어 주세요."
 - Buttons: "고른 시안으로 보내기" / "전부 아님". Check messages: "채택할 시안을 골라 주세요." /
-  "전부 아님은 코멘트를 적어야 보낼 수 있습니다." (the reject reason is written in the comment).
-- Controls: "초기화", "위치 지정", "지정 취소", "삭제", "시안 <n>에 남깁니다.", "시안 <n>에 참고로 남깁니다.",
+  "코멘트나 위치 메모를 남기면 보낼 수 있습니다." (the reject reason is the comment or the pins).
+- Controls: "초기화", "위치 지정", "지정 취소", "삭제", "시안 <n>에 남깁니다.", "선택한 시안이 아니라서 참고 메모로 보냅니다.",
   "시안 <n> 보기" (a text button after "조정은 선택한 시안 <n>에만 적용됩니다."), "보낼 내용: …",
   "전부 아님을 보내면 시안 <n> 선택과 조정값은 버려집니다.", "아래에 더 있습니다.", "위치는 20개까지 남길 수 있습니다.", "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.",
   "선택한 시안 <n>에만 적용됩니다.", "조정은 시안 <n>에 바로 반영됩니다.", "이 시안에는 반영되지 않습니다.", "미리보기 반영 불가.",
@@ -334,6 +338,10 @@ of a design-tool inspector.
   cannot be measured.
 - 2026-11-24 — delegated: focus moves to a white ring so selection, focus and pins are three
   distinct colours; "보는 중" becomes an eye icon so each card keeps one tag line.
+
+- 2026-11-24 — delegated (대협: "알아서 해도 될것들"): reject-all accepts pins without a
+  comment; token controls lock while a non-chosen candidate is on screen; a disabled swatch
+  keeps its true colour; a pin on a non-chosen candidate is said to be sent as a reference note.
 
 **Decided for you:**
 - panel colours and spacing derived from the viewer;
