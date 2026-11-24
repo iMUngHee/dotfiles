@@ -15,7 +15,7 @@ const surface = extra => [{
       { id: "choice", component: "CandidatePicker", label: "채택할 시안", value: { "@path": "/feedback/choice" } },
       { id: "comment", component: "CommentField", label: "코멘트", value: { "@path": "/feedback/comment" } },
       { id: "decide", component: "SubmitButton", label: "보내기", action: { event: { name: "candidate.decide" } } },
-      { id: "none", component: "SubmitButton", label: "전부 아님", action: { event: { name: "candidate.none" } } },
+      { id: "none", component: "SubmitButton", label: "다시 그려 주세요", action: { event: { name: "candidate.none" } } },
       ...extra,
     ],
   },

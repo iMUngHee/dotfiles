@@ -149,12 +149,8 @@
   function draw() {
     frame = 0;
     if (!layer) return;
-    // While pin mode is on, the candidate itself says so: an accent frame and a banner.
-    const armed = pinMode ? [
-      box("position:absolute;inset:0;box-shadow:inset 0 0 0 3px #80c8ff;"),
-      box("position:absolute;bottom:12px;left:12px;padding:6px 12px;border-radius:4px;"
-        + "background:#16191d;color:#fff;font:600 13px/1.4 system-ui;box-shadow:0 0 0 1px #80c8ff;", "위치를 눌러 주세요 · Esc 취소"),
-    ] : [];
+    // While pin mode is on, the candidate shows an accent frame; the panel says what to do.
+    const armed = pinMode ? [box("position:absolute;inset:0;box-shadow:inset 0 0 0 3px #80c8ff;")] : [];
     // Discs already drawn, so a pin close to another one moves aside instead of covering it.
     const placed = [];
     const clash = (x, y) => placed.some(d => Math.abs(d.x - x) < 26 && Math.abs(d.y - y) < 26);

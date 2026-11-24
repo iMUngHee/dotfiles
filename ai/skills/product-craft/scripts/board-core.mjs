@@ -157,18 +157,22 @@ function sentSummary(action, controls) {
   ].filter(([, lines]) => lines.length);
   const components = [{
     id: "sentHead", component: "Heading",
-    text: action.name === "candidate.decide" ? `시안 ${action.context.choice} 채택으로 보냈습니다.` : "전부 아님으로 보냈습니다.",
+    text: action.name === "candidate.decide" ? `시안 ${action.context.choice} 채택으로 보냈습니다.` : "다시 그려 달라고 보냈습니다.",
   }];
+  // Each section is its own column, so its lines sit close under its heading.
+  const sectionParts = [];
   sections.forEach(([title, lines], s) => {
-    components.push({ id: `sentTitle${s}`, component: "Heading", level: 2, text: title });
-    lines.forEach((line, l) => components.push({ id: `sentLine${s}x${l}`, component: "Hint", text: line }));
+    const children = [`sentTitle${s}`, ...lines.map((_, l) => `sentLine${s}x${l}`)];
+    components.push({ id: `sentSection${s}`, component: "Column", children });
+    sectionParts.push({ id: `sentTitle${s}`, component: "Heading", level: 2, text: title });
+    lines.forEach((line, l) => sectionParts.push({ id: `sentLine${s}x${l}`, component: "Hint", text: line }));
   });
   // A rule sets the closing line apart from the last section.
   components.push({ id: "sentRule", component: "Divider" });
   components.push({ id: "sentNext", component: "Hint", text: "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다." });
   return JSON.stringify([{
     version: "1.0",
-    updateComponents: { surfaceId: SURFACE_ID, components: [{ id: "root", component: "Column", children: components.map(c => c.id) }, ...components] },
+    updateComponents: { surfaceId: SURFACE_ID, components: [{ id: "root", component: "Column", children: components.map(c => c.id) }, ...components, ...sectionParts] },
   }]);
 }
 
@@ -195,7 +199,7 @@ function wrapperPage({ token, round, query, board, controls, support, reasons })
 <html lang="ko">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>시안 선택</title>
+<title>시안 채택</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -218,7 +222,7 @@ function wrapperPage({ token, round, query, board, controls, support, reasons })
   aside #loading { margin: 0; color: #b8bec6; }
 </style>
 <iframe title="시안" src="/__viewer/candidate-viewer.html?${escapeHtml(query)}"></iframe>
-<aside aria-label="시안 선택"><p id="loading">보드를 불러오는 중…</p><div id="panel"></div></aside>
+<aside aria-label="시안 채택"><p id="loading">보드를 불러오는 중…</p><div id="panel"></div></aside>
 <script>window.BOARD = ${config};</script>
 <script type="module" src="/__panel.js"></script>
 </html>

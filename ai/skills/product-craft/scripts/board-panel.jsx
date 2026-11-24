@@ -162,7 +162,7 @@ function markChosen() {
   viewerDoc()?.querySelectorAll("nav button").forEach((button, i) => {
     const chosen = String(i + 1) === store.state.chosen;
     button.toggleAttribute("data-chosen", chosen);
-    button.title = chosen ? `시안 ${i + 1} · 선택됨` : "";
+    button.title = chosen ? `시안 ${i + 1} · 채택됨` : "";
   });
 }
 
@@ -229,6 +229,7 @@ function Panel() {
       pins: (data("/pins") ?? []).length,
       comment: Boolean(String(data("/feedback/comment") ?? "").trim()),
       short: Object.values(board.contrast[board.chosen]?.values ?? {}).filter(ratio => ratio < 4.5).length,
+      unchecked: (board.contrast[board.chosen]?.unmeasured ?? []).filter(name => !((board.contrast[board.chosen].values[name] ?? 5) < 4.5)).length,
     }),
     groupState: () => !board.chosen ? "unchosen" : board.viewed !== board.chosen ? "notChosen" : "ok",
     previewState: tokenName => {

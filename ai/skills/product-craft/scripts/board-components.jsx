@@ -34,7 +34,7 @@ function Contrast({ token, current, onFix }) {
   }
   if (!unmeasured) return null;
   const named = sample ? `글자(“${sample.length > 20 ? `${sample.slice(0, 20)}…` : sample}”)` : "글자";
-  return <p className="pcb-note pcb-unmeasured">이미지·그라디언트 위 {named}는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p>;
+  return <p className="pcb-note pcb-unmeasured"><strong>확인 필요:</strong> 이미지·그러데이션 위 {named}는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p>;
 }
 
 // A line that keeps the height of the tallest text it can show, so a change of text never
@@ -78,14 +78,15 @@ function TokenRow({ token, label, changed, onReset, children, extra }) {
   );
 }
 
-const UNCHOSEN = "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.";
-const notChosen = n => `조정은 선택한 시안 ${n}에만 적용됩니다.`;
+const UNCHOSEN = "시안을 채택하면 색·간격·정렬을 조정할 수 있습니다.";
+const notChosen = n => `조정은 채택한 시안 ${n}에만 적용됩니다.`;
 const applied = n => `조정은 시안 ${n}에 바로 반영됩니다.`;
 const show = n => `시안 ${n} 보기`;
-// What a send carries, then, set apart, how many colour tokens still fall short of 4.5:1.
-const preview = ({ chosen, adjust, pins, comment, short }) => ["시안 " + chosen, adjust ? `조정 ${adjust}개` : "",
-  pins ? `위치 ${pins}개` : "", comment ? "코멘트" : ""].filter(Boolean).join(" · ") + (short ? ` — 대비 경고 ${short}개` : "");
-const drops = n => `전부 아님을 보내면 시안 ${n} 선택과 조정값은 버려집니다.`;
+// What a send carries, then how many colour tokens fall short of 4.5:1 or could not be measured.
+const preview = ({ chosen, adjust, pins, comment, short, unchecked }) => ["시안 " + chosen, adjust ? `조정 ${adjust}개` : "",
+  pins ? `위치 ${pins}개` : "", comment ? "코멘트 1개" : "", short ? `대비 경고 ${short}개` : "",
+  unchecked ? `대비 확인 ${unchecked}개` : ""].filter(Boolean).join(" · ");
+const drops = n => `다시 그리면 시안 ${n} 채택과 조정값은 버려집니다.`;
 
 const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({ props }) => {
   const board = useBoard();
@@ -98,12 +99,12 @@ const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({
           const chosen = props.value === c.n;
           return (
             <button key={c.n} type="button" className="pcb-card" data-candidate={c.n} aria-pressed={chosen} title={`시안 ${c.n} 채택`}
-              aria-label={`시안 ${c.n}${viewed ? " 보는 중" : ""}${chosen ? " 선택됨" : ""}`}
+              aria-label={`시안 ${c.n}${viewed ? " 보는 중" : ""}${chosen ? " 채택됨" : ""}`}
               onClick={() => { props.setValue(c.n); board.showCandidate(c.n); }}>
               {viewed ? <EyeIcon /> : null}
               {c.thumbnail ? <img src={c.thumbnail} alt="" /> : null}
               <span className="pcb-number">{c.n}</span>
-              <span className={chosen ? "pcb-tag" : "pcb-tag pcb-pick"}>{chosen ? "선택됨" : "고르기"}</span>
+              <span className={chosen ? "pcb-tag" : "pcb-tag pcb-pick"}>{chosen ? "채택됨" : "채택"}</span>
             </button>
           );
         })}
@@ -129,14 +130,15 @@ const SubmitButton = createComponentImplementation(api("SubmitButton"), ({ props
   // A button that drops the choice warns about it; the one that sends it says what goes.
   const note = !board.chosen ? "" : props.dropsChoice ? drops(board.chosen) : preview(board.sending());
   const longest = props.dropsChoice ? drops(board.candidates.length)
-    : preview({ chosen: board.candidates.length, adjust: board.tokenCount, short: board.colourCount, pins: board.limits.pins, comment: true });
+    // A token is either short or unchecked; the unchecked wording is the longer one.
+    : preview({ chosen: board.candidates.length, adjust: board.tokenCount, unchecked: board.colourCount, pins: board.limits.pins, comment: true });
   const texts = [...board.reasons, longest];
   return (
     <div className="pcb-submit-wrap">
       <button type="button" className={`pcb-submit pcb-${props.variant ?? "primary"}`} disabled={blocked} onClick={() => props.action()}>
         {props.label}
       </button>
-      <ReservedLine className="pcb-reason" texts={texts} shown={blocked ? props.validationErrors?.[0] ?? "" : note} />
+      <ReservedLine className="pcb-reason" texts={texts} shown={blocked ? props.validationErrors?.[0] ?? "" : props.dropsChoice && note ? <span className="pcb-caution">{note}</span> : note} />
     </div>
   );
 });
@@ -250,10 +252,11 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
   useEffect(() => { if (!full) setLimitShown(false); }, [full]);
   const unavailable = board.bridgeState(board.viewed) !== "connected";
   const toggle = () => { if (!board.togglePinMode()) setLimitShown(true); };
-  // The candidate itself shows the pin-mode instruction, so the panel does not repeat it.
+  // The pin-mode instruction lives here, next to the toggle; the candidate shows only a frame.
   // A pin on a candidate other than the chosen one is reference for redrawing the chosen one.
-  const elsewhere = board.chosen && board.viewed && board.viewed !== board.chosen ? "선택한 시안이 아니라서 참고 메모로 보냅니다." : "";
-  const message = limitShown ? `위치는 ${board.limits.pins}개까지 남길 수 있습니다.` : unavailable ? "미리보기 반영 불가." : elsewhere;
+  const elsewhere = board.chosen && board.viewed && board.viewed !== board.chosen ? "채택한 시안이 아니라서 참고 메모로 보냅니다." : "";
+  const message = limitShown ? `위치는 ${board.limits.pins}개까지 남길 수 있습니다.` : unavailable ? "미리보기 반영 불가."
+    : board.pinMode ? "시안에서 위치를 눌러 주세요 · Esc 취소" : elsewhere;
   return (
     <div className="pcb-field">
       <span className="pcb-label">{props.label}</span>
@@ -271,10 +274,10 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
             onFocus={() => board.focusPin(i + 1)} onBlur={() => board.focusPin(0)}>
             <div className="pcb-pin-head">
               <span className="pcb-pin-number" aria-hidden="true">{pinLabel(i)}</span>
-              <span className="pcb-pin-where">시안 {pin.candidate} · {pin.text || pin.selector}</span>
+              <span className="pcb-pin-where">시안 {pin.candidate} · “{pin.text || pin.selector}”</span>
               <button type="button" className="pcb-reset" aria-label={`위치 ${pinLabel(i)} 삭제`} onClick={() => board.deletePin(i)}>삭제</button>
             </div>
-            <textarea rows={2} aria-label={`위치 ${pinLabel(i)} 메모`} placeholder="이 위치에서 바꿀 점" value={pin.note} onChange={e => board.setPinNote(i, e.target.value)} onFocus={reveal} />
+            <textarea rows={2} aria-label={`위치 ${pinLabel(i)} 메모`} placeholder="이 위치에서 바꿀 점을 적어 주세요." value={pin.note} onChange={e => board.setPinNote(i, e.target.value)} onFocus={reveal} />
           </li>
         ))}
       </ol>
@@ -311,10 +314,13 @@ export const BOARD_CSS = `
 .pcb-submit { min-height: 44px; padding: 14px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; line-height: 1; white-space: nowrap; }
 .pcb-primary { background: #fff; color: #16191d; border: 1px solid #fff; }
 .pcb-primary:hover:not(:disabled) { background: #e3e6ea; border-color: #e3e6ea; }
-.pcb-secondary { background: transparent; color: #fff; border: 1px solid #767d87; }
+.pcb-secondary { background: transparent; color: #fff; border: 1px solid #767d87; font-weight: 500; }
+.pcb-caution { color: #ffb4a8; }
 .pcb-secondary:hover:not(:disabled) { background: #22272e; }
 .pcb-submit:disabled, .pcb-toggle:disabled, .pcb-step:disabled, .pcb-segment:disabled, .pcb-hex:disabled, .pcb-number-field:disabled {
   background: transparent; color: #fff; border-color: #4a5058; opacity: .6; cursor: not-allowed; }
+/* A disabled answer button is a flat grey slab, unlike both the white and the outlined ones. */
+.pcb-submit:disabled { background: #22272e; border-color: #22272e; color: #b8bec6; opacity: 1; }
 .pcb-reason { margin: 0; color: #b8bec6; }
 .pcb-reason:empty { display: none; }
 .pcb-reserved { display: grid; }
@@ -326,6 +332,11 @@ export const BOARD_CSS = `
 .pcb-contrast p { margin: 0; }
 .pcb-fix { margin-top: 2px; color: #ffb4a8; }
 .pcb-unmeasured { color: #b8bec6; }
+.pcb-unmeasured strong { color: #fff; font-weight: 600; }
+/* The sent summary groups each section's lines under its heading. */
+aside a2ui-basic-column > a2ui-basic-column { --a2ui-column-gap: 4px; }
+/* The panel fills the window, so the answer area sits at its foot even when content is short. */
+#panel > a2ui-basic-column { min-height: calc(100dvh - 32px); }
 .pcb-comment, .pcb-pin textarea { width: 100%; resize: none; padding: 10px 12px; border: 1px solid #767d87; border-radius: 4px;
   background: #22272e; color: #fff; font: inherit; }
 .pcb-comment::placeholder, .pcb-pin textarea::placeholder { color: #b8bec6; }
@@ -355,7 +366,7 @@ export const BOARD_CSS = `
 .pcb-link { padding: 0; border: 0; background: none; color: #fff; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .pcb-pins { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 12px; }
 .pcb-pins:empty { display: none; }
-.pcb-pin { display: grid; gap: 4px; }
+.pcb-pin { display: grid; gap: 4px; padding: 8px; border: 1px solid #4a5058; border-radius: 4px; }
 .pcb-pin-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .pcb-pin-where { flex: 1; min-width: 0; color: #b8bec6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcb-pin-number { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; line-height: 24px; border-radius: 50%; background: #ffc24d; color: #16191d;
@@ -364,16 +375,16 @@ aside :is(button, input, textarea, select):focus-visible { outline: 2px solid #f
 aside a2ui-basic-text em { font-style: normal; }
 /* The panel title stays in view while the panel scrolls. React hosts are display: contents
    (set inline by the renderer), so the sticky box is the heading inside the first host. */
-aside a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading { position: sticky; top: -16px; z-index: 1;
+#panel > a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading { position: sticky; top: -16px; z-index: 1;
   margin: -16px -16px 0; padding: 16px 16px 8px; background: #16191d; border-bottom: 1px solid #767d87; }
 /* The answer buttons stay in reach however long the panel grows. */
 aside a2ui-basic-column:has(> a2ui-react-submitbutton) { position: sticky; bottom: -16px; z-index: 1;
-  width: calc(100% + 32px); margin: 0 -16px -16px; padding: 12px 16px 16px; --a2ui-column-gap: 8px;
+  width: calc(100% + 32px); margin: auto -16px -16px; padding: 12px 16px 16px; --a2ui-column-gap: 8px;
   background: #16191d; border-top: 1px solid #767d87; }
 /* While the panel scrolls further, content is under the answer area and fades into it; the
    panel's scrollbar stays visible beside it. Scrolled content fades out under the title too. */
-aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::before { content: ""; position: absolute; left: 0; right: 0; bottom: calc(100% + 2px); height: 24px;
-  background: linear-gradient(rgba(22, 25, 29, 0), #16191d); pointer-events: none; }
+aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::before { content: ""; position: absolute; left: 0; right: 0; bottom: calc(100% + 2px); height: 48px;
+  background: linear-gradient(rgba(22, 25, 29, 0), #16191d 85%); pointer-events: none; }
 /* The answer buttons share one row; under it, one line for each, which names its button. */
 aside a2ui-basic-column:has(> a2ui-react-submitbutton) { display: grid; grid-template-columns: auto auto 1fr; column-gap: 8px; row-gap: 4px; align-items: start; }
 aside a2ui-basic-column:has(> a2ui-react-submitbutton) .pcb-submit-wrap { display: contents; }
@@ -381,6 +392,6 @@ aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(1) .pcb-submit { g
 aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(2) .pcb-submit { grid-area: 1 / 2; }
 aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(1) .pcb-reason { grid-area: 2 / 1 / 3 / 4; }
 aside a2ui-basic-column > a2ui-react-submitbutton:nth-of-type(2) .pcb-reason { grid-area: 3 / 1 / 4 / 4; }
-aside[data-scrolled] a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading::after { content: ""; position: absolute; left: 0; right: 0; bottom: -33px; height: 32px;
+aside[data-scrolled] #panel > a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading::after { content: ""; position: absolute; left: 0; right: 0; bottom: -33px; height: 32px;
   background: linear-gradient(#16191d 30%, rgba(22, 25, 29, 0)); pointer-events: none; }
 `;

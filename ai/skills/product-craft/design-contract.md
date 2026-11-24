@@ -53,12 +53,12 @@ for each round from the catalog. A round shows only the controls its candidates 
 | Candidate | switch | yes | the viewer's own number keys, arrows and buttons |
 | Candidate | compare with reference | yes | viewer `R`, unchanged |
 | Candidate | choose | yes | CandidatePicker card; choosing also shows it in the viewer (`showCandidate`) |
-| Candidate | see which one is on screen | yes | CandidatePicker marks the viewed card with an eye icon ("보는 중" as its tooltip and accessible name), separately from the "선택됨" fill and tag |
+| Candidate | see which one is on screen | yes | CandidatePicker marks the viewed card with an eye icon ("보는 중" as its tooltip and accessible name), separately from the "채택됨" fill and tag |
 | Choice | change before sending | yes | pick another card until sent |
 | Token | adjust with live preview | yes | ColorToken / SizeNudge / AlignPicker, enabled once a candidate is chosen; only the chosen candidate previews them, other candidates show as written |
 | Token | reset | yes | each control's 초기화 restores the candidate's own value and drops it from the answer |
 | Token | see that it does not apply here | yes | "이 시안에는 반영되지 않습니다" when the viewed candidate does not declare it on `:root` |
-| Place | pin with a note | yes | RegionNotes: 위치 지정 → the candidate shows an accent frame and a banner → click → note |
+| Place | pin with a note | yes | RegionNotes: 위치 지정 → the candidate shows an accent frame, the panel the instruction → click → note |
 | Pin | delete | yes | per pin |
 | Comment | write | yes | optional on choose, required on reject-all |
 | Answer | send | yes | once per round |
@@ -67,26 +67,25 @@ for each round from the catalog. A round shows only the controls its candidates 
 
 Journeys:
 
-1. **Choose.** Open the board → SubmitButton "고른 시안으로 보내기" is disabled and shows
-   "위 카드에서 채택할 시안을 골라 주세요." under it → pick card 2 → the viewer shows candidate 2, card 2
-   shows the eye icon and "선택됨" → type a comment → send → the form is replaced by
+1. **Choose.** Open the board → SubmitButton "채택해서 보내기" is disabled and shows
+   "‘채택할 시안’에서 하나를 골라 주세요." under it → pick card 2 → the viewer shows candidate 2, card 2
+   shows the eye icon and "채택됨" → type a comment → send → the form is replaced by
    "시안 2 채택으로 보냈습니다." and the comment → `wait --round <r>` prints `candidate.decide`
    with `choice: "2"` and the comment.
-2. **Reject all.** Open the board → "전부 아님" is disabled with "코멘트나 위치 메모를 남기면 보낼
-   수 있습니다." under it → type what is wrong, or pin it → send → `wait` prints `candidate.none`
+2. **Reject all.** Open the board → "다시 그려 주세요" is disabled with "다시 그려 달라고 하려면 코멘트나
+   위치 메모를 남겨 주세요." under it → type what is wrong, or pin it → send → `wait` prints `candidate.none`
    with that comment and those pins.
 3. **Keys stay where they belong.** Type "2" into the comment → the viewer still shows the
    same candidate → focus the viewer and press "2" → the viewer shows candidate 2.
 4. **View versus choose.** Choose card 2 → switch the viewer to 1 with its own buttons →
-   card 1 shows the eye icon, card 2 reads "선택됨".
-5. **Adjust with live preview.** The token controls are disabled with "시안을 고르면 색·간격·정렬 같은
-   값을 조정할 수 있습니다." → choose card 1 → set ColorToken accent to `#3b82f6`, press SizeNudge gap + twice
+   card 1 shows the eye icon, card 2 reads "채택됨".
+5. **Adjust with live preview.** The token controls are disabled with "시안을 채택하면 색·간격·정렬을 조정할 수 있습니다." → choose card 1 → set ColorToken accent to `#3b82f6`, press SizeNudge gap + twice
    (16 → 24), set AlignPicker align to center → candidate 1 changes as each value changes →
-   view candidate 2 → it shows as written and the controls say "선택한 시안 1에만 적용됩니다."
+   view candidate 2 → it shows as written and the controls say "조정은 채택한 시안 1에만 적용됩니다."
    → view 1 again → the values still apply → reset gap → it returns to 16 and leaves the
    answer → send → `adjust` is `{accent: "#3b82f6", align: "center"}`.
-6. **Pin a place.** 위치 지정 → the candidate shows an accent frame and "위치를 눌러 주세요 · Esc
-   취소" → click the candidate's heading → a numbered marker and a dashed outline of the element
+6. **Pin a place.** 위치 지정 → the candidate shows an accent frame and the panel says "시안에서
+   위치를 눌러 주세요 · Esc 취소" → click the candidate's heading → a numbered marker and a dashed outline of the element
    appear, and a note field appears in the panel → type the note → scroll the candidate, open
    the viewer's compare mode → the marker stays on the heading → delete another pin → send →
    `pins` lists the remaining pins with their candidate, selector and note.
@@ -110,12 +109,12 @@ Journeys:
 - States:
   - **open**: SubmitButtons are disabled until their checks pass, and the reason shows under
     each.
-  - **pin mode**: the candidate shows a crosshair cursor, an accent frame and a banner; the
+  - **pin mode**: the candidate shows a crosshair cursor and an accent frame, the panel the instruction; the
     next click adds a pin. Mode ends after one pin, on 지정 취소 or Esc, or when the viewer
     switches candidate.
   - **pin limit**: at 20 pins, 위치 지정 does not arm and "위치는 20개까지 남길 수 있습니다."
     shows until a pin is deleted.
-  - **not chosen yet**: token controls are disabled with "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.".
+  - **not chosen yet**: token controls are disabled with "시안을 채택하면 색·간격·정렬을 조정할 수 있습니다.".
   - **preview unavailable**: per candidate, with the reason.
   - **sent**: `updateComponents` replace the form with what was sent.
   - **server gone**: send fails, and `/status` says to answer in the conversation.
@@ -150,8 +149,8 @@ of a design-tool inspector.
 | Primary action `#fff`, text `#16191d`, hover `#e3e6ea` | departure: the accent already means "selected"; the main action takes the viewer's white so the two never read alike |
 | Primary hover `#a6d8ff` | derived: the accent one step lighter |
 | Disabled control: transparent, `1px solid #4a5058` border, text `#fff`, opacity .6, so a value still reads as a value. The colour swatch keeps its true colour, unfaded, and only its border turns `#4a5058`; the active segment of a disabled AlignPicker is filled `#4a5058`; 초기화 is hidden | derived: one look for every disabled control, so nothing reads as live before a candidate is chosen |
-| "보는 중": a 14px eye icon in the card's top-right corner, `#b8bec6` (`#16191d` on a chosen card); "선택됨": `#80c8ff` fill and tag | derived: viewing is information, not a state to confuse with selection or focus; an icon keeps one tag line per card |
-| Overflow cue: a 24px fade from transparent to `#16191d` above the answer area, and the panel's thin scrollbar (`#767d87` thumb) always shown; scrolled content fades out under the sticky title over 32px | derived: a dark shadow does not show on the dark panel, and a label over the content covered controls in review |
+| "보는 중": a 14px eye icon in the card's top-right corner, `#b8bec6` (`#16191d` on a chosen card); "채택됨": `#80c8ff` fill and tag | derived: viewing is information, not a state to confuse with selection or focus; an icon keeps one tag line per card |
+| Overflow cue: a 48px fade from transparent to `#16191d` above the answer area, and the panel's thin scrollbar (`#767d87` thumb) always shown; scrolled content fades out under the sticky title over 32px | derived: a dark shadow does not show on the dark panel, and a label over the content covered controls in review |
 | Input background `#22272e` | derived: one step lighter than the background |
 | Control height 44px, radius 4px | 44px from viewer buttons; radius from the viewer candidates' 4px |
 | Spacing 8 / 16px; inspector rows 8px apart, groups 16px | derived: viewer uses 4px gaps and 12px padding; doubled for a form column |
@@ -166,12 +165,12 @@ of a design-tool inspector.
   - A row of cards, 8px apart. Each card is 60px high, with the number and one reserved tag
     line, so the height does not change. The thumbnail sits above the number when
     `board.json` gives one (max 96px wide).
-  - Unselected: border `#767d87`, and "고르기" in `#b8bec6` on the tag line, so a card reads as
+  - Unselected: border `#767d87`, and "채택" in `#b8bec6` on the tag line, so a card reads as
     something to press.
   - Each card's tooltip is "시안 <n> 채택", since pressing it chooses; the viewer's numbers only view.
   - Viewed: the eye icon in the top-right corner, with the tooltip "보는 중"; the card's
     accessible name includes "보는 중".
-  - Selected: `#80c8ff` fill, `#16191d` number and a "선택됨" tag.
+  - Selected: `#80c8ff` fill, `#16191d` number and a "채택됨" tag.
   - The group note under the cards keeps the height of its tallest text, so choosing or
     viewing never moves the rows below.
 - **SubmitButton:**
@@ -182,16 +181,21 @@ of a design-tool inspector.
     (every check message declared on the surface's buttons, the drop warning and the send
     preview), so the answer area never changes height.
   - A button without `dropsChoice`, once it can send and a candidate is chosen, says what goes:
-    "시안 <n> · 조정 <k>개 · 위치 <p>개 · 코멘트", leaving out the parts that are empty,
-    then, set apart, " — 대비 경고 <c>개" for the colour tokens below 4.5:1 on the chosen candidate.
+    "시안 <n> · 조정 <k>개 · 위치 <p>개 · 코멘트 1개 · 대비 경고 <c>개 · 대비 확인 <u>개",
+    leaving out the parts that are empty. The last two count, on the chosen candidate, the colour
+    tokens below 4.5:1 and those with text that could not be measured.
   - Pressing a SubmitButton ends pin mode first.
-  - `dropsChoice: true` (the default surface sets it on "전부 아님"): while a candidate is
-    chosen, the line under the button says "전부 아님을 보내면 시안 <n> 선택과 조정값은 버려집니다.".
+  - `dropsChoice: true` (the default surface sets it on "다시 그려 주세요"): while a candidate is
+    chosen, the line under the button says "다시 그리면 시안 <n> 채택과 조정값은 버려집니다." in
+    `#ffb4a8`, the caution colour. The secondary button's label is weight 500.
+  - Disabled, an answer button is a flat `#22272e` slab with `#b8bec6` text and no fade, unlike
+    both the white primary and the outlined secondary.
     Rejecting is always allowed once the comment or a pin says why (a pin is a located
     complaint; the server accepts either). 대협 chose a warning over
     disabling.
   - The column that holds the SubmitButtons sticks to the bottom of the panel, full width,
-    over a 1px top border, so the answer stays in reach however long the panel grows. The
+    over a 1px top border, so the answer stays in reach however long the panel grows; when the
+    content is short the panel still fills the window, so the answer area sits at its foot. The
     buttons share one row; below it is one line per button, in button order, each naming its
     button or what it sends. The
     panel has a 200px scroll padding, and the comment and pin note fields scroll themselves
@@ -206,7 +210,7 @@ of a design-tool inspector.
     row never changes width.
   - A notice line under the control only for a problem with this token on the chosen
     candidate ("이 시안에는 반영되지 않습니다.", "미리보기 반영 불가.").
-  - The group states ("시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.", "조정은 선택한
+  - The group states ("시안을 채택하면 색·간격·정렬을 조정할 수 있습니다.", "조정은 채택한
     시안 <n>에만 적용됩니다.", and while the chosen candidate is on screen "조정은 시안 <n>에 바로
     반영됩니다.") show once, under the CandidatePicker.
   - Token controls are enabled only while the chosen candidate is on screen, so a change is
@@ -226,9 +230,9 @@ of a design-tool inspector.
     background colour down to the first opaque one (or the white canvas); a translucent text
     colour is composited over that background.
   - Text with a background image or gradient on the way down cannot be measured. When nothing
-    measured is below 4.5:1 but such text exists, the row shows "이미지·그라디언트 위
-    글자(“<text>”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요." in `#b8bec6`, naming the first
-    such text (up to 20 characters).
+    measured is below 4.5:1 but such text exists, the row shows "확인 필요: 이미지·그러데이션 위
+    글자(“<text>”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요." in `#b8bec6` with "확인 필요:" in
+    `#fff`, naming the first such text (up to 20 characters).
   - Not measured, and not flagged: text over a separately positioned element, ancestor
     `opacity`, `mix-blend-mode` and filters.
   - Invalid hex shows "#rrggbb 형식으로 적어 주세요".
@@ -243,10 +247,11 @@ of a design-tool inspector.
   - "위치 지정" toggle button, followed by "시안 <n>에 남깁니다." naming the viewed candidate the
     next pin goes to (대협: pins go on the viewed candidate and say so). While pin mode is on, the
     button reads "지정 취소" with a 2px accent border over a 16% accent tint, which a focus ring
-    never has. The instruction shows only on the candidate.
+    never has. The instruction shows as the note line under the toggle.
   - While another candidate than the chosen one is on screen, the note line under the button
-    reads "선택한 시안이 아니라서 참고 메모로 보냅니다.", which is how the agent reads such pins.
-  - Below it, a list of pins. The header row has the number badge, "시안 n · <element text>"
+    reads "채택한 시안이 아니라서 참고 메모로 보냅니다.", which is how the agent reads such pins.
+  - Below it, a list of pins, each a card with a `1px #4a5058` border and 8px padding, so a
+    pin note never reads as a second comment field. The header row has the number badge, "시안 n · <element text>"
     and 삭제; below it is a note field.
   - On the candidate: a lollipop marker. The 24px lettered disc stands on a 12px amber stem
     with a 6px end dot. On an element up to 60px high the dot sits on the element's top edge
@@ -260,7 +265,7 @@ of a design-tool inspector.
     candidate marker's amber disc.
   - Pins are lettered A–T in list order, never numbered, so a pin is never confused with a
     candidate number. Deleting a pin relabels the ones after it.
-  - In pin mode the banner sits at the candidate's bottom-left corner, clear of its header.
+  - Pin mode puts no banner on the candidate: one instruction, in the panel, is enough.
 - **Unavailable notice:** Hint style, in the control's row: "이 시안에는 반영되지 않습니다"
   (token missing or redeclared), "미리보기 반영 불가" (bridge unavailable).
 - **Focus:** a 2px `#fff` ring, offset 2px, on every focusable control, board and basic alike.
@@ -270,7 +275,7 @@ of a design-tool inspector.
 - Minimum window 960px wide: the panel stays 360px and the viewer takes the rest; the panel
   scrolls when its content is taller than the window.
 - Every control is reachable by keyboard and has an accessible name. Icon segments carry text
-  alternatives; "선택됨" is a text tag and "보는 중" is in the card's accessible name, so
+  alternatives; "채택됨" is a text tag and "보는 중" is in the card's accessible name, so
   neither is colour alone.
 - Contrast measured 2026-11-24: `#fff` on `#16191d` 17.63:1, `#b8bec6` on `#22272e` 8.03:1,
   `#16191d` on `#80c8ff` 9.76:1, `#16191d` on `#fff` (primary) 17.63:1, `#b8bec6` on `#16191d`
@@ -280,30 +285,33 @@ of a design-tool inspector.
 
 ## Microcopy
 
-- Heading (default surface): "시안 선택". Opening Hint: "어느 시안으로 갈지 골라 주세요." The
-  reject rule is said once, under "전부 아님".
-- CandidatePicker label: "채택할 시안". Tag: "선택됨". Eye icon tooltip: "보는 중".
+- Heading (default surface): "시안 채택". Opening Hint: "어느 시안을 채택할지 골라 주세요." The
+  reject rule is said once, under "다시 그려 주세요".
+- CandidatePicker label: "채택할 시안". Tag: "채택됨". Eye icon tooltip: "보는 중".
 - Comment label: "코멘트". Placeholder: "바꿀 점이 있으면 적어 주세요."
-- Buttons: "고른 시안으로 보내기" / "전부 아님". Check messages: "위 카드에서 채택할 시안을 골라 주세요." /
-  "코멘트나 위치 메모를 남기면 전부 아님을 보낼 수 있습니다." (the reject reason is the comment or the pins).
-  Card tag: "고르기" until chosen.
-- Controls: "초기화", "위치 지정", "지정 취소", "삭제", "시안 <n>에 남깁니다.", "선택한 시안이 아니라서 참고 메모로 보냅니다.",
-  "시안 <n> 보기" (a text button after "조정은 선택한 시안 <n>에만 적용됩니다."), the send preview "시안 <n> · …",
-  "전부 아님을 보내면 시안 <n> 선택과 조정값은 버려집니다.", "위치는 20개까지 남길 수 있습니다.", "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.",
-  "선택한 시안 <n>에만 적용됩니다.", "조정은 시안 <n>에 바로 반영됩니다.", "이 시안에는 반영되지 않습니다.", "미리보기 반영 불가.",
-  "이미지·그라디언트 위의 이 색 글자는 대비를 재지 못했습니다. 눈으로 확인해 주세요.". Pin controls: "위치 <L> 메모",
+- Buttons: "채택해서 보내기" / "다시 그려 주세요". Check messages: "‘채택할 시안’에서 하나를 골라 주세요." /
+  "다시 그려 달라고 하려면 코멘트나 위치 메모를 남겨 주세요." (the reject reason is the comment or the pins).
+  Card tag: "채택" until chosen.
+- Controls: "초기화", "위치 지정", "지정 취소", "삭제", "시안 <n>에 남깁니다.", "채택한 시안이 아니라서 참고 메모로 보냅니다.",
+  "시안 <n> 보기" (a text button after "조정은 채택한 시안 <n>에만 적용됩니다."), the send preview "시안 <n> · …",
+  "다시 그리면 시안 <n> 채택과 조정값은 버려집니다.", "시안에서 위치를 눌러 주세요 · Esc 취소" (under the toggle in pin mode), "위치는 20개까지 남길 수 있습니다.", "시안을 채택하면 색·간격·정렬을 조정할 수 있습니다.",
+  "조정은 채택한 시안 <n>에만 적용됩니다.", "조정은 시안 <n>에 바로 반영됩니다.", "이 시안에는 반영되지 않습니다.", "미리보기 반영 불가.",
+  the unmeasured note above. Pin rows quote the element text: "시안 <c> · “<text>”"; the note
+  placeholder is "이 위치에서 바꿀 점을 적어 주세요.". Pin controls: "위치 <L> 메모",
   "위치 <L> 삭제".
   Every hint is a sentence ending in a period.
-- On the candidate in pin mode: "위치를 눌러 주세요 · Esc 취소".
+- In pin mode the panel's note line under the toggle reads "시안에서 위치를 눌러 주세요 · Esc 취소".
 - Sent, in this order, each section under its own small heading and left out when empty:
-  - "시안 <n> 채택으로 보냈습니다." or "전부 아님으로 보냈습니다.";
+  - "시안 <n> 채택으로 보냈습니다." or "다시 그려 달라고 보냈습니다."; each section below is its own
+    column, its lines 4px apart under its heading, sections 16px apart;
   - 조정: a line per changed token in its own label, with units and the old value
     ("카드 간격: 16px → 24px", "카드 정렬: 왼쪽 → 가운데");
   - 위치 메모: "위치 A · 시안 1 · <element text>: <note>";
   - 코멘트: "“…”";
   - a divider, then "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다."
-  After a send, the viewer shows the sent candidate and locks: its other buttons dim to .4,
-  the sent candidate's tab stays as it was, and neither buttons nor keys switch candidates.
+  After a send, the viewer shows the sent candidate and locks: the arrows and the other number
+  buttons dim to .4, the sent candidate's tab stays as it was, compare and fit still work, and
+  neither buttons nor keys switch candidates.
 - Status: "이미 전송했습니다." / "보드가 닫혔습니다. 대화창에서 답해 주세요."
 
 ## Do / Don't
@@ -313,9 +321,10 @@ of a design-tool inspector.
   pin.
 - Don't expose a token control for a token no candidate declares.
 - Don't show token names to the owner; they are for the agent.
+- The viewer's top bar has a `1px #2f353d` bottom border, so it stays apart from a dark candidate.
 - Do keep the viewer working on its own. The board drives it only through attributes the
   viewer styles and honours: `data-chosen` on a number button (an 11px "✓" in the tab's text colour, tooltip
-  "시안 <n> · 선택됨") and `data-locked` on its root. The viewer leaves out tools with nothing
+  "시안 <n> · 채택됨") and `data-locked` on its root. The viewer leaves out tools with nothing
   to act on (compare without a reference, fit without an image) and shows the width the
   candidate is drawn at, which tells a narrowed preview apart from the design.
 

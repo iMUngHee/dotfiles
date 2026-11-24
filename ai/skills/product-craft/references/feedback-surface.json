@@ -6,18 +6,18 @@
       "catalogId": "product-craft/board/v1",
       "components": [
         { "id": "root", "component": "Column", "children": ["title", "hint", "choice", "comment", "actions", "status"] },
-        { "id": "title", "component": "Heading", "text": "시안 선택" },
-        { "id": "hint", "component": "Hint", "text": "어느 시안으로 갈지 골라 주세요." },
+        { "id": "title", "component": "Heading", "text": "시안 채택" },
+        { "id": "hint", "component": "Hint", "text": "어느 시안을 채택할지 골라 주세요." },
         { "id": "choice", "component": "CandidatePicker", "label": "채택할 시안", "value": { "@path": "/feedback/choice" } },
         { "id": "comment", "component": "CommentField", "label": "코멘트", "placeholder": "바꿀 점이 있으면 적어 주세요.", "value": { "@path": "/feedback/comment" } },
         { "id": "actions", "component": "Column", "align": "start", "children": ["decide", "none"] },
         {
           "id": "decide",
           "component": "SubmitButton",
-          "label": "고른 시안으로 보내기",
+          "label": "채택해서 보내기",
           "variant": "primary",
           "@checks": [
-            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice" } } }, "message": "위 카드에서 채택할 시안을 골라 주세요." }
+            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice" } } }, "message": "‘채택할 시안’에서 하나를 골라 주세요." }
           ],
           "action": {
             "event": {
@@ -35,7 +35,7 @@
         {
           "id": "none",
           "component": "SubmitButton",
-          "label": "전부 아님",
+          "label": "다시 그려 주세요",
           "variant": "secondary",
           "dropsChoice": true,
           "@checks": [
@@ -47,7 +47,7 @@
                   { "@call": "required", "args": { "value": { "@path": "/pins" } } }
                 ] }
               },
-              "message": "코멘트나 위치 메모를 남기면 전부 아님을 보낼 수 있습니다."
+              "message": "다시 그려 달라고 하려면 코멘트나 위치 메모를 남겨 주세요."
             }
           ],
           "action": {

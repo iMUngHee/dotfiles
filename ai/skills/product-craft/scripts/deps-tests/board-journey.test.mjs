@@ -59,9 +59,9 @@ test("choose: pick 2, answer the added question, comment, send once", async t =>
   assert.ok(responses.some(([path, code]) => path === "/assets/style.css" && code === 200));
   assert.ok(responses.some(([path, code]) => path === "/assets/dot.png" && code === 200));
 
-  const decide = page.locator("button.pcb-submit", { hasText: "고른 시안으로 보내기" });
+  const decide = page.locator("button.pcb-submit", { hasText: "채택해서 보내기" });
   assert.equal(await decide.isDisabled(), true, "choose is disabled before a candidate is picked");
-  await page.getByText("어느 시안으로 갈지 골라 주세요.", { exact: false }).waitFor();
+  await page.getByText("어느 시안을 채택할지 골라 주세요.", { exact: false }).waitFor();
   const viewer = page.frames().find(frame => frame.url().includes("/__viewer/candidate-viewer.html"));
   await page.locator('button.pcb-card[data-candidate="2"]').click();
   await viewer.waitForFunction(() => document.documentElement.dataset.candidate === "2");
@@ -83,12 +83,12 @@ test("choose: pick 2, answer the added question, comment, send once", async t =>
 
 test("reject all: needs a comment, then returns candidate.none with it", async t => {
   const { dir, round, page } = await open(t, await template());
-  const none = page.locator("button.pcb-submit", { hasText: "전부 아님" });
+  const none = page.locator("button.pcb-submit", { hasText: "다시 그려 주세요" });
   assert.equal(await none.isDisabled(), true, "reject is disabled while the comment is empty");
   await page.getByRole("textbox").fill("둘 다 너무 차가움");
   assert.equal(await none.isDisabled(), false);
   await none.click();
-  await page.getByText("전부 아님으로 보냈습니다.").waitFor();
+  await page.getByText("다시 그려 달라고 보냈습니다.").waitFor();
   const waited = await run(["wait", dir, "--round", round, "--timeout", "5"]);
   assert.equal(waited.code, 0, waited.stderr);
   const answer = JSON.parse(waited.stdout);

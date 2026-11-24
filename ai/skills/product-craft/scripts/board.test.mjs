@@ -20,7 +20,7 @@ const surface = [{
       { id: "comment", component: "CommentField", label: "코멘트", value: { "@path": "/feedback/comment" } },
       { id: "gap", component: "SizeNudge", token: "gap", label: "간격", initial: 16, min: 0, max: 64, step: 4, value: { "@path": "/adjust/gap" } },
       { id: "decide", component: "SubmitButton", label: "보내기", action: { event: { name: "candidate.decide" } } },
-      { id: "none", component: "SubmitButton", label: "전부 아님", action: { event: { name: "candidate.none" } } },
+      { id: "none", component: "SubmitButton", label: "다시 그려 주세요", action: { event: { name: "candidate.none" } } },
     ],
   },
 }];

@@ -23,7 +23,7 @@ async function open(t, surface, candidates, { prepare, route } = {}) {
   const viewer = () => page.frames().find(f => f.url().includes("/__viewer/candidate-viewer.html"));
   const candidate = n => page.frames().find(f => new URL(f.url()).pathname === `/${n === "1" ? "one" : "two"}.html`);
   const shown = () => viewer().evaluate(() => document.documentElement.dataset.candidate);
-  const send = () => page.locator("button.pcb-submit", { hasText: "고른 시안으로 보내기" }).click();
+  const send = () => page.locator("button.pcb-submit", { hasText: "채택해서 보내기" }).click();
   const answer = async () => {
     const waited = await run(["wait", dir, "--round", round, "--timeout", "5"]);
     assert.equal(waited.code, 0, waited.stderr);
@@ -67,8 +67,8 @@ test("the support table shows which controls a viewed candidate cannot preview",
   const { page, board, connected } = await open(t, await fullSurface({ radius: true }), candidates);
   const notice = id => page.locator(`[data-pcb-control="${id}"] .pcb-unavailable`);
   await connected("1");
-  await page.getByText("시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.").waitFor();
-  assert.equal(await page.getByText("시안을 고르면", { exact: false }).count(), 1, "the group note appears once");
+  await page.getByText("시안을 채택하면 색·간격·정렬을 조정할 수 있습니다.").waitFor();
+  assert.equal(await page.getByText("시안을 채택하면", { exact: false }).count(), 1, "the group note appears once");
   await card(page, "1").click();
   await page.waitForFunction(() => !document.querySelector('[data-pcb-control="gap"] .pcb-unavailable'));
   assert.equal(await notice("accent").count(), 0);
@@ -91,8 +91,8 @@ test("journey 4: the viewed card and the chosen card are marked separately", asy
   await viewing("1");
   assert.match(await card(page, "1").getAttribute("aria-label"), /보는 중/);
   assert.equal(await card(page, "1").locator(".pcb-eye title").textContent(), "보는 중");
-  assert.doesNotMatch(await card(page, "1").textContent(), /선택됨/);
-  assert.match(await card(page, "2").textContent(), /선택됨/);
+  assert.doesNotMatch(await card(page, "1").textContent(), /채택됨/);
+  assert.match(await card(page, "2").textContent(), /채택됨/);
   assert.doesNotMatch(await card(page, "2").getAttribute("aria-label"), /보는 중/);
   assert.equal(await card(page, "2").locator(".pcb-eye").count(), 0);
 });
@@ -108,17 +108,17 @@ test("journey 5: adjustments preview live, survive switching, reset, and come ba
   await page.getByRole("button", { name: "간격 늘리기" }).click();
   await page.getByRole("button", { name: "간격 늘리기" }).click();
   await page.getByRole("radio", { name: "가운데" }).click();
-  await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
+  await candidate("1").waitForFunction(() => document.getElementById("price") && getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
   assert.equal(await style("1", "#row", "rowGap"), "24px");
   assert.equal(await style("1", "#row", "justifyContent"), "center");
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
   await page.waitForTimeout(200);
   assert.equal(await style("2", "#price", "color"), "rgb(3, 199, 90)", "a candidate that is not chosen shows as written");
-  await page.getByText("조정은 선택한 시안 1에만 적용됩니다.").waitFor();
+  await page.getByText("조정은 채택한 시안 1에만 적용됩니다.").waitFor();
   await viewer().locator("nav button").first().click();
   await connected("1");
-  await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
+  await candidate("1").waitForFunction(() => document.getElementById("price") && getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
   await page.locator('[data-pcb-control="gap"]').getByRole("button", { name: "초기화" }).click();
   await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("row")).rowGap === "16px");
   await send();
@@ -227,11 +227,11 @@ test("the round-wide pin limit stops at 20 and frees up after a delete", async t
 
 test("a disabled submit button shows its reason and a distinct fill", async t => {
   const { page } = await open(t, await template(), two());
-  const decide = page.locator("button.pcb-submit", { hasText: "고른 시안으로 보내기" });
+  const decide = page.locator("button.pcb-submit", { hasText: "채택해서 보내기" });
   assert.equal(await decide.isDisabled(), true);
-  await page.getByText("채택할 시안을 골라 주세요.").waitFor();
-  assert.equal(await decide.evaluate(el => getComputedStyle(el).opacity), "0.6");
-  assert.equal(await decide.evaluate(el => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)");
+  await page.getByText("‘채택할 시안’에서 하나를 골라 주세요.").waitFor();
+  assert.equal(await decide.evaluate(el => getComputedStyle(el).opacity), "1");
+  assert.equal(await decide.evaluate(el => getComputedStyle(el).backgroundColor), "rgb(34, 39, 46)", "a flat grey slab");
   await card(page, "1").click();
   assert.equal(await decide.evaluate(el => getComputedStyle(el).backgroundColor), "rgb(255, 255, 255)");
 });
@@ -242,11 +242,11 @@ test("reject all says it drops the chosen candidate, and pinning names its targe
   await page.getByText("시안 1에 남깁니다.").waitFor();
   await card(page, "1").click();
   await page.getByLabel("코멘트", { exact: true }).fill("둘 다 아쉬워요");
-  await page.getByText("전부 아님을 보내면 시안 1 선택과 조정값은 버려집니다.").waitFor();
+  await page.getByText("다시 그리면 시안 1 채택과 조정값은 버려집니다.").waitFor();
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
   await page.getByText("시안 2에 남깁니다.").waitFor();
-  await page.getByText("선택한 시안이 아니라서 참고 메모로 보냅니다.").waitFor();
+  await page.getByText("채택한 시안이 아니라서 참고 메모로 보냅니다.").waitFor();
 });
 
 test("a colour token warns when the text it colours falls below 4.5:1 on its background", async t => {
@@ -256,7 +256,7 @@ test("a colour token warns when the text it colours falls below 4.5:1 on its bac
   const warning = page.locator('[data-pcb-control="accent"] .pcb-contrast');
   await page.getByLabel("강조색 hex").fill("#1d4ed8");
   await page.getByLabel("강조색 hex").press("Enter");
-  await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("price")).color === "rgb(29, 78, 216)");
+  await candidate("1").waitForFunction(() => document.getElementById("price") && getComputedStyle(document.getElementById("price")).color === "rgb(29, 78, 216)");
   // The initial green falls short too, so wait for the report on the new value to clear it.
   await page.waitForFunction(() => !document.querySelector('[data-pcb-control="accent"] .pcb-contrast'));
   assert.equal(await warning.count(), 0, "dark blue on white passes");
@@ -264,7 +264,7 @@ test("a colour token warns when the text it colours falls below 4.5:1 on its bac
   await page.getByLabel("강조색 hex").press("Enter");
   await warning.waitFor();
   assert.match(await warning.textContent(), /이 색과 배경의 대비가 1\.\d:1입니다\.글자에는 4\.5:1 이상이 필요합니다\./);
-  await page.getByText("시안 1 · 조정 1개 — 대비 경고 1개", { exact: true }).waitFor();
+  await page.getByText("시안 1 · 조정 1개 · 대비 경고 1개", { exact: true }).waitFor();
   const fix = page.getByRole("button", { name: /^#[0-9a-f]{6}로 바꾸기$/ });
   const target = (await fix.textContent()).slice(0, 7);
   await fix.click();
@@ -279,7 +279,7 @@ test("a pin's text keeps the visible line breaks as spaces", async t => {
   await page.getByRole("button", { name: "위치 지정" }).click();
   await candidate("1").waitForFunction(() => document.documentElement.style.cursor === "crosshair");
   await candidate("1").locator("#price").click();
-  await page.getByText("시안 1 · 무선 89,000원").waitFor();
+  await page.getByText("시안 1 · “무선 89,000원”").waitFor();
 });
 
 test("journey 7: a CSP candidate is served untouched and its preview is marked unavailable", async t => {
@@ -347,12 +347,12 @@ test("connection survives a late panel, a reload of the same candidate and a qui
   await page.getByLabel("강조색 hex").press("Enter");
   await candidate("1").evaluate(() => location.reload());
   await connected("1");
-  await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
+  await candidate("1").waitForFunction(() => document.getElementById("price") && getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
   const nav = viewer().locator("nav button");
   await nav.nth(1).click();
   await nav.first().click();
   await connected("1");
-  await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
+  await candidate("1").waitForFunction(() => document.getElementById("price") && getComputedStyle(document.getElementById("price")).color === "rgb(59, 130, 246)");
 });
 
 test("a ready that arrives before the frame's load event still connects", async t => {
@@ -457,7 +457,7 @@ test("pins are lettered in list order across candidates, and relabel after a del
   await pinCount(page, 2);
   assert.deepEqual(await letters(), ["A", "B"]);
   await page.getByLabel("위치 B 메모").waitFor();
-  assert.equal(await page.locator(".pcb-pin-where").nth(1).textContent(), "시안 2 · two");
+  assert.equal(await page.locator(".pcb-pin-where").nth(1).textContent(), "시안 2 · “two”");
   await candidate("2").waitForFunction(() => document.querySelector("#pcb-layer .pcb-pin-marker")?.textContent === "B");
 });
 
@@ -480,7 +480,7 @@ test("choosing, typing and viewing never move the rows or resize the answer area
   const decide = surface[0].createSurface.components.find(c => c.id === "decide");
   // Passes while the comment is short, then fails with a message long enough to wrap.
   decide["@checks"].push({ condition: { "@call": "length", args: { value: { "@path": "/feedback/comment" }, max: 10 } },
-    message: "코멘트가 길면 이 버튼으로는 보낼 수 없습니다. 열 글자 이내로 줄이거나 전부 아님으로 보내 주세요." });
+    message: "코멘트가 길면 이 버튼으로는 보낼 수 없습니다. 열 글자 이내로 줄이거나 다시 그려 달라고 보내 주세요." });
   for (const width of [1280, 960]) {
     const { page, viewer, connected } = await open(t, surface, two());
     await page.setViewportSize({ width, height: 800 });
@@ -501,14 +501,14 @@ test("choosing, typing and viewing never move the rows or resize the answer area
     await card(page, "1").click();
     await page.getByText("조정은 시안 1에 바로 반영됩니다.").waitFor();
     // The fixture's green falls short on white, so the preview counts it.
-    await page.getByText("시안 1 — 대비 경고 1개", { exact: true }).waitFor();
+    await page.getByText("시안 1 · 대비 경고 1개", { exact: true }).waitFor();
     const row = await page.evaluate(() => [...document.querySelectorAll("button.pcb-submit")].map(b => Math.round(b.getBoundingClientRect().top)));
     assert.equal(row[0], row[1], "the answer buttons share one row");
     await same("choosing 1");
     await page.getByLabel("강조색 hex").fill("#2563eb");
     await page.getByLabel("강조색 hex").press("Enter");
     await page.getByLabel("코멘트", { exact: true }).fill("짧게");
-    await page.getByText("시안 1 · 조정 1개 · 코멘트", { exact: true }).waitFor();
+    await page.getByText("시안 1 · 조정 1개 · 코멘트 1개", { exact: true }).waitFor();
     await same("a short comment");
     await page.getByLabel("코멘트", { exact: true }).fill("이 코멘트는 열 글자를 넘습니다");
     await page.getByText("코멘트가 길면").waitFor();
@@ -597,7 +597,8 @@ test("text on a gradient or image is reported as unmeasured", async t => {
   await connected("1");
   await card(page, "1").click();
   await unmeasuredNote(page, "accent").waitFor();
-  assert.equal(await unmeasuredNote(page, "accent").textContent(), "이미지·그라디언트 위 글자(“89,000원”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요.");
+  assert.equal(await unmeasuredNote(page, "accent").textContent(), "확인 필요: 이미지·그러데이션 위 글자(“89,000원”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요.");
+  await page.getByText("시안 1 · 대비 확인 1개", { exact: true }).waitFor();
   assert.equal(await contrastNote(page, "accent").count(), 0);
 });
 
@@ -635,9 +636,9 @@ test("a valid contrast report replaces the last one; foreign or malformed ones a
 test("reject all can be sent with only a location note", async t => {
   const { page, candidate, connected, answer } = await open(t, await fullSurface(), two());
   await connected("1");
-  const none = page.locator("button.pcb-submit", { hasText: "전부 아님" });
+  const none = page.locator("button.pcb-submit", { hasText: "다시 그려 주세요" });
   assert.equal(await none.isDisabled(), true);
-  await page.getByText("코멘트나 위치 메모를 남기면 전부 아님을 보낼 수 있습니다.").waitFor();
+  await page.getByText("다시 그려 달라고 하려면 코멘트나 위치 메모를 남겨 주세요.").waitFor();
   await pinOnce(page, candidate, "1", "#price");
   await pinCount(page, 1);
   await page.waitForFunction(() => !document.querySelector("button.pcb-submit.pcb-secondary").disabled);
@@ -673,6 +674,10 @@ test("the viewer hides tools it cannot use, marks the chosen candidate, shows it
 test("pins close together keep their letters visible", async t => {
   const { page, candidate, connected } = await open(t, await fullSurface(), two());
   await connected("1");
+  await page.getByRole("button", { name: "위치 지정" }).click();
+  await page.getByText("시안에서 위치를 눌러 주세요 · Esc 취소").waitFor();
+  assert.equal(await candidate("1").evaluate(() => document.getElementById("pcb-layer").textContent), "", "the candidate shows only a frame, no second instruction");
+  await page.getByRole("button", { name: "지정 취소" }).click();
   await pinOnce(page, candidate, "1", "#title");
   await pinOnce(page, candidate, "1", "#row");
   await candidate("1").waitForFunction(() => document.querySelectorAll("#pcb-layer .pcb-pin-disc").length === 2);
@@ -681,4 +686,11 @@ test("pins close together keep their letters visible", async t => {
     return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   });
   assert.equal(overlap, false);
+});
+
+test("the answer area sits at the foot of the panel even when the content is short", async t => {
+  const { page, connected } = await open(t, await template(), two());
+  await connected("1");
+  const gap = await page.evaluate(() => innerHeight - document.querySelector("aside a2ui-basic-column:has(> a2ui-react-submitbutton)").getBoundingClientRect().bottom);
+  assert.ok(Math.abs(gap) <= 1, `answer area bottom is ${gap}px above the window bottom`);
 });
