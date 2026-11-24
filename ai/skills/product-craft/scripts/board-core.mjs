@@ -152,7 +152,7 @@ function sentSummary(action, controls) {
       const control = controls.tokens.get(token);
       return `${control.label}: ${shown(control, control.initial)} → ${shown(control, value)}`;
     })],
-    ["위치 메모", pins.map((p, i) => `위치 ${pinLabel(i)} · 시안 ${p.candidate} · ${p.text || p.selector}: ${p.note.trim() || "(메모 없음)"}`)],
+    ["위치 메모", pins.map((p, i) => `위치 ${pinLabel(i)} · 시안 ${p.candidate} · “${p.text || p.selector}”: ${p.note.trim() ? `“${p.note.trim()}”` : "(메모 없음)"}`)],
     ["코멘트", comment?.trim() ? [`“${comment.trim()}”`] : []],
   ].filter(([, lines]) => lines.length);
   const components = [{

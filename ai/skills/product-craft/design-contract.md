@@ -229,8 +229,9 @@ of a design-tool inspector.
   - The background behind the text is found by compositing each ancestor's translucent
     background colour down to the first opaque one (or the white canvas); a translucent text
     colour is composited over that background.
-  - Text with a background image or gradient on the way down cannot be measured. When nothing
-    measured is below 4.5:1 but such text exists, the row shows "확인 필요: 이미지·그러데이션 위
+  - A gradient on the way down is measured at each of its colour stops, and the worst stop
+    counts. Text with a background image on the way down cannot be measured. When nothing
+    measured is below 4.5:1 but such text exists, the row shows "확인 필요: 배경 이미지 위
     글자(“<text>”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요." in `#b8bec6` with "확인 필요:" in
     `#fff`, naming the first such text (up to 20 characters).
   - Not measured, and not flagged: text over a separately positioned element, ancestor
@@ -250,6 +251,7 @@ of a design-tool inspector.
     never has. The instruction shows as the note line under the toggle.
   - While another candidate than the chosen one is on screen, the note line under the button
     reads "채택한 시안이 아니라서 참고 메모로 보냅니다.", which is how the agent reads such pins.
+  - The label carries the pin count ("위치 메모 · 3개") once there is a pin.
   - Below it, a list of pins, each a card with a `1px #4a5058` border and 8px padding, so a
     pin note never reads as a second comment field. The header row has the number badge, "시안 n · <element text>"
     and 삭제; below it is a note field.
@@ -306,7 +308,7 @@ of a design-tool inspector.
     column, its lines 4px apart under its heading, sections 16px apart;
   - 조정: a line per changed token in its own label, with units and the old value
     ("카드 간격: 16px → 24px", "카드 정렬: 왼쪽 → 가운데");
-  - 위치 메모: "위치 A · 시안 1 · <element text>: <note>";
+  - 위치 메모: "위치 A · 시안 1 · “<element text>”: “<note>”", quoted like the comment;
   - 코멘트: "“…”";
   - a divider, then "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다."
   After a send, the viewer shows the sent candidate and locks: the arrows and the other number

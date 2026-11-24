@@ -53,19 +53,21 @@
   };
   const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
   const over = ([r, g, b, a], base) => [r, g, b].map((c, i) => c * a + base[i] * (1 - a));
-  // The colour behind an element's text: its own and its ancestors' background colours,
-  // composited from the first opaque one (or the white canvas) up. Null when a background
-  // image or gradient is on the way, since its colour under the text is unknown.
-  function backgroundOf(el) {
+  // The colours that can be behind an element's text: its own and its ancestors' backgrounds,
+  // composited from the first opaque one (or the white canvas) up. A gradient contributes
+  // each of its stops, so the caller can take the worst. Null when an image is on the way,
+  // since its colour under the text is unknown.
+  function backgroundsOf(el) {
     const layers = [];
     for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
       const style = getComputedStyle(node);
-      if (style.backgroundImage !== "none") return null;
+      if (style.backgroundImage.includes("url(")) return null;
+      if (style.backgroundImage !== "none") layers.push((style.backgroundImage.match(/rgba?\([^)]*\)/g) ?? []).map(rgba));
       const layer = rgba(style.backgroundColor);
-      if (layer[3] > 0) layers.push(layer);
+      if (layer[3] > 0) layers.push([layer]);
       if (layer[3] >= 1) break;
     }
-    return layers.reverse().reduce((base, layer) => over(layer, base), [255, 255, 255]);
+    return layers.reverse().reduce((bases, stops) => stops.flatMap(stop => bases.map(base => over(stop, base))), [[255, 255, 255]]);
   }
   // For each colour token, the lowest contrast between text drawn in that colour and the
   // background behind it, so the panel can warn about a value that makes text unreadable.
@@ -92,17 +94,19 @@
         const style = getComputedStyle(el);
         if (style.visibility === "hidden" || style.color !== colour) continue;
         if (![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
-        const background = backgroundOf(el);
-        if (!background) {
+        const backgrounds_ = backgroundsOf(el);
+        if (!backgrounds_) {
           unmeasured.add(name);
           samples[name] ??= (el.innerText ?? el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, L.text);
           continue;
         }
-        const [a, b] = [luminance(over(text, background)), luminance(background)].sort((x, y) => y - x);
-        const ratio = (a + 0.05) / (b + 0.05);
-        if (ratio < lowest) {
-          lowest = ratio;
-          backgrounds[name] = hex(background);
+        for (const background of backgrounds_) {
+          const [a, b] = [luminance(over(text, background)), luminance(background)].sort((x, y) => y - x);
+          const ratio = (a + 0.05) / (b + 0.05);
+          if (ratio < lowest) {
+            lowest = ratio;
+            backgrounds[name] = hex(background);
+          }
         }
       }
       if (Number.isFinite(lowest)) values[name] = Math.round(lowest * 1000) / 1000;

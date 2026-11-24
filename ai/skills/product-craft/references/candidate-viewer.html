@@ -17,14 +17,15 @@
   body { margin: 0; background: #16191d; color: #fff; font: 16px/1.4 sans-serif; }
   header { height: 48px; border-bottom: 1px solid #2f353d; display: flex; align-items: center; justify-content: center; gap: 4px; }
   button { min-width: 44px; height: 44px; padding: 0 12px; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-  button[aria-current="true"] { background: #fff; color: #16191d; text-decoration: underline; text-underline-offset: 4px; }
+  button[aria-current="true"] { background: #fff; color: #16191d; }
   button:focus-visible { outline: 2px solid #80c8ff; outline-offset: -3px; }
   button:disabled { opacity: .3; cursor: default; }
   /* A tool with nothing to act on is left out rather than shown dimmed without a reason. */
   #compare:disabled, #fit:disabled { display: none; }
   nav button { position: relative; }
+  nav button[data-chosen] { padding-right: 20px; }
   /* Set by a host page that tracks a choice (the candidate board). */
-  nav button[data-chosen]::after { content: "✓"; position: absolute; top: 7px; right: 5px; font-size: 11px; line-height: 1; }
+  nav button[data-chosen]::after { content: "✓"; position: absolute; top: 8px; right: 6px; font-size: 11px; line-height: 1; }
   /* Locked, only the controls that switch candidates dim; compare and fit still work. */
   html[data-locked] :is(#previous, #next, nav button:not([aria-current="true"])) { opacity: .4; cursor: default; }
   #width { margin-left: 12px; color: #b8bec6; font-size: 13px; font-variant-numeric: tabular-nums; }

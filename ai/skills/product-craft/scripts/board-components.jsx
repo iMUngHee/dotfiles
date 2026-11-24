@@ -34,7 +34,7 @@ function Contrast({ token, current, onFix }) {
   }
   if (!unmeasured) return null;
   const named = sample ? `글자(“${sample.length > 20 ? `${sample.slice(0, 20)}…` : sample}”)` : "글자";
-  return <p className="pcb-note pcb-unmeasured"><strong>확인 필요:</strong> 이미지·그러데이션 위 {named}는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p>;
+  return <p className="pcb-note pcb-unmeasured"><strong>확인 필요:</strong> 배경 이미지 위 {named}는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p>;
 }
 
 // A line that keeps the height of the tallest text it can show, so a change of text never
@@ -259,7 +259,7 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
     : board.pinMode ? "시안에서 위치를 눌러 주세요 · Esc 취소" : elsewhere;
   return (
     <div className="pcb-field">
-      <span className="pcb-label">{props.label}</span>
+      <span className="pcb-label">{props.label}{pins.length ? ` · ${pins.length}개` : ""}</span>
       <div className="pcb-inline">
         <button type="button" className="pcb-toggle" aria-pressed={board.pinMode} disabled={unavailable && !board.pinMode} onClick={toggle}>
           {board.pinMode ? "지정 취소" : "위치 지정"}

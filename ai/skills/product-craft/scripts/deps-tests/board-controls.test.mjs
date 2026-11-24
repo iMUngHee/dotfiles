@@ -243,6 +243,7 @@ test("reject all says it drops the chosen candidate, and pinning names its targe
   await card(page, "1").click();
   await page.getByLabel("코멘트", { exact: true }).fill("둘 다 아쉬워요");
   await page.getByText("다시 그리면 시안 1 채택과 조정값은 버려집니다.").waitFor();
+  assert.equal(await page.locator(".pcb-caution").evaluate(el => getComputedStyle(el).color), "rgb(255, 180, 168)", "the drop warning takes the caution colour");
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
   await page.getByText("시안 2에 남깁니다.").waitFor();
@@ -452,6 +453,7 @@ test("pins are lettered in list order across candidates, and relabel after a del
   await pinCount(page, 3);
   const letters = () => page.locator(".pcb-pin-number").allTextContents();
   assert.deepEqual(await letters(), ["A", "B", "C"]);
+  await page.getByText("위치 메모 · 3개").waitFor();
   await candidate("2").waitForFunction(() => document.querySelector("#pcb-layer .pcb-pin-marker")?.textContent === "C");
   await page.getByRole("button", { name: "위치 B 삭제" }).click();
   await pinCount(page, 2);
@@ -591,13 +593,20 @@ test("contrast composites translucent backgrounds, nested layers and translucent
   assert.match(await contrastNote(second.page, "accent").textContent(), /대비가 1\.6:1/);
 });
 
-test("text on a gradient or image is reported as unmeasured", async t => {
-  const gradient = tokenCandidate("one", { extraCss: ".row { background: linear-gradient(#fff, #eee); }" });
+test("text on a gradient is measured at its worst stop; text on an image is unmeasured", async t => {
+  const faded = tokenCandidate("two", { extraCss: ".row { background: linear-gradient(#ffffff, #eeeeee); }" });
+  const first = await open(t, await fullSurface(), { "one.html": faded, "two.html": tokenCandidate("x") });
+  await first.connected("1");
+  await card(first.page, "1").click();
+  // #03c75a is 2.25:1 on the white stop and 1.94:1 on #eeeeee; the worst stop counts.
+  await first.page.waitForFunction(() => /대비가 1\.9:1/.test(document.querySelector('[data-pcb-control="accent"] .pcb-contrast')?.textContent ?? ""));
+  await first.page.getByRole("button", { name: /로 바꾸기$/ }).waitFor();
+  const gradient = tokenCandidate("one", { extraCss: ".row { background: url('data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACw='); }" });
   const { page, connected } = await open(t, await fullSurface(), { "one.html": gradient, "two.html": tokenCandidate("two") });
   await connected("1");
   await card(page, "1").click();
   await unmeasuredNote(page, "accent").waitFor();
-  assert.equal(await unmeasuredNote(page, "accent").textContent(), "확인 필요: 이미지·그러데이션 위 글자(“89,000원”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요.");
+  assert.equal(await unmeasuredNote(page, "accent").textContent(), "확인 필요: 배경 이미지 위 글자(“89,000원”)는 대비를 재지 못했습니다. 눈으로 확인해 주세요.");
   await page.getByText("시안 1 · 대비 확인 1개", { exact: true }).waitFor();
   assert.equal(await contrastNote(page, "accent").count(), 0);
 });
@@ -666,6 +675,7 @@ test("the viewer hides tools it cannot use, marks the chosen candidate, shows it
   await page.getByText("시안 2 채택으로 보냈습니다.").waitFor();
   await viewer().waitForFunction(() => document.documentElement.hasAttribute("data-locked"));
   assert.equal(await viewer().evaluate(() => getComputedStyle(document.querySelector('nav button[aria-current="true"]')).opacity), "1", "the sent candidate's tab stays readable");
+  assert.equal(await viewer().evaluate(() => getComputedStyle(document.getElementById("previous")).opacity), "0.4", "the switchers dim");
   await viewer().locator("nav button").first().click({ force: true });
   await page.waitForTimeout(200);
   assert.equal(await shown(), "2", "the viewer stays on the sent candidate");

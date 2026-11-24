@@ -396,7 +396,7 @@ test("adjust and pins are validated against the surface's controls before the ro
   assert.equal(ok.status, 200);
   const summary = JSON.stringify(await ok.json());
   assert.match(summary, /간격: 16px → 24px/);
-  assert.match(summary, /위치 A · 시안 1 · t: n/);
+  assert.match(summary, /위치 A · 시안 1 · “t”: “n”/);
   assert.match(summary, /"조정"/);
   const { answer } = await waitForAnswer({ dir, round: running.round, timeoutMs: 1000 });
   assert.deepEqual(answer.context.adjust, { gap: 24 });
