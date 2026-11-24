@@ -1,6 +1,14 @@
 # Stack strictness
 
-Ask for capabilities, not tools. For the repository's stack, find in the version-matched official documentation or bundled help how it provides each capability below, and wire what it provides into the gate. The examples are a few known spellings, not a list to pick from; a stack missing from them is handled the same way.
+Ask for capabilities, not tools. For the repository's stack, find how it provides each capability below and wire what it provides into the gate. The examples are a few known spellings, not a list to pick from; a stack missing from them is handled the same way.
+
+Take every command and option from a source for the installed version: the stack's official documentation, else the tool's own `--help` or manual, else its documentation at the pinned release. Many stacks have only community tools; a flag seen in none of these sources is a guess, so leave it out. Run each wired command once and keep its output as evidence that it exists and does what the row asks.
+
+End with one of three outcomes for every capability, and report all of them:
+
+- **Wired**: a tool provides it and the gate runs it.
+- **Stood in for**: no tool provides it, so a repository check covers the risk instead, such as a `banned-patterns.tsv` line for a ban, an import grep for boundaries, a ratcheted `banned-patterns.tsv` line matching suppressions that carry no reason, or a script for an inventory.
+- **Absent**: nothing reasonable covers it. Record it in the development guide with the risk it leaves open, so the gap is known rather than silent, and recheck it when the stack's tools change.
 
 | Capability | Gate tier | Examples |
 | --- | --- | --- |

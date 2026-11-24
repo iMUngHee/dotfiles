@@ -2,6 +2,8 @@
 
 A single passing run proves one case. Pick a method by the risk the code carries and the question that risk asks, then find the stack's tool for that family. The tools named are examples; any method that answers a question below fits the same way.
 
+A stack with no tool for a family still gets the method. A test that loops over inputs from a seeded generator and checks the property is a property-based test without a library; print the seed on failure and save each failing input as a regular test. A directory of hostile inputs that a test replays, grown whenever a crash is found, stands in for fuzzing; where the runtime embeds in a language with a fuzzer, drive the code from there. Model checking of a design needs no support from the code's language at all, so it stays a candidate to report whatever the stack. Name the method that stood in for the missing tool in the development guide and the report.
+
 | Risk | Question | Family |
 | --- | --- | --- |
 | Pure logic with a large input space | Does the property hold for every input? | property-based tests (proptest, fast-check, Hypothesis) |
@@ -27,7 +29,7 @@ A method says how to check; the cases say what. Write these criteria into the de
 
 ## Where each method runs
 
-- **fast**: unit and property-based tests, and a replay of every saved fuzzing crash input as a regression test.
+- **fast**: unit and property-based tests, and a replay of every saved fuzzing crash input, or of the hostile-input directory that stands in for fuzzing, as a regression test.
 - **full**: integration tests, dead-code and dependency checks, fuzzing with a time limit per target (for example 60 seconds), optional mutation testing on changed files, and every formal check whose `formal.tsv` row is `full`.
 - **Outside the gate**, in the development guide's table of verification commands with the target, the property, the harm when it breaks, the run time, when to run it again and how to read a failure as steps in the code's own words: long fuzzing runs and `manual` formal checks.
 

@@ -4,7 +4,7 @@ Use the decisions that affect this repository. Resolve ordinary preferences from
 
 | Decision | Default | When to ask |
 | --- | --- | --- |
-| Conventions | Use the existing formatter, test layout, naming and documented exceptions, and make each of them fail in the gate. For a new stack, find its version-matched official tools ([stacks.md](stacks.md)). | A requested change implies a disruptive migration, such as a repository-wide reformat. |
+| Conventions | Use the existing formatter, test layout, naming and documented exceptions, and make each of them fail in the gate. For a new stack, find its tools from sources for the installed version ([stacks.md](stacks.md)). | A requested change implies a disruptive migration, such as a repository-wide reformat. |
 | Strictness | Warnings are errors, lint suppressions carry a reason, a flaky test fails, every rule names its check. New code is strict at once; violations that already exist enter a ratchet baseline that only shrinks ([gate.md](gate.md)). | Turning a rule on would change many existing files in one go. |
 | Gate | One `scripts/check.sh` with fast and full tiers, run by a pre-push hook. Extend an existing gate instead of adding a second. Wire an existing CI to call the same script; do not create CI. | The maintainer wants CI created, or the full tier needs special hardware or credentials. |
 | Compatibility | Identify a concrete consumer of a command, setting, file format, result or interaction. Preserve its observable behavior. | A missing acceptance criterion determines whether the result is correct. |
