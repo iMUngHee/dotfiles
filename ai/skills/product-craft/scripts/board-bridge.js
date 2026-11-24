@@ -31,7 +31,8 @@
     && typeof p.selector === "string" && p.selector.length > 0 && p.selector.length <= L.selector
     && typeof p.text === "string" && p.text.length <= L.text && unit(p.ox) && unit(p.oy) && unit(p.x) && unit(p.y);
   const isState = d => plain(d) && d.pcb === 1 && d.type === "state" && d.candidate === candidate
-    && onlyKeys(d, ["pcb", "type", "candidate", "tokens", "pins", "pinMode", "focus"]) && typeof d.pinMode === "boolean"
+    && onlyKeys(d, ["pcb", "type", "candidate", "tokens", "pins", "pinMode", "focus", "measure"]) && typeof d.pinMode === "boolean"
+    && Array.isArray(d.measure) && d.measure.length <= L.controls && d.measure.every(k => typeof k === "string" && k.length <= L.tokenLength && IDENTIFIER.test(k))
     && Number.isInteger(d.focus) && d.focus >= 0 && d.focus <= L.pins
     && plain(d.tokens) && Object.entries(d.tokens).every(([k, v]) => k.length <= L.tokenLength && IDENTIFIER.test(k) && tokenValue(v))
     && Array.isArray(d.pins) && d.pins.length <= L.pins && d.pins.every(pinShape);
@@ -40,6 +41,46 @@
     for (const name of applied) if (!(name in tokens)) root.style.removeProperty(`--${name}`);
     for (const [name, value] of Object.entries(tokens)) root.style.setProperty(`--${name}`, typeof value === "number" ? `${value}px` : value);
     applied = new Set(Object.keys(tokens));
+  }
+
+  const channel = v => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const rgb = text => (text.match(/[\d.]+/g) ?? []).map(Number);
+  const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  function backgroundOf(el) {
+    for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
+      const [r, g, b, a = 1] = rgb(getComputedStyle(node).backgroundColor);
+      if (a > 0) return [r, g, b];
+    }
+    return [255, 255, 255];
+  }
+  // For each colour token, the lowest contrast between text drawn in that colour and the
+  // background behind it, so the panel can warn about a value that makes text unreadable.
+  function measureContrast(names) {
+    const values = {};
+    for (const name of names) {
+      const probe = document.createElement("span");
+      probe.style.color = `var(--${name})`;
+      document.body.append(probe);
+      const colour = getComputedStyle(probe).color;
+      probe.remove();
+      // Only sRGB serialisations are measured; other colour spaces would be misread.
+      if (!colour.startsWith("rgb")) continue;
+      let lowest = Infinity;
+      for (const el of document.body.querySelectorAll("*")) {
+        if (el.closest("#pcb-layer") || !el.getClientRects().length) continue;
+        const style = getComputedStyle(el);
+        if (style.visibility === "hidden" || style.color !== colour) continue;
+        if (![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
+        const [a, b] = [luminance(rgb(colour)), luminance(backgroundOf(el))].sort((x, y) => y - x);
+        lowest = Math.min(lowest, (a + 0.05) / (b + 0.05));
+      }
+      if (Number.isFinite(lowest)) values[name] = Math.round(lowest * 1000) / 1000;
+    }
+    // Sent even when empty, so ratios from an earlier value do not linger in the panel.
+    post({ type: "contrast", values });
   }
 
   function selectorFor(el) {
@@ -138,6 +179,8 @@
     focus = event.data.focus;
     root.style.cursor = pinMode ? "crosshair" : "";
     schedule();
+    const names = event.data.measure;
+    if (names.length && document.body) requestAnimationFrame(() => measureContrast(names));
   });
 
   addEventListener("click", event => {
@@ -157,7 +200,8 @@
         oy: clamp(r.height ? (event.clientY - r.top) / r.height : 0.5),
         x: clamp((event.clientX + window.scrollX) / root.scrollWidth),
         y: clamp((event.clientY + window.scrollY) / root.scrollHeight),
-        text: (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, L.text),
+        // innerText keeps the visible breaks (a <br> between name and price) as whitespace.
+        text: (el.innerText ?? el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, L.text),
       },
     });
   }, true);

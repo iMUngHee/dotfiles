@@ -53,6 +53,7 @@ test("extractControls rejects controls that break the contract, with code 2", ()
     [color("x".repeat(LIMITS.tokenLength + 1))],
     [color("with-hyphen")],
     [{ ...color("accent"), value: { "@path": "/adjust/other" } }],
+    Array.from({ length: LIMITS.controls + 1 }, (_, i) => color(`t${i}`)),
   ];
   for (const extra of bad) assert.throws(() => extractControls(surface(extra)), { code: 2 }, JSON.stringify(extra));
   extractControls(surface([color("x".repeat(LIMITS.tokenLength)), size("big", { min: LIMITS.intMin, max: LIMITS.intMax, step: 1, initial: LIMITS.intMax })]));

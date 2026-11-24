@@ -103,7 +103,8 @@ SizeNudge, AlignPicker, RegionNotes, and the function `showCandidate`.
      bindings their actions carry.
    - Add a ColorToken, SizeNudge or AlignPicker only for a token the candidates declare and
      this round is deciding. Bind each to `/adjust/<token>` with the candidates' own value as
-     `initial`. Use one control per token.
+     `initial`. Use one control per token, at most 20 per surface. A ColorToken warns when the text
+     it colours falls below 4.5:1 on the chosen candidate.
    - Add RegionNotes, bound to `/pins`, when placement matters this round.
    - Questions of your own go in components bound to `/extra/<key>`.
    - Leave out controls nobody is deciding, and never describe or rank the candidates on the

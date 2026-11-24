@@ -24,7 +24,8 @@ const viewedNumber = () => viewerDoc()?.documentElement.dataset.candidate;
 const showCandidate = n => viewerDoc()?.querySelectorAll("nav button")[Number(n) - 1]?.click();
 
 // Board state outside the A2UI data model: which candidate is on screen, bridge state, pin mode.
-const store = { state: { viewed: undefined, chosen: "", bridge: {}, pinMode: false, focus: 0 }, listeners: new Set() };
+const store = { state: { viewed: undefined, chosen: "", bridge: {}, pinMode: false, focus: 0, contrast: {} }, listeners: new Set() };
+const COLOUR_TOKENS = Object.entries(config.controls).filter(([, c]) => c.kind === "color").map(([name]) => name);
 const setState = patch => {
   store.state = { ...store.state, ...patch };
   for (const listener of store.listeners) listener();
@@ -63,7 +64,9 @@ function snapshot(n) {
   }));
   const pins = (data("/pins") ?? []).flatMap((p, i) => p.candidate === n
     ? [{ n: i + 1, selector: p.selector, ox: p.ox, oy: p.oy, x: p.x, y: p.y, text: p.text }] : []);
-  return { pcb: 1, type: "state", candidate: n, tokens, pins, pinMode: store.state.pinMode, focus: store.state.focus };
+  // Only tokens this candidate declares on :root are measured; an undeclared var() would measure body text.
+  const measure = COLOUR_TOKENS.filter(name => config.support[name]?.[n] === "ok");
+  return { pcb: 1, type: "state", candidate: n, tokens, pins, pinMode: store.state.pinMode, focus: store.state.focus, measure };
 }
 
 function sendState() {
@@ -86,12 +89,18 @@ function addPin(n, pin) {
   model.dataModel.set("/pins", [...pins, { candidate: n, ...pin, note: "" }]);
 }
 
-const MESSAGE_KEYS = { ready: ["pcb", "type", "candidate"], pinCancel: ["pcb", "type", "candidate"], pin: ["pcb", "type", "candidate", "pin"] };
+const MESSAGE_KEYS = {
+  ready: ["pcb", "type", "candidate"], pinCancel: ["pcb", "type", "candidate"],
+  pin: ["pcb", "type", "candidate", "pin"], contrast: ["pcb", "type", "candidate", "values"],
+};
+const contrastValues = v => typeof v === "object" && v !== null && !Array.isArray(v)
+  && Object.entries(v).every(([name, ratio]) => COLOUR_TOKENS.includes(name) && typeof ratio === "number" && ratio >= 1 && ratio <= 21);
 function isBridgeMessage(d) {
   if (typeof d !== "object" || d === null || d.pcb !== 1 || !MESSAGE_KEYS[d.type]) return false;
   if (typeof d.candidate !== "string" || !/^[1-9]$/.test(d.candidate)) return false;
   const keys = Object.keys(d);
   if (keys.length !== MESSAGE_KEYS[d.type].length || !keys.every(k => MESSAGE_KEYS[d.type].includes(k))) return false;
+  if (d.type === "contrast") return contrastValues(d.values);
   return d.type !== "pin" || validatePin(d.pin);
 }
 
@@ -99,12 +108,14 @@ addEventListener("message", event => {
   try {
     const frame = candidateFrame();
     if (!frame || event.source !== frame.contentWindow || !isBridgeMessage(event.data)) return;
-    const { type, candidate, pin } = event.data;
+    const { type, candidate, pin, values } = event.data;
     if (candidate !== viewedNumber() || candidate !== store.state.viewed) return;
     if (type === "ready") {
       setState({ bridge: { ...store.state.bridge, [candidate]: "connected" } });
       window.__pcbConnected.add(candidate);
       sendState();
+    } else if (type === "contrast") {
+      setState({ contrast: { ...store.state.contrast, [candidate]: values } });
     } else if (type === "pin") {
       if (store.state.pinMode) addPin(candidate, pin);
     } else {
@@ -176,6 +187,7 @@ function Panel() {
     },
     showCandidate,
     bridgeState: n => board.bridge[n],
+    contrastFor: tokenName => (board.chosen && board.viewed === board.chosen ? board.contrast[board.chosen]?.[tokenName] : undefined),
     groupState: () => !board.chosen ? "unchosen" : board.viewed !== board.chosen ? "notChosen" : "ok",
     previewState: tokenName => {
       if (!board.chosen || board.viewed !== board.chosen) return "ok";

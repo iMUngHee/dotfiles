@@ -241,6 +241,32 @@ test("reject all says it drops the chosen candidate, and pinning names its targe
   await page.getByText("시안 2에 남깁니다.").waitFor();
 });
 
+test("a colour token warns when the text it colours falls below 4.5:1 on its background", async t => {
+  const { page, candidate, connected } = await open(t, await fullSurface(), two());
+  await connected("1");
+  await card(page, "1").click();
+  const warning = page.locator('[data-pcb-control="accent"] .pcb-contrast');
+  await page.getByLabel("강조색 hex").fill("#1d4ed8");
+  await page.getByLabel("강조색 hex").press("Enter");
+  await candidate("1").waitForFunction(() => getComputedStyle(document.getElementById("price")).color === "rgb(29, 78, 216)");
+  await page.waitForTimeout(300);
+  assert.equal(await warning.count(), 0, "dark blue on white passes");
+  await page.getByLabel("강조색 hex").fill("#a7f3d0");
+  await page.getByLabel("강조색 hex").press("Enter");
+  await warning.waitFor();
+  assert.match(await warning.textContent(), /배경 대비 1\.\d:1 · 글자에는 4\.5:1 이상이 필요합니다\./);
+});
+
+test("a pin's text keeps the visible line breaks as spaces", async t => {
+  const candidates = { "one.html": tokenCandidate("one").replace('<span class="price" id="price">89,000원</span>', '<span class="price" id="price">무선<br>89,000원</span>'), "two.html": tokenCandidate("two") };
+  const { page, candidate, connected } = await open(t, await fullSurface(), candidates);
+  await connected("1");
+  await page.getByRole("button", { name: "위치 지정" }).click();
+  await candidate("1").waitForFunction(() => document.documentElement.style.cursor === "crosshair");
+  await candidate("1").locator("#price").click();
+  await page.getByText("시안 1 · 무선 89,000원").waitFor();
+});
+
 test("journey 7: a CSP candidate is served untouched and its preview is marked unavailable", async t => {
   const csp = `<!doctype html><meta http-equiv="Content-Security-Policy" content="script-src 'none'">${tokenCandidate("two")}`;
   const { page, viewer, board } = await open(t, await fullSurface(), { "one.html": tokenCandidate("one"), "two.html": csp });
@@ -260,6 +286,9 @@ test("the panel ignores pins from the wrong source, the wrong candidate or the w
     top.postMessage({ pcb: 1, type: "pin", candidate: "1", pin: { ...pin, x: 7 } }, "*");
     top.postMessage({ pcb: 1, type: "pin", candidate: "1", pin, extra: true }, "*");
     top.postMessage({ pcb: 1, type: "pin", candidate: "1", pin: { ...pin, selector: "x".repeat(301) } }, "*");
+    top.postMessage({ pcb: 1, type: "contrast", candidate: "1", values: { unknown: 2 } }, "*");
+    top.postMessage({ pcb: 1, type: "contrast", candidate: "1", values: { accent: 40 } }, "*");
+    top.postMessage({ pcb: 1, type: "contrast", candidate: "2", values: { accent: 1.5 } }, "*");
   });
   await page.evaluate(() => {
     const pin = { selector: "#title", ox: 0.5, oy: 0.5, x: 0.1, y: 0.1, text: "t" };
@@ -267,6 +296,7 @@ test("the panel ignores pins from the wrong source, the wrong candidate or the w
   });
   await page.waitForTimeout(300);
   assert.equal(await page.locator(".pcb-pin").count(), before);
+  assert.equal(await page.locator(".pcb-contrast").count(), 0, "malformed or foreign contrast reports are ignored");
   assert.deepEqual(await page.evaluate(() => window.__pcbErrors ?? []), []);
 });
 

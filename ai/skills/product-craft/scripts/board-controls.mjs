@@ -3,7 +3,7 @@
 // imports it too, so the browser checks values by the same rules as the server.
 
 export const LIMITS = Object.freeze({
-  tokenLength: 30, intMin: -10000, intMax: 10000, pins: 20, selector: 300, text: 120, note: 500,
+  tokenLength: 30, intMin: -10000, intMax: 10000, pins: 20, controls: 20, selector: 300, text: 120, note: 500,
 });
 export const ALIGN_OPTIONS = Object.freeze(["start", "center", "end", "stretch"]);
 const TOKEN_KINDS = { ColorToken: "color", SizeNudge: "size", AlignPicker: "align" };
@@ -63,6 +63,7 @@ export function extractControls(messages) {
     const control = readControl(c);
     if (tokens.has(c.token)) throw new ContractError(`token ${c.token} has more than one control`);
     tokens.set(c.token, control);
+    if (tokens.size > LIMITS.controls) throw new ContractError(`at most ${LIMITS.controls} token controls per surface`);
   }
   return { tokens, pins: components.some(c => c?.component === "RegionNotes") };
 }

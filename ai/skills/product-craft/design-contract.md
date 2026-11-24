@@ -193,6 +193,10 @@ of a design-tool inspector.
 - **ColorToken:**
   - One row: label, a 32px swatch that opens the native picker, a hex field 88px wide, and
     초기화.
+  - Contrast: the bridge measures, on the chosen candidate, the lowest contrast between text
+    drawn in the token's colour and the background behind it. Below 4.5:1 the row shows
+    "배경 대비 <r>:1 · 글자에는 4.5:1 이상이 필요합니다." in `#ffb4a8` (10.37:1 on the
+    panel). The value is not blocked; the owner may keep it.
   - Invalid hex shows "#rrggbb 형식으로 적어 주세요".
 - **SizeNudge:**
   - One row: label, a 32px − button, a number field 64px wide with the `px` unit, a 32px +

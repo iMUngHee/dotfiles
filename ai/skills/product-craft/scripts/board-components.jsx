@@ -17,8 +17,16 @@ function notice(state) {
   return "미리보기 반영 불가.";
 }
 
-// A token row: label, the control, a reset slot that keeps its width, and one notice line.
-function TokenRow({ token, label, changed, onReset, children }) {
+// 4.5:1 is the WCAG minimum for body-size text.
+function Contrast({ token }) {
+  const ratio = useBoard().contrastFor(token);
+  if (ratio === undefined || ratio >= 4.5) return null;
+  // Rounded down, so a ratio just under the minimum never displays as 4.5.
+  return <p className="pcb-note pcb-contrast">배경 대비 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1 · 글자에는 4.5:1 이상이 필요합니다.</p>;
+}
+
+// A token row: label, the control, a reset slot that keeps its width, notice lines below.
+function TokenRow({ token, label, changed, onReset, children, extra }) {
   const board = useBoard();
   const state = board.previewState(token);
   return (
@@ -29,6 +37,7 @@ function TokenRow({ token, label, changed, onReset, children }) {
         <button type="button" className="pcb-reset" data-hidden={!changed} tabIndex={changed ? 0 : -1} aria-hidden={!changed} onClick={onReset}>초기화</button>
       </div>
       <p className={state === "ok" ? "pcb-note" : "pcb-note pcb-unavailable"}>{notice(state)}</p>
+      {extra}
     </div>
   );
 }
@@ -109,7 +118,8 @@ const ColorToken = createComponentImplementation(api("ColorToken"), ({ props }) 
     props.setValue(value.toLowerCase() === props.initial.toLowerCase() ? null : value);
   };
   return (
-    <TokenRow token={props.token} label={props.label} changed={props.value != null} onReset={() => props.setValue(null)}>
+    <TokenRow token={props.token} label={props.label} changed={props.value != null} onReset={() => props.setValue(null)}
+      extra={<Contrast token={props.token} />}>
       {locked => <>
         <input type="color" className="pcb-swatch" aria-label={`${props.label} 색 선택`} value={current} disabled={locked} onChange={e => commit(e.target.value)} />
         <input type="text" className="pcb-hex" aria-label={`${props.label} hex`} value={draft} spellCheck={false} disabled={locked}
@@ -253,6 +263,7 @@ export const BOARD_CSS = `
 .pcb-reason { margin: 0; color: #b8bec6; }
 .pcb-reason:empty { display: none; }
 .pcb-unavailable { color: #b8bec6; }
+.pcb-contrast { color: #ffb4a8; }
 .pcb-comment, .pcb-pin textarea { width: 100%; resize: none; padding: 10px 12px; border: 1px solid #767d87; border-radius: 4px;
   background: #22272e; color: #fff; font: inherit; }
 .pcb-comment::placeholder, .pcb-pin textarea::placeholder { color: #b8bec6; }
