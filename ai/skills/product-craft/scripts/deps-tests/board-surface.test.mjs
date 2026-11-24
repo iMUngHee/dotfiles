@@ -4,18 +4,19 @@ import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
 import test from "node:test";
 import { MessageProcessor } from "@a2ui/web_core";
-import { basicCatalog } from "@a2ui/web_core/catalogs/basic/v1";
+import { boardCatalog } from "../board-catalog.mjs";
 import { prepareSurface } from "../board-core.mjs";
 import { makeBoard, run, serve, template } from "./helpers.mjs";
 
 test("the shipped template is a valid A2UI v1.0 surface once its choices are numbered", async () => {
-  const messages = prepareSurface(await template(), 3);
-  new MessageProcessor([basicCatalog]).processMessages(structuredClone(messages));
+  const messages = prepareSurface(await template());
+  new MessageProcessor([boardCatalog]).processMessages(structuredClone(messages));
 });
 
 test("serve refuses a surface the basic catalog rejects, with exit 2", async t => {
   const surface = await template();
-  surface[0].createSurface.components.find(c => c.id === "hint").variant = "h3";
+  surface[0].createSurface.components.push({ id: "bogus", component: "Bogus" });
+  surface[0].createSurface.components.find(c => c.id === "root").children.push("bogus");
   const dir = await makeBoard(surface);
   t.after(() => rm(dir, { recursive: true, force: true }));
   const result = await run(["serve", dir]);

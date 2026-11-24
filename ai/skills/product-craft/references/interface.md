@@ -78,40 +78,69 @@ reference, and redraw. Do not adjust the same three.
 
 ### The board, when Node can run here
 
-The board puts the viewer beside an A2UI feedback panel and hands the owner's answer back to
-you as data, so they answer on the page instead of in the conversation. It is served by
-`../scripts/board.mjs` (relative to this file); its look and journeys are in
-`../design-contract.md`.
+The board puts the viewer beside an A2UI panel and hands the owner's answer back to you as
+data. The owner picks a candidate, tunes the tokens you expose with a live preview, and pins
+places to change. It is served by `../scripts/board.mjs` (relative to this file); its look
+and journeys are in `../design-contract.md`. You compose the panel for each round from the
+board catalog. `node <skill>/scripts/board.mjs catalog` prints that catalog: the basic A2UI
+components plus CandidatePicker, Heading, Hint, SubmitButton, CommentField, ColorToken,
+SizeNudge, AlignPicker, RegionNotes, and the function `showCandidate`.
 
 1. Put the candidates, their assets and their references in a directory of their own, such as
    `.agents/design/board/`. Everything in it except dotfiles and `.board/` is served.
-2. Write `board.json` there: `{"candidates": [{"path": "one.html", "reference": "one-ref.png"},
-   ...], "surface": "surface.json"}`. The order is the numbering. Give either a reference per
-   candidate or one shared `"reference"` at the top, not both.
-3. Copy `feedback-surface.json` beside it as `surface.json`. You may add questions this set of
-   candidates raises — a component bound to `/extra/<key>` and listed in `root`'s children —
-   and they come back in `context.extra`. Keep the ids `choice`, `comment`, `decide` and
-   `none`; the board numbers `choice` itself. Never describe or rank the candidates there.
-4. Run `npm install --prefix <this skill's directory>` once, then start
-   `node <skill>/scripts/board.mjs serve <dir>` as a background process and read its line
-   `board: ready <url> round=<round>`. Give the owner the url.
-5. Run `node <skill>/scripts/board.mjs wait <dir> --round <round>` in the foreground. It
-   prints the answer as one JSON line and exits 0. Exit 3 means no answer yet: run it again;
-   waiting is not delegation. Exit 5 means the round ended without an answer: say so and ask
-   in the conversation.
+2. Write `board.json` there: `{"candidates": [{"path": "one.html", "reference": "one-ref.png",
+   "thumbnail": "one-thumb.png"}, ...], "surface": "surface.json"}`. The order is the
+   numbering. Give either a reference per candidate or one shared `"reference"` at the top,
+   not both. Thumbnails are optional and show on the picker cards.
+3. For live preview, write each tunable value of an HTML candidate as a custom property on
+   `:root` in an inline `<style>`, and use it through `var()`: `:root { --accent: #03c75a;
+   --gap: 16px; --align: start; } .price { color: var(--accent); }`. Declaring a token again on
+   another rule, or only in an external stylesheet, leaves the control without a preview there.
+   A candidate with a Content-Security-Policy meta is served as written, with no preview or
+   pins.
+4. Compose `surface.json` starting from `feedback-surface.json`, which is the minimal surface:
+   - Keep the ids `choice` (a CandidatePicker), `comment`, `decide` and `none`, and the
+     bindings their actions carry.
+   - Add a ColorToken, SizeNudge or AlignPicker only for a token the candidates declare and
+     this round is deciding. Bind each to `/adjust/<token>` with the candidates' own value as
+     `initial`. Use one control per token.
+   - Add RegionNotes, bound to `/pins`, when placement matters this round.
+   - Questions of your own go in components bound to `/extra/<key>`.
+   - Leave out controls nobody is deciding, and never describe or rank the candidates on the
+     page.
+   - serve refuses a surface that breaks the catalog or the control contract (exit 2), and
+     warns about a token no candidate can preview.
+5. Run `npm install --prefix <this skill's directory>` once. Then start
+   `node <skill>/scripts/board.mjs serve <dir>` as a background process, read its line
+   `board: ready <url> round=<round>`, and give the owner the url.
+6. Run `node <skill>/scripts/board.mjs wait <dir> --round <round>` in the foreground.
+   - It prints the answer as one JSON line and exits 0.
+   - Exit 3 means no answer yet: run it again. Waiting is not delegation.
+   - Exit 5 means the round ended without an answer: say so and ask in the conversation.
 
-Read the answer by the rules above. `candidate.decide` with an empty comment takes that
-number as it is. A comment that asks for a change — "2, with the list from 1" — is a request
-to redraw that candidate, not to splice; a comment that only remarks is recorded. For
-`candidate.none`, the comment is the owner's account of what is wrong; when it does not say,
-ask before redrawing. Put the comment into the Decision Log in the owner's words.
+Read the answer by the rules above:
+- **Choice.** `candidate.decide` with an empty comment takes that number as it is.
+- **Comment.** A comment that asks for a change — "2, with the list from 1" — is a request to
+  redraw that candidate, not to splice. A comment that only remarks is recorded.
+- **Adjustments.** `adjust` holds only the tokens the owner changed, with values their control
+  allowed. Apply them to the chosen candidate, and record each in the contract's Visual System
+  as `departure: owner adjusted on board`.
+- **Pins.** Each pin names its candidate, a selector, the position inside that element
+  (`ox`, `oy`) and the page (`x`, `y`), the element's text and the owner's note. Pins on the
+  chosen candidate are located change requests. Pins on another candidate are notes for
+  redrawing the chosen one, not parts to splice in.
+- **Reject all.** For `candidate.none`, the comment and any pins are the owner's account of
+  what is wrong. When they do not say, ask before redrawing.
+- **Decision Log.** Put the comment and the notes into the Decision Log in the owner's words.
 
-Fall back to the viewer and a number in the conversation when Node is missing, `npm install`
-fails, serve ends before printing its ready line (any exit code or signal; a sandbox that
-forbids listening on a port ends it with exit 2), or no ready line appears within ten
-seconds. Each answer closes its
-round; to ask again, start a new serve. If the owner answers in the conversation instead, use
-that answer and run `board.mjs stop <dir> --round <round>`.
+Fall back to the viewer and a number in the conversation when any of these happens:
+- Node is missing, or `npm install` fails.
+- serve ends before printing its ready line, with any exit code or signal. A sandbox that
+  forbids listening on a port ends it with exit 2.
+- No ready line appears within ten seconds.
+
+Each answer closes its round; to ask again, start a new serve. If the owner answers in the
+conversation instead, use that answer and run `board.mjs stop <dir> --round <round>`.
 
 ## When the owner is away
 

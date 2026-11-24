@@ -13,20 +13,21 @@ const surface = [{
   version: "1.0",
   createSurface: {
     surfaceId: SURFACE_ID,
-    catalogId: "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+    catalogId: "product-craft/board/v1",
     components: [
-      { id: "root", component: "Column", children: ["choice", "comment", "decide", "none"] },
-      { id: "choice", component: "ChoicePicker", options: [], value: { "@path": "/feedback/choice" } },
-      { id: "comment", component: "TextField", label: "코멘트", value: { "@path": "/feedback/comment" } },
-      { id: "decide", component: "Button", child: "decideLabel", action: { event: { name: "candidate.decide" } } },
-      { id: "none", component: "Button", child: "noneLabel", action: { event: { name: "candidate.none" } } },
+      { id: "root", component: "Column", children: ["choice", "comment", "gap", "decide", "none"] },
+      { id: "choice", component: "CandidatePicker", label: "채택할 시안", value: { "@path": "/feedback/choice" } },
+      { id: "comment", component: "CommentField", label: "코멘트", value: { "@path": "/feedback/comment" } },
+      { id: "gap", component: "SizeNudge", token: "gap", label: "간격", initial: 16, min: 0, max: 64, step: 4, value: { "@path": "/adjust/gap" } },
+      { id: "decide", component: "SubmitButton", label: "보내기", action: { event: { name: "candidate.decide" } } },
+      { id: "none", component: "SubmitButton", label: "전부 아님", action: { event: { name: "candidate.none" } } },
     ],
   },
 }];
 
-async function board(candidates = [{ path: "one.html" }, { path: "two.html" }], extra = {}) {
+async function board(candidates = [{ path: "one.html" }, { path: "two.html" }], extra = {}, html = {}) {
   const dir = await mkdtemp(join(tmpdir(), "board-test-"));
-  for (const c of candidates) await writeFile(join(dir, c.path), `<p>${c.path}</p>`);
+  for (const c of candidates) await writeFile(join(dir, c.path), html[c.path] ?? `<p>${c.path}</p>`);
   await writeFile(join(dir, "surface.json"), JSON.stringify(surface));
   await writeFile(join(dir, "board.json"), JSON.stringify({ candidates, surface: "surface.json", ...extra }));
   return dir;
@@ -34,7 +35,7 @@ async function board(candidates = [{ path: "one.html" }, { path: "two.html" }], 
 
 async function serve(dir, options = {}) {
   const config = readBoard(dir);
-  const messages = prepareSurface(JSON.parse(await readFile(join(dir, config.surface), "utf8")), config.candidates.length);
+  const messages = prepareSurface(JSON.parse(await readFile(join(dir, config.surface), "utf8")));
   return startBoard({ dir, board: config, messages, panel: async () => "/* panel */", afterAnswerMs: 50, idleMs: 60_000, ...options });
 }
 
@@ -46,9 +47,9 @@ function post(running, body, headers = {}) {
   });
 }
 
-const decide = (choice, comment = "") => ({
+const decide = (choice, comment = "", more = {}) => ({
   name: "candidate.decide", surfaceId: SURFACE_ID, sourceComponentId: "decide",
-  timestamp: new Date().toISOString(), context: { choice, comment, extra: {} },
+  timestamp: new Date().toISOString(), context: { choice, comment, extra: {}, adjust: {}, pins: [], ...more },
 });
 const none = comment => ({
   name: "candidate.none", surfaceId: SURFACE_ID, sourceComponentId: "none",
@@ -71,13 +72,14 @@ test("a shared reference is passed once; mixing shared and per-candidate referen
   assert.throws(() => readBoard(mixed), { code: 2 });
 });
 
-test("prepareSurface numbers the choice options and requires the reserved ids", () => {
-  const prepared = prepareSurface(structuredClone(surface), 3);
-  const choice = prepared[0].createSurface.components.find(c => c.id === "choice");
-  assert.deepEqual(choice.options.map(o => o.value), ["1", "2", "3"]);
+test("prepareSurface requires the reserved ids and a CandidatePicker for the choice", () => {
+  prepareSurface(structuredClone(surface));
   const missing = structuredClone(surface);
   missing[0].createSurface.components = missing[0].createSurface.components.filter(c => c.id !== "none");
-  assert.throws(() => prepareSurface(missing, 2), { code: 2 });
+  assert.throws(() => prepareSurface(missing), { code: 2 });
+  const chips = structuredClone(surface);
+  chips[0].createSurface.components.find(c => c.id === "choice").component = "ChoicePicker";
+  assert.throws(() => prepareSurface(chips), { code: 2 });
 });
 
 test("the first valid answer closes the round; later posts get 409; wait returns it", async t => {
@@ -290,4 +292,101 @@ test("the wrapper page carries the round token and the viewer address", async t 
   assert.match(html, new RegExp(running.token));
   assert.match(html, /__viewer\/candidate-viewer\.html\?c=%2Fone\.html&amp;c=%2Ftwo\.html|__viewer\/candidate-viewer\.html\?c=%2Fone\.html&c=%2Ftwo\.html/);
   assert.equal((await fetch(`${running.url}__viewer/candidate-viewer.html`)).status, 200);
+});
+
+const rawGet = (running, path) => new Promise((resolve, reject) => {
+  import("node:http").then(({ request }) => {
+    const req = request({ host: "127.0.0.1", port: running.port, path }, res => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => resolve({ status: res.statusCode, type: res.headers["content-type"], body: Buffer.concat(chunks).toString("utf8") }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+});
+const BRIDGE = /<script src="\/__candidate-bridge\.js" data-candidate="(\d)"><\/script>/;
+
+test("listed HTML candidates get the bridge after <head>, or after the doctype, as text/html", async t => {
+  const html = {
+    "one.HTML": "<!doctype html><html><head><title>a</title></head><body>one</body></html>",
+    "two.htm": "<!DOCTYPE html><p>two</p>",
+    "three.html": "<p>three</p>",
+  };
+  const dir = await board([{ path: "one.HTML" }, { path: "two.htm" }, { path: "three.html" }], {}, html);
+  await writeFile(join(dir, "extra.html"), "<p>not a candidate</p>");
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const running = await serve(dir);
+  t.after(() => running.close());
+  const one = await rawGet(running, "/one.HTML");
+  assert.match(one.type, /^text\/html/);
+  assert.match(one.body, /^<!doctype html><html><head><script src="\/__candidate-bridge\.js" data-candidate="1"><\/script><title>/);
+  const two = await rawGet(running, "/two.htm");
+  assert.match(two.type, /^text\/html/);
+  assert.match(two.body, /^<!DOCTYPE html><script src="\/__candidate-bridge\.js" data-candidate="2"><\/script><p>two/);
+  assert.match((await rawGet(running, "/three.html")).body, /^<script src="\/__candidate-bridge\.js" data-candidate="3"><\/script><p>three/);
+  assert.equal((await rawGet(running, "/extra.html")).body, "<p>not a candidate</p>");
+});
+
+test("a candidate with a CSP meta is served untouched and marked csp", async t => {
+  const csp = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'"><style>:root{--gap:8px}</style>';
+  const dir = await board(undefined, {}, { "one.html": csp });
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const running = await serve(dir);
+  t.after(() => running.close());
+  assert.equal((await rawGet(running, "/one.html")).body, csp);
+  assert.deepEqual(running.support.gap, { 1: "csp", 2: "missing" });
+  assert.deepEqual(running.csp, ["1"], "reported without depending on token controls");
+});
+
+test("the bridge script is served as JavaScript with the shared limits", async t => {
+  const dir = await board();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const running = await serve(dir);
+  t.after(() => running.close());
+  const bridge = await rawGet(running, "/__candidate-bridge.js");
+  assert.equal(bridge.status, 200);
+  assert.match(bridge.type, /^text\/javascript/);
+  assert.match(bridge.body, /"pins":20/);
+});
+
+test("the wrapper config carries candidates, thumbnails, controls and the support table", async t => {
+  const dir = await board([{ path: "one.html", thumbnail: "one.png" }, { path: "two.html" }], {},
+    { "one.html": "<style>:root{--gap:16px}</style>" });
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const running = await serve(dir);
+  t.after(() => running.close());
+  const html = await (await fetch(running.url)).text();
+  const config = JSON.parse(html.match(/window\.BOARD = (\{.*\});/)[1]);
+  assert.deepEqual(config.candidates, [{ n: "1", path: "/one.html", thumbnail: "/one.png" }, { n: "2", path: "/two.html" }]);
+  assert.deepEqual(config.support.gap, { 1: "ok", 2: "missing" });
+  assert.deepEqual(config.controls.gap, { kind: "size", label: "간격", initial: 16, min: 0, max: 64, step: 4 });
+  assert.equal(config.limits.pins, 20);
+});
+
+test("a thumbnail path must stay inside the board directory", async t => {
+  const dir = await board([{ path: "one.html", thumbnail: "../x.png" }, { path: "two.html" }]);
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  assert.throws(() => readBoard(dir), { code: 2 });
+});
+
+test("adjust and pins are validated against the surface's controls before the round closes", async t => {
+  const dir = await board();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const running = await serve(dir);
+  t.after(() => running.close());
+  const pin = { candidate: "1", selector: "h1", ox: 0.5, oy: 0.5, x: 0.2, y: 0.1, text: "t", note: "n" };
+  assert.equal((await post(running, decide("1", "", { adjust: { gap: 22 } }))).status, 400);
+  assert.equal((await post(running, decide("1", "", { adjust: { accent: "#ffffff" } }))).status, 400);
+  assert.equal((await post(running, decide("1", "", { pins: Array.from({ length: 21 }, () => pin) }))).status, 400);
+  assert.equal((await post(running, { ...none("이유"), context: { comment: "이유", adjust: { gap: 24 } } })).status, 400);
+  const ok = await post(running, decide("2", "", { adjust: { gap: 24 }, pins: [pin] }));
+  assert.equal(ok.status, 200);
+  const summary = JSON.stringify(await ok.json());
+  assert.match(summary, /간격: 16px → 24px/);
+  assert.match(summary, /위치 1 · 시안 1 · t: n/);
+  assert.match(summary, /"조정"/);
+  const { answer } = await waitForAnswer({ dir, round: running.round, timeoutMs: 1000 });
+  assert.deepEqual(answer.context.adjust, { gap: 24 });
+  assert.equal(answer.context.pins.length, 1);
 });

@@ -5,14 +5,17 @@ import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, wr
 import { createServer } from "node:http";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LIMITS, extractControls, hasCspMeta, tokenSupport, validateAdjust, validatePins } from "./board-controls.mjs";
 
 export const SURFACE_ID = "candidate-feedback";
 const RESERVED_IDS = ["choice", "comment", "decide", "none"];
 const MAX_BODY = 64 * 1024;
 const MAX_CANDIDATES = 9; // the viewer switches candidates with the keys 1-9
 const VIEWER = fileURLToPath(new URL("../references/candidate-viewer.html", import.meta.url));
+const BRIDGE = fileURLToPath(new URL("./board-bridge.js", import.meta.url));
+const HTML = /\.html?$/i;
 const TYPES = {
-  ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+  ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".avif": "image/avif", ".svg": "image/svg+xml",
   ".woff2": "font/woff2", ".woff": "font/woff",
@@ -46,6 +49,7 @@ export function readBoard(dir) {
   const candidates = list.map((entry, index) => ({
     path: relativeFile(entry?.path, `candidates[${index}].path`),
     reference: entry?.reference === undefined ? undefined : relativeFile(entry.reference, `candidates[${index}].reference`),
+    thumbnail: entry?.thumbnail === undefined ? undefined : relativeFile(entry.thumbnail, `candidates[${index}].thumbnail`),
   }));
   const reference = raw.reference === undefined ? undefined : relativeFile(raw.reference, "reference");
   if (reference && candidates.some(c => c.reference)) {
@@ -67,13 +71,14 @@ export function viewerQuery(board) {
   return query.toString();
 }
 
-export function prepareSurface(messages, count) {
+export function prepareSurface(messages) {
   if (!Array.isArray(messages)) throw new BoardError("surface: expected an array of A2UI messages");
   const components = messages.flatMap(m => m?.createSurface?.components ?? m?.updateComponents?.components ?? []);
   const missing = RESERVED_IDS.filter(id => !components.some(c => c?.id === id));
   if (missing.length) throw new BoardError(`surface: missing reserved component ids: ${missing.join(", ")}`);
-  const choice = components.find(c => c.id === "choice");
-  choice.options = Array.from({ length: count }, (_, i) => ({ label: String(i + 1), value: String(i + 1) }));
+  if (components.find(c => c.id === "choice").component !== "CandidatePicker") {
+    throw new BoardError("surface: the choice component must be a CandidatePicker");
+  }
   return messages;
 }
 
@@ -106,12 +111,14 @@ function sameToken(given, token) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function validateAction(action, count) {
+function validateAction(action, count, controls) {
   if (!action || typeof action !== "object" || Array.isArray(action)) return "action must be an object";
   if (action.surfaceId !== SURFACE_ID) return `surfaceId must be ${SURFACE_ID}`;
   const context = action.context;
   if (!context || typeof context !== "object" || Array.isArray(context)) return "context must be an object";
   if (context.comment !== undefined && typeof context.comment !== "string") return "comment must be a string";
+  const pinProblem = context.pins === undefined ? undefined : validatePins(context.pins, count);
+  if (pinProblem) return pinProblem;
   if (action.name === "candidate.decide") {
     if (typeof context.choice !== "string" || !/^[1-9]$/.test(context.choice) || Number(context.choice) > count) {
       return `choice must be a candidate number from 1 to ${count}`;
@@ -119,9 +126,10 @@ function validateAction(action, count) {
     if (context.extra !== undefined && (typeof context.extra !== "object" || context.extra === null || Array.isArray(context.extra))) {
       return "extra must be an object";
     }
-    return undefined;
+    return context.adjust === undefined ? undefined : validateAdjust(context.adjust, controls);
   }
   if (action.name === "candidate.none") {
+    if (context.adjust !== undefined) return "candidate.none carries no adjustments";
     return typeof context.comment === "string" && context.comment.trim() ? undefined : "say what is wrong in the comment";
   }
   return "name must be candidate.decide or candidate.none";
@@ -131,29 +139,44 @@ function status(text) {
   return JSON.stringify([{ version: "1.0", updateDataModel: { surfaceId: SURFACE_ID, path: "/status", value: text } }]);
 }
 
+const ALIGN_WORDS = { start: "왼쪽", center: "가운데", end: "오른쪽", stretch: "채움" };
+const shown = (control, value) => control.kind === "size" ? `${value}px` : control.kind === "align" ? ALIGN_WORDS[value] : value;
+
 // Replaces the form with what was sent, so the panel cannot look editable after the round closed.
-function sentSummary(action) {
-  const comment = action.context.comment?.trim();
-  const head = action.name === "candidate.decide" ? `${action.context.choice}번 시안으로 보냈습니다.` : "전부 아님으로 보냈습니다.";
-  const text = (id, value) => ({ id, component: "Text", text: value });
+function sentSummary(action, controls) {
+  const { comment, adjust = {}, pins = [] } = action.context;
+  const sections = [
+    ["조정", Object.entries(adjust).map(([token, value]) => {
+      const control = controls.tokens.get(token);
+      return `${control.label}: ${shown(control, control.initial)} → ${shown(control, value)}`;
+    })],
+    ["위치 메모", pins.map((p, i) => `위치 ${i + 1} · 시안 ${p.candidate} · ${p.text || p.selector}: ${p.note.trim() || "(메모 없음)"}`)],
+    ["코멘트", comment?.trim() ? [`“${comment.trim()}”`] : []],
+  ].filter(([, lines]) => lines.length);
+  const components = [{
+    id: "sentHead", component: "Heading",
+    text: action.name === "candidate.decide" ? `${action.context.choice}번 시안으로 보냈습니다.` : "전부 아님으로 보냈습니다.",
+  }];
+  sections.forEach(([title, lines], s) => {
+    components.push({ id: `sentTitle${s}`, component: "Heading", level: 2, text: title });
+    lines.forEach((line, l) => components.push({ id: `sentLine${s}x${l}`, component: "Hint", text: line }));
+  });
+  components.push({ id: "sentNext", component: "Hint", text: "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다." });
   return JSON.stringify([{
     version: "1.0",
-    updateComponents: {
-      surfaceId: SURFACE_ID,
-      components: [
-        { id: "root", component: "Column", children: comment ? ["sentHead", "sentComment", "sentNext"] : ["sentHead", "sentNext"] },
-        text("sentHead", head),
-        ...(comment ? [text("sentComment", `“${comment}”`)] : []),
-        text("sentNext", "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다."),
-      ],
-    },
+    updateComponents: { surfaceId: SURFACE_ID, components: [{ id: "root", component: "Column", children: components.map(c => c.id) }, ...components] },
   }]);
 }
 
 const escapeHtml = text => text.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 
-function wrapperPage({ token, round, query }) {
-  const config = JSON.stringify({ token, round }).replace(/</g, "\\u003c");
+function wrapperPage({ token, round, query, board, controls, support }) {
+  const candidates = board.candidates.map((c, i) => ({
+    n: String(i + 1), path: urlPath(c.path), ...(c.thumbnail ? { thumbnail: urlPath(c.thumbnail) } : {}),
+  }));
+  const config = JSON.stringify({
+    token, round, candidates, support, limits: LIMITS, controls: Object.fromEntries(controls.tokens),
+  }).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html lang="ko">
 <meta charset="utf-8">
@@ -164,7 +187,7 @@ function wrapperPage({ token, round, query }) {
   html, body { height: 100%; margin: 0; }
   body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; background: #16191d; color: #fff; font: 16px/1.4 sans-serif; }
   iframe { display: block; width: 100%; height: 100dvh; border: 0; }
-  aside { height: 100dvh; overflow: auto; border-left: 1px solid #767d87; padding: 16px; word-break: keep-all; font-size: 14px;
+  aside { height: 100dvh; overflow: auto; scroll-padding-bottom: 200px; border-left: 1px solid #767d87; padding: 16px; word-break: keep-all; font-size: 14px;
     --a2ui-color-background: #16191d; --a2ui-color-surface: #16191d; --a2ui-color-on-surface: #fff;
     --a2ui-color-on-background: #fff; --a2ui-text-color-text: #fff; --a2ui-text-color: #fff;
     --a2ui-color-border: #767d87; --a2ui-border: 1px solid #767d87;
@@ -177,9 +200,8 @@ function wrapperPage({ token, round, query }) {
     --a2ui-color-on-secondary: #fff; --a2ui-color-secondary-hover: #22272e;
     --a2ui-button-margin: 0; --a2ui-button-padding: 14px 16px; --a2ui-button-border: 1px solid #767d87;
     --a2ui-choicepicker-chip-padding: 12px 18px; --a2ui-choicepicker-chip-font-size: 14px; --a2ui-choicepicker-gap: 8px; }
-  /* Focus rings: the controls draw inside shadow roots, but their hosts are reachable here. */
   aside :is(a2ui-basic-button, a2ui-choicepicker):focus-within { outline: 2px solid #80c8ff; outline-offset: 2px; border-radius: 4px; }
-  aside p { margin: 0; color: #b8bec6; }
+  aside #loading { margin: 0; color: #b8bec6; }
 </style>
 <iframe title="시안" src="/__viewer/candidate-viewer.html?${escapeHtml(query)}"></iframe>
 <aside aria-label="시안 선택"><p id="loading">보드를 불러오는 중…</p><div id="panel"></div></aside>
@@ -194,7 +216,17 @@ function send(res, code, body, type = "text/plain; charset=utf-8") {
   res.end(body);
 }
 
-function serveStatic(dir, pathname, res) {
+// Puts the bridge right after <head>, else after the doctype, else first, so it runs before the
+// candidate's own scripts. A candidate with a CSP meta is left as written.
+function withBridge(html, n) {
+  const tag = `<script src="/__candidate-bridge.js" data-candidate="${n}"></script>`;
+  const anchor = html.match(/<head\b[^>]*>/i) ?? html.match(/<!doctype[^>]*>/i);
+  if (!anchor) return tag + html;
+  const at = anchor.index + anchor[0].length;
+  return html.slice(0, at) + tag + html.slice(at);
+}
+
+function serveStatic(dir, pathname, res, candidateNumber) {
   const root = resolve(dir);
   const full = resolve(root, "." + pathname);
   const lexical = relative(root, full);
@@ -211,7 +243,13 @@ function serveStatic(dir, pathname, res) {
   const resolved = relative(realpathSync(root), real);
   if (resolved.startsWith("..") || isAbsolute(resolved)) return send(res, 403, "outside the board directory");
   if (hidden(resolved) || !statSync(real).isFile()) return send(res, 404, "not found");
-  send(res, 200, readFileSync(real), TYPES[extname(real).toLowerCase()] ?? "application/octet-stream");
+  const type = TYPES[extname(real).toLowerCase()] ?? "application/octet-stream";
+  const n = candidateNumber(resolved.split(sep).join("/"));
+  if (n && HTML.test(real)) {
+    const html = readFileSync(real, "utf8");
+    return send(res, 200, hasCspMeta(html) ? html : withBridge(html, n), type);
+  }
+  send(res, 200, readFileSync(real), type);
 }
 
 /**
@@ -226,6 +264,20 @@ export async function startBoard({
   const token = randomBytes(32).toString("hex");
   const query = viewerQuery(board);
   const count = board.candidates.length;
+  const controls = extractControls(messages);
+  const numbers = new Map(board.candidates.map((c, i) => [c.path, String(i + 1)]));
+  const sources = Object.fromEntries(board.candidates.map((c, i) => {
+    let html;
+    try {
+      html = HTML.test(c.path) ? readFileSync(join(dir, c.path), "utf8") : undefined;
+    } catch {
+      html = undefined;
+    }
+    return [String(i + 1), html ?? { image: true }];
+  }));
+  const support = tokenSupport(sources, controls.tokens.keys());
+  const csp = Object.entries(sources).filter(([, html]) => typeof html === "string" && hasCspMeta(html)).map(([n]) => n);
+  const bridge = `const PCB_LIMITS = ${JSON.stringify(LIMITS)};\n${readFileSync(BRIDGE, "utf8")}`;
   mkdirSync(join(dir, ".board"), { recursive: true });
   let port;
   let origin;
@@ -247,8 +299,9 @@ export async function startBoard({
     }
     if (pathname.includes("\0")) return send(res, 400, "bad path");
     const authorized = sameToken(req.headers["x-board-token"], token);
-    if (req.method === "GET" && pathname === "/") return send(res, 200, wrapperPage({ token, round, query }), TYPES[".html"]);
+    if (req.method === "GET" && pathname === "/") return send(res, 200, wrapperPage({ token, round, query, board, controls, support }), TYPES[".html"]);
     if (req.method === "GET" && pathname === "/__viewer/candidate-viewer.html") return send(res, 200, readFileSync(viewer), TYPES[".html"]);
+    if (req.method === "GET" && pathname === "/__candidate-bridge.js") return send(res, 200, bridge, TYPES[".js"]);
     if (req.method === "GET" && pathname === "/__surface.json") return send(res, 200, JSON.stringify(messages), TYPES[".json"]);
     if (req.method === "GET" && pathname === "/__panel.js") {
       bundle ??= panel();
@@ -278,7 +331,7 @@ export async function startBoard({
           return send(res, 400, "not JSON");
         }
         if (answered) return send(res, 409, status("이미 전송했습니다."), TYPES[".json"]);
-        const problem = validateAction(action, count);
+        const problem = validateAction(action, count, controls);
         if (problem) return send(res, 400, problem);
         // Claimed synchronously, before any await, so a second request cannot also pass.
         answered = true;
@@ -288,12 +341,12 @@ export async function startBoard({
           answered = false;
           return send(res, 500, `could not save the answer: ${error.message}`);
         }
-        send(res, 200, sentSummary(action), TYPES[".json"]);
+        send(res, 200, sentSummary(action, controls), TYPES[".json"]);
         schedule(afterAnswerMs);
       });
       return;
     }
-    if (req.method === "GET" && !pathname.startsWith("/__")) return serveStatic(dir, pathname, res);
+    if (req.method === "GET" && !pathname.startsWith("/__")) return serveStatic(dir, pathname, res, path => numbers.get(path));
     send(res, 404, "not found");
   });
 
@@ -333,7 +386,7 @@ export async function startBoard({
   const url = `${origin}/`;
   writeAtomic(statePath(dir, round), JSON.stringify({ pid: process.pid, port, url, round, token }));
   schedule(idleMs);
-  return { round, token, port, origin, url, close, closed };
+  return { round, token, port, origin, url, close, closed, support, csp };
 }
 
 async function request(url, { token, method = "GET", timeoutMs }) {

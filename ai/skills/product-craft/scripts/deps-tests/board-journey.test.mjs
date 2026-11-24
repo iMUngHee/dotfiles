@@ -59,11 +59,11 @@ test("choose: pick 2, answer the added question, comment, send once", async t =>
   assert.ok(responses.some(([path, code]) => path === "/assets/style.css" && code === 200));
   assert.ok(responses.some(([path, code]) => path === "/assets/dot.png" && code === 200));
 
-  const decide = page.getByRole("button", { name: "고른 시안으로 보내기" });
+  const decide = page.locator("button.pcb-submit", { hasText: "고른 시안으로 보내기" });
   assert.equal(await decide.isDisabled(), true, "choose is disabled before a candidate is picked");
   await page.getByText("어느 시안으로 갈지 골라 주세요.", { exact: false }).waitFor();
   const viewer = page.frames().find(frame => frame.url().includes("/__viewer/candidate-viewer.html"));
-  await page.getByText("2", { exact: true }).click();
+  await page.locator('button.pcb-card[data-candidate="2"]').click();
   await viewer.waitForFunction(() => document.documentElement.dataset.candidate === "2");
   await page.getByText("필요", { exact: true }).click();
   await page.getByRole("textbox").fill("리스트는 1처럼");
@@ -77,13 +77,13 @@ test("choose: pick 2, answer the added question, comment, send once", async t =>
   assert.equal(waited.code, 0, waited.stderr);
   const answer = JSON.parse(waited.stdout);
   assert.equal(answer.name, "candidate.decide");
-  assert.deepEqual(answer.context, { choice: "2", comment: "리스트는 1처럼", extra: { light: ["yes"] } });
+  assert.deepEqual(answer.context, { choice: "2", comment: "리스트는 1처럼", extra: { light: ["yes"] }, adjust: {}, pins: [] });
 
 });
 
 test("reject all: needs a comment, then returns candidate.none with it", async t => {
   const { dir, round, page } = await open(t, await template());
-  const none = page.getByRole("button", { name: "전부 아님" });
+  const none = page.locator("button.pcb-submit", { hasText: "전부 아님" });
   assert.equal(await none.isDisabled(), true, "reject is disabled while the comment is empty");
   await page.getByRole("textbox").fill("둘 다 너무 차가움");
   assert.equal(await none.isDisabled(), false);

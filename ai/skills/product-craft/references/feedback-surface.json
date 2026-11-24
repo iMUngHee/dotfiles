@@ -3,72 +3,54 @@
     "version": "1.0",
     "createSurface": {
       "surfaceId": "candidate-feedback",
-      "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+      "catalogId": "product-craft/board/v1",
       "components": [
-        { "id": "root", "component": "Column", "children": ["hint", "choice", "comment", "actions", "status"] },
-        {
-          "id": "choice",
-          "component": "ChoicePicker",
-          "label": "채택할 시안 (고르면 왼쪽에 그 시안이 나옵니다)",
-          "variant": "mutuallyExclusive",
-          "displayStyle": "chips",
-          "options": [],
-          "value": { "@path": "/feedback/choice" }
-        },
-        {
-          "id": "comment",
-          "component": "TextField",
-          "label": "코멘트",
-          "variant": "longText",
-          "placeholder": "바꿀 점이 있으면 적어 주세요.",
-          "value": { "@path": "/feedback/comment" }
-        },
-        { "id": "hint", "component": "Text", "text": "어느 시안으로 갈지 골라 주세요. 전부 아니면 무엇이 맞지 않는지 코멘트에 적어 주세요." },
-        { "id": "actions", "component": "Row", "align": "center", "children": ["decide", "none"] },
+        { "id": "root", "component": "Column", "children": ["title", "hint", "choice", "comment", "actions", "status"] },
+        { "id": "title", "component": "Heading", "text": "시안 선택" },
+        { "id": "hint", "component": "Hint", "text": "어느 시안으로 갈지 골라 주세요." },
+        { "id": "choice", "component": "CandidatePicker", "label": "채택할 시안", "value": { "@path": "/feedback/choice" } },
+        { "id": "comment", "component": "CommentField", "label": "코멘트", "placeholder": "바꿀 점이 있으면 적어 주세요.", "value": { "@path": "/feedback/comment" } },
+        { "id": "actions", "component": "Column", "align": "start", "children": ["decide", "none"] },
         {
           "id": "decide",
-          "component": "Button",
+          "component": "SubmitButton",
+          "label": "고른 시안으로 보내기",
           "variant": "primary",
-          "child": "decideLabel",
           "@checks": [
-            {
-              "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice/0" } } },
-              "message": "채택할 시안을 골라 주세요."
-            }
+            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/choice" } } }, "message": "채택할 시안을 골라 주세요." }
           ],
           "action": {
             "event": {
               "name": "candidate.decide",
               "context": {
-                "choice": { "@path": "/feedback/choice/0" },
+                "choice": { "@path": "/feedback/choice" },
                 "comment": { "@path": "/feedback/comment" },
+                "adjust": { "@path": "/adjust" },
+                "pins": { "@path": "/pins" },
                 "extra": { "@path": "/extra" }
               }
             }
           }
         },
-        { "id": "decideLabel", "component": "Text", "text": "고른 시안으로 보내기" },
         {
           "id": "none",
-          "component": "Button",
-          "child": "noneLabel",
+          "component": "SubmitButton",
+          "label": "전부 아님",
+          "variant": "secondary",
+          "dropsChoice": true,
           "@checks": [
-            {
-              "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } },
-              "message": "무엇이 맞지 않는지 적어 주세요."
-            }
+            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } }, "message": "코멘트를 적으면 보낼 수 있습니다." }
           ],
           "action": {
             "event": {
               "name": "candidate.none",
-              "context": { "comment": { "@path": "/feedback/comment" } }
+              "context": { "comment": { "@path": "/feedback/comment" }, "pins": { "@path": "/pins" } }
             }
           }
         },
-        { "id": "noneLabel", "component": "Text", "text": "전부 아님" },
-        { "id": "status", "component": "Text", "text": { "@path": "/status" } }
+        { "id": "status", "component": "Hint", "text": { "@path": "/status" } }
       ],
-      "dataModel": { "feedback": { "choice": [], "comment": "" }, "extra": {}, "status": "" }
+      "dataModel": { "feedback": { "choice": "", "comment": "" }, "adjust": {}, "pins": [], "extra": {}, "status": "" }
     }
   }
 ]
