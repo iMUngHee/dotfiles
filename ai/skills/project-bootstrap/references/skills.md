@@ -10,7 +10,7 @@ Keep the commands usable by humans and by agents with only the repository. Intro
 
 ## Conditional skills
 
-Create these only when the repository gives them something concrete to check.
+Start with the contributor guide. Use these examples when a repeated project-specific procedure has a concrete check and benefits from an independent invocation.
 
 | Skill | Create when | Does |
 | --- | --- | --- |

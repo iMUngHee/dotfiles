@@ -28,10 +28,9 @@ For a new gate, use the bundled [driver](../assets/check.sh) and [hook](../asset
 
 ## Repository checks
 
-Select a check when it protects an adopted contract precisely and at reasonable cost. Examples:
+Select a check when it protects an adopted contract precisely and at reasonable cost. Try the stack's existing inspection or test first. Add custom logic only for a concrete gap and record the extra guarantee it buys. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
 
 - **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
-- **Workaround comments.** A comment that justifies a workaround teaches the next agent the workaround. Ban the workaround itself where the stack can, and the justifying phrase where it cannot.
 - **Surface inventory drift.** Extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when a reference document does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
 - **Layering.** Fail when a module imports across a boundary the architecture document forbids ([documentation.md](documentation.md)); the check reads the allowed dependencies from that document or a data file it links. Prefer the stack's dependency-graph or import-restriction tool; fall back to a manifest or import grep.
 - **Generated sources.** Regenerate and fail when the committed output differs, so edits go to the source.
@@ -41,17 +40,17 @@ Select a check when it protects an adopted contract precisely and at reasonable 
 - **Documents stay true.** Check an inventory when contributors rely on its completeness, or compare generated text with its source. Review ownership and intent separately ([documentation.md](documentation.md)).
 - **Flaky tests fail.** A test that passes only on retry fails the run.
 
-Every check script that has its own logic gets a self-test the gate runs, so a broken check cannot pass silently.
+Keep regression cases for custom check logic where a mistake could hide a violation or reject a legitimate change. Reuse existing coverage for thin wrappers around a tested tool.
 
 ## Turning a correction into a check
 
-When a reviewer or the maintainer corrects the same mistake twice:
+When a recurring or costly mistake warrants work, use the evidence from the affected change:
 
 1. Remove the mistake with structure where possible: one owner for each piece of state, one supported way to do a task, internals that cannot be imported.
 2. Otherwise make it fail: a type, the stack's own ban-with-message facility, or a `banned-patterns.tsv` line. Before adding the check, show it failing on the real past mistake or a reproduction of it.
-3. Put existing occurrences into the ratchet baseline and give them a deadline when they are deprecated.
-4. Tag the rule in `.ai/rules` with the check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; record its evidence in the existing review or issue log.
+3. Baseline existing occurrences if gradual removal fits the adopted rule. Set a deadline when there is a supported migration and a reason to enforce it.
+4. Tag the rule in its owning guidance with the actual check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; record its evidence in the existing review or issue log.
 
 ## Mutation testing
 
-A suite that passes when the code is broken proves nothing. When an important behavior can break without a failing test and mutation testing is worth its cost, register it as an optional `full` check limited to the files a change touches, and treat a surviving mutant in changed code as a missing test.
+A suite that passes when the code is broken proves nothing. When an important behavior can break without a failing test and mutation testing is worth its cost, register it as an optional `full` check limited to the files a change touches, and assess whether a surviving mutant changes an observable contract before adding a test.

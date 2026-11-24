@@ -13,7 +13,7 @@ Observed practice settles only what none of these decides, such as which of two 
 
 ## Find the guides
 
-Cover every area the rules govern, not only the language's style. For each area that matters to the repository, fetch and read a primary source and, where it leaves gaps, a second:
+When a consequential choice needs outside guidance, read a primary source that applies to the repository and consult another when a relevant question remains open:
 
 | Area | Known examples (search the same way for anything missing) |
 | --- | --- |
@@ -31,8 +31,7 @@ Use the version matching the language edition or framework major version the rep
 
 ## Turn them into rules
 
-1. Open each rule file that a guide governs with a guide header. Name the guides with links and the sections excluded and why. Then state the order above as it applies here.
-2. Write each adopted item as a short rule that cites the guide's rule ID or section, such as `(M-PANIC-ON-BUG)` or Google's [pagination guidance](https://google.aip.dev/158), and ends with its tag like any rule.
-3. Start with responsibilities, allowed dependencies, state ownership and the public error contract. For implementation choices consider unnecessary wrappers, traits, dependencies, blocking I/O and data structures against an actual caller and workload. Prefer a borrowed input on a hot path when its lifetime permits; ownership transfer can legitimately need a copy. Require before/after evidence for a performance claim. Install benchmarks only for a concrete cost risk.
-4. Try a type, visibility or API boundary first. Where a violation remains expressible, choose a precise check and ratchet legacy violations if appropriate. Mark review decisions `[unchecked: reason]`; a valid tag alone proves only the check name exists.
-5. Keep the guide section, reason, exceptions and overrides close to the rule or in the existing contributor guide. Record an expensive structural migration as a separate decision.
+1. Record why the decision fits this project. Cite the owning code, contract or reasoned project decision. For an adopted external rule, cite the applicable guide section or rule ID and record a consequential override or exclusion with its reason.
+2. Trace the effect on a real change. At the architecture level, ask who owns the responsibility, allowed dependencies and state. At the semantic level, ask what inputs, errors and states the public contract permits. For implementation, look at actual callers and workload before adding abstractions, copies, blocking work or dependencies. Language idioms and formatting matter when they help contributors work within those decisions.
+3. Preserve a nearby valid choice. A CLI may translate a domain error for a user while its storage package still owns persistence and retry. A hot path may borrow a value where the lifetime permits and copy it when ownership really transfers. Measure a speedup under equivalent work and results. Add a benchmark when the cost or risk warrants keeping one.
+4. Prefer an existing sound path or a small structure, type or API change. For violations that remain possible, choose a precise check and ratchet existing debt if useful. A check tag names the actual mechanism. Give review-owned rules an unchecked reason. Keep the decision and its legitimate alternatives discoverable from contributor guidance.
