@@ -151,6 +151,13 @@ marked `Source: LOCAL`.
   is invent one — record only what the user actually said, in their reasoning, so a wrong
   summary is visible and correctable rather than laundered into a rule.
 - A collection run never deletes `LOCAL` entries; they have no PR to re-derive them from.
+- In a repository that enforces its rules by machine — it has `scripts/check-data/banned-patterns.tsv`
+  or `.ai/rules` items tagged `[check: …]` — a lesson a machine could catch is not finished as
+  prose. Give the entry `- Enforce: <the ban, banned-patterns line or tagged rule that would
+  catch it>`, or `- Enforce: none — <why a machine cannot decide it>`. Writing that check is the
+  repository's own work (its code-review or garden skill), not this skill's; once the check
+  exists, the next run (§8) moves the entry to **Superseded** with the check as its owner. In a
+  repository without those files, leave entries as they are.
 
 ## 7. Write the output
 
@@ -200,6 +207,7 @@ Excluded: bot accounts (<list>)
 - Type: correctness | convention | preference
 - State: accepted | partial
 - Source: PR #<num> (reviewer <name>) | LOCAL
+- Enforce: <check that would catch it> | none — <why>   (only where §6 asks for it)
 - Seen in: <N> PRs (#<num>, #<num>) · reviewers: <count>
 - Last evidence: <YYYY-MM-DD>
 
@@ -251,6 +259,7 @@ Then, on each run:
 | `Verify: none`, absent from the new sample | **Keep as is.** Silence may mean it is followed, or that nobody touched that code. Never delete on absence alone |
 | The same point is raised again in new PRs | Increment `Seen in`; recompute the Adopted bar |
 | A written project rule now covers it (`grep -rn '<lesson keyword>'` over this repository's own rule and convention files — its instructions file, `rules/`, `CONVENTIONS.md`, lint config) | `superseded` — replace the body with a one-line pointer to the rule. The rule is authoritative; a duplicate lesson competes with it |
+| Its `Enforce:` check now exists (the banned-patterns id is in the file, or a `[check: …]` rule names it) | `superseded` — point at the check. A check enforces what the lesson could only ask |
 | The API or structure it depended on is gone | Remove, naming what disappeared |
 | New evidence contradicts it | Narrow the condition or move it to `open`. Never overwrite quietly |
 
