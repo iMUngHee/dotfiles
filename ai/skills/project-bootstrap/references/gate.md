@@ -26,6 +26,12 @@ For a new gate, use the bundled [driver](../assets/check.sh) and [hook](../asset
    - A `tier=full` row is registered as the full check `formal:<name>` running `command`, so rule tags can name it. A `manual` row belongs in the development guide's table of verification commands.
 8. **Pre-push.** The hook refuses a dirty working tree, because the checks read the working tree and an uncommitted edit could hide a violation in HEAD. It refuses to push any commit other than HEAD and says to check that branch out first. Otherwise it skips when `check.sh --passed` succeeds and runs `check.sh --fast` when it does not. The hook and the gate unset `git rev-parse --local-env-vars` first, so running from a linked worktree cannot reach another repository.
 
+## Replacing a protection
+
+Identify the old control's effective scope, accepted exceptions and the failure it prevents. Run it on the current checkout and on a realistic violation where feasible. Prove the replacement against the same failure and a nearby legitimate change. An import check over workspace packages and a resolved dependency graph may cover different risks. A renamed gate or shorter command needs the same comparison.
+
+Preserve an effective control while its replacement's coverage is uncertain. If checks or history are missing, recover important promises from the code, tests, release artifacts and owner decisions. Record gaps you cannot recover and who owns them. When deciding whether to change a supported contract, bring its consumers and the migration cost into the decision.
+
 ## Repository checks
 
 Select a check when it protects an adopted contract precisely and at reasonable cost. Try the stack's existing inspection or test first. Add custom logic only for a concrete gap and record the extra guarantee it buys. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:

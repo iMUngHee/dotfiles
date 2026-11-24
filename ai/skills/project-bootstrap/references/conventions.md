@@ -31,7 +31,6 @@ Use the version matching the language edition or framework major version the rep
 
 ## Turn them into rules
 
-1. Record why the decision fits this project. Cite the owning code, contract or reasoned project decision. For an adopted external rule, cite the applicable guide section or rule ID and record a consequential override or exclusion with its reason.
-2. Trace the effect on a real change. At the architecture level, ask who owns the responsibility, allowed dependencies and state. At the semantic level, ask what inputs, errors and states the public contract permits. For implementation, look at actual callers and workload before adding abstractions, copies, blocking work or dependencies. Language idioms and formatting matter when they help contributors work within those decisions.
-3. Preserve a nearby valid choice. A CLI may translate a domain error for a user while its storage package still owns persistence and retry. A hot path may borrow a value where the lifetime permits and copy it when ownership really transfers. Measure a speedup under equivalent work and results. Add a benchmark when the cost or risk warrants keeping one.
-4. Prefer an existing sound path or a small structure, type or API change. For violations that remain possible, choose a precise check and ratchet existing debt if useful. A check tag names the actual mechanism. Give review-owned rules an unchecked reason. Keep the decision and its legitimate alternatives discoverable from contributor guidance.
+1. Start with architecture, semantics and implementation. Use idiom and format where they keep the code consistent with those decisions. Calibrate consequential choices with the applicable sources above.
+2. Anchor the standard in the owning code, a public contract or a reasoned project decision. For an adopted external rule, cite its section or rule ID. Record the reason for a consequential exclusion or override.
+3. Determine what to keep, redesign or enforce using the [code path and cost comparison](structure.md). Record the standard only where contributors need it. Cite an actual enforcing check or mark the remaining judgment with an unchecked reason.
