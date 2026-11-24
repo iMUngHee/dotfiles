@@ -17,7 +17,7 @@ ai/
 ├── scripts/
 │   ├── bootstrap.sh            # Orchestrator — calls claude/ + codex/ bootstrap
 │   ├── sync-back.sh            # Orchestrator — calls per-tool sync-back
-│   ├── vendor.sh               # Run by hand and after every pull — checks / syncs vendored code (archify, rea, eli5) outside the repo
+│   ├── vendor.sh               # Run by hand and after every pull — checks / syncs vendored code (archify, rea, eli5, a2ui) outside the repo
 │   └── vendor.manifest         # What vendor.sh manages; machine-only entries live outside the repo
 └── lib/
     ├── worktree.mjs            # Managed-worktree and session-binding engine (worktree skill, prompt hooks)
@@ -149,13 +149,13 @@ vendor.sh sync --all
 | Kind | What it is | Used for |
 |---|---|---|
 | `release` | a git tag or commit, read in place | archify, the diagram engine |
-| `skill` | the same, plus a link into `~/.claude/skills` and `~/.agents/skills` | eli5, upstream DreambigOu/ELI5 verbatim |
+| `skill` | the same, plus a link into `~/.claude/skills` and `~/.agents/skills` | eli5, upstream DreambigOu/ELI5 verbatim; a2ui, upstream a2ui-project/a2ui's agent skill verbatim |
 | `npm` | a package whose own installer does the work | rea — `rea setup` registers its MCP server on both tools and installs its skill |
 | `source` | a checkout, cloned when missing and only ever built afterwards | machine-only entries |
 
 Machine-only entries — internal hosts, MCP servers carrying local patches — go in `~/.local/share/ai-vendor/private.manifest`: same format, outside this repo on purpose, so nothing in it can be committed by accident. vendor.sh never changes an existing `source` checkout: `sync` only runs its build there, and `check` reads it with lock-free, read-only git.
 
-`bootstrap.sh` never calls it, so deploys stay offline-safe. Every pull does: `githooks/post-merge` (and `post-rewrite` after a rebase pull) runs `check`, prints the table and syncs the `update` and `missing` rows by name. A pinned entry moves only when the manifest does, with one exception: when upstream re-points the pinned tag itself the row reads `update (tag moved)` and the hook syncs it like any other update. Otherwise an `upstream moved` or `latest` note in its row is the cue to edit the manifest. An automatic rea update therefore runs `setup --yes` unreviewed too, and without `GHIDRA_INSTALL_DIR`, `JAVA_HOME` and `REA_JADX_MCP_JAR` exported (see step 3 below). A new machine needs the entries synced once after bootstrap; until then the diagram router falls back to Mermaid and eli5 and rea are simply absent. `sync --all` includes rea, whose `setup --yes` edits `~/.claude.json` and `~/.codex/config.toml` with no review step — to look first, sync the others by name and preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (a positive whole number, default 20) and print `unreachable` instead of hanging; `AI_VENDOR_DIR` must be absolute. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
+`bootstrap.sh` never calls it, so deploys stay offline-safe. Every pull does: `githooks/post-merge` (and `post-rewrite` after a rebase pull) runs `check`, prints the table and syncs the `update` and `missing` rows by name. A pinned entry moves only when the manifest does, with one exception: when upstream re-points the pinned tag itself the row reads `update (tag moved)` and the hook syncs it like any other update. Otherwise an `upstream moved` or `latest` note in its row is the cue to edit the manifest. An automatic rea update therefore runs `setup --yes` unreviewed too, and without `GHIDRA_INSTALL_DIR`, `JAVA_HOME` and `REA_JADX_MCP_JAR` exported (see step 3 below). A new machine needs the entries synced once after bootstrap; until then the diagram router falls back to Mermaid and eli5, a2ui and rea are simply absent. `sync --all` includes rea, whose `setup --yes` edits `~/.claude.json` and `~/.codex/config.toml` with no review step — to look first, sync the others by name and preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (a positive whole number, default 20) and print `unreachable` instead of hanging; `AI_VENDOR_DIR` must be absolute. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
 
 ### Bringing another machine up to date
 

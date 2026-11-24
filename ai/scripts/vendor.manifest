@@ -24,3 +24,4 @@
 archify   release  https://github.com/tt-a1i/archify   v*                                        -            node archify/bin/archify.mjs doctor
 rea       npm      rea-agents                          latest                                    -            npx -y rea-agents@{ver} setup --client claude_code --client codex --yes
 eli5      skill    https://github.com/DreambigOu/ELI5  a766623b062331fdde53467001379b4ddf3acc2f  skills/eli5  -
+a2ui      skill    https://github.com/a2ui-project/a2ui  c33d629d2a31595585d04bd059cf1d4fe93bdb85  skills/a2ui  -
