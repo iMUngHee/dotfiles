@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, wr
 import { createServer } from "node:http";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LIMITS, extractControls, hasCspMeta, tokenSupport, validateAdjust, validatePins } from "./board-controls.mjs";
+import { LIMITS, extractControls, hasCspMeta, pinLabel, tokenSupport, validateAdjust, validatePins } from "./board-controls.mjs";
 
 export const SURFACE_ID = "candidate-feedback";
 const RESERVED_IDS = ["choice", "comment", "decide", "none"];
@@ -150,7 +150,7 @@ function sentSummary(action, controls) {
       const control = controls.tokens.get(token);
       return `${control.label}: ${shown(control, control.initial)} → ${shown(control, value)}`;
     })],
-    ["위치 메모", pins.map((p, i) => `위치 ${i + 1} · 시안 ${p.candidate} · ${p.text || p.selector}: ${p.note.trim() || "(메모 없음)"}`)],
+    ["위치 메모", pins.map((p, i) => `위치 ${pinLabel(i)} · 시안 ${p.candidate} · ${p.text || p.selector}: ${p.note.trim() || "(메모 없음)"}`)],
     ["코멘트", comment?.trim() ? [`“${comment.trim()}”`] : []],
   ].filter(([, lines]) => lines.length);
   const components = [{
@@ -170,12 +170,22 @@ function sentSummary(action, controls) {
 
 const escapeHtml = text => text.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 
-function wrapperPage({ token, round, query, board, controls, support }) {
+// Every check message a SubmitButton declares. The renderer only exposes the message of a
+// failing check, so the panel reserves room for these from the start.
+function checkMessages(messages) {
+  const components = messages.flatMap(m => m?.createSurface?.components ?? m?.updateComponents?.components ?? []);
+  const texts = components.filter(c => c?.component === "SubmitButton")
+    .flatMap(c => (Array.isArray(c["@checks"]) ? c["@checks"] : []).map(check => check?.message))
+    .filter(text => typeof text === "string");
+  return [...new Set(texts)];
+}
+
+function wrapperPage({ token, round, query, board, controls, support, reasons }) {
   const candidates = board.candidates.map((c, i) => ({
     n: String(i + 1), path: urlPath(c.path), ...(c.thumbnail ? { thumbnail: urlPath(c.thumbnail) } : {}),
   }));
   const config = JSON.stringify({
-    token, round, candidates, support, limits: LIMITS, controls: Object.fromEntries(controls.tokens),
+    token, round, candidates, support, limits: LIMITS, controls: Object.fromEntries(controls.tokens), reasons,
   }).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html lang="ko">
@@ -193,14 +203,14 @@ function wrapperPage({ token, round, query, board, controls, support }) {
     --a2ui-color-border: #767d87; --a2ui-border: 1px solid #767d87;
     --a2ui-color-primary: #80c8ff; --a2ui-color-primary-hover: #a6d8ff; --a2ui-color-primary-dark: #5fb4f5;
     --a2ui-color-primary-light: #80c8ff; --a2ui-color-on-primary: #16191d;
-    --a2ui-color-input: #22272e; --a2ui-color-on-input: #fff; --a2ui-textfield-color-border-focus: #80c8ff;
+    --a2ui-color-input: #22272e; --a2ui-color-on-input: #fff; --a2ui-textfield-color-border-focus: #fff;
     --a2ui-choicepicker-chip-background-selected: #80c8ff; --a2ui-choicepicker-label-color: #fff;
     --a2ui-border-radius: 4px; --a2ui-textfield-border-radius: 4px; --a2ui-spacing-s: 8px; --a2ui-spacing-m: 16px;
     --a2ui-font-size-s: 14px; --a2ui-font-size-xs: 14px; --a2ui-label-font-size: 14px;
     --a2ui-color-on-secondary: #fff; --a2ui-color-secondary-hover: #22272e;
     --a2ui-button-margin: 0; --a2ui-button-padding: 14px 16px; --a2ui-button-border: 1px solid #767d87;
     --a2ui-choicepicker-chip-padding: 12px 18px; --a2ui-choicepicker-chip-font-size: 14px; --a2ui-choicepicker-gap: 8px; }
-  aside :is(a2ui-basic-button, a2ui-choicepicker):focus-within { outline: 2px solid #80c8ff; outline-offset: 2px; border-radius: 4px; }
+  aside :is(a2ui-basic-button, a2ui-choicepicker):focus-within { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
   aside #loading { margin: 0; color: #b8bec6; }
 </style>
 <iframe title="시안" src="/__viewer/candidate-viewer.html?${escapeHtml(query)}"></iframe>
@@ -265,6 +275,7 @@ export async function startBoard({
   const query = viewerQuery(board);
   const count = board.candidates.length;
   const controls = extractControls(messages);
+  const reasons = checkMessages(messages);
   const numbers = new Map(board.candidates.map((c, i) => [c.path, String(i + 1)]));
   const sources = Object.fromEntries(board.candidates.map((c, i) => {
     let html;
@@ -299,7 +310,7 @@ export async function startBoard({
     }
     if (pathname.includes("\0")) return send(res, 400, "bad path");
     const authorized = sameToken(req.headers["x-board-token"], token);
-    if (req.method === "GET" && pathname === "/") return send(res, 200, wrapperPage({ token, round, query, board, controls, support }), TYPES[".html"]);
+    if (req.method === "GET" && pathname === "/") return send(res, 200, wrapperPage({ token, round, query, board, controls, support, reasons }), TYPES[".html"]);
     if (req.method === "GET" && pathname === "/__viewer/candidate-viewer.html") return send(res, 200, readFileSync(viewer), TYPES[".html"]);
     if (req.method === "GET" && pathname === "/__candidate-bridge.js") return send(res, 200, bridge, TYPES[".js"]);
     if (req.method === "GET" && pathname === "/__surface.json") return send(res, 200, JSON.stringify(messages), TYPES[".json"]);

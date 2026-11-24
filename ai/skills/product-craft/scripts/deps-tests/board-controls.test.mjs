@@ -83,15 +83,18 @@ test("the support table shows which controls a viewed candidate cannot preview",
 
 test("journey 4: the viewed card and the chosen card are marked separately", async t => {
   const { page, viewer, shown } = await open(t, await template(), two());
+  const viewing = n => page.waitForFunction(k => document.querySelector(`button.pcb-card[data-candidate="${k}"] .pcb-eye`), n);
   await card(page, "2").click();
-  await page.waitForFunction(() => document.querySelector('button.pcb-card[data-candidate="2"]')?.textContent.includes("보는 중"));
+  await viewing("2");
   assert.equal(await shown(), "2");
   await viewer().locator("nav button").first().click();
-  await page.waitForFunction(() => document.querySelector('button.pcb-card[data-candidate="1"]')?.textContent.includes("보는 중"));
-  assert.match(await card(page, "1").textContent(), /보는 중/);
+  await viewing("1");
+  assert.match(await card(page, "1").getAttribute("aria-label"), /보는 중/);
+  assert.equal(await card(page, "1").locator(".pcb-eye title").textContent(), "보는 중");
   assert.doesNotMatch(await card(page, "1").textContent(), /선택됨/);
   assert.match(await card(page, "2").textContent(), /선택됨/);
-  assert.doesNotMatch(await card(page, "2").textContent(), /보는 중/);
+  assert.doesNotMatch(await card(page, "2").getAttribute("aria-label"), /보는 중/);
+  assert.equal(await card(page, "2").locator(".pcb-eye").count(), 0);
 });
 
 test("journey 5: adjustments preview live, survive switching, reset, and come back as typed data", async t => {
@@ -143,8 +146,8 @@ test("journey 6: pins stay on their element through compare mode, scrolling and 
     return Math.max(Math.abs(cx - (target.left + pin.ox * target.width)), Math.abs(cy - (target.top + pin.oy * target.height)));
   }, n);
   await pinAt("#title");
-  await page.getByLabel("위치 1 메모").fill("제목 더 작게");
-  assert.equal(await page.getByLabel("위치 1 메모").inputValue(), "제목 더 작게", "the note shows what was typed");
+  await page.getByLabel("위치 A 메모").fill("제목 더 작게");
+  assert.equal(await page.getByLabel("위치 A 메모").inputValue(), "제목 더 작게", "the note shows what was typed");
   assert.ok(await offBy(1) <= 4);
   await viewer().locator("#compare").click().catch(() => {});
   await candidate("1").evaluate(() => window.scrollTo(0, 200));
@@ -178,7 +181,7 @@ test("pins can be deleted and stay put across a candidate switch", async t => {
     await candidate("1").waitForFunction(() => document.documentElement.style.cursor === "crosshair");
     await candidate("1").locator(sel).click();
   }
-  await page.getByRole("button", { name: "위치 1 삭제" }).click();
+  await page.getByRole("button", { name: "위치 A 삭제" }).click();
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
   await viewer().locator("nav button").first().click();
@@ -209,7 +212,8 @@ test("the round-wide pin limit stops at 20 and frees up after a delete", async t
   await candidate("2").locator("#price").click();
   await page.waitForTimeout(300);
   assert.equal(await page.locator(".pcb-pin").count(), 20, "a click at the limit adds nothing");
-  await page.getByRole("button", { name: "위치 20 삭제" }).click();
+  assert.equal(await page.locator(".pcb-pin-number").last().textContent(), "T", "the 20th pin is T");
+  await page.getByRole("button", { name: "위치 T 삭제" }).click();
   await pinCount(19);
   await pinOn("2");
   await pinCount(20);
@@ -365,4 +369,211 @@ test("limit values round-trip; one past the limit refuses to serve", async t => 
   const dir = await makeBoard(over, two());
   t.after(() => rm(dir, { recursive: true, force: true }));
   assert.equal((await run(["serve", dir])).code, 2);
+});
+
+// Colour roles, pin letters, the disabled look, layout stability, the overflow cue and contrast.
+
+const pinOnce = async (page, candidate, n, selector) => {
+  await page.getByRole("button", { name: "위치 지정" }).click();
+  await candidate(n).waitForFunction(() => document.documentElement.style.cursor === "crosshair");
+  await candidate(n).locator(selector).click();
+};
+const pinCount = (page, k) => page.waitForFunction(n => document.querySelectorAll(".pcb-pin").length === n, k);
+const style = (locator, prop) => locator.evaluate((el, p) => getComputedStyle(el)[p], prop);
+
+test("a click on the candidate's root, below a short body, pins \"html\"", async t => {
+  const short = '<!doctype html><html><head><meta charset="utf-8"><style>:root { --accent: #03c75a; } body { margin: 0; height: 40px; }</style></head><body><p style="margin:0">짧음</p></body></html>';
+  const { page, candidate, connected, send, answer } = await open(t, await fullSurface(), { "one.html": short, "two.html": tokenCandidate("two") });
+  await connected("1");
+  await page.getByRole("button", { name: "위치 지정" }).click();
+  await candidate("1").waitForFunction(() => document.documentElement.style.cursor === "crosshair");
+  await candidate("1").locator("html").click({ position: { x: 200, y: 400 } });
+  await pinCount(page, 1);
+  await card(page, "1").click();
+  await send();
+  assert.equal((await answer()).context.pins[0].selector, "html");
+});
+
+test("selection, focus and pins have three distinct colours", async t => {
+  const { page, candidate, connected } = await open(t, await fullSurface(), two());
+  await connected("1");
+  await card(page, "2").focus();
+  assert.equal(await style(card(page, "2"), "outlineColor"), "rgb(255, 255, 255)", "keyboard focus is a white ring");
+  await card(page, "1").click();
+  assert.equal(await style(card(page, "1"), "backgroundColor"), "rgb(128, 200, 255)", "selection is the accent fill");
+  await pinOnce(page, candidate, "1", "#title");
+  await pinCount(page, 1);
+  assert.equal(await style(page.locator(".pcb-pin-number").first(), "backgroundColor"), "rgb(255, 194, 77)");
+  await candidate("1").waitForFunction(() => document.querySelector("#pcb-layer .pcb-pin-marker"));
+  assert.equal(await candidate("1").evaluate(() => getComputedStyle(document.querySelector("#pcb-layer .pcb-pin-marker")).backgroundColor), "rgb(255, 194, 77)");
+});
+
+test("pins are lettered in list order across candidates, and relabel after a delete", async t => {
+  const { page, viewer, candidate, connected } = await open(t, await fullSurface(), two());
+  await connected("1");
+  await pinOnce(page, candidate, "1", "#title");
+  await pinOnce(page, candidate, "1", "#price");
+  await viewer().locator("nav button").nth(1).click();
+  await connected("2");
+  await pinOnce(page, candidate, "2", "#title");
+  await pinCount(page, 3);
+  const letters = () => page.locator(".pcb-pin-number").allTextContents();
+  assert.deepEqual(await letters(), ["A", "B", "C"]);
+  await candidate("2").waitForFunction(() => document.querySelector("#pcb-layer .pcb-pin-marker")?.textContent === "C");
+  await page.getByRole("button", { name: "위치 B 삭제" }).click();
+  await pinCount(page, 2);
+  assert.deepEqual(await letters(), ["A", "B"]);
+  await page.getByLabel("위치 B 메모").waitFor();
+  assert.equal(await page.locator(".pcb-pin-where").nth(1).textContent(), "시안 2 · two");
+  await candidate("2").waitForFunction(() => document.querySelector("#pcb-layer .pcb-pin-marker")?.textContent === "B");
+});
+
+test("before a candidate is chosen every token control has the one disabled look", async t => {
+  const { page } = await open(t, await fullSurface(), two());
+  const hex = page.getByLabel("강조색 hex");
+  const swatch = page.getByLabel("강조색 색 선택");
+  const active = page.locator('.pcb-segment[aria-checked="true"]');
+  for (const control of [hex, swatch, active]) assert.equal(await style(control, "opacity"), "0.6");
+  assert.equal(await style(swatch, "borderTopColor"), await style(hex, "borderTopColor"));
+  assert.equal(await style(hex, "borderTopColor"), "rgb(74, 80, 88)");
+  assert.equal(await style(active, "backgroundColor"), "rgb(74, 80, 88)");
+  await card(page, "1").click();
+  assert.equal(await style(active, "backgroundColor"), "rgb(128, 200, 255)");
+});
+
+test("choosing, typing and viewing never move the rows or resize the answer area", async t => {
+  const surface = await fullSurface();
+  const decide = surface[0].createSurface.components.find(c => c.id === "decide");
+  // Passes while the comment is short, then fails with a message long enough to wrap.
+  decide["@checks"].push({ condition: { "@call": "length", args: { value: { "@path": "/feedback/comment" }, max: 10 } },
+    message: "코멘트가 길면 이 버튼으로는 보낼 수 없습니다. 열 글자 이내로 줄이거나 전부 아님으로 보내 주세요." });
+  for (const width of [1280, 960]) {
+    const { page, viewer, connected } = await open(t, surface, two());
+    await page.setViewportSize({ width, height: 800 });
+    await connected("1");
+    const measure = () => page.evaluate(() => {
+      const answer = document.querySelector("aside a2ui-basic-column:has(> a2ui-react-submitbutton)").getBoundingClientRect();
+      // Relative to the panel's content, since focusing the comment scrolls the panel.
+      const row = document.querySelector('[data-pcb-control="accent"]').getBoundingClientRect().top + document.querySelector("aside").scrollTop;
+      return { answer: answer.height, row };
+    });
+    const first = await measure();
+    const same = async what => {
+      await page.waitForTimeout(150);
+      const now = await measure();
+      assert.ok(Math.abs(now.answer - first.answer) <= 0.5, `${width}: answer height after ${what}: ${first.answer} → ${now.answer}`);
+      assert.ok(Math.abs(now.row - first.row) <= 0.5, `${width}: token row after ${what}: ${first.row} → ${now.row}`);
+    };
+    await card(page, "1").click();
+    await same("choosing 1");
+    await page.getByLabel("코멘트", { exact: true }).fill("짧게");
+    await same("a short comment");
+    await page.getByLabel("코멘트", { exact: true }).fill("이 코멘트는 열 글자를 넘습니다");
+    await page.getByText("코멘트가 길면").waitFor();
+    await same("a long comment");
+    await viewer().locator("nav button").nth(1).click();
+    await connected("2");
+    await same("viewing 2");
+  }
+});
+
+test("the answer area shows the overflow cue only while the panel scrolls further", async t => {
+  const surface = await template();
+  const { components } = surface[0].createSurface;
+  components.push({ id: "pins", component: "RegionNotes", label: "위치 메모", value: { "@path": "/pins" } });
+  const root = components.find(c => c.id === "root");
+  root.children.splice(root.children.indexOf("comment"), 0, "pins");
+  const { page, candidate, connected } = await open(t, surface, two());
+  await connected("1");
+  const cue = () => page.evaluate(() => document.querySelector("aside").hasAttribute("data-more-below"));
+  const until = want => page.waitForFunction(w => document.querySelector("aside").hasAttribute("data-more-below") === w, want);
+  await page.waitForTimeout(200);
+  assert.equal(await cue(), false, "a surface that fits has no cue");
+  let added = 0;
+  while (!(await cue()) && added < 10) {
+    await pinOnce(page, candidate, "1", "#title");
+    await pinCount(page, ++added);
+    await page.waitForTimeout(100);
+  }
+  assert.equal(await cue(), true, "content under the answer area shows the cue without scrolling");
+  await page.evaluate(() => { const a = document.querySelector("aside"); a.scrollTop = a.scrollHeight; });
+  await until(false);
+  await page.evaluate(() => { document.querySelector("aside").scrollTop = 0; });
+  await until(true);
+  while (added > 0) {
+    await page.getByRole("button", { name: "위치 A 삭제" }).click();
+    await pinCount(page, --added);
+  }
+  await until(false);
+});
+
+const contrastNote = (page, token) => page.locator(`[data-pcb-control="${token}"] .pcb-contrast`);
+const unmeasuredNote = (page, token) => page.locator(`[data-pcb-control="${token}"] .pcb-unmeasured`);
+const setHex = async (page, value) => {
+  await page.getByLabel("강조색 hex").fill(value);
+  await page.getByLabel("강조색 hex").press("Enter");
+};
+
+test("contrast composites translucent backgrounds, nested layers and translucent text", async t => {
+  const single = tokenCandidate("one", { extraCss: ".row { background: rgba(0, 0, 0, .5); }" });
+  const nested = tokenCandidate("two", { extraCss: ".row { background: rgba(0, 0, 0, .5); } .price { background: rgba(0, 0, 0, .5); }" });
+  const { page, viewer, connected } = await open(t, await fullSurface(), { "one.html": single, "two.html": nested });
+  await connected("1");
+  await card(page, "1").click();
+  // White over black at .5 on white is rgb(127.5): 3.98:1, shown rounded down.
+  // The initial green also falls short here, so wait for the ratio of the new value.
+  await setHex(page, "#ffffff");
+  await page.waitForFunction(() => /배경 대비 3\.9:1/.test(document.querySelector('[data-pcb-control="accent"] .pcb-contrast')?.textContent ?? ""));
+  await viewer().locator("nav button").nth(1).click();
+  await connected("2");
+  await card(page, "2").click();
+  // #808080 over two .5 black layers on white (rgb 63.75): 2.64:1.
+  await setHex(page, "#808080");
+  await page.waitForFunction(() => /2\.6:1/.test(document.querySelector('[data-pcb-control="accent"] .pcb-contrast')?.textContent ?? ""));
+
+  const faint = tokenCandidate("one", { accent: "rgba(255, 255, 255, .2)", extraCss: "body { background: #000; }" });
+  const second = await open(t, await fullSurface(), { "one.html": faint, "two.html": tokenCandidate("two") });
+  await second.connected("1");
+  await card(second.page, "1").click();
+  // White at .2 over black composites to rgb(51): 1.66:1.
+  await contrastNote(second.page, "accent").waitFor();
+  assert.match(await contrastNote(second.page, "accent").textContent(), /배경 대비 1\.6:1/);
+});
+
+test("text on a gradient or image is reported as unmeasured", async t => {
+  const gradient = tokenCandidate("one", { extraCss: ".row { background: linear-gradient(#fff, #eee); }" });
+  const { page, connected } = await open(t, await fullSurface(), { "one.html": gradient, "two.html": tokenCandidate("two") });
+  await connected("1");
+  await card(page, "1").click();
+  await unmeasuredNote(page, "accent").waitFor();
+  assert.equal(await unmeasuredNote(page, "accent").textContent(), "배경이 이미지·그라디언트인 글자는 대비를 재지 못했습니다.");
+  assert.equal(await contrastNote(page, "accent").count(), 0);
+});
+
+test("a valid contrast report replaces the last one; foreign or malformed ones are ignored", async t => {
+  const { page, candidate, connected } = await open(t, await fullSurface(), two());
+  await connected("1");
+  await card(page, "1").click();
+  await page.waitForTimeout(400);
+  const post = data => candidate("1").evaluate(d => top.postMessage(d, "*"), data);
+  const report = { pcb: 1, type: "contrast", candidate: "1", values: {}, unmeasured: ["accent"] };
+  await post(report);
+  await unmeasuredNote(page, "accent").waitFor();
+  await post({ ...report, values: { accent: 2 }, unmeasured: ["accent"] });
+  await contrastNote(page, "accent").waitFor();
+  assert.equal(await unmeasuredNote(page, "accent").count(), 0, "a warning outranks the unmeasured note");
+  await post({ ...report, unmeasured: [] });
+  await page.waitForFunction(() => !document.querySelector(".pcb-contrast, .pcb-unmeasured"));
+  for (const bad of [
+    { ...report, candidate: "2" },
+    { ...report, unmeasured: ["unknown"] },
+    { ...report, unmeasured: ["accent", "accent"] },
+    { ...report, unmeasured: [1] },
+    { ...report, unmeasured: "accent" },
+    (({ unmeasured, ...rest }) => rest)(report),
+  ]) await post(bad);
+  await page.evaluate(d => window.postMessage(d, "*"), report);
+  await page.waitForTimeout(300);
+  assert.equal(await unmeasuredNote(page, "accent").count(), 0, "foreign or malformed reports change nothing");
+  assert.deepEqual(await page.evaluate(() => window.__pcbErrors ?? []), []);
 });

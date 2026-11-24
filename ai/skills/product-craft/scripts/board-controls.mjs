@@ -6,6 +6,9 @@ export const LIMITS = Object.freeze({
   tokenLength: 30, intMin: -10000, intMax: 10000, pins: 20, controls: 20, selector: 300, text: 120, note: 500,
 });
 export const ALIGN_OPTIONS = Object.freeze(["start", "center", "end", "stretch"]);
+// Pins are lettered A, B, C… in list order so they never read as candidate numbers; the pin
+// limit keeps them within A–T.
+export const pinLabel = index => String.fromCharCode(65 + index);
 const TOKEN_KINDS = { ColorToken: "color", SizeNudge: "size", AlignPicker: "align" };
 const HEX = /^#[0-9a-fA-F]{6}$/;
 // UAX #31 identifiers, as the protocol requires of ids; tokens become CSS custom property names too.

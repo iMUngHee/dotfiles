@@ -104,7 +104,9 @@ SizeNudge, AlignPicker, RegionNotes, and the function `showCandidate`.
    - Add a ColorToken, SizeNudge or AlignPicker only for a token the candidates declare and
      this round is deciding. Bind each to `/adjust/<token>` with the candidates' own value as
      `initial`. Use one control per token, at most 20 per surface. A ColorToken warns when the text
-     it colours falls below 4.5:1 on the chosen candidate.
+     it colours falls below 4.5:1 on the chosen candidate. Text on a background image or
+     gradient is reported as unmeasured, so keep a token's text on plain or translucent colour
+     when its contrast matters.
    - Add RegionNotes, bound to `/pins`, when placement matters this round.
    - Questions of your own go in components bound to `/extra/<key>`.
    - Leave out controls nobody is deciding, and never describe or rank the candidates on the
@@ -127,7 +129,8 @@ Read the answer by the rules above:
   allowed. Apply them to the chosen candidate, and record each in the contract's Visual System
   as `departure: owner adjusted on board`.
 - **Pins.** Each pin names its candidate, a selector, the position inside that element
-  (`ox`, `oy`) and the page (`x`, `y`), the element's text and the owner's note. Pins on the
+  (`ox`, `oy`) and the page (`x`, `y`), the element's text and the owner's note. The board
+  letters pins A, B, C… in array order; the sent summary uses those letters. Pins on the
   chosen candidate are located change requests. Pins on another candidate are notes for
   redrawing the chosen one, not parts to splice in.
 - **Reject all.** For `candidate.none`, the comment and any pins are the owner's account of

@@ -4,6 +4,7 @@
 import { createContext, useContext, useEffect, useId, useState } from "react";
 import { createComponentImplementation } from "@a2ui/react";
 import { BOARD_COMPONENT_APIS } from "./board-catalog.mjs";
+import { pinLabel } from "./board-controls.mjs";
 
 export const BoardContext = createContext(null);
 const useBoard = () => useContext(BoardContext);
@@ -17,12 +18,37 @@ function notice(state) {
   return "미리보기 반영 불가.";
 }
 
-// 4.5:1 is the WCAG minimum for body-size text.
+// 4.5:1 is the WCAG minimum for body-size text. A measured shortfall outranks the notice that
+// some text could not be measured.
 function Contrast({ token }) {
-  const ratio = useBoard().contrastFor(token);
-  if (ratio === undefined || ratio >= 4.5) return null;
+  const { ratio, unmeasured } = useBoard().contrastFor(token);
   // Rounded down, so a ratio just under the minimum never displays as 4.5.
-  return <p className="pcb-note pcb-contrast">배경 대비 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1 · 글자에는 4.5:1 이상이 필요합니다.</p>;
+  if (ratio !== undefined && ratio < 4.5) {
+    return <p className="pcb-note pcb-contrast">배경 대비 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1 · 글자에는 4.5:1 이상이 필요합니다.</p>;
+  }
+  return unmeasured ? <p className="pcb-note pcb-unmeasured">배경이 이미지·그라디언트인 글자는 대비를 재지 못했습니다.</p> : null;
+}
+
+// A line that keeps the height of the tallest text it can show, so a change of text never
+// moves what is below it. The other texts sit in the same grid cell as hidden generated
+// content, which is neither page text nor in the accessibility tree.
+function ReservedLine({ className, texts, shown }) {
+  return (
+    <div className={`pcb-reserved ${className}`}>
+      {texts.map(text => <span key={text} className="pcb-ghost" data-text={text} />)}
+      <p>{shown}</p>
+    </div>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg className="pcb-eye" viewBox="0 0 16 16" width="14" height="14">
+      <title>보는 중</title>
+      <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="8" cy="8" r="2" fill="currentColor" />
+    </svg>
+  );
 }
 
 // A token row: label, the control, a reset slot that keeps its width, notice lines below.
@@ -42,6 +68,10 @@ function TokenRow({ token, label, changed, onReset, children, extra }) {
   );
 }
 
+const UNCHOSEN = "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.";
+const notChosen = n => `조정은 선택한 시안 ${n}에만 적용됩니다.`;
+const drops = n => `보내면 시안 ${n} 선택과 조정값은 버려집니다.`;
+
 const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({ props }) => {
   const board = useBoard();
   return (
@@ -55,17 +85,17 @@ const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({
             <button key={c.n} type="button" className="pcb-card" data-candidate={c.n} aria-pressed={chosen}
               aria-label={`시안 ${c.n}${viewed ? " 보는 중" : ""}${chosen ? " 선택됨" : ""}`}
               onClick={() => { props.setValue(c.n); board.showCandidate(c.n); }}>
+              {viewed ? <EyeIcon /> : null}
               {c.thumbnail ? <img src={c.thumbnail} alt="" /> : null}
               <span className="pcb-number">{c.n}</span>
               <span className="pcb-tag">{chosen ? "선택됨" : ""}</span>
-              <span className="pcb-tag pcb-viewing">{viewed ? "보는 중" : ""}</span>
             </button>
           );
         })}
       </div>
       {/* One note for the whole group of token controls, instead of one under each. */}
-      <p className="pcb-note">{!board.hasTokenControls ? "" : board.groupState() === "unchosen" ? "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다."
-        : board.groupState() === "notChosen" ? `조정은 선택한 시안 ${board.chosen}에만 적용됩니다.` : ""}</p>
+      {board.hasTokenControls ? <ReservedLine className="pcb-note" texts={[UNCHOSEN, notChosen(board.candidates.length)]}
+        shown={board.groupState() === "unchosen" ? UNCHOSEN : board.groupState() === "notChosen" ? notChosen(board.chosen) : ""} /> : null}
     </fieldset>
   );
 });
@@ -79,13 +109,14 @@ const Hint = createComponentImplementation(api("Hint"), ({ props }) =>
 const SubmitButton = createComponentImplementation(api("SubmitButton"), ({ props }) => {
   const board = useBoard();
   const blocked = props.isValid === false;
-  const drops = props.dropsChoice && board.chosen ? `보내면 시안 ${board.chosen} 선택과 조정값은 버려집니다.` : "";
+  const warning = props.dropsChoice && board.chosen ? drops(board.chosen) : "";
+  const texts = [...board.reasons, ...(props.dropsChoice ? [drops(board.candidates.length)] : [])];
   return (
     <div className="pcb-submit-wrap">
       <button type="button" className={`pcb-submit pcb-${props.variant ?? "primary"}`} disabled={blocked} onClick={() => props.action()}>
         {props.label}
       </button>
-      <p className="pcb-reason">{blocked ? props.validationErrors?.[0] ?? "" : drops}</p>
+      <ReservedLine className="pcb-reason" texts={texts} shown={blocked ? props.validationErrors?.[0] ?? "" : warning} />
     </div>
   );
 });
@@ -217,11 +248,11 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
             onMouseEnter={() => board.focusPin(i + 1)} onMouseLeave={() => board.focusPin(0)}
             onFocus={() => board.focusPin(i + 1)} onBlur={() => board.focusPin(0)}>
             <div className="pcb-pin-head">
-              <span className="pcb-pin-number" aria-hidden="true">{i + 1}</span>
+              <span className="pcb-pin-number" aria-hidden="true">{pinLabel(i)}</span>
               <span className="pcb-pin-where">시안 {pin.candidate} · {pin.text || pin.selector}</span>
-              <button type="button" className="pcb-reset" aria-label={`위치 ${i + 1} 삭제`} onClick={() => board.deletePin(i)}>삭제</button>
+              <button type="button" className="pcb-reset" aria-label={`위치 ${pinLabel(i)} 삭제`} onClick={() => board.deletePin(i)}>삭제</button>
             </div>
-            <textarea rows={2} aria-label={`위치 ${i + 1} 메모`} placeholder="이 위치에서 바꿀 점" value={pin.note} onChange={e => board.setPinNote(i, e.target.value)} onFocus={reveal} />
+            <textarea rows={2} aria-label={`위치 ${pinLabel(i)} 메모`} placeholder="이 위치에서 바꿀 점" value={pin.note} onChange={e => board.setPinNote(i, e.target.value)} onFocus={reveal} />
           </li>
         ))}
       </ol>
@@ -243,15 +274,15 @@ export const BOARD_CSS = `
 .pcb-note { margin: 4px 0 0; color: #b8bec6; }
 .pcb-note:empty { display: none; }
 .pcb-cards { display: flex; flex-wrap: wrap; gap: 8px; }
-.pcb-card { min-width: 64px; height: 76px; padding: 8px 12px; display: grid; grid-template-rows: auto 1fr 16px 16px; justify-items: center; align-items: center;
+.pcb-card { position: relative; min-width: 64px; height: 60px; padding: 8px 12px; display: grid; grid-template-rows: 1fr 16px; justify-items: center; align-items: center;
   border: 1px solid #767d87; border-radius: 4px; background: #16191d; color: #fff; font: inherit; cursor: pointer; }
-.pcb-card:has(img) { height: auto; }
+.pcb-card:has(img) { height: auto; grid-template-rows: auto 1fr 16px; }
+.pcb-eye { position: absolute; top: 4px; right: 4px; color: #b8bec6; }
+.pcb-card[aria-pressed="true"] .pcb-eye { color: #16191d; }
 .pcb-card img { max-width: 96px; border-radius: 2px; }
 .pcb-card[aria-pressed="true"] { background: #80c8ff; border-color: #80c8ff; color: #16191d; }
 .pcb-number { font-size: 16px; font-weight: 600; }
 .pcb-tag { font-size: 12px; line-height: 16px; }
-.pcb-viewing { color: #b8bec6; }
-.pcb-card[aria-pressed="true"] .pcb-viewing { color: #16191d; }
 .pcb-submit-wrap { display: grid; gap: 4px; justify-items: start; }
 .pcb-submit { min-height: 44px; padding: 14px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; line-height: 1; white-space: nowrap; }
 .pcb-primary { background: #fff; color: #16191d; border: 1px solid #fff; }
@@ -262,8 +293,13 @@ export const BOARD_CSS = `
   background: transparent; color: #b8bec6; border-color: #4a5058; opacity: .6; cursor: not-allowed; }
 .pcb-reason { margin: 0; color: #b8bec6; }
 .pcb-reason:empty { display: none; }
+.pcb-reserved { display: grid; }
+.pcb-reserved > * { grid-area: 1 / 1; margin: 0; }
+.pcb-ghost { visibility: hidden; }
+.pcb-ghost::before { content: attr(data-text); }
 .pcb-unavailable { color: #b8bec6; }
 .pcb-contrast { color: #ffb4a8; }
+.pcb-unmeasured { color: #b8bec6; }
 .pcb-comment, .pcb-pin textarea { width: 100%; resize: none; padding: 10px 12px; border: 1px solid #767d87; border-radius: 4px;
   background: #22272e; color: #fff; font: inherit; }
 .pcb-comment::placeholder, .pcb-pin textarea::placeholder { color: #b8bec6; }
@@ -273,13 +309,16 @@ export const BOARD_CSS = `
 .pcb-hex, .pcb-number-field { height: 32px; padding: 0 8px; border: 1px solid #767d87; border-radius: 4px; background: #22272e; color: #fff; font: inherit; }
 .pcb-hex { width: 88px; }
 .pcb-number-field { width: 64px; }
-.pcb-swatch:disabled { cursor: not-allowed; }
+.pcb-swatch:disabled { border-color: #4a5058; opacity: .6; cursor: not-allowed; }
 .pcb-step { width: 32px; height: 32px; border: 1px solid #767d87; border-radius: 4px; background: #16191d; color: #fff; font: inherit; font-size: 16px; cursor: pointer; }
 .pcb-unit { color: #b8bec6; }
 .pcb-segments { display: inline-flex; border: 1px solid #767d87; border-radius: 4px; overflow: hidden; }
 .pcb-segment { width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: #16191d; color: #fff; cursor: pointer; }
 .pcb-segment + .pcb-segment { border-left: 1px solid #767d87; }
 .pcb-segment[aria-checked="true"] { background: #80c8ff; color: #16191d; }
+.pcb-segments:has(.pcb-segment:disabled) { border-color: #4a5058; }
+.pcb-segment:disabled + .pcb-segment:disabled { border-left-color: #4a5058; }
+.pcb-segment[aria-checked="true"]:disabled { background: #4a5058; color: #fff; }
 .pcb-toggle { height: 32px; padding: 0 12px; border: 1px solid #767d87; border-radius: 4px; background: transparent; color: #fff; font: inherit; cursor: pointer; }
 .pcb-reset { height: 32px; padding: 0 4px; border: 0; background: transparent; color: #b8bec6; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .pcb-reset:hover { color: #fff; }
@@ -290,9 +329,9 @@ export const BOARD_CSS = `
 .pcb-pin { display: grid; gap: 4px; }
 .pcb-pin-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .pcb-pin-where { flex: 1; min-width: 0; color: #b8bec6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pcb-pin-number { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #80c8ff; color: #16191d;
+.pcb-pin-number { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #ffc24d; color: #16191d;
   font-weight: 600; font-size: 12px; }
-aside :is(button, input, textarea, select):focus-visible { outline: 2px solid #80c8ff; outline-offset: 2px; }
+aside :is(button, input, textarea, select):focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 aside a2ui-basic-text em { font-style: normal; }
 /* The panel title stays in view while the panel scrolls. React hosts are display: contents
    (set inline by the renderer), so the sticky box is the heading inside the first host. */
@@ -302,4 +341,7 @@ aside a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading { positi
 aside a2ui-basic-column:has(> a2ui-react-submitbutton) { position: sticky; bottom: -16px; z-index: 1;
   width: calc(100% + 32px); margin: 0 -16px -16px; padding: 12px 16px 16px; --a2ui-column-gap: 8px;
   background: #16191d; border-top: 1px solid #767d87; }
+/* While the panel scrolls further, content is under the answer area; a shadow says so. */
+aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::before { content: ""; position: absolute; left: 0; right: 0; top: -17px; height: 16px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .55)); pointer-events: none; }
 `;

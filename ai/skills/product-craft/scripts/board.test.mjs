@@ -292,6 +292,8 @@ test("the wrapper page carries the round token and the viewer address", async t 
   assert.match(html, new RegExp(running.token));
   assert.match(html, /__viewer\/candidate-viewer\.html\?c=%2Fone\.html&amp;c=%2Ftwo\.html|__viewer\/candidate-viewer\.html\?c=%2Fone\.html&c=%2Ftwo\.html/);
   assert.equal((await fetch(`${running.url}__viewer/candidate-viewer.html`)).status, 200);
+  // Focus is white everywhere on the panel; the accent blue means selection only.
+  assert.doesNotMatch(html, /focus[^;{}]*#80c8ff|focus-within\s*\{[^}]*#80c8ff/);
 });
 
 const rawGet = (running, path) => new Promise((resolve, reject) => {
@@ -384,7 +386,7 @@ test("adjust and pins are validated against the surface's controls before the ro
   assert.equal(ok.status, 200);
   const summary = JSON.stringify(await ok.json());
   assert.match(summary, /간격: 16px → 24px/);
-  assert.match(summary, /위치 1 · 시안 1 · t: n/);
+  assert.match(summary, /위치 A · 시안 1 · t: n/);
   assert.match(summary, /"조정"/);
   const { answer } = await waitForAnswer({ dir, round: running.round, timeoutMs: 1000 });
   assert.deepEqual(answer.context.adjust, { gap: 24 });

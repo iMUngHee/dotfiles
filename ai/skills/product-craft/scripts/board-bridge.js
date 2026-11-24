@@ -47,19 +47,31 @@
     const c = v / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   };
-  const rgb = text => (text.match(/[\d.]+/g) ?? []).map(Number);
+  const rgba = text => {
+    const [r, g, b, a = 1] = (text.match(/[\d.]+/g) ?? []).map(Number);
+    return [r, g, b, a];
+  };
   const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  const over = ([r, g, b, a], base) => [r, g, b].map((c, i) => c * a + base[i] * (1 - a));
+  // The colour behind an element's text: its own and its ancestors' background colours,
+  // composited from the first opaque one (or the white canvas) up. Null when a background
+  // image or gradient is on the way, since its colour under the text is unknown.
   function backgroundOf(el) {
+    const layers = [];
     for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
-      const [r, g, b, a = 1] = rgb(getComputedStyle(node).backgroundColor);
-      if (a > 0) return [r, g, b];
+      const style = getComputedStyle(node);
+      if (style.backgroundImage !== "none") return null;
+      const layer = rgba(style.backgroundColor);
+      if (layer[3] > 0) layers.push(layer);
+      if (layer[3] >= 1) break;
     }
-    return [255, 255, 255];
+    return layers.reverse().reduce((base, layer) => over(layer, base), [255, 255, 255]);
   }
   // For each colour token, the lowest contrast between text drawn in that colour and the
   // background behind it, so the panel can warn about a value that makes text unreadable.
   function measureContrast(names) {
     const values = {};
+    const unmeasured = new Set();
     for (const name of names) {
       const probe = document.createElement("span");
       probe.style.color = `var(--${name})`;
@@ -68,19 +80,25 @@
       probe.remove();
       // Only sRGB serialisations are measured; other colour spaces would be misread.
       if (!colour.startsWith("rgb")) continue;
+      const text = rgba(colour);
       let lowest = Infinity;
       for (const el of document.body.querySelectorAll("*")) {
         if (el.closest("#pcb-layer") || !el.getClientRects().length) continue;
         const style = getComputedStyle(el);
         if (style.visibility === "hidden" || style.color !== colour) continue;
         if (![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
-        const [a, b] = [luminance(rgb(colour)), luminance(backgroundOf(el))].sort((x, y) => y - x);
+        const background = backgroundOf(el);
+        if (!background) {
+          unmeasured.add(name);
+          continue;
+        }
+        const [a, b] = [luminance(over(text, background)), luminance(background)].sort((x, y) => y - x);
         lowest = Math.min(lowest, (a + 0.05) / (b + 0.05));
       }
       if (Number.isFinite(lowest)) values[name] = Math.round(lowest * 1000) / 1000;
     }
     // Sent even when empty, so ratios from an earlier value do not linger in the panel.
-    post({ type: "contrast", values });
+    post({ type: "contrast", values, unmeasured: [...unmeasured] });
   }
 
   function selectorFor(el) {
@@ -139,7 +157,7 @@
         // Only the pin whose note the owner is on gets its element outlined.
         if (pin.n === focus) {
           outline = [box(`position:absolute;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;`
-            + "outline:2px dashed #80c8ff;outline-offset:2px;")];
+            + "outline:2px dashed #ffc24d;outline-offset:2px;")];
         }
       } else {
         left = pin.x * root.scrollWidth - window.scrollX;
@@ -148,9 +166,10 @@
       const marker = document.createElement("span");
       marker.className = "pcb-pin-marker";
       marker.dataset.n = String(pin.n);
-      marker.textContent = String(pin.n);
+      // Lettered like the panel's list (pin.n is 1-based), never numbered like candidates.
+      marker.textContent = String.fromCharCode(64 + pin.n);
       marker.style.cssText = `position:absolute;left:${left - 12}px;top:${top - 12}px;width:24px;height:24px;border-radius:50%;`
-        + "background:#80c8ff;color:#16191d;box-shadow:0 0 0 2px #16191d;font:600 12px/24px system-ui;text-align:center;";
+        + "background:#ffc24d;color:#16191d;box-shadow:0 0 0 2px #16191d;font:600 12px/24px system-ui;text-align:center;";
       return [...outline, marker];
     }));
   }
