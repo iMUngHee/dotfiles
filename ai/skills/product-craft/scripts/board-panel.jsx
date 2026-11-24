@@ -24,7 +24,9 @@ const viewedNumber = () => viewerDoc()?.documentElement.dataset.candidate;
 const showCandidate = n => viewerDoc()?.querySelectorAll("nav button")[Number(n) - 1]?.click();
 
 // Board state outside the A2UI data model: which candidate is on screen, bridge state, pin mode.
-const store = { state: { viewed: undefined, chosen: "", bridge: {}, pinMode: false, focus: 0, contrast: {} }, listeners: new Set() };
+// revision counts data model changes the panel shows outside A2UI bindings (the send preview).
+const store = { state: { viewed: undefined, chosen: "", bridge: {}, pinMode: false, focus: 0, contrast: {}, revision: 0 }, listeners: new Set() };
+const bump = () => setState({ revision: store.state.revision + 1 });
 const COLOUR_TOKENS = Object.entries(config.controls).filter(([, c]) => c.kind === "color").map(([name]) => name);
 const setState = patch => {
   store.state = { ...store.state, ...patch };
@@ -164,8 +166,9 @@ function Panel() {
       .then(messages => {
         processor.processMessages(messages);
         model = processor.model.surfacesMap.get(SURFACE_ID);
-        model.dataModel.subscribe("/adjust", sendState);
-        model.dataModel.subscribe("/pins", sendState);
+        model.dataModel.subscribe("/adjust", () => { sendState(); bump(); });
+        model.dataModel.subscribe("/pins", () => { sendState(); bump(); });
+        model.dataModel.subscribe("/feedback/comment", bump);
         model.dataModel.subscribe("/feedback/choice", value => {
           setState({ chosen: typeof value === "string" ? value : "" });
           sendState();
@@ -195,6 +198,12 @@ function Panel() {
       return { ratio: report?.values[tokenName], unmeasured: report?.unmeasured.includes(tokenName) ?? false };
     },
     reasons: config.reasons,
+    sending: () => ({
+      chosen: board.chosen,
+      adjust: Object.values(data("/adjust") ?? {}).filter(v => v !== null && v !== undefined).length,
+      pins: (data("/pins") ?? []).length,
+      comment: Boolean(String(data("/feedback/comment") ?? "").trim()),
+    }),
     groupState: () => !board.chosen ? "unchosen" : board.viewed !== board.chosen ? "notChosen" : "ok",
     previewState: tokenName => {
       if (!board.chosen || board.viewed !== board.chosen) return "ok";
@@ -218,7 +227,10 @@ function Panel() {
 // under it. Scroll, size and content changes (surface, pins, sent summary) all recompute it.
 function trackOverflow() {
   const aside = document.querySelector("aside");
-  const update = () => aside.toggleAttribute("data-more-below", aside.scrollTop + aside.clientHeight < aside.scrollHeight - 1);
+  const update = () => {
+    aside.toggleAttribute("data-more-below", aside.scrollTop + aside.clientHeight < aside.scrollHeight - 1);
+    aside.toggleAttribute("data-scrolled", aside.scrollTop > 0);
+  };
   aside.addEventListener("scroll", update, { passive: true });
   const resize = new ResizeObserver(update);
   resize.observe(aside);

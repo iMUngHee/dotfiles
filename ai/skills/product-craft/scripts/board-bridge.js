@@ -163,13 +163,23 @@
         left = pin.x * root.scrollWidth - window.scrollX;
         top = pin.y * root.scrollHeight - window.scrollY;
       }
-      const marker = document.createElement("span");
+      // A lollipop: the lettered disc on a short stem whose end dot is the exact point. The
+      // disc stays tied to its point and clear of the line that was pinned; near the top edge
+      // it hangs below instead.
+      const flip = top < 40;
+      const marker = box(`position:absolute;left:${left - 12}px;top:${flip ? top - 3 : top - 39}px;width:24px;height:42px;`
+        + `display:flex;flex-direction:${flip ? "column-reverse" : "column"};align-items:center;`);
       marker.className = "pcb-pin-marker";
       marker.dataset.n = String(pin.n);
       // Lettered like the panel's list (pin.n is 1-based), never numbered like candidates.
-      marker.textContent = String.fromCharCode(64 + pin.n);
-      marker.style.cssText = `position:absolute;left:${left - 12}px;top:${top - 12}px;width:24px;height:24px;border-radius:50%;`
-        + "background:#ffc24d;color:#16191d;box-shadow:0 0 0 2px #16191d;font:600 12px/24px system-ui;text-align:center;";
+      const disc = box("flex:none;width:24px;height:24px;border-radius:50%;background:#ffc24d;color:#16191d;"
+        + "box-shadow:0 0 0 2px #16191d;font:600 12px/24px system-ui;text-align:center;", String.fromCharCode(64 + pin.n));
+      disc.className = "pcb-pin-disc";
+      const stem = box("flex:none;width:2px;height:12px;background:#ffc24d;box-shadow:0 0 0 1px #16191d;");
+      const dot = box("flex:none;width:6px;height:6px;border-radius:50%;background:#ffc24d;box-shadow:0 0 0 1.5px #16191d;");
+      dot.className = "pcb-pin-dot";
+      dot.dataset.n = String(pin.n);
+      marker.append(disc, stem, dot);
       return [...outline, marker];
     }));
   }

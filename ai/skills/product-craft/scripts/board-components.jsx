@@ -24,9 +24,9 @@ function Contrast({ token }) {
   const { ratio, unmeasured } = useBoard().contrastFor(token);
   // Rounded down, so a ratio just under the minimum never displays as 4.5.
   if (ratio !== undefined && ratio < 4.5) {
-    return <p className="pcb-note pcb-contrast">배경 대비 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1 · 글자에는 4.5:1 이상이 필요합니다.</p>;
+    return <p className="pcb-note pcb-contrast">이 색 글자의 배경 대비가 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1입니다. 글자에는 4.5:1 이상이 필요합니다.</p>;
   }
-  return unmeasured ? <p className="pcb-note pcb-unmeasured">배경이 이미지·그라디언트인 글자는 대비를 재지 못했습니다.</p> : null;
+  return unmeasured ? <p className="pcb-note pcb-unmeasured">이미지·그라디언트 위의 이 색 글자는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p> : null;
 }
 
 // A line that keeps the height of the tallest text it can show, so a change of text never
@@ -70,7 +70,11 @@ function TokenRow({ token, label, changed, onReset, children, extra }) {
 
 const UNCHOSEN = "시안을 고르면 색·간격·정렬 같은 값을 조정할 수 있습니다.";
 const notChosen = n => `조정은 선택한 시안 ${n}에만 적용됩니다.`;
-const drops = n => `보내면 시안 ${n} 선택과 조정값은 버려집니다.`;
+const applied = n => `조정은 시안 ${n}에 바로 반영됩니다.`;
+const show = n => `시안 ${n} 보기`;
+const preview = ({ chosen, adjust, pins, comment }) => ["보낼 내용: 시안 " + chosen, adjust ? `조정 ${adjust}개` : "",
+  pins ? `위치 ${pins}개` : "", comment ? "코멘트" : ""].filter(Boolean).join(" · ");
+const drops = n => `전부 아님을 보내면 시안 ${n} 선택과 조정값은 버려집니다.`;
 
 const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({ props }) => {
   const board = useBoard();
@@ -94,8 +98,10 @@ const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({
         })}
       </div>
       {/* One note for the whole group of token controls, instead of one under each. */}
-      {board.hasTokenControls ? <ReservedLine className="pcb-note" texts={[UNCHOSEN, notChosen(board.candidates.length)]}
-        shown={board.groupState() === "unchosen" ? UNCHOSEN : board.groupState() === "notChosen" ? notChosen(board.chosen) : ""} /> : null}
+      {board.hasTokenControls ? <ReservedLine className="pcb-note" texts={[UNCHOSEN, `${notChosen(board.candidates.length)} ${show(board.candidates.length)}`, applied(board.candidates.length)]}
+        shown={board.groupState() === "unchosen" ? UNCHOSEN : board.groupState() === "notChosen"
+          ? <>{notChosen(board.chosen)} <button type="button" className="pcb-link" onClick={() => board.showCandidate(board.chosen)}>{show(board.chosen)}</button></>
+          : applied(board.chosen)} /> : null}
     </fieldset>
   );
 });
@@ -109,14 +115,17 @@ const Hint = createComponentImplementation(api("Hint"), ({ props }) =>
 const SubmitButton = createComponentImplementation(api("SubmitButton"), ({ props }) => {
   const board = useBoard();
   const blocked = props.isValid === false;
-  const warning = props.dropsChoice && board.chosen ? drops(board.chosen) : "";
-  const texts = [...board.reasons, ...(props.dropsChoice ? [drops(board.candidates.length)] : [])];
+  // A button that drops the choice warns about it; the one that sends it says what goes.
+  const note = !board.chosen ? "" : props.dropsChoice ? drops(board.chosen) : preview(board.sending());
+  const longest = props.dropsChoice ? drops(board.candidates.length)
+    : preview({ chosen: board.candidates.length, adjust: board.limits.controls, pins: board.limits.pins, comment: true });
+  const texts = [...board.reasons, longest];
   return (
     <div className="pcb-submit-wrap">
       <button type="button" className={`pcb-submit pcb-${props.variant ?? "primary"}`} disabled={blocked} onClick={() => props.action()}>
         {props.label}
       </button>
-      <ReservedLine className="pcb-reason" texts={texts} shown={blocked ? props.validationErrors?.[0] ?? "" : warning} />
+      <ReservedLine className="pcb-reason" texts={texts} shown={blocked ? props.validationErrors?.[0] ?? "" : note} />
     </div>
   );
 });
@@ -232,6 +241,8 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
   const toggle = () => { if (!board.togglePinMode()) setLimitShown(true); };
   // The candidate itself shows the pin-mode instruction, so the panel does not repeat it.
   const message = limitShown ? `위치는 ${board.limits.pins}개까지 남길 수 있습니다.` : unavailable ? "미리보기 반영 불가." : "";
+  // A pin on a candidate other than the chosen one is reference for redrawing the chosen one.
+  const elsewhere = board.chosen && board.viewed !== board.chosen;
   return (
     <div className="pcb-field">
       <span className="pcb-label">{props.label}</span>
@@ -239,7 +250,7 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
         <button type="button" className="pcb-toggle" aria-pressed={board.pinMode} disabled={unavailable && !board.pinMode} onClick={toggle}>
           {board.pinMode ? "지정 취소" : "위치 지정"}
         </button>
-        {board.viewed ? <span className="pcb-target">시안 {board.viewed}에 남깁니다.</span> : null}
+        {board.viewed ? <span className="pcb-target">시안 {board.viewed}에 {elsewhere ? "참고로 " : ""}남깁니다.</span> : null}
       </div>
       <p className={limitShown || unavailable ? "pcb-note pcb-unavailable" : "pcb-note"}>{message}</p>
       <ol className="pcb-pins">
@@ -324,12 +335,14 @@ export const BOARD_CSS = `
 .pcb-reset:hover { color: #fff; }
 .pcb-target { color: #b8bec6; }
 .pcb-reset[data-hidden="true"] { visibility: hidden; }
-.pcb-toggle[aria-pressed="true"] { border: 2px solid #80c8ff; }
+.pcb-toggle[aria-pressed="true"] { border: 2px solid #80c8ff; background: rgba(128, 200, 255, .16); }
+.pcb-link { padding: 0; border: 0; background: none; color: #fff; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .pcb-pins { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 12px; }
+.pcb-pins:empty { display: none; }
 .pcb-pin { display: grid; gap: 4px; }
 .pcb-pin-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .pcb-pin-where { flex: 1; min-width: 0; color: #b8bec6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pcb-pin-number { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #ffc24d; color: #16191d;
+.pcb-pin-number { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; line-height: 24px; border-radius: 50%; background: #ffc24d; color: #16191d;
   font-weight: 600; font-size: 12px; }
 aside :is(button, input, textarea, select):focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 aside a2ui-basic-text em { font-style: normal; }
@@ -341,7 +354,12 @@ aside a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading { positi
 aside a2ui-basic-column:has(> a2ui-react-submitbutton) { position: sticky; bottom: -16px; z-index: 1;
   width: calc(100% + 32px); margin: 0 -16px -16px; padding: 12px 16px 16px; --a2ui-column-gap: 8px;
   background: #16191d; border-top: 1px solid #767d87; }
-/* While the panel scrolls further, content is under the answer area; a shadow says so. */
-aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::before { content: ""; position: absolute; left: 0; right: 0; top: -17px; height: 16px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, .55)); pointer-events: none; }
+/* While the panel scrolls further, content is under the answer area: it fades into it, and
+   a label on the divider says so. Scrolled content fades out under the title the same way. */
+aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::before { content: ""; position: absolute; left: 0; right: 0; bottom: calc(100% + 2px); height: 24px;
+  background: linear-gradient(rgba(22, 25, 29, 0), #16191d); pointer-events: none; }
+aside[data-more-below] a2ui-basic-column:has(> a2ui-react-submitbutton)::after { content: "아래에 더 있습니다."; position: absolute; right: 16px; top: -12px;
+  padding: 2px 8px; border: 1px solid #767d87; border-radius: 999px; background: #16191d; color: #b8bec6; font-size: 12px; line-height: 16px; pointer-events: none; }
+aside[data-scrolled] a2ui-basic-column > a2ui-react-heading:first-child > .pcb-heading::after { content: ""; position: absolute; left: 0; right: 0; bottom: -33px; height: 32px;
+  background: linear-gradient(#16191d 30%, rgba(22, 25, 29, 0)); pointer-events: none; }
 `;

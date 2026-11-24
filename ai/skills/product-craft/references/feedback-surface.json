@@ -39,7 +39,7 @@
           "variant": "secondary",
           "dropsChoice": true,
           "@checks": [
-            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } }, "message": "코멘트를 적으면 보낼 수 있습니다." }
+            { "condition": { "@call": "required", "args": { "value": { "@path": "/feedback/comment" } } }, "message": "전부 아님은 코멘트를 적어야 보낼 수 있습니다." }
           ],
           "action": {
             "event": {

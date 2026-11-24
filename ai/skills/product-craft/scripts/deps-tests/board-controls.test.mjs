@@ -134,11 +134,11 @@ test("journey 6: pins stay on their element through compare mode, scrolling and 
     await candidate("1").locator(selector).click();
   };
   const offBy = async n => {
-    await candidate("1").waitForFunction(k => document.querySelector(`#pcb-layer .pcb-pin-marker[data-n="${k}"]`), n);
+    await candidate("1").waitForFunction(k => document.querySelector(`#pcb-layer .pcb-pin-dot[data-n="${k}"]`), n);
     return measure(n);
   };
   const measure = n => candidate("1").evaluate(k => {
-    const marker = document.querySelector(`#pcb-layer .pcb-pin-marker[data-n="${k}"]`).getBoundingClientRect();
+    const marker = document.querySelector(`#pcb-layer .pcb-pin-dot[data-n="${k}"]`).getBoundingClientRect();
     const pin = window.__pcbPins.find(p => p.n === k);
     const target = document.querySelector(pin.selector).getBoundingClientRect();
     const cx = marker.left + marker.width / 2;
@@ -239,10 +239,10 @@ test("reject all says it drops the chosen candidate, and pinning names its targe
   await page.getByText("시안 1에 남깁니다.").waitFor();
   await card(page, "1").click();
   await page.getByLabel("코멘트", { exact: true }).fill("둘 다 아쉬워요");
-  await page.getByText("보내면 시안 1 선택과 조정값은 버려집니다.").waitFor();
+  await page.getByText("전부 아님을 보내면 시안 1 선택과 조정값은 버려집니다.").waitFor();
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
-  await page.getByText("시안 2에 남깁니다.").waitFor();
+  await page.getByText("시안 2에 참고로 남깁니다.").waitFor();
 });
 
 test("a colour token warns when the text it colours falls below 4.5:1 on its background", async t => {
@@ -258,7 +258,7 @@ test("a colour token warns when the text it colours falls below 4.5:1 on its bac
   await page.getByLabel("강조색 hex").fill("#a7f3d0");
   await page.getByLabel("강조색 hex").press("Enter");
   await warning.waitFor();
-  assert.match(await warning.textContent(), /배경 대비 1\.\d:1 · 글자에는 4\.5:1 이상이 필요합니다\./);
+  assert.match(await warning.textContent(), /이 색 글자의 배경 대비가 1\.\d:1입니다\. 글자에는 4\.5:1 이상이 필요합니다\./);
 });
 
 test("a pin's text keeps the visible line breaks as spaces", async t => {
@@ -401,11 +401,28 @@ test("selection, focus and pins have three distinct colours", async t => {
   assert.equal(await style(card(page, "2"), "outlineColor"), "rgb(255, 255, 255)", "keyboard focus is a white ring");
   await card(page, "1").click();
   assert.equal(await style(card(page, "1"), "backgroundColor"), "rgb(128, 200, 255)", "selection is the accent fill");
-  await pinOnce(page, candidate, "1", "#title");
+  await pinOnce(page, candidate, "1", "#price");
   await pinCount(page, 1);
   assert.equal(await style(page.locator(".pcb-pin-number").first(), "backgroundColor"), "rgb(255, 194, 77)");
   await candidate("1").waitForFunction(() => document.querySelector("#pcb-layer .pcb-pin-marker"));
-  assert.equal(await candidate("1").evaluate(() => getComputedStyle(document.querySelector("#pcb-layer .pcb-pin-marker")).backgroundColor), "rgb(255, 194, 77)");
+  const covers = await candidate("1").evaluate(() => {
+    const disc = document.querySelector("#pcb-layer .pcb-pin-disc").getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById("price"));
+    const text = range.getBoundingClientRect();
+    return disc.left < text.right && disc.right > text.left && disc.top < text.bottom && disc.bottom > text.top;
+  });
+  assert.equal(covers, false, "the lettered disc does not cover the pinned text");
+  // Near the top edge the marker hangs below its point instead.
+  await page.getByRole("button", { name: "위치 지정" }).click();
+  await candidate("1").waitForFunction(() => document.documentElement.style.cursor === "crosshair");
+  await candidate("1").locator("#hd").click({ position: { x: 200, y: 4 } });
+  await candidate("1").waitForFunction(() => document.querySelectorAll("#pcb-layer .pcb-pin-marker").length === 2);
+  const order = await candidate("1").evaluate(() => [...document.querySelectorAll("#pcb-layer .pcb-pin-marker")].map(m =>
+    m.querySelector(".pcb-pin-dot").getBoundingClientRect().top < m.querySelector(".pcb-pin-disc").getBoundingClientRect().top ? "below" : "above"));
+  assert.deepEqual(order, ["above", "below"]);
+  await candidate("1").waitForFunction(() => document.querySelector("#pcb-layer .pcb-pin-marker"));
+  assert.equal(await candidate("1").evaluate(() => getComputedStyle(document.querySelector("#pcb-layer .pcb-pin-disc")).backgroundColor), "rgb(255, 194, 77)");
 });
 
 test("pins are lettered in list order across candidates, and relabel after a delete", async t => {
@@ -465,15 +482,24 @@ test("choosing, typing and viewing never move the rows or resize the answer area
       assert.ok(Math.abs(now.row - first.row) <= 0.5, `${width}: token row after ${what}: ${first.row} → ${now.row}`);
     };
     await card(page, "1").click();
+    await page.getByText("조정은 시안 1에 바로 반영됩니다.").waitFor();
+    await page.getByText("보낼 내용: 시안 1", { exact: true }).waitFor();
     await same("choosing 1");
+    await page.getByLabel("강조색 hex").fill("#2563eb");
+    await page.getByLabel("강조색 hex").press("Enter");
     await page.getByLabel("코멘트", { exact: true }).fill("짧게");
+    await page.getByText("보낼 내용: 시안 1 · 조정 1개 · 코멘트", { exact: true }).waitFor();
     await same("a short comment");
     await page.getByLabel("코멘트", { exact: true }).fill("이 코멘트는 열 글자를 넘습니다");
     await page.getByText("코멘트가 길면").waitFor();
     await same("a long comment");
     await viewer().locator("nav button").nth(1).click();
     await connected("2");
+    await page.getByRole("button", { name: "시안 1 보기" }).waitFor();
     await same("viewing 2");
+    await page.getByRole("button", { name: "시안 1 보기" }).click();
+    await connected("1");
+    await same("going back to 1");
   }
 });
 
@@ -498,6 +524,7 @@ test("the answer area shows the overflow cue only while the panel scrolls furthe
   assert.equal(await cue(), true, "content under the answer area shows the cue without scrolling");
   await page.evaluate(() => { const a = document.querySelector("aside"); a.scrollTop = a.scrollHeight; });
   await until(false);
+  assert.equal(await page.evaluate(() => document.querySelector("aside").hasAttribute("data-scrolled")), true, "scrolled content fades under the title");
   await page.evaluate(() => { document.querySelector("aside").scrollTop = 0; });
   await until(true);
   while (added > 0) {
@@ -523,13 +550,13 @@ test("contrast composites translucent backgrounds, nested layers and translucent
   // White over black at .5 on white is rgb(127.5): 3.98:1, shown rounded down.
   // The initial green also falls short here, so wait for the ratio of the new value.
   await setHex(page, "#ffffff");
-  await page.waitForFunction(() => /배경 대비 3\.9:1/.test(document.querySelector('[data-pcb-control="accent"] .pcb-contrast')?.textContent ?? ""));
+  await page.waitForFunction(() => /배경 대비가 3\.9:1/.test(document.querySelector('[data-pcb-control="accent"] .pcb-contrast')?.textContent ?? ""));
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
   await card(page, "2").click();
   // #808080 over two .5 black layers on white (rgb 63.75): 2.64:1.
   await setHex(page, "#808080");
-  await page.waitForFunction(() => /2\.6:1/.test(document.querySelector('[data-pcb-control="accent"] .pcb-contrast')?.textContent ?? ""));
+  await page.waitForFunction(() => /배경 대비가 2\.6:1/.test(document.querySelector('[data-pcb-control="accent"] .pcb-contrast')?.textContent ?? ""));
 
   const faint = tokenCandidate("one", { accent: "rgba(255, 255, 255, .2)", extraCss: "body { background: #000; }" });
   const second = await open(t, await fullSurface(), { "one.html": faint, "two.html": tokenCandidate("two") });
@@ -537,7 +564,7 @@ test("contrast composites translucent backgrounds, nested layers and translucent
   await card(second.page, "1").click();
   // White at .2 over black composites to rgb(51): 1.66:1.
   await contrastNote(second.page, "accent").waitFor();
-  assert.match(await contrastNote(second.page, "accent").textContent(), /배경 대비 1\.6:1/);
+  assert.match(await contrastNote(second.page, "accent").textContent(), /배경 대비가 1\.6:1/);
 });
 
 test("text on a gradient or image is reported as unmeasured", async t => {
@@ -546,7 +573,7 @@ test("text on a gradient or image is reported as unmeasured", async t => {
   await connected("1");
   await card(page, "1").click();
   await unmeasuredNote(page, "accent").waitFor();
-  assert.equal(await unmeasuredNote(page, "accent").textContent(), "배경이 이미지·그라디언트인 글자는 대비를 재지 못했습니다.");
+  assert.equal(await unmeasuredNote(page, "accent").textContent(), "이미지·그라디언트 위의 이 색 글자는 대비를 재지 못했습니다. 눈으로 확인해 주세요.");
   assert.equal(await contrastNote(page, "accent").count(), 0);
 });
 
