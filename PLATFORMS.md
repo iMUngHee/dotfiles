@@ -7,6 +7,13 @@ each platform does differently, and which checks are still owed.
 
 ## After a pull, on any machine
 
+The pstack skills `correct`, `create-formal-verification-skill` and
+`maintain-formal-verification-skill` are no longer vendored (`statechart` stays), and
+`vendor.sh` does not remove dropped entries. Where they were synced, delete each one's
+two skill links and its clone (in Git Bash on Windows):
+`for s in correct create-formal-verification-skill maintain-formal-verification-skill; do rm -f ~/.claude/skills/$s ~/.agents/skills/$s; rm -rf "${AI_VENDOR_DIR:-$HOME/.local/share/ai-vendor}/$s"; done`.
+The macOS machine was cleaned 2026-11-24.
+
 The copied Gaebu mod and shared rule now come from Gaebu 0.10.0 (`94c6068`).
 Gaebu 0.10.0 reads `pager who --all` and sends notices with pager's `--event`
 and `--kind` (`gaebu stalled --notify` also with `--automation`), so upgrade

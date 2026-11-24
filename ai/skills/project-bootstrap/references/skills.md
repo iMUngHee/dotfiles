@@ -6,7 +6,7 @@ These keep the repository improving after bootstrap. Write them under `.ai/` (or
 
 `.ai/rules/maintenance.md`, unconditional. Each item ends with its tag (see [gate.md](gate.md) contract 6):
 
-- When a change is corrected for a mistake that a machine can catch, make the mistake fail: structure first, then a type, a ban with a message, or a banned-patterns line. Show the check failing on the real mistake before adding it. [unchecked: judged in review; the gate cannot see why a check was added]
+- When a change is corrected for a mistake that a machine can catch, make the mistake fail at the highest level that works: structure first, then a type, a ban whose message names what to use instead or a banned-patterns line, then a test; prose last. Show the check failing on the real mistake before adding it. [unchecked: judged in review; the gate cannot see why a check was added]
 - Put existing occurrences of a newly banned pattern in the ratchet baseline instead of fixing them in the same change, and leave the clean-up to the garden skill. [check: banned patterns]
 - Write prose rules only for decisions that need judgment, and tag every rule with the check that enforces it or the reason none can. [check: rule tags]
 - When asked for a table of rules and what enforces them, the tags in `.ai/rules` are that table; do not keep a second one. [check: rule tags]
@@ -19,11 +19,11 @@ Create these three in every bootstrapped repository.
 
 ### `<prefix>-code-review`
 
-Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. Where a reviewer has the `correct` skill, it does the same job across past commits; its rule table is the tags.
+Review a branch commit by commit. Run `scripts/check.sh` first and report its failures as findings. Judge each commit against `.ai/rules` and the development guide. End the review by closing every finding that has happened before: name the check, ban, ratchet entry or structural change that stops it recurring, and add it in the same branch or as a follow-up for the garden skill. A finding that needs judgment becomes or extends a tagged `unchecked` rule, and an `unchecked` rule that a check could now enforce is proposed as one. A test that still passes when the behavior it names breaks, or fails when only internals change, is a finding too.
 
 ### `<prefix>-rule-docs-sync`
 
-Find where rules, generated agent files and human documentation disagree, and fix the source. Check that every rule's tag still names a check that exists and still enforces it, that the development guide gives the reason for each rule, and that generated files were rebuilt from their sources. List `unchecked` rules that a check could now enforce.
+Find where rules, generated agent files and human documentation disagree, and fix the source. Check that every rule's tag still names a check that exists and still enforces it, that the development guide gives the reason for each rule, and that generated files were rebuilt from their sources. List `unchecked` rules that a check could now enforce, and remove a rule whose mistake the structure now makes impossible.
 
 ### `<prefix>-garden`
 
