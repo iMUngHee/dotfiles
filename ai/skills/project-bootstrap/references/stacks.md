@@ -6,7 +6,7 @@ Take every command and option from a source for the installed version: the stack
 
 A dependency rule between workspace packages is machine-decidable: read the resolved graph (`cargo metadata`, `go list -deps`, the package manager's workspace listing) and fail on the forbidden production edge while dev or test edges stay allowed. A manifest that merely declares today's edges does not stop the next one.
 
-Enable the native lints and lint groups that enforce the adopted conventions, including stricter groups where the conventions call for them; the code's current state decides only how a lint is introduced (on now, ratcheted, or recorded as debt until its existing violations are fixed), not whether the convention holds.
+Enable the native lints and lint groups that enforce the adopted conventions, including stricter groups where the conventions call for them; the code's current state decides only how a lint is introduced (on now, ratcheted, or recorded as debt until its existing violations are fixed), not whether the convention holds. A lint recorded as debt is an incomplete requirement and is reported as one until it is on.
 
 | Capability | Example tier | Examples |
 | --- | --- | --- |

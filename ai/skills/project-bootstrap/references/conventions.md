@@ -13,7 +13,7 @@ Observed practice settles only what none of these decides, such as which of two 
 
 ## Find the guides
 
-When a consequential choice needs outside guidance, read a primary source that applies to the repository and consult another when a relevant question remains open:
+Identify the consequential architecture, semantics and execution-cost questions this repository exercises, and fetch and read relevant primary guidance before selecting rules; reading a guide does not require adopting it:
 
 | Area | Known examples (search the same way for anything missing) |
 | --- | --- |
