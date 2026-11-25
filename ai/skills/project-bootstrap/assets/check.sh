@@ -464,8 +464,8 @@ check_rule_tags() {
 		fi
 		while IFS= read -r p; do
 			[ -n "$p" ] || continue
-			p=${p#./}
 			while case $p in *//*) true ;; *) false ;; esac do p=${p//\/\//\/}; done
+			p=${p#./}
 			case $p in /*)
 				echo "rule_files: $p: give a path relative to the repository root"; bad=1; continue ;;
 			esac

@@ -42,7 +42,7 @@ trap 'rm -rf "$tmp"' EXIT
 status=0
 "$@" >"$tmp/edges" || status=$?
 if [ "$status" -ne 0 ]; then
-	echo "check-layers: the extractor exited with status $status: $*"
+	echo "check-layers: the extractor exited with status $status: $*; the layers are described in $doc"
 	exit 1
 fi
 
@@ -81,8 +81,10 @@ elif ! git show "$base:$policy" >"$tmp/base"; then
 	exit 1
 fi
 
-awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
-	-v bfile="$tmp/base" -v efile="$tmp/edges" '
+# Values go through the environment, where awk does not decode backslash
+# escapes as it does for -v.
+CL_DOC=$doc CL_FIRST=$first CL_POLICY=$policy CL_BFILE=$tmp/base CL_EFILE=$tmp/edges awk -F'\t' '
+	BEGIN { doc = ENVIRON["CL_DOC"]; first = ENVIRON["CL_FIRST"]; policy = ENVIRON["CL_POLICY"]; bfile = ENVIRON["CL_BFILE"]; efile = ENVIRON["CL_EFILE"] }
 	# A canonical repository path: relative, no empty, . or .. segment, no
 	# control character (so no endpoint can contain SUBSEP), not an ext: name.
 	function canonical(p) {
@@ -90,7 +92,8 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 	}
 	function external(p) { return p ~ /^ext:[^\001-\037]+$/ }
 	# The supported glob subset: *, ? and [...] or [!...] without classes or escapes.
-	function glob_ok(g) { return g !~ /\\|\[:|\[[^]]*$|\[\]/ }
+	function glob_ok(g) { return g !~ /\\|\[:|\[[^]]*$|\[!?\]/ }
+	function name_ok(n) { return n ~ /^[A-Za-z0-9_.-]+$/ }
 	# A supported glob as a regular expression: * and ? also match /, and
 	# [...] or [!...] is a character class.
 	function g2r(g,   r, i, c, j) {
@@ -123,7 +126,7 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 		return s == "" ? "none" : s
 	}
 	function layer_row(name, list,   n, globs, i) {
-		if (name == "" || list == "") return 0
+		if (!name_ok(name) || list == "") return 0
 		n = split(list, globs, ",")
 		for (i = 1; i <= n; i++) {
 			if (globs[i] == "" || !glob_ok(globs[i])) return 0
@@ -139,7 +142,7 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 	FILENAME == policy {
 		if ($0 ~ /^#/ || $0 ~ /^[ \t]*$/) next
 		if ($1 == "layer" && NF == 3 && layer_row($2, $3)) next
-		if ($1 == "allow" && NF == 3 && $2 != "" && $3 != "") { allow[$2 SUBSEP $3] = FNR; next }
+		if ($1 == "allow" && NF == 3 && name_ok($2) && name_ok($3)) { allow[$2 SUBSEP $3] = FNR; next }
 		if ($1 == "debt" && NF == 3 && canonical($2) && canonical($3)) {
 			if (($2 SUBSEP $3) in debt) fail(policy ":" FNR ": repeats the debt row on line " debt[$2 SUBSEP $3])
 			else debt[$2 SUBSEP $3] = FNR
@@ -162,7 +165,7 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 			if (!(parts[1] in re) || !(parts[2] in re)) fail(policy ":" allow[k] ": allow names an unknown layer")
 		}
 		# Classify only input that passed validation.
-		if (bad) exit 1
+		if (bad) { print "check-layers: the layers and their policy are described in " doc; exit 1 }
 		for (e = 1; e <= edges; e++) {
 			lf = lt = ""
 			if (!external(from[e])) lf = layer_of(from[e])
@@ -180,6 +183,7 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 			else if (!first && !(k in basedebt)) fail(policy ":" debt[k] ": debt grew; " parts[1] " -> " parts[2] " is new since the base commit, so fix the dependency instead")
 		}
 		if (internal == 0 && !emptyok) fail("the extractor reported no dependency between internal files; add empty-ok to " policy " if that is expected")
+		if (bad) print "check-layers: the layers and their policy are described in " doc
 		exit bad
 	}
 ' "$tmp/base" "$policy" "$tmp/edges"

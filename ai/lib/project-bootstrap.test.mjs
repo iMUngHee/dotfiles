@@ -761,6 +761,11 @@ test("rule tags: registered paths are canonical, tracked and not aliased", async
     assert.equal(twice.status, 1);
     assert.equal(out(twice).match(/x\.md:1/g).length, 1);
   });
+  await t.test("(k) .//CONVENTIONS.md normalizes to CONVENTIONS.md", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo './/CONVENTIONS.md'"), files: { "CONVENTIONS.md": "- Rule [check: lint]\n" } });
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
   await t.test("a file named like an awk assignment is still checked", (t) => {
     const g = gateRepo(t, { config: RULES_CONFIG("  echo 'guide=rules.md'"), files: { "guide=rules.md": "- Untagged\n" } });
     const r = g.run(["--fast"]);
@@ -884,6 +889,7 @@ test("checkout example: the documented layer policy rejects a real forbidden imp
     const g = layerRepo(t);
     const r = g.run(["--fast"], { EDGES_FAIL: "1" });
     assert.equal(r.status, 1);
+    assert.match(out(r), /the extractor exited with status 7/);
   });
   await t.test("removing an owned rule's tag fails rule tags", (t) => {
     const g = layerRepo(t);
@@ -891,7 +897,8 @@ test("checkout example: the documented layer policy rejects a real forbidden imp
     g.commit("drop tag");
     const r = g.run(["--fast"]);
     assert.equal(r.status, 1);
-    assert.match(out(r), /rule tags/);
+    assert.match(out(r), /-- rule tags: FAILED/);
+    assert.match(out(r), /CONVENTIONS\.md:5: end the rule/);
   });
 });
 
@@ -922,7 +929,11 @@ test("layer policy outcomes", async (t) => {
   await passes("an empty extractor run with empty-ok", { policy: LAYER_POLICY + "empty-ok\n" }, silent);
   await fails("a tab-only extractor record", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf '\\t\\n'\n"), /neither ext:<name> nor a canonical repository path/);
   await fails("a nameless ext: endpoint", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\text:\\n'\n"), /neither ext:<name> nor a canonical repository path/);
-  await fails("an endpoint holding a control character cannot alias a debt key", { policy: LAYER_POLICY + "debt\tsrc/domain/a\\034src/http/b\tsrc/http/z\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/domain/a\\tsrc/http/b\\034src/http/z\\n'\n"), /canonical repository path|not a layer, allow, debt/);
+  await fails("a control byte in an extractor endpoint", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/domain/a\\tsrc/http/b\\034src/http/z\\n'\n"), /neither ext:<name> nor a canonical repository path/);
+  await fails("a control byte in a debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/a\x1csrc/http/b\tsrc/http/z\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
+  await fails("a control byte in a layer name", { policy: LAYER_POLICY + "layer\ta\x1cb\tsrc/x/*\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
+  await fails("a control byte in an allow field", { policy: LAYER_POLICY + "allow\thttp\tdomain\x1cx\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
+  await fails("an empty negated class, even with no edges", { policy: "layer\tdomain\tsrc/[!]/*\nlayer\thttp\tsrc/http/*\nempty-ok\n" }, silent, /globs take only/);
   await fails("a glob with a character class name", { policy: "layer\tdomain\tsrc/[[:alpha:]]omain/*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" }, undefined, /globs take only/);
   await fails("a glob with an escape", { policy: "layer\tdomain\tsrc/domain/\\*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" }, undefined, /globs take only/);
   await fails("a duplicated debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/model.js\tsrc/http/handler.js\ndebt\tsrc/domain/model.js\tsrc/http/handler.js\n", files: { "src/domain/model.js": 'import { h } from "../http/handler.js";\n' } }, undefined, /repeats the debt row/);
@@ -934,7 +945,9 @@ test("layer policy outcomes", async (t) => {
     const g = layerRepo(t);
     g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'only-one-field\\n'\n");
     g.commit("bad extractor");
-    assert.equal(g.run(["--fast"]).status, 1);
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /extractor line 1 is not from<TAB>to/);
   });
   await t.test("(w) a noncanonical endpoint fails by line; a real ../ import is resolved and checked", (t) => {
     const g = layerRepo(t);
@@ -963,13 +976,17 @@ test("layer debt only shrinks", async (t) => {
   });
   await t.test("(r) a debt row for a vanished edge fails", (t) => {
     const g = layerRepo(t, { policy: LAYER_POLICY + debt });
-    assert.equal(g.run(["--fast"]).status, 1);
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /is resolved \(gone or now allowed\); delete the row/);
   });
   await t.test("(y) a debt row for an edge the policy now allows fails until deleted", (t) => {
     const g = layerRepo(t, { policy: LAYER_POLICY + debt, files: { "src/domain/model.js": forbidden } });
     g.put("scripts/check-data/layers.tsv", LAYER_POLICY + "allow\tdomain\thttp\n" + debt);
     g.commit("allow it");
-    assert.equal(g.run(["--fast"]).status, 1);
+    const stale = g.run(["--fast"]);
+    assert.equal(stale.status, 1);
+    assert.match(out(stale), /is resolved \(gone or now allowed\); delete the row/);
     g.put("scripts/check-data/layers.tsv", LAYER_POLICY + "allow\tdomain\thttp\n");
     g.commit("drop debt");
     const r = g.run(["--fast"]);
@@ -995,6 +1012,16 @@ test("layer debt: first adoption against a base without the policy", (t) => {
   g.commit("adopt with debt");
   const r = g.run(["--fast"]);
   assert.equal(r.status, 0, out(r));
+});
+
+test("check-layers.sh keeps a --doc path with a backslash literal", (t) => {
+  const g = layerRepo(t);
+  g.put("src/domain/model.js", 'import { h } from "../http/handler.js";\n');
+  g.commit("forbidden");
+  const doc = "docs\\tarch.md";
+  const r = spawnSync(BASH, [g.at("scripts/check-layers.sh"), "--doc", doc, "--", "bash", "scripts/edges.sh"], { cwd: g.root, env: vars(), encoding: "utf8" });
+  assert.equal(r.status, 1);
+  assert.ok(out(r).includes("described in " + doc), out(r));
 });
 
 test("check-layers.sh stops when it cannot create a temporary directory", (t) => {
