@@ -333,60 +333,181 @@ EOF
 
 # ── rule tags ──
 
+# The tag rules shared by both grammars: an item's last line ends with exactly
+# one [check: <names>] naming registered checks or banned:<id>, or one
+# [unchecked: <reason>].
+rule_flush='
+	function flush(   copy, count, last, tag, kind, body, n, parts, i, name) {
+		if (item == "") return
+		copy = item
+		count = gsub(/\[(check|unchecked):[^]]*\]/, "&", copy)
+		last = item
+		sub(/^.*\n/, "", last)
+		if (count != 1 || !match(last, /\[(check|unchecked):[^]]*\][ \t]*$/)) {
+			printf "%s:%d: end the rule with exactly one [check: <name>] or [unchecked: <reason>]\n", file, start
+			bad = 1; item = ""; return
+		}
+		tag = substr(last, RSTART + 1, RLENGTH - 1)
+		sub(/\][ \t]*$/, "", tag)
+		kind = tag; sub(/:.*/, "", kind)
+		body = tag; sub(/^[a-z]+:/, "", body)
+		gsub(/^[ \t]+|[ \t]+$/, "", body)
+		if (body == "") {
+			printf "%s:%d: [%s: ] needs %s\n", file, start, kind, (kind == "check" ? "a check name" : "a reason")
+			bad = 1
+		} else if (kind == "check") {
+			n = split(body, parts, ",")
+			for (i = 1; i <= n; i++) {
+				name = parts[i]; gsub(/^[ \t]+|[ \t]+$/, "", name)
+				if (!(name in known)) {
+					printf "%s:%d: unknown check \"%s\"; use a scripts/check.sh --list name or banned:<id>\n", file, start, name
+					bad = 1
+				}
+			}
+		}
+		item = ""
+	}
+	BEGIN { n = split(ENVIRON["CHECK_KNOWN"], k, "\n"); for (i = 1; i <= n; i++) known[k[i]] = 1 }
+'
+
+# .ai/rules keeps its original grammar: a rule starts at an unindented "- ".
+# shellcheck disable=SC2016 # an awk program; its $ fields are not shell expansions
+rule_legacy='
+	FNR == 1 { flush(); front = 0; fence = 0 }
+	{ sub(/\r$/, "") }
+	FNR == 1 && $0 == "---" { front = 1; next }
+	front { if ($0 == "---") front = 0; next }
+	/^[ \t]*(```|~~~)/ { flush(); fence = !fence; next }
+	fence { next }
+	/^- / { flush(); item = $0; start = FNR; file = FILENAME; next }
+	/^[ \t]+[^ \t]/ && item != "" { item = item "\n" $0; next }
+	{ flush() }
+	END { flush(); exit bad }
+'
+
+# Documents registered through rule_files use a closed grammar, so that no list
+# form or fence can hide a rule: every unindented list line is a rule, every
+# indented list line is rejected, and a fence opens only at column 0.
+# shellcheck disable=SC2016 # an awk program; its $ fields are not shell expansions
+rule_strict='
+	function opened() {
+		if (fence != "") { printf "%s:%d: close this fence; the rest of the file was hidden from the rule check\n", ffile, fstart; bad = 1 }
+		fence = ""
+	}
+	function closes(line,   i, n) {
+		for (i = 0; i < 3 && substr(line, 1, 1) == " "; i++) line = substr(line, 2)
+		n = 0
+		while (substr(line, n + 1, 1) == fence) n++
+		return n >= flen && substr(line, n + 1) ~ /^[ \t]*$/
+	}
+	function marker(rest) { return rest ~ /^[-*+]([ \t]|$)/ || rest ~ /^[0-9]+[.)]([ \t]|$)/ }
+	FNR == 1 { flush(); opened(); front = 0 }
+	{ sub(/\r$/, "") }
+	FNR == 1 && $0 == "---" { front = 1; next }
+	front { if ($0 == "---") front = 0; next }
+	fence != "" { if (closes($0)) fence = ""; next }
+	/^(```|~~~)/ {
+		c = substr($0, 1, 1)
+		if (c == "`") { match($0, /^`+/) } else { match($0, /^~+/) }
+		if (!(c == "`" && index(substr($0, RLENGTH + 1), "`"))) {
+			flush(); fence = c; flen = RLENGTH; fstart = FNR; ffile = FILENAME; next
+		}
+	}
+	/^ ? ? ?>/ {
+		quoted = $0; sub(/^ *>[> \t]*/, "", quoted)
+		if (marker(quoted)) {
+			flush()
+			printf "%s:%d: rule files take no lists inside block quotes; write the rule as an unindented list item\n", FILENAME, FNR
+			bad = 1; next
+		}
+	}
+	{
+		ind = match($0, /^[ \t]+/) ? RLENGTH : 0
+		rest = substr($0, ind + 1)
+		if (marker(rest)) {
+			flush()
+			if (ind > 0) {
+				printf "%s:%d: rule files take no indented or nested lists; write it as a paragraph or a separate rule\n", FILENAME, FNR
+				bad = 1; next
+			}
+			body = rest; sub(/^([-*+]|[0-9]+[.)])/, "", body)
+			if (body ~ /^[ \t]*$/) {
+				printf "%s:%d: write the rule on the marker line\n", FILENAME, FNR
+				bad = 1; next
+			}
+			item = $0; start = FNR; file = FILENAME; next
+		}
+		if (ind > 0 && rest != "" && item != "") { item = item "\n" $0; next }
+		flush()
+	}
+	END { flush(); opened(); exit bad }
+'
+
+listed() {
+	local want=$1 x
+	shift
+	for x in "$@"; do [ "$x" = "$want" ] && return 0; done
+	return 1
+}
+
 check_rule_tags() {
-	local files=() f
+	local legacy=() strict=() f p q seg rest out status=0 tracked bad=0
 	for f in .ai/rules/*.md; do
-		[ -f "$f" ] && files+=("$f")
+		[ -f "$f" ] && legacy+=("$f")
 	done
-	[ ${#files[@]} -gt 0 ] || return 0
+	if declare -F rule_files >/dev/null; then
+		out=$(rule_files) || status=$?
+		if [ "$status" -ne 0 ]; then
+			echo "rule_files exited with status $status; it must print one repository-relative path per line"
+			return 1
+		fi
+		tracked=$(git ls-files -z | tr '\0' '\n')
+		while IFS= read -r p; do
+			[ -n "$p" ] || continue
+			p=${p#./}
+			while case $p in *//*) true ;; *) false ;; esac do p=${p//\/\//\/}; done
+			case $p in /*)
+				echo "rule_files: $p: give a path relative to the repository root"; bad=1; continue ;;
+			esac
+			case "/$p/" in */./* | */../*)
+				echo "rule_files: $p: remove the . and .. segments"; bad=1; continue ;;
+			esac
+			q='' rest=$p
+			while [ -n "$rest" ]; do
+				seg=${rest%%/*}
+				if [ "$seg" = "$rest" ]; then rest=''; else rest=${rest#*/}; fi
+				q=${q:+$q/}$seg
+				if [ -L "$q" ]; then break; fi
+			done
+			if [ -L "$q" ]; then
+				echo "rule_files: $p: $q is a symlink; register the file it points to"; bad=1; continue
+			fi
+			if ! grep -qxF -- "$p" <<<"$tracked"; then
+				echo "rule_files: $p: not a tracked path with this exact spelling"; bad=1; continue
+			fi
+			if [ ! -f "$p" ] || [ ! -r "$p" ]; then
+				echo "rule_files: $p: not a readable file"; bad=1; continue
+			fi
+			case $p in
+			.ai/rules/*) [ ${#legacy[@]} -gt 0 ] && listed "$p" "${legacy[@]}" || legacy+=("$p") ;;
+			*) [ ${#strict[@]} -gt 0 ] && listed "$p" "${strict[@]}" || strict+=("$p") ;;
+			esac
+		done <<EOF
+$out
+EOF
+	fi
 	CHECK_KNOWN=$(
 		printf '%s\n' "${names[@]}"
 		[ -f "$patterns" ] && awk -F'\t' '!/^#/ && NF { print "banned:" $1 }' "$patterns"
 	) || true
 	export CHECK_KNOWN
-	awk '
-		function flush(   copy, count, last, tag, kind, body, n, parts, i, name) {
-			if (item == "") return
-			copy = item
-			count = gsub(/\[(check|unchecked):[^]]*\]/, "&", copy)
-			last = item
-			sub(/^.*\n/, "", last)
-			if (count != 1 || !match(last, /\[(check|unchecked):[^]]*\][ \t]*$/)) {
-				printf "%s:%d: end the rule with exactly one [check: <name>] or [unchecked: <reason>]\n", file, start
-				bad = 1; item = ""; return
-			}
-			tag = substr(last, RSTART + 1, RLENGTH - 1)
-			sub(/\][ \t]*$/, "", tag)
-			kind = tag; sub(/:.*/, "", kind)
-			body = tag; sub(/^[a-z]+:/, "", body)
-			gsub(/^[ \t]+|[ \t]+$/, "", body)
-			if (body == "") {
-				printf "%s:%d: [%s: ] needs %s\n", file, start, kind, (kind == "check" ? "a check name" : "a reason")
-				bad = 1
-			} else if (kind == "check") {
-				n = split(body, parts, ",")
-				for (i = 1; i <= n; i++) {
-					name = parts[i]; gsub(/^[ \t]+|[ \t]+$/, "", name)
-					if (!(name in known)) {
-						printf "%s:%d: unknown check \"%s\"; use a scripts/check.sh --list name or banned:<id>\n", file, start, name
-						bad = 1
-					}
-				}
-			}
-			item = ""
-		}
-		BEGIN { n = split(ENVIRON["CHECK_KNOWN"], k, "\n"); for (i = 1; i <= n; i++) known[k[i]] = 1 }
-		FNR == 1 { flush(); front = 0; fence = 0 }
-		{ sub(/\r$/, "") }
-		FNR == 1 && $0 == "---" { front = 1; next }
-		front { if ($0 == "---") front = 0; next }
-		/^[ \t]*(```|~~~)/ { flush(); fence = !fence; next }
-		fence { next }
-		/^- / { flush(); item = $0; start = FNR; file = FILENAME; next }
-		/^[ \t]+[^ \t]/ && item != "" { item = item "\n" $0; next }
-		{ flush() }
-		END { flush(); exit bad }
-	' "${files[@]}"
+	if [ ${#legacy[@]} -gt 0 ]; then
+		awk "$rule_flush$rule_legacy" "${legacy[@]}" || bad=1
+	fi
+	if [ ${#strict[@]} -gt 0 ]; then
+		awk "$rule_flush$rule_strict" "${strict[@]}" || bad=1
+	fi
+	return "$bad"
 }
 
 # ── registration ──
@@ -417,8 +538,8 @@ $(formal_rows 0 || true)
 EOF
 fi
 register_checks
-if [ -d .ai/rules ]; then
-	check "rule tags" fast "end each rule item in .ai/rules with [check: <name>] or [unchecked: <reason>]" -- check_rule_tags
+if [ -d .ai/rules ] || declare -F rule_files >/dev/null; then
+	check "rule tags" fast "end each rule item in .ai/rules and the rule_files documents with [check: <name>] or [unchecked: <reason>]" -- check_rule_tags
 fi
 
 if [ "$mode" = list ]; then

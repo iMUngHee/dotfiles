@@ -603,3 +603,347 @@ test("a full-tier formal row becomes a full check that rule tags can name", (t) 
   const manual = formalRepo(t);
   assert.doesNotMatch(manual.run(["--list"]).stdout, /formal:queue/);
 });
+
+// ── rule_files: CONVENTIONS and other registered rule documents ──
+
+const RULES_CONFIG = (ruleFiles) => `tool_versions() { echo fixture-tools; }
+register_checks() {
+  check lint fast "run the linter" -- true
+}
+${ruleFiles === undefined ? "" : `rule_files() {\n${ruleFiles}\n}\n`}`;
+
+test("rule tags: registration and legacy compatibility", async (t) => {
+  const listed = (g) => g.run(["--list"]).stdout.split("\n");
+  await t.test("(a) .ai/rules only keeps the legacy behaviour", (t) => {
+    const g = gateRepo(t, { files: { ".ai/rules/main.md": "- Rule [check: lint]\n* untagged legacy list\n" } });
+    assert.ok(listed(g).includes("rule tags"));
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("(b) an empty .ai/rules still registers", (t) => {
+    const g = gateRepo(t, { files: { ".ai/rules/.keep": "" } });
+    assert.ok(listed(g).includes("rule tags"));
+  });
+  await t.test("(c) neither source registers nothing", (t) => {
+    const g = gateRepo(t);
+    assert.ok(!listed(g).includes("rule tags"));
+  });
+  await t.test("(d) rule_files alone registers and checks", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo CONVENTIONS.md"), files: { "CONVENTIONS.md": "# Conventions\n\n- Owned rule\n" } });
+    assert.ok(listed(g).includes("rule tags"));
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /CONVENTIONS\.md:3/);
+  });
+  await t.test("(e) both sources are checked once each", (t) => {
+    const g = gateRepo(t, {
+      config: RULES_CONFIG("  echo CONVENTIONS.md\n  echo CONVENTIONS.md"),
+      files: { ".ai/rules/main.md": "- Legacy [check: lint]\n", "CONVENTIONS.md": "- Owned [unchecked: judgment]\n" },
+    });
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+    g.put(".ai/rules/main.md", "- Legacy untagged\n");
+    g.commit("break legacy");
+    const bad = g.run(["--fast"]);
+    assert.equal(bad.status, 1);
+    assert.equal(out(bad).match(/main\.md:1/g).length, 1);
+  });
+  await t.test("(f) a failing function or a missing path fails by name", async (t) => {
+    const fn = gateRepo(t, { config: RULES_CONFIG("  return 3") });
+    const r1 = fn.run(["--fast"]);
+    assert.equal(r1.status, 1);
+    assert.match(out(r1), /rule_files.*3/);
+    const missing = gateRepo(t, { config: RULES_CONFIG("  echo NOPE.md") });
+    const r2 = missing.run(["--fast"]);
+    assert.equal(r2.status, 1);
+    assert.match(out(r2), /NOPE\.md/);
+  });
+  await t.test("(i) the legacy grammar is unchanged under .ai/rules", (t) => {
+    const g = gateRepo(t, { files: { ".ai/rules/main.md": "* untagged star item\n1. untagged ordered item\n" } });
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("(q) --list still prints rule tags when rule_files fails", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  return 1") });
+    const r = g.run(["--list"]);
+    assert.equal(r.status, 0, out(r));
+    assert.match(r.stdout, /^rule tags$/m);
+  });
+});
+
+test("rule tags: the closed grammar for registered documents", async (t) => {
+  const doc = (t, body, extraFiles = {}) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo CONVENTIONS.md"), files: { "CONVENTIONS.md": body, ...extraFiles } });
+    return g.run(["--fast"]);
+  };
+  const fails = {
+    "(g) untagged star item": "# C\n\nGuides: see below.\n\n* Owned rule\n",
+    "(g) untagged 2. item": "2. Owned rule\n",
+    "(g) untagged 1) item": "1) Owned rule\n",
+    "(j) one-space indented item": " - Indented rule\n",
+    "(j) tab after the marker": "-\tTabbed rule\n",
+    "(j) a backtick fence with a backtick in its info string does not hide a rule": "``` a`b\n- Hidden rule\n",
+    "(h) a closing fence with trailing text does not close": "```\nexample\n``` more\n```\n- After rule\n",
+    "(l) a marker-only item": "-\n  Rule on the next line\n",
+    "(n) an indented marker right after an item": "- Parent [check: lint]\n  - Child\n",
+    "(n) an indented marker after a blank line": "- Parent [check: lint]\n\n    - Child\n",
+    "(n) a column-0 item right after a paragraph": "Some paragraph\n- Untagged rule\n",
+    "(p) an indented fence inside an item does not hide the next item": "- Parent [check: lint]\n  ~~~\n  code\n- Untagged rule\n",
+    "(p) a two-space closing fence closes a column-0 fence": "~~~\nexample\n  ~~~\n- Untagged rule\n",
+    "(x) an unterminated fence": "- Rule [check: lint]\n```\n- Swallowed rule [check: lint]\n",
+    "(z) a list inside a block quote": "> - Quoted rule with no tag\n",
+  };
+  for (const [name, body] of Object.entries(fails)) {
+    await t.test(`fails: ${name}`, (t) => assert.equal(doc(t, body).status, 1));
+  }
+  const passes = {
+    "(g) paragraphs, tables and link paragraphs": "# C\n\nFollows [Google](https://example.com).\n\n| Area | Guide |\n| --- | --- |\n| x | y |\n\nScoped rules live in [.ai/rules](.ai/rules/main.md).\n\n- Owned rule [unchecked: judgment]\n",
+    "(h) four-backtick fence holding three backticks": "````md\n```\n- not a rule\n```\n````\n- Rule [check: lint]\n",
+    "(l) a wrapped item tagged on its continuation": "- A long rule that\n  continues here [check: lint]\n",
+  };
+  for (const [name, body] of Object.entries(passes)) {
+    await t.test(`passes: ${name}`, (t) => {
+      const r = doc(t, body);
+      assert.equal(r.status, 0, out(r));
+    });
+  }
+  await t.test("(x) an unterminated fence names its opening line", (t) => {
+    const r = doc(t, "- Rule [check: lint]\n```\n- Swallowed\n");
+    assert.match(out(r), /CONVENTIONS\.md:2/);
+  });
+  await t.test("(n) the nested-list failure explains itself", (t) => {
+    const r = doc(t, "- Parent [check: lint]\n  - Child\n");
+    assert.match(out(r), /nested/i);
+  });
+});
+
+test("rule tags: registered paths are canonical, tracked and not aliased", async (t) => {
+  const withPath = (t, emit, files = {}, setup) => {
+    const g = gateRepo(t, { config: RULES_CONFIG(`  echo '${emit}'`), files: { ".ai/rules/x.md": "* legacy untagged\n", ...files } });
+    if (setup) { setup(g); g.commit("setup"); }
+    return g.run(["--fast"]);
+  };
+  await t.test("(k) ./.ai/rules/x.md is checked once with the legacy grammar", (t) => {
+    const r = withPath(t, "./.ai/rules/x.md");
+    assert.equal(r.status, 0, out(r));
+  });
+  for (const bad of ["/etc/passwd", "../x.md", ".ai/./rules/x.md", ".ai/rules/../rules/x.md"]) {
+    await t.test(`(k) rejects ${bad}`, (t) => {
+      const r = withPath(t, bad);
+      assert.equal(r.status, 1);
+      assert.match(out(r), esc(bad));
+    });
+  }
+  await t.test("(q) a symlinked file is rejected", (t) => {
+    const r = withPath(t, ".claude/rules/x.md", {}, (g) => {
+      fs.mkdirSync(g.at(".claude/rules"), { recursive: true });
+      fs.symlinkSync("../../.ai/rules/x.md", g.at(".claude/rules/x.md"));
+    });
+    assert.equal(r.status, 1);
+    assert.match(out(r), /\.claude\/rules\/x\.md/);
+  });
+  await t.test("(s) a path through a symlinked directory is rejected", (t) => {
+    const r = withPath(t, "alias/x.md", {}, (g) => fs.symlinkSync(".ai/rules", g.at("alias")));
+    assert.equal(r.status, 1);
+    assert.match(out(r), /alias\/x\.md/);
+  });
+  await t.test("(t) CONVENTIONS outside .ai/rules is strict; the same text under .ai/rules is legacy", (t) => {
+    const strict = withPath(t, "CONVENTIONS.md", { "CONVENTIONS.md": "* untagged\n" });
+    assert.equal(strict.status, 1);
+    const legacy = withPath(t, ".ai/rules/x.md");
+    assert.equal(legacy.status, 0, out(legacy));
+  });
+  await t.test("(v) a case alias of a tracked path is rejected", (t) => {
+    const r = withPath(t, ".AI/RULES/x.md");
+    assert.equal(r.status, 1);
+    assert.match(out(r), /\.AI\/RULES\/x\.md/);
+  });
+  await t.test("(v) a tracked non-ASCII path is accepted with git's default quotePath", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo '규칙.md'"), files: { "규칙.md": "- Rule [check: lint]\n" } });
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("(o) an untracked path is rejected by name", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo NEW.md") });
+    g.put("NEW.md", "- Rule [check: lint]\n");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /NEW\.md/);
+  });
+});
+
+// ── layer policy (assets/check-layers.sh) ──
+
+const layersAsset = new URL("../skills/project-bootstrap/assets/check-layers.sh", import.meta.url);
+
+// Prints `from<TAB>to` for each import in src/**/*.js: a relative import is
+// resolved to a canonical repository path, anything else becomes ext:<name>.
+const EDGES = `#!/bin/bash
+set -euo pipefail
+[ -z "\${EDGES_FAIL:-}" ] || exit 7
+git ls-files 'src/*.js' | while IFS= read -r f; do
+  { grep -oE 'from "[^"]+"' "$f" || true; } | sed -E 's/from "(.*)"/\\1/' | while IFS= read -r spec; do
+    case "$spec" in
+      ./*|../*) printf '%s\\t%s\\n' "$f" "$(awk -v d="$(dirname "$f")" -v s="$spec" 'BEGIN { n = split(d "/" s, p, "/"); o = 0; for (i = 1; i <= n; i++) { if (p[i] == "." || p[i] == "") continue; if (p[i] == "..") { o--; continue }; q[++o] = p[i] }; out = q[1]; for (i = 2; i <= o; i++) out = out "/" q[i]; print out }')" ;;
+      *) printf '%s\\text:%s\\n' "$f" "$spec" ;;
+    esac
+  done
+done
+`;
+
+const LAYERS_CONFIG = `tool_versions() { echo fixture-tools; }
+register_checks() {
+  check lint fast "run the linter" -- true
+  check layers fast "move the import or change the policy ARCHITECTURE.md describes" -- bash scripts/check-layers.sh --doc ARCHITECTURE.md -- bash scripts/edges.sh
+}
+rule_files() {
+  echo CONVENTIONS.md
+}
+`;
+
+const LAYER_POLICY = "layer\tdomain\tsrc/domain/*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n";
+
+function layerRepo(t, { policy = LAYER_POLICY, files = {}, branch = "main" } = {}) {
+  return gateRepo(t, {
+    branch,
+    config: LAYERS_CONFIG,
+    files: {
+      "scripts/check-layers.sh": fs.readFileSync(layersAsset),
+      "scripts/edges.sh": EDGES,
+      "scripts/check-data/layers.tsv": policy,
+      "src/domain/model.js": "export const x = 1;\n",
+      "src/http/handler.js": 'import { x } from "../domain/model.js";\n',
+      "ARCHITECTURE.md": "# Architecture\n\nTwo layers: domain and http. The allowed directions are in [the layer policy](scripts/check-data/layers.tsv).\n",
+      "CONVENTIONS.md": "# Conventions\n\nLayer dependencies are owned by [the layer policy](scripts/check-data/layers.tsv) and enforced by the `layers` check.\n\n- Domain functions return typed errors and never build HTTP responses. [unchecked: judged in review]\n",
+      "AGENTS.md": "# Agents\n\nStructure: [ARCHITECTURE.md](ARCHITECTURE.md). Rules: [CONVENTIONS.md](CONVENTIONS.md).\n",
+      ...files,
+    },
+  });
+}
+
+test("checkout example: the documented layer policy rejects a real forbidden import", async (t) => {
+  await t.test("the allowed import passes and the documents link up", (t) => {
+    const g = layerRepo(t);
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+    for (const [doc, target] of [["AGENTS.md", "ARCHITECTURE.md"], ["AGENTS.md", "CONVENTIONS.md"], ["CONVENTIONS.md", "scripts/check-data/layers.tsv"], ["ARCHITECTURE.md", "scripts/check-data/layers.tsv"]]) {
+      assert.match(fs.readFileSync(g.at(doc), "utf8"), esc(`](${target})`));
+      assert.ok(fs.existsSync(g.at(target)), `${doc} -> ${target}`);
+    }
+    assert.doesNotMatch(fs.readFileSync(g.at("CONVENTIONS.md"), "utf8"), /allow\t|src\/http\/\*|src\/domain\/\*/);
+  });
+  await t.test("a forbidden import fails with a hint naming ARCHITECTURE.md", (t) => {
+    const g = layerRepo(t);
+    g.put("src/domain/model.js", 'import { h } from "../http/handler.js";\nexport const x = 1;\n');
+    g.commit("forbidden");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /src\/domain\/model\.js/);
+    assert.match(out(r), /ARCHITECTURE\.md/);
+  });
+  await t.test("an extractor failure cannot pass", (t) => {
+    const g = layerRepo(t);
+    const r = g.run(["--fast"], { EDGES_FAIL: "1" });
+    assert.equal(r.status, 1);
+  });
+  await t.test("removing an owned rule's tag fails rule tags", (t) => {
+    const g = layerRepo(t);
+    g.put("CONVENTIONS.md", fs.readFileSync(g.at("CONVENTIONS.md"), "utf8").replace(" [unchecked: judged in review]", ""));
+    g.commit("drop tag");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /rule tags/);
+  });
+});
+
+test("layer policy outcomes", async (t) => {
+  const fails = (name, opts, edit) => t.test(`fails: ${name}`, (t) => {
+    const g = layerRepo(t, opts);
+    if (edit) { edit(g); g.commit("edit"); }
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  const passes = (name, opts, edit) => t.test(`passes: ${name}`, (t) => {
+    const g = layerRepo(t, opts);
+    if (edit) { edit(g); g.commit("edit"); }
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await fails("unclassified internal file", {}, (g) => g.put("src/util/u.js", 'import { x } from "../domain/model.js";\n'));
+  await fails("ambiguous internal file", { policy: LAYER_POLICY + "layer\tall\tsrc/*\n" });
+  await fails("(m) unclassified file importing only an external package", {}, (g) => g.put("src/unowned/client.js", 'import k from "kafka";\n'));
+  await passes("an external import from a classified file", {}, (g) => g.put("src/http/client.js", 'import k from "kafka";\n'));
+  await fails("(m) malformed policy row", { policy: LAYER_POLICY + "layer\tbroken\n" });
+  await fails("(m) unknown layer in allow", { policy: LAYER_POLICY + "allow\thttp\tnowhere\n" });
+  await fails("(m) external-only output without empty-ok", { files: { "src/http/handler.js": 'import k from "kafka";\n' } });
+  await fails("(m) an allow row naming an unknown layer is reported even with no edges", { policy: LAYER_POLICY + "empty-ok\nallow\thttp\tnowhere\n", files: { "src/http/handler.js": 'import k from "kafka";\n' } });
+  await passes("(m) zero internal edges with empty-ok", { policy: LAYER_POLICY + "empty-ok\n", files: { "src/http/handler.js": 'import k from "kafka";\n' } });
+  await t.test("(m) malformed extractor output fails", (t) => {
+    const g = layerRepo(t);
+    g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'only-one-field\\n'\n");
+    g.commit("bad extractor");
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("(w) a noncanonical endpoint fails by line; a real ../ import is resolved and checked", (t) => {
+    const g = layerRepo(t);
+    g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\tsrc/http/../domain/model.js\\n'\n");
+    g.commit("noncanonical");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /src\/http\/\.\.\/domain\/model\.js/);
+    const real = layerRepo(t);
+    real.put("src/domain/deep/a.js", 'import { h } from "../../http/handler.js";\n');
+    real.put("scripts/check-data/layers.tsv", "layer\tdomain\tsrc/domain/*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n");
+    real.commit("deep forbidden");
+    assert.equal(real.run(["--fast"]).status, 1);
+  });
+});
+
+test("layer debt only shrinks", async (t) => {
+  const forbidden = 'import { h } from "../http/handler.js";\nexport const x = 1;\n';
+  const debt = "debt\tsrc/domain/model.js\tsrc/http/handler.js\n";
+  await t.test("(r) a debt row adopted with the policy passes", (t) => {
+    const g = layerRepo(t, { policy: LAYER_POLICY + debt, files: { "src/domain/model.js": forbidden } });
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("(r) a debt row for a vanished edge fails", (t) => {
+    const g = layerRepo(t, { policy: LAYER_POLICY + debt });
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("(y) a debt row for an edge the policy now allows fails until deleted", (t) => {
+    const g = layerRepo(t, { policy: LAYER_POLICY + debt, files: { "src/domain/model.js": forbidden } });
+    g.put("scripts/check-data/layers.tsv", LAYER_POLICY + "allow\tdomain\thttp\n" + debt);
+    g.commit("allow it");
+    assert.equal(g.run(["--fast"]).status, 1);
+    g.put("scripts/check-data/layers.tsv", LAYER_POLICY + "allow\tdomain\thttp\n");
+    g.commit("drop debt");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("(u) a new forbidden import with a matching debt row on a branch fails", (t) => {
+    const g = layerRepo(t);
+    g.git("checkout", "-q", "-b", "feat");
+    g.put("src/domain/model.js", forbidden);
+    g.put("scripts/check-data/layers.tsv", LAYER_POLICY + debt);
+    g.commit("sneak debt");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /debt/);
+  });
+});
+
+test("generated entry points resolve the normative documents", (t) => {
+  const f = fixture(t);
+  f.put(".ai/PROJECT.md", "# Project\n\nStructure: [ARCHITECTURE.md](ARCHITECTURE.md). Rules: [CONVENTIONS.md](CONVENTIONS.md).\n");
+  f.put("ARCHITECTURE.md", "# Architecture\n");
+  f.put("CONVENTIONS.md", "# Conventions\n");
+  const r = f.run();
+  assert.equal(r.status, 0, r.stderr);
+  for (const entry of ["AGENTS.md", "CLAUDE.md"]) {
+    const text = fs.readFileSync(f.at(entry), "utf8");
+    for (const target of ["ARCHITECTURE.md", "CONVENTIONS.md"]) {
+      assert.match(text, esc(`](${target})`));
+      assert.ok(fs.existsSync(path.join(path.dirname(f.at(entry)), target)), `${entry} -> ${target}`);
+    }
+  }
+});
