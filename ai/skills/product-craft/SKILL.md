@@ -81,9 +81,11 @@ default in disguise.
 
 Derive what the surface owes from the app itself:
 
-- An **object × action matrix**: every object a user sees, against what people expect to do
-  to it. Each cell is `yes`, or `no` with a reason.
-- **Journeys**: the few paths that matter, written as steps that can be replayed on the build.
+- An **object × action matrix**: discover what users can do and which product rules change
+  the result before narrowing the scope. Use the product's behaviour and the references to
+  check the matrix. Mark material unknowns `open` and record what would resolve them.
+- **Journeys**: every reachable user scenario in scope, written as steps that can be replayed
+  on the build. Record the UI response and next step for each path before moving to Direction.
 - **States** each screen can be in, and the **component baselines** from
   `references/component-baselines.md` for every component kind in use.
 
@@ -94,6 +96,8 @@ leads your report. It is never recorded as settled.
 
 Turn the materials into one committed look: concrete values (palette, type, radius, spacing
 rhythm, density, icon style, motion) taken from the chosen reference, each with its source.
+Use the journeys to decide which screens, controls, messages, and transitions the UI needs.
+Check the design against every recorded path before building.
 
 - **Owner present** → show two or three candidates in `references/candidate-viewer.html` and
   let them answer with a number — on the board, which returns their answer to you as data,
@@ -110,9 +114,10 @@ toolkit facts.
 ### 6. Review — `references/review.md`
 
 Run the review on the running build: native-resolution tiles, geometry measurement, a style
-census of the source, the journeys replayed, the result beside its reference, and a reviewer
-in a separate context who has not seen the code. Fix what is found and run it again. Stop
-when nothing above polish remains, or after three rounds — then report exactly what is left.
+census of the source, journey replay, exploratory tasks across the full in-scope UI, the
+result beside its reference, and a reviewer in a separate context who has not seen the code.
+Fix what is found and run it again. Stop when nothing above polish remains, or after three
+rounds — then report exactly what is left.
 
 Do not report the surface as done on the strength of having built it. The review output is
 the evidence.

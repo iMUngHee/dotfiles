@@ -84,7 +84,7 @@ once in UI code usually is one. `--json` gives every location.
 Then compare screens with each other: the same kind of thing (section header, secondary
 text, list row, primary button) looks the same everywhere it appears.
 
-## 4. Replay the journeys
+## 4. Replay and explore the running UI
 
 Walk every journey in the contract on the running build, step by step, by actually
 operating it — with the pointer where a user would use the pointer and the keyboard where
@@ -93,6 +93,23 @@ A step you could not perform is recorded as not replayed, not as passed.
 
 Then check the matrix: for each `yes` cell, do it once. For each component kind, check its
 baseline.
+
+After replay, explore every in-scope screen and its reachable controls, menus, overlays and
+links to related objects, including those missing from the contract. Use realistic fixtures
+and the roles and states that change what users can see or do. Record any area you could not
+exercise and why.
+
+In each area, attempt realistic tasks from a user goal and starting situation, without
+following the contract's click sequence. Follow questions that arise as you work. Can you
+inspect the item behind a summary, check what changed, find what depends on it, recover when
+a step fails, or tell whether the action took effect? Follow work across screens, related
+objects or tools as needed. Continue until you can verify the outcome, recover, hand off, or
+identify the first point where the work stops.
+
+Record the role and starting state, what the user tried, the exact point where it stopped,
+what was missing or hard to find, and the outcome the user needed. Check whether another
+reachable path or an explicit scope decision already addresses it. Include gaps the contract
+did not anticipate in Findings.
 
 ## 5. Beside the reference
 
@@ -128,9 +145,10 @@ overlays) rather than handing one reviewer everything; each sees fewer images mo
 Check each reported finding against the capture before accepting it: a reviewer who cannot
 see a control in a still may report it missing.
 
-Where the session can drive the app, also ask that reviewer to attempt the journeys from
-their one-line titles alone and report where it got stuck or expected something that was
-not there.
+Where the session can drive the app, give that reviewer the role, starting fixture, goal
+and expected outcome. Omit menu names and click sequences. Ask them to follow any questions
+that arise, as in step 4, and report where they stopped and what they needed to continue.
+Record when the separate reviewer could only review captures.
 
 ## Findings
 
@@ -138,7 +156,7 @@ Record each finding as:
 
 ```text
 - [blocks | degrades | polish] <where> — <what is wrong> → <fix>
-  evidence: <tile path, measured delta, census line, or journey step>
+  evidence: <tile path, measured delta, census line, or observed task step>
 ```
 
 - **blocks**: a journey cannot be completed, content cannot be read or reached.
@@ -147,11 +165,33 @@ Record each finding as:
 - **polish**: a competent reviewer would mention it but not mind.
 
 Fix blocks and degrades that fall inside the work's scope and run the affected steps again.
+For build work, add any newly confirmed in-scope path or state to the contract. After fixing
+it, repeat the task from the same starting state and replay the affected contract journeys.
 Findings about screens the work only touched through shared values — their own layout, their
-own controls — are reported as out of scope with their severity, not fixed and not hidden. A round is: capture, steps 1–5
-on what changed, and a **new** separate-context reviewer who has seen neither the code nor
-the earlier rounds. Your own re-check does not close a round. Three rounds at most; after
-that, or when a round ends with nothing above polish, stop and report.
+own controls — are reported as out of scope with their severity, not fixed and not hidden.
+A round includes capture, steps 1–5 on what changed, and a **new** separate-context reviewer
+who has seen neither the code nor the earlier rounds. Your own re-check does not close a
+round. Stop after three rounds or when a round ends with nothing above polish, and report.
+
+## Optional review methods
+
+Pick a method when a finding leaves a specific question to answer.
+
+- **Tree testing** helps check where users look. Give them a goal and the menu labels and
+  hierarchy, then observe where they start and whether they reach the right destination.
+  [NN/g guide](https://www.nngroup.com/articles/interpreting-tree-test-results/)
+- **Cognitive dimensions** help examine hidden dependencies and changes that require repeated
+  edits. Check whether users can see what will be affected before making a change.
+  [Green and Blackwell](https://www.cl.cam.ac.uk/~afb21/CognitiveDimensions/CDtutorial.pdf)
+- **Service blueprinting** helps trace a task across tools or systems. Check what the user
+  sees and what happens to the same request or record across each handoff.
+  [Bitner, Ostrom and Morgan](https://doi.org/10.2307/41166446)
+- **Keystroke-Level Model (KLM)** helps compare the effort of repeated tasks on known paths.
+  Count the pointing and keystrokes for each path and state any timing assumptions.
+  [Card, Moran and Newell](https://doi.org/10.1145/358886.358895)
+- **Parallel prototyping** helps compare alternatives for fixing the same problem. Make a
+  lightweight prototype of each and try the same task in each one.
+  [Dow et al.](https://doi.org/10.1145/1879831.1879836)
 
 ## Reporting
 

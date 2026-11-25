@@ -7,17 +7,32 @@ owner after the build.
 ## 1. Objects × actions
 
 List every **object** a user can see or act on — the nouns of this app: a book, a bookmark, a
-recent item, a page, a job, a message, a setting, an account. Take them from the request, the
-data model, the references, and the owner's sibling apps.
+recent item, a page, a job, a message, a setting, an account. Before deciding what fits the
+scope, use the request, existing behaviour, data model, and product references to discover
+the actions and rules that affect each object. Look beyond the reference screenshots to
+related screens or help for the action's options and effects.
 
 For each object, fill a row. The columns are what people expect to be able to do to a thing
 on a screen; keep the ones that could apply and add any the domain brings (play, share,
-export, pin, archive, retry).
+export, pin, archive, retry). For each main action, ask what changes when:
+
+- The actor, permission, device, entry point, or source or destination changes.
+- The action applies to one object, a group, or a combination of objects or rules.
+- The object or a related object is in a different state, including before or after an
+  effective time, after completion, or when it is hidden from the normal view.
+- A setting, limit, or plan changes availability, the result, or the path to recover.
+- The action affects someone else or changes, retains, or removes related data.
+
+Record the variants that change what the user can do or what happens next. Check each rule
+against the available evidence before relying on it. A brief that is silent about a relevant
+action or variant leaves its support open. Spell out the plausible alternatives and their UI
+consequences in the contract's Open Questions. When you need a working assumption, name the
+branch you provisionally chose and what would change under the other rule.
 
 | Object | Create / add | Open / view | Rename / edit | Delete / remove | Reorder / sort | Find / filter | Select many | Undo | By mouse | By keyboard |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
-Each cell is one of:
+Each applicable cell is one of:
 
 - `yes` — with where it lives **on screen**: a button, a menu item, a visible per-item
   action, a mode the screen offers. A shortcut or modifier-click may be an additional route,
@@ -25,25 +40,36 @@ Each cell is one of:
   In the keyboard column, `yes` means reachable by focus and a key, with the key shown
   somewhere (menu, tooltip, key list). An undo the operating system provides (the system
   trash) is `no — <where it can be recovered>` unless the screen offers the way back.
-- `no — <reason>` — a deliberate omission the owner would agree with ("no reorder: list is
-  always newest first").
+- `no — <reason>` — a known constraint, evidence that the action does not apply, or an
+  explicit scope decision ("no reorder: list is always newest first").
+- `open — <question>` — a plausible action or rule with support still unknown. Name the
+  evidence or decision needed and keep the alternatives visible in Open Questions.
 
-An empty cell is not allowed, and neither is a `no` without a reason. Most omissions an owner
-later complains about are cells nobody looked at: an item that can be created but not
-renamed, removed by keyboard but not by mouse, deleted with no way back.
+Fill every applicable cell and check the rows for partial support. If an action is available
+for one role, state, or object but unavailable for another, record both outcomes and what the
+user can do in each case.
 
 Then check three things against the matrix:
 
 - **Destructive actions** say what is lost and either confirm or offer undo.
-- **Sibling parity**: anything the owner's related apps do for the same kind of object
-  (a password lock, an export, a rename) is `yes` here or a reasoned `no`.
+- **Sibling parity**: look for actions in the owner's related apps for the same kind of
+  object (a password lock, an export, a rename) and account for them in the matrix.
 - **Reference parity**: skim what the references offer for these objects. Anything common
   to all of them is table stakes for this kind of app.
 
 ## 2. Journeys
 
-Write the few paths that make the app worth having — usually three to six — as numbered
-steps a person or an agent can replay on the running build:
+Use the object × action matrix and screen states to enumerate every reachable user scenario
+within the surface's scope. For each goal, follow the supported entry points, user choices,
+and possible outcomes through to completion, exit, or recovery. Write distinct paths for
+variants that change the action, the data affected, or the next step. Carry any provisional
+path as an assumption and link it to the corresponding open question. Check first use, empty and
+populated data, permissions, validation, failures, retry, cancel, and back or resume wherever
+they apply. For repeated loading, retry, and navigation behaviour, write the shared steps
+once and name where they apply.
+
+Record each distinct path in the contract as numbered steps a person or an agent can replay
+on the running build. Branches can refer to shared steps:
 
 ```text
 J1 — Add a folder of images and start reading
@@ -51,11 +77,18 @@ J1 — Add a folder of images and start reading
 2. Drop a folder on the window → progress appears and can be cancelled.
 3. Import finishes → the book appears, focused, with its title and page count.
 4. Press Enter → the reader opens on page one.
+
+J1b — Recover when the folder cannot be read
+1. Follow J1 through step 2 with a folder the app cannot read.
+2. Import fails → the app names the folder and offers to choose another.
+3. Choose a readable folder → progress resumes, then follow J1 from step 3.
 ```
 
-Each step names what the user does and what they must then see. Include the first-run path
-and at least one path where something goes wrong. These are replayed in the review; a journey
-that cannot be replayed step by step is too vague.
+Each step names the action or event, what the user sees, and where they can go next. Before
+Direction, check each applicable action and reachable screen state against the journeys.
+Record why any apparent path is unreachable or out of scope. Carry the UI response for each
+path into the design so its screens, controls, messages, and transitions can be replayed in
+the review.
 
 Walk each step once now, before anything is built, asking four questions:
 
@@ -64,7 +97,8 @@ Walk each step once now, before anything is built, asking four questions:
 3. Does the control say it will do that?
 4. After acting, can they tell it worked — and what to do next?
 
-A "no" is a design change now or a line in **Decided for you**.
+Resolve each "no" in the design and log any choice you make for the owner under
+**Decided for you**.
 
 ## 3. States
 
