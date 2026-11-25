@@ -1185,6 +1185,24 @@ test("check-layers.sh resolves the base itself beside a repository's own gate", 
   assert.match(out(r), /debt grew/);
 });
 
+test("check-layers.sh run alone honors a CHECK_BASE set by check-config.sh", (t) => {
+  const debt = "debt\tsrc/domain/model.js\tsrc/http/handler.js\n";
+  const g = layerRepo(t, { policy: LAYER_POLICY + debt, files: { "src/domain/model.js": 'import { h } from "../http/handler.js";\nexport const x = 1;\n' } });
+  g.git("checkout", "-q", "-b", "feat");
+  g.put("src/domain/model.js", "export const x = 1;\n");
+  g.put("scripts/check-data/layers.tsv", LAYER_POLICY);
+  g.commit("pay the debt");
+  const paid = g.git("rev-parse", "HEAD");
+  g.put("src/domain/model.js", 'import { h } from "../http/handler.js";\nexport const x = 1;\n');
+  g.put("scripts/check-data/layers.tsv", LAYER_POLICY + debt);
+  g.put("scripts/check-config.sh", `CHECK_BASE=${paid}\n${LAYERS_CONFIG}`);
+  g.commit("bring it back");
+  const alone = spawnSync(BASH, [g.at("scripts/check-layers.sh"), "--doc", "ARCHITECTURE.md", "--", "bash", "scripts/edges.sh"], { cwd: g.root, env: vars(), encoding: "utf8" });
+  assert.equal(alone.status, 1);
+  assert.match(out(alone), /debt grew/);
+  assert.match(out(g.run(["--fast"])), /debt grew/);
+});
+
 test("the base resolver is the same text in check.sh and check-layers.sh", () => {
   const block = (url) => {
     const text = fs.readFileSync(url, "utf8");

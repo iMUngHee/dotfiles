@@ -116,8 +116,13 @@ resolve_base() {
 }
 # End of the base resolver, kept identical in check.sh and check-layers.sh.
 
-# The gate passes the base it resolved for its run; run alone, resolve it here.
+# The gate passes the base it resolved for its run; run alone, resolve it here,
+# with a CHECK_BASE that scripts/check-config.sh sets, as the gate would.
 why=
+if [ -z "${CHECK_RESOLVED_BASE+set}" ] && [ -z "${CHECK_BASE:-}" ] && [ -f scripts/check-config.sh ]; then
+	# shellcheck source=/dev/null
+	CHECK_BASE=$(. scripts/check-config.sh >&2 && printf '%s' "${CHECK_BASE:-}")
+fi
 if [ -n "${CHECK_RESOLVED_BASE+set}" ]; then
 	base=$CHECK_RESOLVED_BASE
 	why=${CHECK_BASE_ERROR:-}
