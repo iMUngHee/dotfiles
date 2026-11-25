@@ -8,11 +8,17 @@ This is how the bundled [driver](check.sh), [hook](pre-push) and [layer helper](
 
 ## Base
 
-Ratchet checks compare against a base commit: `CHECK_BASE` when set, otherwise `git merge-base HEAD <default branch>`, where the default branch is `origin/HEAD`, else local `main`, else `master`. If no base resolves, the ratchet check fails and says to set `CHECK_BASE`. Limitation: working directly on the default branch with no `origin/HEAD`, the merge-base is `HEAD` itself and growth compares equal; a run there, or CI that checks several commits, sets `CHECK_BASE` to the commit before the changes.
+Ratchet and layer-debt checks compare against one base, resolved once per run after `scripts/check-config.sh` is sourced (so it may set `CHECK_BASE`) and printed by `scripts/check.sh --base`, which also runs without that file (stdout holds only the OID or `root`; diagnostics go to stderr and the exit status is nonzero when none resolves):
+
+1. `CHECK_BASE` when set; it must name a commit.
+2. Otherwise the default branch is `origin/HEAD`, else local `main`, else `master`; with none of them the base is unresolved. The base is `git merge-base HEAD <default branch>`.
+3. When that merge-base is `HEAD` itself and HEAD is the default branch (for `origin/HEAD`, the branch it points to with `refs/remotes/origin/` removed) or detached, the last commit is the change: the base is the first parent named in HEAD's commit header, `root` when the header names none, and unresolved when the named parent cannot be read, as at a shallow boundary. On any other branch HEAD is the base, since only the working tree has changed.
+
+An unresolved base fails the ratchet and the layer helper with the reason, such as fetching more history or setting `CHECK_BASE`. `root` adopts the baselines and the layer policy as they are, and `Ratchet-Reset` trailers are read from all of HEAD's history. The gate passes the base to its checks as `CHECK_RESOLVED_BASE`, empty when unresolved with the reason in `CHECK_BASE_ERROR`; the [layer helper](#layer-policy) uses it and, run on its own, asks `scripts/check.sh --base`, so the helper is installed beside the bundled driver even in a repository that keeps its own gate. Limitation: on the default branch several commits made without a run are compared only through the last one, and a working-tree change on top of the first commit counts as part of the adoption; CI that checks several commits, or a run meant to cover them, sets `CHECK_BASE` to the commit before the changes.
 
 ## Pass record
 
-After a full or fast run passes on a clean working tree, the gate appends `<mode> <key>` to `$(git rev-parse --git-path check-passes)`. The key hashes the HEAD commit OID, the resolved base OID, the output of the repository's `tool_versions` function and the UTC date (`CHECK_TODAY=YYYY-MM-DD` overrides it). `--passed` exits 0 only when the working tree is clean and the current key is recorded. The date in the key makes expiring exceptions and deadlines run again on a new day.
+After a full or fast run passes on a clean working tree, the gate appends `<mode> <key>` to `$(git rev-parse --git-path check-passes)`. The key hashes the HEAD commit OID, the resolved base (an OID, `root`, or `none` when unresolved), the output of the repository's `tool_versions` function and the UTC date (`CHECK_TODAY=YYYY-MM-DD` overrides it). `--passed` exits 0 only when the base resolves, the working tree is clean and the current key is recorded; a run without a base never compared growth, so it never counts. The date in the key makes expiring exceptions and deadlines run again on a new day.
 
 ## Banned patterns
 
@@ -55,5 +61,5 @@ For a repository whose stack has no native dependency-policy tool. `scripts/chec
 1. Every policy row and extractor line is validated first; a malformed row, an allow row naming an unknown layer, a non-canonical endpoint or an extractor that exits non-zero fails.
 2. The internal endpoint of every edge, external edges included, must match exactly one layer, else it fails as unclassified or ambiguous.
 3. Edges with an `ext:` endpoint are then dropped. A same-layer edge passes; a cross-layer edge passes when an `allow` row permits it; otherwise it fails with both layers, the allowed targets and the ARCHITECTURE path given by `--doc`, unless a `debt` row names exactly that edge.
-4. A `debt` row is valid only for an edge that exists and is still forbidden; one for a vanished or now-allowed edge fails until deleted. Against the base commit resolved as for the ratchet, `debt` rows may only be removed: a row added since the base fails. When the base commit confirms the policy file absent, its rows are the first adoption; when the base cannot be read, the check fails.
+4. A `debt` row is valid only for an edge that exists and is still forbidden; one for a vanished or now-allowed edge fails until deleted. Against the [base](#base), `debt` rows may only be removed: a row added since the base fails. When the base is `root` or confirms the policy file absent, its rows are the first adoption; when the base cannot be read, the check fails.
 5. With no edge between internal files, the check fails unless the policy has `empty-ok`.

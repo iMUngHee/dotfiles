@@ -6,6 +6,7 @@
 #   scripts/check.sh --passed           exit 0 when this clean HEAD already passed here
 #   scripts/check.sh --list             print the registered check names and run nothing
 #   scripts/check.sh --write-baselines  rewrite the ratchet baselines to the current violations
+#   scripts/check.sh --base             print the base commit the checks compare against
 #
 # The repository's own checks live in scripts/check-config.sh, which defines
 # tool_versions and register_checks, so a newer copy of this file can replace
@@ -26,9 +27,10 @@ case "${1:-}" in
 --passed) mode=passed ;;
 --list) mode=list ;;
 --write-baselines) mode=baselines ;;
+--base) mode=base ;;
 "") ;;
 *)
-	echo "usage: scripts/check.sh [--fast | --passed | --list | --write-baselines]" >&2
+	echo "usage: scripts/check.sh [--fast | --passed | --list | --write-baselines | --base]" >&2
 	exit 2
 	;;
 esac
@@ -82,21 +84,69 @@ trim() {
 	printf '%s' "${s%"${s##*[![:space:]]}"}"
 }
 
-# The commit ratchet baselines are compared against.
+# True when HEAD is detached or is the branch the default ref $1 names.
+on_default_branch() {
+	local branch name
+	branch=$(git symbolic-ref -q HEAD) || return 0
+	case $1 in
+	refs/remotes/origin/HEAD)
+		name=$(git symbolic-ref -q "$1") || return 1
+		name=${name#refs/remotes/origin/}
+		;;
+	*) name=${1#refs/heads/} ;;
+	esac
+	[ "$branch" = "refs/heads/$name" ]
+}
+
+# Prints the commit that ratchet baselines and layer debt are compared
+# against, or "root" when HEAD is the first commit; diagnostics go to stderr.
 resolve_base() {
-	local ref
+	local ref found='' head mb header parent
 	if [ -n "${CHECK_BASE:-}" ]; then
-		git rev-parse --verify -q "$CHECK_BASE^{commit}"
-		return
+		if ! git rev-parse --verify -q "$CHECK_BASE^{commit}"; then
+			echo "check.sh: CHECK_BASE=$CHECK_BASE is not a commit" >&2
+			return 1
+		fi
+		return 0
 	fi
 	for ref in refs/remotes/origin/HEAD refs/heads/main refs/heads/master; do
 		if git rev-parse --verify -q "$ref^{commit}" >/dev/null; then
-			git merge-base HEAD "$ref"
-			return
+			found=$ref
+			break
 		fi
 	done
-	return 1
+	if [ -z "$found" ]; then
+		echo "check.sh: no origin/HEAD, main or master to take a base from; set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
+	head=$(git rev-parse HEAD)
+	if ! mb=$(git merge-base HEAD "$found"); then
+		echo "check.sh: HEAD shares no history with $found; set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
+	# A branch with no commits of its own changes only the working tree, so
+	# HEAD is its base. On the default branch itself the last commit is the
+	# change: compare with its first parent, read from the commit header so a
+	# shallow boundary is not mistaken for the first commit.
+	if [ "$mb" != "$head" ] || ! on_default_branch "$found"; then
+		echo "$mb"
+		return 0
+	fi
+	if ! header=$(git cat-file commit "$head"); then
+		echo "check.sh: cannot read the commit HEAD ($head); set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
+	parent=$(awk '/^$/ { body = 1 } !body && !p && /^parent / { p = $2 } END { print p }' <<<"$header")
+	if [ -z "$parent" ]; then
+		echo root
+	elif git cat-file -e "$parent^{commit}" 2>/dev/null; then
+		echo "$parent"
+	else
+		echo "check.sh: cannot read $parent, the parent of HEAD (a shallow clone?); fetch more history or set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
 }
+
 
 clean() { [ -z "$(git status --porcelain --untracked-files=normal)" ]; }
 
@@ -105,7 +155,7 @@ clean() { [ -z "$(git status --porcelain --untracked-files=normal)" ]; }
 pass_key() {
 	{
 		git rev-parse HEAD
-		resolve_base 2>/dev/null || echo none
+		echo "${gate_base:-none}"
 		tool_versions
 		echo "$today"
 	} | sha256
@@ -192,13 +242,15 @@ scan_patterns() {
 
 # Compares each ratchet id's hits with its baseline and the baseline with the base.
 check_ratchet() {
-	local status=0 id baseline base resets reason fix
+	local status=0 id baseline range resets reason fix
 	[ -s "$tmp/ratchet-ids" ] || return 0
-	if ! base=$(resolve_base 2>/dev/null); then
-		echo "ratchet: no base commit to compare baselines with; set CHECK_BASE to the commit this branch starts from"
+	if [ -z "$gate_base" ]; then
+		echo "ratchet: no base commit to compare baselines with: $CHECK_BASE_ERROR"
 		return 1
 	fi
-	resets=$(git log --format=%B "$base..HEAD" | sed -n 's/^Ratchet-Reset:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p')
+	range=$gate_base..HEAD
+	[ "$gate_base" != root ] || range=HEAD
+	resets=$(git log --format=%B "$range" | sed -n 's/^Ratchet-Reset:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p')
 	while IFS= read -r id; do
 		{
 			IFS= read -r reason
@@ -222,8 +274,9 @@ check_ratchet() {
 			}' "$baseline" "$tmp/hits.$id"; then
 			status=1
 		fi
-		[ -f "$data/ratchet/$id.txt" ] || continue
-		git show "$base:$data/ratchet/$id.txt" >"$tmp/base.$id" 2>/dev/null || continue
+		# The first commit adopts its baselines; so does a base without one.
+		[ -f "$data/ratchet/$id.txt" ] && [ "$gate_base" != root ] || continue
+		git show "$gate_base:$data/ratchet/$id.txt" >"$tmp/base.$id" 2>/dev/null || continue
 		if ! awk -F'\t' -v id="$id" -v reset="$(printf '%s\n' "$resets" | grep -qx -- "$id" && echo 1)" '
 			FILENAME == ARGV[1] { base[$1] = $2; btotal += $2; next }
 			{ work[$1] = $2; wtotal += $2 }
@@ -523,15 +576,29 @@ EOF
 
 # ── registration ──
 
-if [ ! -f scripts/check-config.sh ]; then
+# --base needs no configuration, so a repository with its own gate can call it.
+if [ -f scripts/check-config.sh ]; then
+	# shellcheck source=/dev/null
+	. scripts/check-config.sh
+elif [ "$mode" != base ]; then
 	echo "check.sh: scripts/check-config.sh is missing; it defines tool_versions and register_checks" >&2
 	exit 2
 fi
-# shellcheck source=/dev/null
-. scripts/check-config.sh
+if [ "$mode" = base ]; then
+	resolve_base
+	exit
+fi
+
+# One base for the whole run: the ratchet, the pass record and the checks,
+# which read it from CHECK_RESOLVED_BASE (empty when unresolved, with the
+# reason in CHECK_BASE_ERROR).
+gate_base=$(resolve_base 2>"$tmp/base-error") || gate_base=
+CHECK_BASE_ERROR=$(sed 's/^check.sh: //' "$tmp/base-error")
+export CHECK_RESOLVED_BASE=$gate_base CHECK_BASE_ERROR
 
 if [ "$mode" = passed ]; then
-	clean && grep -qE "^(fast|full) $(pass_key)\$" "$passes" 2>/dev/null
+	# A run without a base never compared growth, so it never counts.
+	[ -n "$gate_base" ] && clean && grep -qE "^(fast|full) $(pass_key)\$" "$passes" 2>/dev/null
 	exit
 fi
 

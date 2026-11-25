@@ -192,7 +192,7 @@ test("pass record needs a clean tree and is keyed by commit, base and date", (t)
   assert.equal(g.run([], today).status, 0);
   assert.equal(g.run(["--passed"], today).status, 0);
   assert.equal(g.run(["--passed"], { CHECK_TODAY: "2030-01-02" }).status, 1);
-  assert.equal(g.run(["--passed"], { ...today, CHECK_BASE: "HEAD~1" }).status, 1);
+  assert.equal(g.run(["--passed"], { ...today, CHECK_BASE: "HEAD" }).status, 1);
   // The body differs from the commit recorded above, so the amended commit
   // cannot coincide with it even when both are made within one second.
   g.git("commit", "-q", "--amend", "-m", "second\n\nbody\n\nRatchet-Reset: x y");
@@ -384,6 +384,124 @@ test("ratchet identifies violations by content and only moves one way", async (t
     g.run(["--write-baselines"]);
     g.commit("baseline");
     assert.equal(g.run().status, 1);
+  });
+});
+
+const LEG_PATTERNS = tsv(["leg", "LEGACY", "-", "ratchet", "-", "old style", "use the new API"]);
+
+// A repository whose ratchet is adopted in a second commit on its default branch.
+function adoptedRatchet(t, opts = {}) {
+  const g = gateRepo(t, { files: { "src/a.txt": "LEGACY(a)\n" }, ...opts });
+  g.put("scripts/check-data/banned-patterns.tsv", LEG_PATTERNS);
+  assert.equal(g.run(["--write-baselines"]).status, 0);
+  g.commit("adopt the ratchet");
+  return g;
+}
+
+// Commits a larger baseline, as a contributor who rewrote it would.
+function growBaseline(g) {
+  g.put("src/c.txt", "LEGACY(c)\n");
+  assert.equal(g.run(["--write-baselines"]).status, 0);
+  g.commit("grow the baseline");
+}
+
+test("base on the default branch", async (t) => {
+  await t.test("a committed baseline increase on main fails without a remote", (t) => {
+    const g = adoptedRatchet(t);
+    growBaseline(g);
+    const r = g.run();
+    assert.equal(r.status, 1);
+    assert.match(out(r), /the baseline grew relative to the base/);
+  });
+  await t.test("a detached HEAD at the default branch compares with its first parent", (t) => {
+    const g = adoptedRatchet(t);
+    growBaseline(g);
+    g.git("checkout", "-q", "--detach");
+    const r = g.run();
+    assert.equal(r.status, 1);
+    assert.match(out(r), /the baseline grew relative to the base/);
+  });
+  await t.test("a default branch whose name has a slash is recognized through origin/HEAD", (t) => {
+    const g = adoptedRatchet(t, { branch: "dev/main" });
+    growBaseline(g);
+    g.git("update-ref", "refs/remotes/origin/dev/main", "HEAD");
+    g.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/dev/main");
+    const r = g.run();
+    assert.equal(r.status, 1);
+    assert.match(out(r), /the baseline grew relative to the base/);
+  });
+  await t.test("a parent that cannot be read fails and says to fetch or set CHECK_BASE", (t) => {
+    const g = adoptedRatchet(t);
+    growBaseline(g);
+    const clone = fs.mkdtempSync(path.join(tmpdir(), "gate-shallow-"));
+    t.after(() => fs.rmSync(clone, { recursive: true, force: true }));
+    const c = spawnSync("git", ["clone", "-q", "--depth", "1", `file://${g.root}`, clone], { env: vars(), encoding: "utf8" });
+    assert.equal(c.status, 0, c.stderr);
+    const r = spawnSync(BASH, [path.join(clone, "scripts/check.sh")], { cwd: clone, env: vars(), encoding: "utf8" });
+    assert.equal(r.status, 1);
+    assert.match(out(r), /fetch/);
+    assert.match(out(r), /CHECK_BASE/);
+  });
+  await t.test("--base prints the base alone", (t) => {
+    const g = gateRepo(t);
+    let r = g.run(["--base"]);
+    assert.equal(r.status, 0, out(r));
+    assert.equal(r.stdout, "root\n");
+    g.put("a.txt", "a\n");
+    g.commit("second");
+    r = g.run(["--base"]);
+    assert.equal(r.stdout, g.git("rev-parse", "HEAD~1") + "\n");
+    g.git("checkout", "-q", "-b", "feat");
+    r = g.run(["--base"]);
+    assert.equal(r.stdout, g.git("rev-parse", "HEAD") + "\n");
+    const trunk = gateRepo(t, { branch: "trunk" });
+    r = trunk.run(["--base"]);
+    assert.notEqual(r.status, 0);
+    assert.equal(r.stdout, "");
+    assert.match(r.stderr, /CHECK_BASE/);
+  });
+  await t.test("an unresolved base never counts as passed", (t) => {
+    const g = gateRepo(t, { branch: "trunk" });
+    const today = { CHECK_TODAY: "2030-01-01" };
+    assert.equal(g.run([], today).status, 0);
+    assert.equal(g.run(["--passed"], today).status, 1);
+  });
+  await t.test("a commit header that cannot be read is not a first adoption", (t) => {
+    const g = adoptedRatchet(t);
+    growBaseline(g);
+    const bin = path.join(g.root, "..", `${path.basename(g.root)}-bin`);
+    fs.mkdirSync(bin);
+    t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+    const real = spawnSync("sh", ["-c", "command -v git"], { env: vars(), encoding: "utf8" }).stdout.trim();
+    fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\n[ "$1 $2" = "cat-file commit" ] && exit 1\nexec "${real}" "$@"\n`, { mode: 0o755 });
+    const r = g.run([], { PATH: `${bin}:${vars().PATH}` });
+    assert.equal(r.status, 1);
+    assert.match(out(r), /cannot read the commit HEAD/);
+  });
+  await t.test("a CHECK_BASE set by check-config.sh is honored", (t) => {
+    const g = gateRepo(t, {
+      branch: "trunk",
+      config: `CHECK_BASE=$(git rev-parse HEAD)\n${PASSING_CONFIG}`,
+      files: { "scripts/check-data/banned-patterns.tsv": LEG_PATTERNS, "src/a.txt": "LEGACY(a)\n" },
+    });
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    const r = g.run();
+    assert.equal(r.status, 0, out(r));
+    assert.equal(g.run(["--base"]).stdout, g.git("rev-parse", "HEAD") + "\n");
+  });
+  await t.test("control: a baseline in the root commit is a first adoption", (t) => {
+    const g = gateRepo(t, { files: { "scripts/check-data/banned-patterns.tsv": LEG_PATTERNS, "src/a.txt": "LEGACY(a)\n" } });
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    g.git("add", "-A");
+    g.git("commit", "-q", "--amend", "--no-edit");
+    const r = g.run();
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("control: a pass on main is recorded", (t) => {
+    const g = adoptedRatchet(t);
+    const today = { CHECK_TODAY: "2030-01-01" };
+    assert.equal(g.run([], today).status, 0);
+    assert.equal(g.run(["--passed"], today).status, 0);
   });
 });
 
@@ -1024,6 +1142,41 @@ test("layer debt only shrinks", async (t) => {
     assert.equal(r.status, 1);
     assert.match(out(r), /debt grew/);
   });
+});
+
+test("layer debt grown in a commit on main fails in the gate and in the helper", (t) => {
+  const g = layerRepo(t);
+  g.put("src/domain/model.js", 'import { h } from "../http/handler.js";\nexport const x = 1;\n');
+  g.put("scripts/check-data/layers.tsv", LAYER_POLICY + "debt\tsrc/domain/model.js\tsrc/http/handler.js\n");
+  g.commit("sneak debt on main");
+  const r = g.run(["--fast"]);
+  assert.equal(r.status, 1);
+  assert.match(out(r), /debt grew/);
+  const alone = spawnSync(BASH, [g.at("scripts/check-layers.sh"), "--doc", "ARCHITECTURE.md", "--", "bash", "scripts/edges.sh"], { cwd: g.root, env: vars(), encoding: "utf8" });
+  assert.equal(alone.status, 1);
+  assert.match(out(alone), /debt grew/);
+});
+
+test("check-layers.sh without the bundled driver names it", (t) => {
+  const g = layerRepo(t);
+  fs.unlinkSync(g.at("scripts/check.sh"));
+  g.commit("no driver");
+  const r = spawnSync(BASH, [g.at("scripts/check-layers.sh"), "--doc", "ARCHITECTURE.md", "--", "bash", "scripts/edges.sh"], { cwd: g.root, env: vars(), encoding: "utf8" });
+  assert.equal(r.status, 1);
+  assert.match(out(r), /scripts\/check\.sh is missing/);
+});
+
+test("an unresolved base in the layer check shows why", (t) => {
+  const g = layerRepo(t);
+  g.put("a.txt", "a\n");
+  g.commit("second");
+  const clone = fs.mkdtempSync(path.join(tmpdir(), "gate-shallow-"));
+  t.after(() => fs.rmSync(clone, { recursive: true, force: true }));
+  const c = spawnSync("git", ["clone", "-q", "--depth", "1", `file://${g.root}`, clone], { env: vars(), encoding: "utf8" });
+  assert.equal(c.status, 0, c.stderr);
+  const r = spawnSync(BASH, [path.join(clone, "scripts/check.sh")], { cwd: clone, env: vars(), encoding: "utf8" });
+  assert.equal(r.status, 1);
+  assert.match(out(r), /check-layers: .*fetch more history/);
 });
 
 test("layer debt: first adoption against a base without the policy", (t) => {

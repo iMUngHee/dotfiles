@@ -7,7 +7,8 @@
 # The extractor prints one `from<TAB>to` line per production dependency:
 # internal files as canonical repository-relative paths, external dependencies
 # as ext:<name>. The rows and outcomes are described in check-contract.md
-# ("Layer policy"). Written for the bash 3.2 that macOS ships.
+# ("Layer policy"). Debt is compared with the base scripts/check.sh resolves.
+# Written for the bash 3.2 that macOS ships.
 set -uo pipefail
 
 usage() {
@@ -51,34 +52,34 @@ if [ "$(tr -d '\000' <"$tmp/edges" | wc -c)" -ne "$(wc -c <"$tmp/edges")" ]; the
 	exit 1
 fi
 
-# The same base as the gate's ratchet: CHECK_BASE, else the merge-base with the
-# default branch.
-resolve_base() {
-	local ref
-	if [ -n "${CHECK_BASE:-}" ]; then
-		git rev-parse --verify -q "$CHECK_BASE^{commit}"
-		return
-	fi
-	for ref in refs/remotes/origin/HEAD refs/heads/main refs/heads/master; do
-		if git rev-parse --verify -q "$ref^{commit}" >/dev/null; then
-			git merge-base HEAD "$ref"
-			return
-		fi
-	done
-	return 1
-}
-if ! base=$(resolve_base); then
-	echo "check-layers: no base commit to compare debt with; set CHECK_BASE to the commit before your changes; the layers are described in $doc"
+# The gate's base: scripts/check.sh passes the one it resolved for its run,
+# and a run on its own asks it.
+why=
+if [ -n "${CHECK_RESOLVED_BASE+set}" ]; then
+	base=$CHECK_RESOLVED_BASE
+	why=${CHECK_BASE_ERROR:-}
+elif [ ! -f scripts/check.sh ]; then
+	echo "check-layers: scripts/check.sh is missing; install the bundled driver beside this helper, which asks it for the base; the layers are described in $doc"
+	exit 1
+elif ! base=$(bash scripts/check.sh --base 2>"$tmp/base-error"); then
+	base=
+	why=$(sed 's/^check.sh: //' "$tmp/base-error")
+fi
+if [ -z "$base" ]; then
+	echo "check-layers: no base commit to compare debt with: ${why:-set CHECK_BASE to the commit before your changes}; the layers are described in $doc"
 	exit 1
 fi
 # Only a successful listing that is empty proves the policy absent at the base;
-# any read error fails instead of opening a first adoption.
-if ! entry=$(git ls-tree "$base" -- "$policy"); then
+# any read error fails instead of opening a first adoption. The first commit
+# adopts its policy.
+first=0
+if [ "$base" = root ]; then
+	first=1
+	: >"$tmp/base"
+elif ! entry=$(git ls-tree "$base" -- "$policy"); then
 	echo "check-layers: cannot read $policy at $base; fetch that commit or set CHECK_BASE; the layers are described in $doc"
 	exit 1
-fi
-first=0
-if [ -z "$entry" ]; then
+elif [ -z "$entry" ]; then
 	first=1
 	: >"$tmp/base"
 elif ! git show "$base:$policy" >"$tmp/base"; then
