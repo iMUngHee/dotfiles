@@ -28,6 +28,9 @@
   nav button[data-chosen]::after { content: "✓"; position: absolute; top: 8px; right: 6px; font-size: 11px; line-height: 1; }
   /* Locked, only the controls that switch candidates dim; compare and fit still work. */
   html[data-locked] :is(#previous, #next, nav button:not([aria-current="true"])) { opacity: .4; cursor: default; }
+  /* Fixed width, so the wrap cue at either end never shifts the centred header. */
+  #previous, #next { width: 64px; }
+  #previous small, #next small { font-size: 13px; color: #b8bec6; }
   #width { margin-left: 12px; color: #b8bec6; font-size: 13px; font-variant-numeric: tabular-nums; }
   main { height: calc(100dvh - 48px); display: grid; grid-template-columns: minmax(0, 1fr); }
   main.split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -142,6 +145,16 @@ function show(index) {
   frame.title = `Candidate ${current + 1}`;
   document.documentElement.dataset.candidate = current + 1;
   [...navigation.children].forEach((button, number) => button.setAttribute('aria-current', String(number === current)));
+  arrows();
+}
+// At either end an arrow wraps around, so it shows the number it goes to.
+function arrows() {
+  const last = candidates.length - 1;
+  const wrapsBack = current === 0 && last > 0, wrapsOn = current === last && last > 0;
+  previous.innerHTML = wrapsBack ? `<small>${last + 1}</small> ←` : '←';
+  previous.setAttribute('aria-label', wrapsBack ? `Previous candidate (wraps to ${last + 1})` : 'Previous candidate');
+  next.innerHTML = wrapsOn ? '→ <small>1</small>' : '→';
+  next.setAttribute('aria-label', wrapsOn ? 'Next candidate (wraps to 1)' : 'Next candidate');
 }
 function key(key) {
   if (key === 'ArrowLeft') show(current - 1);
@@ -150,8 +163,10 @@ function key(key) {
   else if (key.toLowerCase() === 'r' && !compare.disabled) compare.click();
   else if (key.toLowerCase() === 'f' && !fit.disabled) fit.click();
 }
-document.querySelector('#previous').onclick = () => show(current - 1);
-document.querySelector('#next').onclick = () => show(current + 1);
+const previous = document.querySelector('#previous');
+const next = document.querySelector('#next');
+previous.onclick = () => show(current - 1);
+next.onclick = () => show(current + 1);
 compare.onclick = () => {
   compare.setAttribute('aria-pressed', String(compare.getAttribute('aria-pressed') !== 'true'));
   layout();
@@ -180,7 +195,7 @@ addEventListener('message', event => {
 // The width the candidate is drawn at, which is narrower than its design in a small window.
 const widthLabel = document.querySelector('#width');
 const candidatePane = document.querySelector('.candidate');
-new ResizeObserver(() => { widthLabel.textContent = `${candidatePane.clientWidth}px`; }).observe(candidatePane);
+new ResizeObserver(() => { widthLabel.textContent = `Preview width ${candidatePane.clientWidth}px`; }).observe(candidatePane);
 show(0);
 </script>
 </html>

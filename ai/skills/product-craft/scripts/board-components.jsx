@@ -21,19 +21,20 @@ function notice(state) {
 // 4.5:1 is the WCAG minimum for body-size text. A measured shortfall outranks the notice that
 // some text could not be measured.
 function Contrast({ token, current, onFix }) {
-  const { ratio, background, unmeasured, sample } = useBoard().contrastFor(token);
+  const { ratio, background, text, unmeasured, sample } = useBoard().contrastFor(token);
+  const quote = words => `“${words.length > 20 ? `${words.slice(0, 20)}…` : words}”`;
   if (ratio !== undefined && ratio < 4.5) {
     const fix = background ? readableColour(current, background) : null;
     return (
       <div className="pcb-note pcb-contrast">
         {/* Rounded down, so a ratio just under the minimum never displays as 4.5. */}
-        <p>이 색과 배경의 대비가 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1입니다.<br />글자에는 4.5:1 이상이 필요합니다.</p>
+        <p>이 색과 배경의 대비가 {(Math.floor(ratio * 10) / 10).toFixed(1)}:1입니다{text ? `(${quote(text)})` : ""}.<br />글자에는 4.5:1 이상이 필요합니다.</p>
         {fix && fix !== current ? <button type="button" className="pcb-link pcb-fix" onClick={() => onFix(fix)}>{fix}로 바꾸기</button> : null}
       </div>
     );
   }
   if (!unmeasured) return null;
-  const named = sample ? `글자(“${sample.length > 20 ? `${sample.slice(0, 20)}…` : sample}”)` : "글자";
+  const named = sample ? `글자(${quote(sample)})` : "글자";
   return <p className="pcb-note pcb-unmeasured"><strong>확인 필요:</strong> 배경 이미지 위 {named}는 대비를 재지 못했습니다. 눈으로 확인해 주세요.</p>;
 }
 
@@ -121,8 +122,15 @@ const CandidatePicker = createComponentImplementation(api("CandidatePicker"), ({
 const Heading = createComponentImplementation(api("Heading"), ({ props }) =>
   props.level === 2 ? <h3 className="pcb-heading pcb-heading2">{props.text}</h3> : <h2 className="pcb-heading">{props.text}</h2>);
 
-const Hint = createComponentImplementation(api("Hint"), ({ props }) =>
-  props.text ? <p className="pcb-hint">{props.text}</p> : null);
+// With swatches, each #rrggbb in the text gets a chip of that colour in front of it.
+const Hint = createComponentImplementation(api("Hint"), ({ props }) => {
+  if (!props.text) return null;
+  if (!props.swatches) return <p className="pcb-hint">{props.text}</p>;
+  const parts = props.text.split(/(#[0-9a-fA-F]{6})\b/);
+  return <p className="pcb-hint">{parts.map((part, i) => i % 2
+    ? <span key={i} className="pcb-hex-value"><span className="pcb-chip" style={{ background: part }} aria-hidden="true" />{part}</span>
+    : part)}</p>;
+});
 
 const SubmitButton = createComponentImplementation(api("SubmitButton"), ({ props }) => {
   const board = useBoard();
@@ -225,7 +233,10 @@ const AlignPicker = createComponentImplementation(api("AlignPicker"), ({ props }
   const move = (event, delta) => {
     event.preventDefault();
     const i = props.options.indexOf(current);
-    choose(props.options[(i + delta + props.options.length) % props.options.length]);
+    const j = (i + delta + props.options.length) % props.options.length;
+    choose(props.options[j]);
+    // Focus follows the active segment, the only one in the tab order.
+    event.currentTarget.parentElement.children[j].focus();
   };
   return (
     <TokenRow token={props.token} label={<span id={labelId}>{props.label}</span>} changed={props.value != null} onReset={() => props.setValue(null)}>
@@ -244,6 +255,8 @@ const AlignPicker = createComponentImplementation(api("AlignPicker"), ({ props }
   );
 });
 
+const PIN_MODE = "시안에서 위치를 눌러 주세요 · Esc 취소";
+const REFERENCE = "채택한 시안이 아니라서 참고 메모로 보냅니다.";
 const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }) => {
   const board = useBoard();
   const pins = Array.isArray(props.value) ? props.value : [];
@@ -254,9 +267,10 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
   const toggle = () => { if (!board.togglePinMode()) setLimitShown(true); };
   // The pin-mode instruction lives here, next to the toggle; the candidate shows only a frame.
   // A pin on a candidate other than the chosen one is reference for redrawing the chosen one.
-  const elsewhere = board.chosen && board.viewed && board.viewed !== board.chosen ? "채택한 시안이 아니라서 참고 메모로 보냅니다." : "";
-  const message = limitShown ? `위치는 ${board.limits.pins}개까지 남길 수 있습니다.` : unavailable ? "미리보기 반영 불가."
-    : board.pinMode ? "시안에서 위치를 눌러 주세요 · Esc 취소" : elsewhere;
+  const elsewhere = board.chosen && board.viewed && board.viewed !== board.chosen ? REFERENCE : "";
+  const limit = `위치는 ${board.limits.pins}개까지 남길 수 있습니다.`;
+  const message = limitShown ? limit : unavailable ? "미리보기 반영 불가."
+    : board.pinMode ? PIN_MODE : elsewhere;
   return (
     <div className="pcb-field">
       <span className="pcb-label">{props.label}{pins.length ? ` · ${pins.length}개` : ""}</span>
@@ -266,7 +280,8 @@ const RegionNotes = createComponentImplementation(api("RegionNotes"), ({ props }
         </button>
         {board.viewed ? <span className="pcb-target">시안 {board.viewed}에 남깁니다.</span> : null}
       </div>
-      <p className={limitShown || unavailable ? "pcb-note pcb-unavailable" : "pcb-note"}>{message}</p>
+      {/* Keeps the height of its tallest text, so toggling pin mode never moves the list. */}
+      <ReservedLine className="pcb-note pcb-pin-note" texts={[limit, "미리보기 반영 불가.", PIN_MODE, REFERENCE]} shown={message} />
       <ol className="pcb-pins">
         {pins.map((pin, i) => (
           <li key={`${pin.candidate}-${pin.selector}-${i}`} className="pcb-pin"
@@ -315,7 +330,9 @@ export const BOARD_CSS = `
 .pcb-primary { background: #fff; color: #16191d; border: 1px solid #fff; }
 .pcb-primary:hover:not(:disabled) { background: #e3e6ea; border-color: #e3e6ea; }
 .pcb-secondary { background: transparent; color: #fff; border: 1px solid #767d87; font-weight: 500; }
-.pcb-caution { color: #ffb4a8; }
+/* The drop warning is secondary text until the button that drops the choice is about to be pressed. */
+.pcb-caution { color: #b8bec6; }
+.pcb-submit-wrap:has(> .pcb-submit:is(:hover, :focus-visible):not(:disabled)) .pcb-caution { color: #ffb4a8; }
 .pcb-secondary:hover:not(:disabled) { background: #22272e; }
 .pcb-submit:disabled, .pcb-toggle:disabled, .pcb-step:disabled, .pcb-segment:disabled, .pcb-hex:disabled, .pcb-number-field:disabled {
   background: transparent; color: #fff; border-color: #4a5058; opacity: .6; cursor: not-allowed; }
@@ -333,6 +350,10 @@ export const BOARD_CSS = `
 .pcb-fix { margin-top: 2px; color: #ffb4a8; }
 .pcb-unmeasured { color: #b8bec6; }
 .pcb-unmeasured strong { color: #fff; font-weight: 600; }
+.pcb-hex-value { white-space: nowrap; }
+/* The closing rule keeps the 16px section spacing on both sides. */
+aside hr.a2ui-divider { margin: 0; }
+.pcb-chip { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: -1px; border: 1px solid #767d87; border-radius: 2px; }
 /* The sent summary groups each section's lines under its heading. */
 aside a2ui-basic-column > a2ui-basic-column { --a2ui-column-gap: 4px; }
 /* The panel fills the window, so the answer area sits at its foot even when content is short. */

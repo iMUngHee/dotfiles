@@ -88,6 +88,10 @@ const setPinMode = on => {
   setState({ pinMode: on });
   sendState();
 };
+// Esc ends pin mode from the panel too; the candidate's bridge handles Esc pressed inside it.
+addEventListener("keydown", event => {
+  if (event.key === "Escape" && store.state.pinMode) setPinMode(false);
+});
 
 function addPin(n, pin) {
   const pins = data("/pins") ?? [];
@@ -99,7 +103,7 @@ function addPin(n, pin) {
 
 const MESSAGE_KEYS = {
   ready: ["pcb", "type", "candidate"], pinCancel: ["pcb", "type", "candidate"],
-  pin: ["pcb", "type", "candidate", "pin"], contrast: ["pcb", "type", "candidate", "values", "unmeasured", "backgrounds", "samples"],
+  pin: ["pcb", "type", "candidate", "pin"], contrast: ["pcb", "type", "candidate", "values", "unmeasured", "backgrounds", "texts", "samples"],
 };
 const contrastValues = v => typeof v === "object" && v !== null && !Array.isArray(v)
   && Object.entries(v).every(([name, ratio]) => COLOUR_TOKENS.includes(name) && typeof ratio === "number" && ratio >= 1 && ratio <= 21);
@@ -114,6 +118,7 @@ function isBridgeMessage(d) {
   if (d.type === "contrast") {
     return contrastValues(d.values) && unmeasuredNames(d.unmeasured)
       && plain(d.backgrounds) && Object.entries(d.backgrounds).every(([name, hex]) => COLOUR_TOKENS.includes(name) && typeof hex === "string" && HEX_COLOUR.test(hex))
+      && plain(d.texts) && Object.entries(d.texts).every(([name, text]) => name in d.values && typeof text === "string" && text.length <= config.limits.text)
       && plain(d.samples) && Object.entries(d.samples).every(([name, text]) => d.unmeasured.includes(name) && typeof text === "string" && text.length <= config.limits.text);
   }
   return d.type !== "pin" || validatePin(d.pin);
@@ -123,7 +128,7 @@ addEventListener("message", event => {
   try {
     const frame = candidateFrame();
     if (!frame || event.source !== frame.contentWindow || !isBridgeMessage(event.data)) return;
-    const { type, candidate, pin, values, unmeasured, backgrounds, samples } = event.data;
+    const { type, candidate, pin, values, unmeasured, backgrounds, texts, samples } = event.data;
     if (candidate !== viewedNumber() || candidate !== store.state.viewed) return;
     if (type === "ready") {
       setState({ bridge: { ...store.state.bridge, [candidate]: "connected" } });
@@ -131,7 +136,7 @@ addEventListener("message", event => {
       sendState();
     } else if (type === "contrast") {
       // A report replaces the candidate's last one whole, so an empty report clears it.
-      setState({ contrast: { ...store.state.contrast, [candidate]: { values, unmeasured, backgrounds, samples } } });
+      setState({ contrast: { ...store.state.contrast, [candidate]: { values, unmeasured, backgrounds, texts, samples } } });
     } else if (type === "pin") {
       if (store.state.pinMode) addPin(candidate, pin);
     } else {
@@ -218,7 +223,7 @@ function Panel() {
     contrastFor: tokenName => {
       const report = board.chosen && board.viewed === board.chosen ? board.contrast[board.chosen] : undefined;
       return {
-        ratio: report?.values[tokenName], background: report?.backgrounds[tokenName],
+        ratio: report?.values[tokenName], background: report?.backgrounds[tokenName], text: report?.texts[tokenName],
         unmeasured: report?.unmeasured.includes(tokenName) ?? false, sample: report?.samples[tokenName],
       };
     },

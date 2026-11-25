@@ -8,7 +8,7 @@
   `scripts/board-components.jsx`, catalog `scripts/board-catalog.mjs`).
 - **Parent contract:** none. The viewer's own behaviour is set by `references/interface.md`
   and is not changed here.
-- **Owner:** 대협. **Depth:** Screen. **Last updated:** 2026-11-24.
+- **Owner:** 대협. **Depth:** Screen. **Last updated:** 2026-11-25.
 - **Medium:** web, desktop browser, served from 127.0.0.1. **Toolkit:** React 19 +
   `@a2ui/react` 0.16.1, catalog `product-craft/board/v1` (the v1.0 basic catalog plus the
   components below).
@@ -85,8 +85,8 @@ Journeys:
    → view 1 again → the values still apply → reset gap → it returns to 16 and leaves the
    answer → send → `adjust` is `{accent: "#3b82f6", align: "center"}`.
 6. **Pin a place.** 위치 지정 → the candidate shows an accent frame and the panel says "시안에서
-   위치를 눌러 주세요 · Esc 취소" → click the candidate's heading → a numbered marker and a dashed outline of the element
-   appear, and a note field appears in the panel → type the note → scroll the candidate, open
+   위치를 눌러 주세요 · Esc 취소" → click the candidate's heading → a lettered marker appears (the element's dashed outline shows while its note row is
+   hovered or focused), and a note field appears in the panel → type the note → scroll the candidate, open
    the viewer's compare mode → the marker stays on the heading → delete another pin → send →
    `pins` lists the remaining pins with their candidate, selector and note.
 7. **No preview here.** View a candidate that does not declare a token, or that carries a CSP
@@ -147,7 +147,6 @@ of a design-tool inspector.
 | Focus ring `#fff`, 2px, offset 2px | departure: the viewer's focus ring is `#80c8ff`, which here already means "selected"; white keeps focus from reading as selection (17.63:1 on the panel) |
 | Pin `#ffc24d` disc, `#16191d` letter, 2px `#16191d` ring | derived: a third hue, so a pin never reads as selection or focus; the dark ring keeps it visible on light candidates (letter 10.98:1) |
 | Primary action `#fff`, text `#16191d`, hover `#e3e6ea` | departure: the accent already means "selected"; the main action takes the viewer's white so the two never read alike |
-| Primary hover `#a6d8ff` | derived: the accent one step lighter |
 | Disabled control: transparent, `1px solid #4a5058` border, text `#fff`, opacity .6, so a value still reads as a value. The colour swatch keeps its true colour, unfaded, and only its border turns `#4a5058`; the active segment of a disabled AlignPicker is filled `#4a5058`; 초기화 is hidden | derived: one look for every disabled control, so nothing reads as live before a candidate is chosen |
 | "보는 중": a 14px eye icon in the card's top-right corner, `#b8bec6` (`#16191d` on a chosen card); "채택됨": `#80c8ff` fill and tag | derived: viewing is information, not a state to confuse with selection or focus; an icon keeps one tag line per card |
 | Overflow cue: a 48px fade from transparent to `#16191d` above the answer area, and the panel's thin scrollbar (`#767d87` thumb) always shown; scrolled content fades out under the sticky title over 32px | derived: a dark shadow does not show on the dark panel, and a label over the content covered controls in review |
@@ -160,7 +159,9 @@ of a design-tool inspector.
 
 - **Heading:** 16px, weight 600, `#fff`, 0 margin. The surface's first Heading sticks to the
   top of the panel while it scrolls, over a 1px `#767d87` bottom border.
-- **Hint:** 14px, `#b8bec6`, upright (the basic caption's `<em>` is not used).
+- **Hint:** 14px, `#b8bec6`, upright (the basic caption's `<em>` is not used). With
+  `swatches: true`, each `#rrggbb` in the text gets a 12px chip of that colour in front of it,
+  with a `1px #767d87` border; the sent summary sets it on colour adjustment lines.
 - **CandidatePicker:**
   - A row of cards, 8px apart. Each card is 60px high, with the number and one reserved tag
     line, so the height does not change. The thumbnail sits above the number when
@@ -187,7 +188,8 @@ of a design-tool inspector.
   - Pressing a SubmitButton ends pin mode first.
   - `dropsChoice: true` (the default surface sets it on "다시 그려 주세요"): while a candidate is
     chosen, the line under the button says "다시 그리면 시안 <n> 채택과 조정값은 버려집니다." in
-    `#ffb4a8`, the caution colour. The secondary button's label is weight 500.
+    `#b8bec6`, turning to `#ffb4a8`, the caution colour, while that button is hovered or has
+    keyboard focus. The secondary button's label is weight 500.
   - Disabled, an answer button is a flat `#22272e` slab with `#b8bec6` text and no fade, unlike
     both the white primary and the outlined secondary.
     Rejecting is always allowed once the comment or a pin says why (a pin is a located
@@ -221,7 +223,8 @@ of a design-tool inspector.
     초기화.
   - Contrast: the bridge measures, on the chosen candidate, the lowest contrast between text
     drawn in the token's colour and the background behind it. Below 4.5:1 the row shows
-    "이 색과 배경의 대비가 <r>:1입니다." and, on its own line, "글자에는 4.5:1 이상이 필요합니다." in `#ffb4a8` (10.37:1 on the
+    "이 색과 배경의 대비가 <r>:1입니다(“<text>”)." naming the least readable text (up to 20
+    characters) and, on its own line, "글자에는 4.5:1 이상이 필요합니다." in `#ffb4a8` (10.37:1 on the
     panel). The value is not blocked; the owner may keep it.
   - Below the warning, "<#hex>로 바꾸기" sets the nearest colour of the same hue and saturation
     that reaches 4.5:1 on the background behind the least readable text, which the bridge
@@ -248,7 +251,9 @@ of a design-tool inspector.
   - "위치 지정" toggle button, followed by "시안 <n>에 남깁니다." naming the viewed candidate the
     next pin goes to (대협: pins go on the viewed candidate and say so). While pin mode is on, the
     button reads "지정 취소" with a 2px accent border over a 16% accent tint, which a focus ring
-    never has. The instruction shows as the note line under the toggle.
+    never has. The instruction shows as the note line under the toggle. That line keeps the
+    height of its tallest text (the instruction, the pin limit, "미리보기 반영 불가." and the
+    reference-note line), so toggling pin mode never moves the list below it.
   - While another candidate than the chosen one is on screen, the note line under the button
     reads "채택한 시안이 아니라서 참고 메모로 보냅니다.", which is how the agent reads such pins.
   - The label carries the pin count ("위치 메모 · 3개") once there is a pin.
@@ -307,8 +312,10 @@ of a design-tool inspector.
   - "시안 <n> 채택으로 보냈습니다." or "다시 그려 달라고 보냈습니다."; each section below is its own
     column, its lines 4px apart under its heading, sections 16px apart;
   - 조정: a line per changed token in its own label, with units and the old value
-    ("카드 간격: 16px → 24px", "카드 정렬: 왼쪽 → 가운데");
-  - 위치 메모: "위치 A · 시안 1 · “<element text>”: “<note>”", quoted like the comment;
+    ("카드 간격: 16px → 24px", "카드 정렬: 왼쪽 → 가운데"); a colour line shows a chip beside
+    each hex;
+  - 위치 메모: "위치 A · 시안 1 · “<element text>”: “<note>”", quoted like the comment, or
+    "(메모 없음)" in place of the quoted note when the pin has none;
   - 코멘트: "“…”";
   - a divider, then "에이전트가 이어서 진행합니다. 이 창은 닫아도 됩니다."
   After a send, the viewer shows the sent candidate and locks: the arrows and the other number
@@ -328,7 +335,9 @@ of a design-tool inspector.
   viewer styles and honours: `data-chosen` on a number button (an 11px "✓" in the tab's text colour, tooltip
   "시안 <n> · 채택됨") and `data-locked` on its root. The viewer leaves out tools with nothing
   to act on (compare without a reference, fit without an image) and shows the width the
-  candidate is drawn at, which tells a narrowed preview apart from the design.
+  candidate is drawn at as "Preview width <n>px", which tells a narrowed preview apart from the
+  design. At the first or last candidate the arrow that wraps shows the number it goes to
+  ("2 ←", "→ 1") and says so in its accessible name; both arrows keep one fixed width.
 
 ## Implementation Bridge
 
@@ -374,6 +383,11 @@ of a design-tool inspector.
 - 2026-11-24 — delegated (대협: "알아서 해도 될것들"): reject-all accepts pins without a
   comment; token controls lock while a non-chosen candidate is on screen; a disabled swatch
   keeps its true colour; a pin on a non-chosen candidate is said to be sent as a reference note.
+- 2026-11-25 — 대협, settling four findings that review rounds reversed; reviews treat these as
+  decided: the pin-mode instruction stays in the panel only, with no banner on the candidate;
+  the drop warning is secondary text at rest and caution only while its button is hovered or
+  focused; a disabled swatch keeps its true colour with only its border dimmed; an unchosen
+  card keeps the "채택" tag, since pressing it does choose.
 
 **Decided for you:**
 - panel colours and spacing derived from the viewer;

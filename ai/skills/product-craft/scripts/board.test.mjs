@@ -398,6 +398,7 @@ test("adjust and pins are validated against the surface's controls before the ro
   assert.match(summary, /간격: 16px → 24px/);
   assert.match(summary, /위치 A · 시안 1 · “t”: “n”/);
   assert.match(summary, /"조정"/);
+  assert.doesNotMatch(summary, /swatches/, "a size change carries no colour chips");
   const { answer } = await waitForAnswer({ dir, round: running.round, timeoutMs: 1000 });
   assert.deepEqual(answer.context.adjust, { gap: 24 });
   assert.equal(answer.context.pins.length, 1);
