@@ -549,6 +549,7 @@ test("rule tags", async (t) => {
     "fenced example": "---\npaths:\n  - \"src/**\"\n---\n- Rule [check: lint]\n\n```md\n- not a rule\n```\n",
     "multi-line item": "- A long rule that\n  continues here [check: lint]\n",
     "CRLF": "- Rule [check: lint]\r\n- Other [unchecked: judgment]\r\n",
+    "a one-word unchecked reason, which the original grammar keeps accepting": "- Rule [unchecked: review]\n",
   };
   for (const [name, body] of Object.entries(passes)) {
     await t.test(`passes: ${name}`, (t) => {
@@ -773,7 +774,7 @@ test("rule tags: registration and legacy compatibility", async (t) => {
   await t.test("(e) both sources are checked once each", (t) => {
     const g = gateRepo(t, {
       config: RULES_CONFIG("  echo CONVENTIONS.md\n  echo CONVENTIONS.md"),
-      files: { ".ai/rules/main.md": "- Legacy [check: lint]\n", "CONVENTIONS.md": "- Owned [unchecked: judgment]\n" },
+      files: { ".ai/rules/main.md": "- Legacy [check: lint]\n", "CONVENTIONS.md": "- Owned [unchecked: judged in review]\n" },
     });
     const r = g.run(["--fast"]);
     assert.equal(r.status, 0, out(r));
@@ -829,11 +830,16 @@ test("rule tags: the closed grammar for registered documents", async (t) => {
     "(x) an unterminated fence": "- Rule [check: lint]\n```\n- Swallowed rule [check: lint]\n",
     "(z) a list inside a block quote": "> - Quoted rule with no tag\n",
   };
+  await t.test("an unchecked reason of one word fails and names what to write", (t) => {
+    const r = doc(t, "- Owned rule [unchecked: review]\n");
+    assert.equal(r.status, 1);
+    assert.match(out(r), /CONVENTIONS\.md:1: \[unchecked: review\] needs a reason that says why no check decides it/);
+  });
   for (const [name, body] of Object.entries(fails)) {
     await t.test(`fails: ${name}`, (t) => assert.equal(doc(t, body).status, 1));
   }
   const passes = {
-    "(g) paragraphs, tables and link paragraphs": "# C\n\nFollows [Google](https://example.com).\n\n| Area | Guide |\n| --- | --- |\n| x | y |\n\nScoped rules live in [.ai/rules](.ai/rules/main.md).\n\n- Owned rule [unchecked: judgment]\n",
+    "(g) paragraphs, tables and link paragraphs": "# C\n\nFollows [Google](https://example.com).\n\n| Area | Guide |\n| --- | --- |\n| x | y |\n\nScoped rules live in [.ai/rules](.ai/rules/main.md).\n\n- Owned rule [unchecked: judged in review]\n",
     "(h) four-backtick fence holding three backticks": "````md\n```\n- not a rule\n```\n````\n- Rule [check: lint]\n",
     "(l) a wrapped item tagged on its continuation": "- A long rule that\n  continues here [check: lint]\n",
   };
@@ -977,10 +983,12 @@ const layersAsset = new URL("../skills/project-bootstrap/assets/check-layers.sh"
 
 // Prints `from<TAB>to` for each import in src/**/*.js: a relative import is
 // resolved to a canonical repository path, anything else becomes ext:<name>.
+// A file with no imports is printed alone so that it is still classified.
 const EDGES = `#!/bin/bash
 set -euo pipefail
 [ -z "\${EDGES_FAIL:-}" ] || exit 7
 git ls-files 'src/*.js' | while IFS= read -r f; do
+  grep -q 'from "' "$f" || { printf '%s\\n' "$f"; continue; }
   { grep -oE 'from "[^"]+"' "$f" || true; } | sed -E 's/from "(.*)"/\\1/' | while IFS= read -r spec; do
     case "$spec" in
       ./*|../*) printf '%s\\t%s\\n' "$f" "$(awk -v d="$(dirname "$f")" -v s="$spec" 'BEGIN { n = split(d "/" s, p, "/"); o = 0; for (i = 1; i <= n; i++) { if (p[i] == "." || p[i] == "") continue; if (p[i] == "..") { o--; continue }; q[++o] = p[i] }; out = q[1]; for (i = 2; i <= o; i++) out = out "/" q[i]; print out }')" ;;
@@ -1085,6 +1093,9 @@ test("layer policy outcomes", async (t) => {
   await fails("a nameless ext: endpoint", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\text:\\n'\n"), /neither ext:<name> nor a canonical repository path/);
   await fails("a control byte in an extractor endpoint", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/domain/a\\tsrc/http/b\\034src/http/z\\n'\n"), /neither ext:<name> nor a canonical repository path/);
   await fails("a control byte in a debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/a\x1csrc/http/b\tsrc/http/z\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
+  await fails("a production file with no dependencies outside every layer", {}, (g) => g.put("src/other/x.js", "export const z = 1;\n"), /src\/other\/x\.js belongs to no layer/);
+  await passes("a production file with no dependencies inside a layer", {}, (g) => g.put("src/domain/y.js", "export const y = 1;\n"));
+  await fails("a lone external name", {}, (g) => g.put("scripts/edges.sh", EDGES + "printf 'ext:kafka\\n'\n"), /extractor line \d+: "ext:kafka" is not a canonical repository path/);
   await fails("a NUL byte in the extractor output", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\tsrc/domain/model.js\\000\\textra\\n'\n"), /holds a NUL byte/);
   await fails("a DEL byte in an extractor endpoint", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\tsrc/domain/model.js\\177\\n'\n"), /neither ext:<name> nor a canonical repository path/);
   await fails("an equivalence-class glob, even with no edges", { policy: "layer\tdomain\tsrc/[[=d=]]omain/*\nlayer\thttp\tsrc/http/*\nempty-ok\n" }, silent, /globs take only/);
@@ -1100,7 +1111,7 @@ test("layer policy outcomes", async (t) => {
   await passes("(m) zero internal edges with empty-ok", { policy: LAYER_POLICY + "empty-ok\n", files: { "src/http/handler.js": 'import k from "kafka";\n' } });
   await t.test("(m) malformed extractor output fails", (t) => {
     const g = layerRepo(t);
-    g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'only-one-field\\n'\n");
+    g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/a.js\\tsrc/b.js\\tsrc/c.js\\n'\n");
     g.commit("bad extractor");
     const r = g.run(["--fast"]);
     assert.equal(r.status, 1);

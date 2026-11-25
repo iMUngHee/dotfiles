@@ -4,10 +4,11 @@
 #
 #   scripts/check-layers.sh --doc <ARCHITECTURE path> -- <extractor command...>
 #
-# The extractor prints one `from<TAB>to` line per production dependency:
-# internal files as canonical repository-relative paths, external dependencies
-# as ext:<name>. The rows and outcomes are described in check-contract.md
-# ("Layer policy"). Debt is compared with the same base as scripts/check.sh.
+# The extractor prints one `from<TAB>to` line per production dependency, and
+# each production file without one alone on its line: internal files as
+# canonical repository-relative paths, external dependencies as ext:<name>.
+# The rows and outcomes are described in check-contract.md ("Layer policy").
+# Debt is compared with the same base as scripts/check.sh.
 # Written for the bash 3.2 that macOS ships.
 set -uo pipefail
 
@@ -225,6 +226,12 @@ CL_DOC=$doc CL_FIRST=$first CL_POLICY=$policy CL_BFILE=$tmp/base CL_EFILE=$tmp/e
 	}
 	FILENAME == efile {
 		if ($0 == "") next
+		# A file with no dependencies is listed alone, so it is still classified.
+		if (NF == 1) {
+			if (canonical($1)) { lone++; alone[lone] = $1 }
+			else fail("extractor line " FNR ": \"" $1 "\" is not a canonical repository path")
+			next
+		}
 		if (NF != 2) { fail("extractor line " FNR " is not from<TAB>to: " $0); next }
 		for (i = 1; i <= 2; i++)
 			if (!external($i) && !canonical($i)) fail("extractor line " FNR ": \"" $i "\" is neither ext:<name> nor a canonical repository path")
@@ -237,6 +244,7 @@ CL_DOC=$doc CL_FIRST=$first CL_POLICY=$policy CL_BFILE=$tmp/base CL_EFILE=$tmp/e
 		}
 		# Classify only input that passed validation.
 		if (bad) { print "check-layers: the layers and their policy are described in " doc; exit 1 }
+		for (e = 1; e <= lone; e++) layer_of(alone[e])
 		for (e = 1; e <= edges; e++) {
 			lf = lt = ""
 			if (!external(from[e])) lf = layer_of(from[e])

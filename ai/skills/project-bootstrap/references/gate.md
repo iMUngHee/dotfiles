@@ -16,17 +16,14 @@ Preserve an effective control while its replacement's coverage is uncertain. If 
 
 ## Repository checks
 
-Select a check when it protects an adopted contract precisely and at reasonable cost. Try the stack's existing inspection or test first. Add custom logic only for a concrete gap and record the extra guarantee it buys. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
+Select a check when it protects an adopted contract precisely and at reasonable cost. Try the stack's existing inspection or test first. Add custom logic only for a concrete gap the existing checks miss, and name that failure in its hint or the rule it enforces; a check with no failure to name stays out. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
 
 - **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
-- **Surface inventory drift.** Extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when a reference document does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
+- **Surface inventory drift.** Where contributors rely on a reference document's completeness, extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when it does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
 - **Layering.** Fail when a module imports across a boundary ARCHITECTURE forbids, with the stack's native policy tool or else the bundled layer helper on the policy ARCHITECTURE links ([architecture](architecture.md#the-dependency-policy)).
-- **Generated sources.** Regenerate and fail when the committed output differs, so edits go to the source.
+- **Generated sources.** Use the generator's read-only mode, or regenerate into a temporary location, and fail when the result differs from the tracked output, so edits go to the source; the check never rewrites tracked files.
 - **Changelog and version.** Fail when the version owner and the changelog's released sections disagree, or when the unreleased section is missing.
 - **Dependency audit.** Known advisories, unused dependencies and disallowed licenses in `full`. Each ignore entry carries an id, a date and a reason, and a self-test proves the gate fails on an entry that lacks one.
-- **Dead code** in `full`, with the stack's own detector.
-- **Documents stay true.** Check an inventory when contributors rely on its completeness, or compare generated text with its source. Review ownership and intent separately ([harness](harness.md)).
-- **Flaky tests fail.** A test that passes only on retry fails the run.
 
 Keep regression cases for custom check logic where a mistake could hide a violation or reject a legitimate change. Reuse existing coverage for thin wrappers around a tested tool.
 

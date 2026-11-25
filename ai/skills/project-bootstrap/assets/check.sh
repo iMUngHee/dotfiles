@@ -396,9 +396,10 @@ EOF
 
 # The tag rules shared by both grammars: an item's last line ends with exactly
 # one [check: <names>] naming registered checks or banned:<id>, or one
-# [unchecked: <reason>].
+# [unchecked: <reason>]. The closed grammar (strict) also wants a reason of
+# more than one word, since a bare "review" never says why no check decides it.
 rule_flush='
-	function flush(   copy, count, last, tag, kind, body, n, parts, i, name) {
+	function flush(   copy, count, last, tag, kind, body, n, parts, i, name, words) {
 		if (item == "") return
 		copy = item
 		count = gsub(/\[(check|unchecked):[^]]*\]/, "&", copy)
@@ -415,6 +416,9 @@ rule_flush='
 		gsub(/^[ \t]+|[ \t]+$/, "", body)
 		if (body == "") {
 			printf "%s:%d: [%s: ] needs %s\n", file, start, kind, (kind == "check" ? "a check name" : "a reason")
+			bad = 1
+		} else if (kind == "unchecked" && strict && split(body, words, /[ \t]+/) < 2) {
+			printf "%s:%d: [unchecked: %s] needs a reason that says why no check decides it, such as [unchecked: review judges allocation on the request path]\n", file, start, body
 			bad = 1
 		} else if (kind == "check") {
 			n = split(body, parts, ",")
@@ -451,6 +455,7 @@ rule_legacy='
 # indented list line is rejected, and a fence opens only at column 0.
 # shellcheck disable=SC2016 # an awk program; its $ fields are not shell expansions
 rule_strict='
+	BEGIN { strict = 1 }
 	function opened() {
 		if (fence != "") { printf "%s:%d: close this fence; the rest of the file was hidden from the rule check\n", ffile, fstart; bad = 1 }
 		fence = ""

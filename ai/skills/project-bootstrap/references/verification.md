@@ -14,7 +14,7 @@ Choose a trigger and an observation at the public boundary. Exercise a meaningfu
 
 ## Scheduling a selected check
 
-Time the check in the environment where contributors will run it. A quick local integration check can run before a push; one that takes minutes belongs in full when its dependencies are available there. For a check that needs specialized hardware or manual access, document its command, prerequisites, trigger, protected property and how to read a failure. Keep a working crash corpus replaying in fast. The bundled gate always runs formal drift in fast when a formal record exists ([gate contract](../assets/check-contract.md#formal-verification-record)).
+Time the check where contributors will run it: a quick one can run before a push, and one that takes minutes belongs in full when that environment has its prerequisites. For a check that needs specialized hardware or manual access, document its command, prerequisites, trigger, protected property and how to read a failure. Keep a working crash corpus replaying in fast. The bundled gate always runs formal drift in fast when a formal record exists ([gate contract](../assets/check-contract.md#formal-verification-record)).
 
 ## Beyond ordinary tests
 

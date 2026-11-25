@@ -1,6 +1,6 @@
 # What the repository holds
 
-The harness is what a contributor, human or agent, reads and runs to make a fitting change with only the checkout. Every repository holds the floor: an entry point, ARCHITECTURE ([architecture](architecture.md)), CONVENTIONS ([conventions](conventions.md#writing-conventions)) and a gate. Two working repositories mark the range above it. A small analysis engine adds a contributing guide and its existing specifications beside a nine-line gate. A platform with isolation, security and release risk adds path-scoped agent rules, a development guide giving the reason behind each rule, reference documents that checks keep true, operations documents and a few project skills. Start small: a piece above the floor joins the document that already serves its readers and gets its own file only when maintained independently.
+The harness is what a contributor, human or agent, reads and runs to make a fitting change with only the checkout. Every repository holds the floor: an entry point, ARCHITECTURE ([architecture](architecture.md)), CONVENTIONS ([conventions](conventions.md#writing-conventions)) and a gate. Above it the range is wide: a small engine may add only a contributing guide beside a short gate, while a platform with isolation, security and release risk adds path-scoped agent rules, a development guide with each rule's reason, reference documents that checks keep true and a few project skills. Start small: a piece above the floor joins the document that already serves its readers and gets its own file only when maintained independently.
 
 | Piece | Holds | Default home | Own file when |
 | --- | --- | --- | --- |
@@ -21,7 +21,7 @@ Give each decision one editable source and link human and agent entry points to 
 
 ## Keeping it true
 
-Prefer checks such as these: a reference document fails when the code exposes a name it does not list, generated agent guidance fails when it differs from its source, comments and test messages fail when they point at plans or session artifacts, the changelog fails when it disagrees with the version owner, and a module fails when it imports across a documented boundary ([gate](gate.md#repository-checks)). Review ownership and intent separately.
+Keep documents true with the checks in [gate](gate.md#repository-checks) (surface inventories, generated guidance, work-artifact references, changelog and version, layering) and review ownership and intent separately.
 
 ## Agent guidance source and loaders
 
