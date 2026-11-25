@@ -647,6 +647,10 @@ test("rule tags: registration and legacy compatibility", async (t) => {
     const bad = g.run(["--fast"]);
     assert.equal(bad.status, 1);
     assert.equal(out(bad).match(/main\.md:1/g).length, 1);
+    g.put("CONVENTIONS.md", "- Owned untagged\n");
+    g.commit("break strict");
+    const twice = g.run(["--fast"]);
+    assert.equal(out(twice).match(/CONVENTIONS\.md:1/g).length, 1);
   });
   await t.test("(f) a failing function or a missing path fails by name", async (t) => {
     const fn = gateRepo(t, { config: RULES_CONFIG("  return 3") });
@@ -683,13 +687,10 @@ test("rule tags: the closed grammar for registered documents", async (t) => {
     "(j) one-space indented item": " - Indented rule\n",
     "(j) tab after the marker": "-\tTabbed rule\n",
     "(j) a backtick fence with a backtick in its info string does not hide a rule": "``` a`b\n- Hidden rule\n",
-    "(h) a closing fence with trailing text does not close": "```\nexample\n``` more\n```\n- After rule\n",
     "(l) a marker-only item": "-\n  Rule on the next line\n",
     "(n) an indented marker right after an item": "- Parent [check: lint]\n  - Child\n",
     "(n) an indented marker after a blank line": "- Parent [check: lint]\n\n    - Child\n",
     "(n) a column-0 item right after a paragraph": "Some paragraph\n- Untagged rule\n",
-    "(p) an indented fence inside an item does not hide the next item": "- Parent [check: lint]\n  ~~~\n  code\n- Untagged rule\n",
-    "(p) a two-space closing fence closes a column-0 fence": "~~~\nexample\n  ~~~\n- Untagged rule\n",
     "(x) an unterminated fence": "- Rule [check: lint]\n```\n- Swallowed rule [check: lint]\n",
     "(z) a list inside a block quote": "> - Quoted rule with no tag\n",
   };
@@ -707,6 +708,34 @@ test("rule tags: the closed grammar for registered documents", async (t) => {
       assert.equal(r.status, 0, out(r));
     });
   }
+  await t.test("(h) a closing fence with trailing text does not close", (t) => {
+    const r = doc(t, "```\nexample\n``` more\n- After rule [check: lint]\n");
+    assert.equal(r.status, 1);
+    assert.match(out(r), /CONVENTIONS\.md:1: close this fence/);
+  });
+  await t.test("(x) the legacy grammar keeps its own fence handling", (t) => {
+    const g = gateRepo(t, { files: { ".ai/rules/main.md": "- Rule [check: lint]\n```\n- Swallowed\n" } });
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("(p) the item after an indented fence is checked", (t) => {
+    const r = doc(t, "- Parent\n  ~~~\n  code [check: lint]\n- Untagged rule\n");
+    assert.equal(r.status, 1);
+    assert.match(out(r), /CONVENTIONS\.md:4: end the rule/);
+    assert.doesNotMatch(out(r), /CONVENTIONS\.md:1:/);
+  });
+  await t.test("(p) a two-space closing fence closes a column-0 fence", (t) => {
+    const r = doc(t, "~~~\nexample\n  ~~~\n- Untagged rule\n");
+    assert.match(out(r), /CONVENTIONS\.md:4: end the rule/);
+  });
+  await t.test("frontmatter is not skipped in a registered document", (t) => {
+    const r = doc(t, "---\n- Untagged\n");
+    assert.match(out(r), /CONVENTIONS\.md:2: end the rule/);
+  });
+  await t.test("a number of ten digits is not a list marker", (t) => {
+    const r = doc(t, "1234567890. prose\n\n- Rule [check: lint]\n");
+    assert.equal(r.status, 0, out(r));
+  });
   await t.test("(x) an unterminated fence names its opening line", (t) => {
     const r = doc(t, "- Rule [check: lint]\n```\n- Swallowed\n");
     assert.match(out(r), /CONVENTIONS\.md:2/);
@@ -726,6 +755,16 @@ test("rule tags: registered paths are canonical, tracked and not aliased", async
   await t.test("(k) ./.ai/rules/x.md is checked once with the legacy grammar", (t) => {
     const r = withPath(t, "./.ai/rules/x.md");
     assert.equal(r.status, 0, out(r));
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo ./.ai/rules/x.md\n  echo .ai/rules/x.md"), files: { ".ai/rules/x.md": "- untagged\n" } });
+    const twice = g.run(["--fast"]);
+    assert.equal(twice.status, 1);
+    assert.equal(out(twice).match(/x\.md:1/g).length, 1);
+  });
+  await t.test("a file named like an awk assignment is still checked", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo 'guide=rules.md'"), files: { "guide=rules.md": "- Untagged\n" } });
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /guide=rules\.md:1/);
   });
   for (const bad of ["/etc/passwd", "../x.md", ".ai/./rules/x.md", ".ai/rules/../rules/x.md"]) {
     await t.test(`(k) rejects ${bad}`, (t) => {
@@ -810,7 +849,7 @@ function layerRepo(t, { policy = LAYER_POLICY, files = {}, branch = "main" } = {
     files: {
       "scripts/check-layers.sh": fs.readFileSync(layersAsset),
       "scripts/edges.sh": EDGES,
-      "scripts/check-data/layers.tsv": policy,
+      ...(policy === null ? {} : { "scripts/check-data/layers.tsv": policy }),
       "src/domain/model.js": "export const x = 1;\n",
       "src/http/handler.js": 'import { x } from "../domain/model.js";\n',
       "ARCHITECTURE.md": "# Architecture\n\nTwo layers: domain and http. The allowed directions are in [the layer policy](scripts/check-data/layers.tsv).\n",
@@ -875,7 +914,15 @@ test("layer policy outcomes", async (t) => {
   await fails("(m) malformed policy row", { policy: LAYER_POLICY + "layer\tbroken\n" });
   await fails("(m) unknown layer in allow", { policy: LAYER_POLICY + "allow\thttp\tnowhere\n" });
   await fails("(m) external-only output without empty-ok", { files: { "src/http/handler.js": 'import k from "kafka";\n' } });
-  await fails("(m) an allow row naming an unknown layer is reported even with no edges", { policy: LAYER_POLICY + "empty-ok\nallow\thttp\tnowhere\n", files: { "src/http/handler.js": 'import k from "kafka";\n' } });
+  const silent = (g) => g.put("scripts/edges.sh", "#!/bin/bash\n");
+  await fails("(m) an allow row naming an unknown layer is reported even with no edges", { policy: LAYER_POLICY + "empty-ok\nallow\thttp\tnowhere\n" }, silent);
+  await fails("an empty extractor run without empty-ok", {}, silent);
+  await passes("an empty extractor run with empty-ok", { policy: LAYER_POLICY + "empty-ok\n" }, silent);
+  await fails("a tab-only extractor record", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf '\\t\\n'\n"));
+  await fails("a duplicated debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/model.js\tsrc/http/handler.js\ndebt\tsrc/domain/model.js\tsrc/http/handler.js\n", files: { "src/domain/model.js": 'import { h } from "../http/handler.js";\n' } });
+  await fails("a noncanonical debt row", { policy: LAYER_POLICY + "debt\t./src/domain/model.js\tsrc/http/handler.js\n" });
+  await fails("an empty glob member", { policy: "layer\tdomain\tsrc/domain/*,\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" });
+  await passes("a bracket glob classifies its files", { policy: "layer\tdomain\tsrc/[d]omain/*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" });
   await passes("(m) zero internal edges with empty-ok", { policy: LAYER_POLICY + "empty-ok\n", files: { "src/http/handler.js": 'import k from "kafka";\n' } });
   await t.test("(m) malformed extractor output fails", (t) => {
     const g = layerRepo(t);
@@ -930,6 +977,22 @@ test("layer debt only shrinks", async (t) => {
     assert.equal(r.status, 1);
     assert.match(out(r), /debt/);
   });
+});
+
+test("layer debt: first adoption against a base without the policy", (t) => {
+  const g = layerRepo(t, { policy: null });
+  g.git("checkout", "-q", "-b", "feat");
+  g.put("src/domain/model.js", 'import { h } from "../http/handler.js";\nexport const x = 1;\n');
+  g.put("scripts/check-data/layers.tsv", LAYER_POLICY + "debt\tsrc/domain/model.js\tsrc/http/handler.js\n");
+  g.commit("adopt with debt");
+  const r = g.run(["--fast"]);
+  assert.equal(r.status, 0, out(r));
+});
+
+test("check-layers.sh rejects a missing --doc value instead of looping", (t) => {
+  const g = layerRepo(t);
+  const r = spawnSync(BASH, [g.at("scripts/check-layers.sh"), "--doc"], { cwd: g.root, env: vars(), encoding: "utf8", timeout: 10000 });
+  assert.equal(r.status, 2);
 });
 
 test("generated entry points resolve the normative documents", (t) => {

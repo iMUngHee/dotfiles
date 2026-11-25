@@ -400,11 +400,12 @@ rule_strict='
 		while (substr(line, n + 1, 1) == fence) n++
 		return n >= flen && substr(line, n + 1) ~ /^[ \t]*$/
 	}
-	function marker(rest) { return rest ~ /^[-*+]([ \t]|$)/ || rest ~ /^[0-9]+[.)]([ \t]|$)/ }
-	FNR == 1 { flush(); opened(); front = 0 }
+	function marker(rest) {
+		if (rest ~ /^[-*+]([ \t]|$)/) return 1
+		return match(rest, /^[0-9]+[.)]([ \t]|$)/) && match(rest, /^[0-9]+/) && RLENGTH <= 9
+	}
+	FNR == 1 { flush(); opened() }
 	{ sub(/\r$/, "") }
-	FNR == 1 && $0 == "---" { front = 1; next }
-	front { if ($0 == "---") front = 0; next }
 	fence != "" { if (closes($0)) fence = ""; next }
 	/^(```|~~~)/ {
 		c = substr($0, 1, 1)
@@ -451,9 +452,9 @@ listed() {
 }
 
 check_rule_tags() {
-	local legacy=() strict=() f p q seg rest out status=0 tracked bad=0
+	local legacy=() strict=() f p q seg rest out status=0 match bad=0
 	for f in .ai/rules/*.md; do
-		[ -f "$f" ] && legacy+=("$f")
+		[ -f "$f" ] && legacy+=("./$f")
 	done
 	if declare -F rule_files >/dev/null; then
 		out=$(rule_files) || status=$?
@@ -461,7 +462,6 @@ check_rule_tags() {
 			echo "rule_files exited with status $status; it must print one repository-relative path per line"
 			return 1
 		fi
-		tracked=$(git ls-files -z | tr '\0' '\n')
 		while IFS= read -r p; do
 			[ -n "$p" ] || continue
 			p=${p#./}
@@ -482,15 +482,18 @@ check_rule_tags() {
 			if [ -L "$q" ]; then
 				echo "rule_files: $p: $q is a symlink; register the file it points to"; bad=1; continue
 			fi
-			if ! grep -qxF -- "$p" <<<"$tracked"; then
-				echo "rule_files: $p: not a tracked path with this exact spelling"; bad=1; continue
+			if ! match=$(git ls-files -z -- ":(literal)$p" | tr '\0' '\n'); then
+				echo "rule_files: $p: git ls-files failed"; bad=1; continue
+			fi
+			if [ "$match" != "$p" ]; then
+				echo "rule_files: $p: not a tracked file with this exact spelling"; bad=1; continue
 			fi
 			if [ ! -f "$p" ] || [ ! -r "$p" ]; then
 				echo "rule_files: $p: not a readable file"; bad=1; continue
 			fi
 			case $p in
-			.ai/rules/*) [ ${#legacy[@]} -gt 0 ] && listed "$p" "${legacy[@]}" || legacy+=("$p") ;;
-			*) [ ${#strict[@]} -gt 0 ] && listed "$p" "${strict[@]}" || strict+=("$p") ;;
+			.ai/rules/*) [ ${#legacy[@]} -gt 0 ] && listed "./$p" "${legacy[@]}" || legacy+=("./$p") ;;
+			*) [ ${#strict[@]} -gt 0 ] && listed "./$p" "${strict[@]}" || strict+=("./$p") ;;
 			esac
 		done <<EOF
 $out

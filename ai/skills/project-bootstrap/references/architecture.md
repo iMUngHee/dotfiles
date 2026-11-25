@@ -1,19 +1,19 @@
 # Architecture
 
-ARCHITECTURE is the repository's definition of its structure. A later contributor, with only the checkout, judges a change against it, and the gate reads the part a machine can decide. Without it, nothing says whether the code has drifted.
+ARCHITECTURE is the repository's definition of its structure. A later contributor, with only the checkout, judges a change against it, and the gate reads the part a machine can decide.
 
 ## What it holds
 
 | Section | Holds |
 | --- | --- |
 | Components | Each component, what it owns (persisted state, resources, invariants) and the code that is its owner |
-| Layers and dependencies | The layers, the allowed directions between them, and a link to the dependency policy the gate reads |
+| Layers and dependencies | The layers and why they are cut this way, with a link to the dependency policy that owns the allowed directions |
 | Boundaries | Security and isolation boundaries, where external input is parsed, who may release each resource |
 | Extension paths | For each component, the supported way to extend it and a real example a contributor can copy |
 | Decisions | Each decision a later reader could undo by accident, with its reason; move them to a decisions directory only when they outgrow a section |
 | Current, target, debt | For an existing repository: the structure as the code shows it, the target the conventions and decisions set, and the departures between them, each tied to a ratchet, a debt entry or a deferred decision |
 
-Write it from the code: every claim names the file, module or type that makes it true, so a reviewer can open it. Keep only what changes rarely; leave function-level detail to the code. Scale it to the project: a small app has two or three components and one line of dependencies, and a project with no boundary to enforce says "one component, no layer policy" and why. Mark the structure of a new project provisional and correct it in the change that proves it wrong. Reuse existing design documents and decision records by linking them; do not restate them.
+Write it from the code: every claim names the file, module or type that makes it true, so a reviewer can open it. Keep what changes rarely; leave function-level detail to the code. Scale it to the project: a small app has two or three components and one line of dependencies, and a project with no boundary to enforce says "one component, no layer policy" and why. Mark the structure of a new project provisional and correct it in the change that proves it wrong. Link existing design documents and decision records instead of restating them.
 
 ## Decisions carried by code
 
@@ -38,4 +38,4 @@ The allowed directions live in data the gate reads; ARCHITECTURE explains them a
 2. Where it has none and a real boundary exists, use `scripts/check-data/layers.tsv` with the bundled [`check-layers.sh`](../assets/check-layers.sh) installed as `scripts/check-layers.sh`. The repository supplies an extractor that prints its production dependencies as `from<TAB>to` lines, internal files as canonical repository-relative paths and external dependencies as `ext:<name>`. The rows and outcomes are in the [contract](../assets/check-contract.md#layer-policy).
 3. Where no boundary exists, install neither; ARCHITECTURE says so.
 
-Forbidden edges that already exist when the policy is adopted are `debt` rows, never `allow` rows. They can only be removed, and ARCHITECTURE's debt section points at them.
+Forbidden edges that already exist when the policy is adopted are recorded as debt, never as allowed directions: `debt` rows with the default policy, the tool's own baseline or exception mechanism with a native one. Debt can only shrink, and ARCHITECTURE's debt section points at it. If the debt is too large to activate the policy now, report the deferred activation as an incomplete requirement. Link ARCHITECTURE from the entry point; in a generated entry point write the link relative to the repository root ([harness](harness.md#agent-guidance-source-and-loaders)).
