@@ -4,7 +4,7 @@ After bootstrap the repository maintains its own floor. Write the loop below and
 
 ## The correction loop
 
-Seed all four items into the unconditional guidance, naming the actual place where corrections are recorded; a repository without an issue tracker or review log gets the lessons file at its first entry, and the guidance says so. In a tagged `.ai/rules` file each item ends with its tag ([gate](gate.md) contract 6); elsewhere say in words what enforces it.
+Seed all four items into the unconditional guidance, naming the actual place where corrections are recorded; a repository without an issue tracker or review log gets the lessons file at its first entry, and the guidance says so. In a tagged `.ai/rules` file each item ends with its tag ([rule tags](../assets/check-contract.md#rule-tags)); elsewhere say in words what enforces it.
 
 - When a change is corrected for a mistake, remove the mistake at the first level that holds: structure, an API or a type, then a lint or a ban whose message names the alternative, then a test; prose last. Before relying on a new check, show it failing on the real mistake and passing the closest legitimate change.
 - Existing code is evidence, not precedent: new code follows the adopted rules, and old violations stay in the ratchet until the code around them changes.
@@ -14,7 +14,7 @@ Seed all four items into the unconditional guidance, naming the actual place whe
 ## Responsibilities
 
 - **Review changes.** Follow the change through its code owner and public contract. Check new dependency edges, duplicated decisions, abstractions and changes in cost at actual callers. Run the repository gate. Review the mechanism that protects each consequential decision.
-- **Keep rules and documentation current.** Name the editable policy, its enforcing check and any command that syncs generated guidance. When a restriction gains an exception, update its owners and run the gate with two changes: the newly allowed case must pass, and the closest case still covered must fail with its repair hint. Retire obsolete checks and tags with their rule. Update the owning architecture, contract or contributor document in the same change.
+- **Keep rules and documentation current.** Name the editable policy, its enforcing check and any command that syncs generated guidance. When a restriction gains an exception, update its owners and run the gate with two changes: the newly allowed case must pass, and the closest case still covered must fail with its repair hint. Retire obsolete checks and tags with their rule. Update the owning document in the same change: a change to a component's ownership, a layer boundary, a flow or an external contract updates ARCHITECTURE, a reversed decision records its successor and reason, and a new or retired rule updates CONVENTIONS.
 - **Garden.** Repair the example contributors keep copying when a small compatible change removes a recurring mistake, lower an applicable baseline as code is fixed, and keep the evidence and its scope for the next maintainer.
 
 ## Questions every harness piece must answer
