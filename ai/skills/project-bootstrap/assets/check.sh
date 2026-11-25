@@ -104,7 +104,7 @@ resolve_base() {
 	local ref found='' head mb header parent
 	if [ -n "${CHECK_BASE:-}" ]; then
 		if ! git rev-parse --verify -q "$CHECK_BASE^{commit}"; then
-			echo "check.sh: CHECK_BASE=$CHECK_BASE is not a commit" >&2
+			echo "CHECK_BASE=$CHECK_BASE is not a commit" >&2
 			return 1
 		fi
 		return 0
@@ -116,12 +116,12 @@ resolve_base() {
 		fi
 	done
 	if [ -z "$found" ]; then
-		echo "check.sh: no origin/HEAD, main or master to take a base from; set CHECK_BASE to the commit before your changes" >&2
+		echo "no origin/HEAD, main or master to take a base from; set CHECK_BASE to the commit before your changes" >&2
 		return 1
 	fi
 	head=$(git rev-parse HEAD)
 	if ! mb=$(git merge-base HEAD "$found"); then
-		echo "check.sh: HEAD shares no history with $found; set CHECK_BASE to the commit before your changes" >&2
+		echo "HEAD shares no history with $found; set CHECK_BASE to the commit before your changes" >&2
 		return 1
 	fi
 	# A branch with no commits of its own changes only the working tree, so
@@ -133,7 +133,7 @@ resolve_base() {
 		return 0
 	fi
 	if ! header=$(git cat-file commit "$head"); then
-		echo "check.sh: cannot read the commit HEAD ($head); set CHECK_BASE to the commit before your changes" >&2
+		echo "cannot read the commit HEAD ($head); set CHECK_BASE to the commit before your changes" >&2
 		return 1
 	fi
 	parent=$(awk '/^$/ { body = 1 } !body && !p && /^parent / { p = $2 } END { print p }' <<<"$header")
@@ -142,10 +142,11 @@ resolve_base() {
 	elif git cat-file -e "$parent^{commit}" 2>/dev/null; then
 		echo "$parent"
 	else
-		echo "check.sh: cannot read $parent, the parent of HEAD (a shallow clone?); fetch more history or set CHECK_BASE to the commit before your changes" >&2
+		echo "cannot read $parent, the parent of HEAD (a shallow clone?); fetch more history or set CHECK_BASE to the commit before your changes" >&2
 		return 1
 	fi
 }
+# End of the base resolver, kept identical in check.sh and check-layers.sh.
 
 
 clean() { [ -z "$(git status --porcelain --untracked-files=normal)" ]; }
@@ -242,7 +243,7 @@ scan_patterns() {
 
 # Compares each ratchet id's hits with its baseline and the baseline with the base.
 check_ratchet() {
-	local status=0 id baseline range resets reason fix
+	local status=0 id baseline range resets reason fix entry
 	[ -s "$tmp/ratchet-ids" ] || return 0
 	if [ -z "$gate_base" ]; then
 		echo "ratchet: no base commit to compare baselines with: $CHECK_BASE_ERROR"
@@ -274,9 +275,16 @@ check_ratchet() {
 			}' "$baseline" "$tmp/hits.$id"; then
 			status=1
 		fi
-		# The first commit adopts its baselines; so does a base without one.
+		# The first commit adopts its baselines; so does a base that lists none.
+		# A baseline the base lists but cannot produce, as in a partial clone,
+		# fails instead of passing as an adoption.
 		[ -f "$data/ratchet/$id.txt" ] && [ "$gate_base" != root ] || continue
-		git show "$gate_base:$data/ratchet/$id.txt" >"$tmp/base.$id" 2>/dev/null || continue
+		if ! entry=$(git ls-tree "$gate_base" -- "$data/ratchet/$id.txt") || { [ -n "$entry" ] && ! git show "$gate_base:$data/ratchet/$id.txt" >"$tmp/base.$id"; }; then
+			echo "ratchet $id: cannot read $data/ratchet/$id.txt at $gate_base; fetch that commit or set CHECK_BASE"
+			status=1
+			continue
+		fi
+		[ -n "$entry" ] || continue
 		if ! awk -F'\t' -v id="$id" -v reset="$(printf '%s\n' "$resets" | grep -qx -- "$id" && echo 1)" '
 			FILENAME == ARGV[1] { base[$1] = $2; btotal += $2; next }
 			{ work[$1] = $2; wtotal += $2 }
@@ -578,8 +586,14 @@ EOF
 
 # --base needs no configuration, so a repository with its own gate can call it.
 if [ -f scripts/check-config.sh ]; then
-	# shellcheck source=/dev/null
-	. scripts/check-config.sh
+	# --base prints only the base, so the configuration's output goes to stderr.
+	if [ "$mode" = base ]; then
+		# shellcheck source=/dev/null
+		. scripts/check-config.sh >&2
+	else
+		# shellcheck source=/dev/null
+		. scripts/check-config.sh
+	fi
 elif [ "$mode" != base ]; then
 	echo "check.sh: scripts/check-config.sh is missing; it defines tool_versions and register_checks" >&2
 	exit 2
@@ -593,7 +607,7 @@ fi
 # which read it from CHECK_RESOLVED_BASE (empty when unresolved, with the
 # reason in CHECK_BASE_ERROR).
 gate_base=$(resolve_base 2>"$tmp/base-error") || gate_base=
-CHECK_BASE_ERROR=$(sed 's/^check.sh: //' "$tmp/base-error")
+CHECK_BASE_ERROR=$(cat "$tmp/base-error")
 export CHECK_RESOLVED_BASE=$gate_base CHECK_BASE_ERROR
 
 if [ "$mode" = passed ]; then

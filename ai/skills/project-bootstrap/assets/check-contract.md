@@ -8,13 +8,13 @@ This is how the bundled [driver](check.sh), [hook](pre-push) and [layer helper](
 
 ## Base
 
-Ratchet and layer-debt checks compare against one base, resolved once per run after `scripts/check-config.sh` is sourced (so it may set `CHECK_BASE`) and printed by `scripts/check.sh --base`, which also runs without that file (stdout holds only the OID or `root`; diagnostics go to stderr and the exit status is nonzero when none resolves):
+Ratchet and layer-debt checks compare against one base, resolved once per run after `scripts/check-config.sh` is sourced (so it may set `CHECK_BASE`) and printed by `scripts/check.sh --base`, which also runs without that file and sends its output to stderr (stdout holds only the OID or `root`; diagnostics go to stderr and the exit status is nonzero when none resolves):
 
 1. `CHECK_BASE` when set; it must name a commit.
 2. Otherwise the default branch is `origin/HEAD`, else local `main`, else `master`; with none of them the base is unresolved. The base is `git merge-base HEAD <default branch>`.
 3. When that merge-base is `HEAD` itself and HEAD is the default branch (for `origin/HEAD`, the branch it points to with `refs/remotes/origin/` removed) or detached, the last commit is the change: the base is the first parent named in HEAD's commit header, `root` when the header names none, and unresolved when the named parent cannot be read, as at a shallow boundary. On any other branch HEAD is the base, since only the working tree has changed.
 
-An unresolved base fails the ratchet and the layer helper with the reason, such as fetching more history or setting `CHECK_BASE`. `root` adopts the baselines and the layer policy as they are, and `Ratchet-Reset` trailers are read from all of HEAD's history. The gate passes the base to its checks as `CHECK_RESOLVED_BASE`, empty when unresolved with the reason in `CHECK_BASE_ERROR`; the [layer helper](#layer-policy) uses it and, run on its own, asks `scripts/check.sh --base`, so the helper is installed beside the bundled driver even in a repository that keeps its own gate. Limitation: on the default branch several commits made without a run are compared only through the last one, and a working-tree change on top of the first commit counts as part of the adoption; CI that checks several commits, or a run meant to cover them, sets `CHECK_BASE` to the commit before the changes.
+An unresolved base fails the ratchet and the layer helper with the reason, such as fetching more history or setting `CHECK_BASE`. `root` adopts the baselines and the layer policy as they are, and `Ratchet-Reset` trailers are read from all of HEAD's history. The gate passes the base to its checks as `CHECK_RESOLVED_BASE`, empty when unresolved with the reason in `CHECK_BASE_ERROR`; the [layer helper](#layer-policy) uses it and, run on its own, resolves the base with the same rules (it carries the same resolver, so it also works beside a repository's own gate). Limitation: on the default branch several commits made without a run are compared only through the last one, and a working-tree change on top of the first commit counts as part of the adoption; CI that checks several commits, or a run meant to cover them, sets `CHECK_BASE` to the commit before the changes.
 
 ## Pass record
 
@@ -33,7 +33,7 @@ After a full or fast run passes on a clean working tree, the gate appends `<mode
 `scripts/check-data/ratchet/<id>.txt` holds `sha256(line with surrounding whitespace trimmed)<TAB>count<TAB>example path`, one line per distinct content. A violation is its content, not its location, so moving a file passes and replacing one baselined violation with a different one fails.
 - A content hash counted above its baseline, or absent from it, fails. The message gives the count against the baseline and lists every line with that content, since content cannot tell the new copy from the old ones.
 - A content hash counted below its baseline fails until the baseline is lowered, so the baseline only shrinks.
-- The baseline file may not gain hashes or counts relative to the same file at the base. A baseline absent at the base is a first adoption and passes.
+- The baseline file may not gain hashes or counts relative to the same file at the base. A baseline the base does not list is a first adoption and passes; one it lists but cannot produce, as in a partial clone, fails.
 - A reformat changes hashes without adding violations. A commit in `base..HEAD` with the trailer `Ratchet-Reset: <id> <reason>` lets that id's hashes change, provided its total count does not exceed the base's total.
 - Limit: a content hash cannot tell a moved line from the same content reintroduced elsewhere; the second is caught only when the count rises. A ratchet hit in a file whose path holds a tab or a newline is misread; keep such paths out of ratchet patterns.
 

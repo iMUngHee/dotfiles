@@ -489,6 +489,23 @@ test("base on the default branch", async (t) => {
     assert.equal(r.status, 0, out(r));
     assert.equal(g.run(["--base"]).stdout, g.git("rev-parse", "HEAD") + "\n");
   });
+  await t.test("a baseline that exists at the base but cannot be read fails", (t) => {
+    const g = adoptedRatchet(t);
+    growBaseline(g);
+    const bin = path.join(g.root, "..", `${path.basename(g.root)}-bin`);
+    fs.mkdirSync(bin);
+    t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+    const real = spawnSync("sh", ["-c", "command -v git"], { env: vars(), encoding: "utf8" }).stdout.trim();
+    fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\n[ "$1" = show ] && exit 128\nexec "${real}" "$@"\n`, { mode: 0o755 });
+    const r = g.run([], { PATH: `${bin}:${vars().PATH}` });
+    assert.equal(r.status, 1);
+    assert.match(out(r), /cannot read scripts\/check-data\/ratchet\/leg\.txt at/);
+  });
+  await t.test("--base prints only the base when check-config.sh writes to stdout", (t) => {
+    const g = gateRepo(t, { config: `echo Loading toolchain\n${PASSING_CONFIG}` });
+    const r = g.run(["--base"]);
+    assert.equal(r.stdout, "root\n");
+  });
   await t.test("control: a baseline in the root commit is a first adoption", (t) => {
     const g = gateRepo(t, { files: { "scripts/check-data/banned-patterns.tsv": LEG_PATTERNS, "src/a.txt": "LEGACY(a)\n" } });
     assert.equal(g.run(["--write-baselines"]).status, 0);
@@ -1157,13 +1174,26 @@ test("layer debt grown in a commit on main fails in the gate and in the helper",
   assert.match(out(alone), /debt grew/);
 });
 
-test("check-layers.sh without the bundled driver names it", (t) => {
+test("check-layers.sh resolves the base itself beside a repository's own gate", (t) => {
   const g = layerRepo(t);
-  fs.unlinkSync(g.at("scripts/check.sh"));
-  g.commit("no driver");
-  const r = spawnSync(BASH, [g.at("scripts/check-layers.sh"), "--doc", "ARCHITECTURE.md", "--", "bash", "scripts/edges.sh"], { cwd: g.root, env: vars(), encoding: "utf8" });
+  g.put("scripts/check.sh", "#!/bin/bash\nexec bash scripts/check-layers.sh --doc ARCHITECTURE.md -- bash scripts/edges.sh\n");
+  g.put("src/domain/model.js", 'import { h } from "../http/handler.js";\nexport const x = 1;\n');
+  g.put("scripts/check-data/layers.tsv", LAYER_POLICY + "debt\tsrc/domain/model.js\tsrc/http/handler.js\n");
+  g.commit("own gate, sneak debt");
+  const r = spawnSync(BASH, [g.at("scripts/check.sh")], { cwd: g.root, env: vars(), encoding: "utf8", timeout: 20000 });
   assert.equal(r.status, 1);
-  assert.match(out(r), /scripts\/check\.sh is missing/);
+  assert.match(out(r), /debt grew/);
+});
+
+test("the base resolver is the same text in check.sh and check-layers.sh", () => {
+  const block = (url) => {
+    const text = fs.readFileSync(url, "utf8");
+    const start = text.indexOf("# True when HEAD is detached");
+    const end = text.indexOf("# End of the base resolver");
+    assert.ok(start >= 0 && end > start, url.pathname);
+    return text.slice(start, end);
+  };
+  assert.equal(block(layersAsset), block(gateAsset));
 });
 
 test("an unresolved base in the layer check shows why", (t) => {

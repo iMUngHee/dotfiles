@@ -7,7 +7,7 @@
 # The extractor prints one `from<TAB>to` line per production dependency:
 # internal files as canonical repository-relative paths, external dependencies
 # as ext:<name>. The rows and outcomes are described in check-contract.md
-# ("Layer policy"). Debt is compared with the base scripts/check.sh resolves.
+# ("Layer policy"). Debt is compared with the same base as scripts/check.sh.
 # Written for the bash 3.2 that macOS ships.
 set -uo pipefail
 
@@ -52,18 +52,78 @@ if [ "$(tr -d '\000' <"$tmp/edges" | wc -c)" -ne "$(wc -c <"$tmp/edges")" ]; the
 	exit 1
 fi
 
-# The gate's base: scripts/check.sh passes the one it resolved for its run,
-# and a run on its own asks it.
+# True when HEAD is detached or is the branch the default ref $1 names.
+on_default_branch() {
+	local branch name
+	branch=$(git symbolic-ref -q HEAD) || return 0
+	case $1 in
+	refs/remotes/origin/HEAD)
+		name=$(git symbolic-ref -q "$1") || return 1
+		name=${name#refs/remotes/origin/}
+		;;
+	*) name=${1#refs/heads/} ;;
+	esac
+	[ "$branch" = "refs/heads/$name" ]
+}
+
+# Prints the commit that ratchet baselines and layer debt are compared
+# against, or "root" when HEAD is the first commit; diagnostics go to stderr.
+resolve_base() {
+	local ref found='' head mb header parent
+	if [ -n "${CHECK_BASE:-}" ]; then
+		if ! git rev-parse --verify -q "$CHECK_BASE^{commit}"; then
+			echo "CHECK_BASE=$CHECK_BASE is not a commit" >&2
+			return 1
+		fi
+		return 0
+	fi
+	for ref in refs/remotes/origin/HEAD refs/heads/main refs/heads/master; do
+		if git rev-parse --verify -q "$ref^{commit}" >/dev/null; then
+			found=$ref
+			break
+		fi
+	done
+	if [ -z "$found" ]; then
+		echo "no origin/HEAD, main or master to take a base from; set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
+	head=$(git rev-parse HEAD)
+	if ! mb=$(git merge-base HEAD "$found"); then
+		echo "HEAD shares no history with $found; set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
+	# A branch with no commits of its own changes only the working tree, so
+	# HEAD is its base. On the default branch itself the last commit is the
+	# change: compare with its first parent, read from the commit header so a
+	# shallow boundary is not mistaken for the first commit.
+	if [ "$mb" != "$head" ] || ! on_default_branch "$found"; then
+		echo "$mb"
+		return 0
+	fi
+	if ! header=$(git cat-file commit "$head"); then
+		echo "cannot read the commit HEAD ($head); set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
+	parent=$(awk '/^$/ { body = 1 } !body && !p && /^parent / { p = $2 } END { print p }' <<<"$header")
+	if [ -z "$parent" ]; then
+		echo root
+	elif git cat-file -e "$parent^{commit}" 2>/dev/null; then
+		echo "$parent"
+	else
+		echo "cannot read $parent, the parent of HEAD (a shallow clone?); fetch more history or set CHECK_BASE to the commit before your changes" >&2
+		return 1
+	fi
+}
+# End of the base resolver, kept identical in check.sh and check-layers.sh.
+
+# The gate passes the base it resolved for its run; run alone, resolve it here.
 why=
 if [ -n "${CHECK_RESOLVED_BASE+set}" ]; then
 	base=$CHECK_RESOLVED_BASE
 	why=${CHECK_BASE_ERROR:-}
-elif [ ! -f scripts/check.sh ]; then
-	echo "check-layers: scripts/check.sh is missing; install the bundled driver beside this helper, which asks it for the base; the layers are described in $doc"
-	exit 1
-elif ! base=$(bash scripts/check.sh --base 2>"$tmp/base-error"); then
+elif ! base=$(resolve_base 2>"$tmp/base-error"); then
 	base=
-	why=$(sed 's/^check.sh: //' "$tmp/base-error")
+	why=$(cat "$tmp/base-error")
 fi
 if [ -z "$base" ]; then
 	echo "check-layers: no base commit to compare debt with: ${why:-set CHECK_BASE to the commit before your changes}; the layers are described in $doc"
