@@ -407,6 +407,11 @@ rule_strict='
 	FNR == 1 { flush(); opened() }
 	{ sub(/\r$/, "") }
 	fence != "" { if (closes($0)) fence = ""; next }
+	/<!--/ {
+		flush()
+		printf "%s:%d: rule files take no HTML comments; they can hide a rule from this check\n", FILENAME, FNR
+		bad = 1; next
+	}
 	/^(```|~~~)/ {
 		c = substr($0, 1, 1)
 		if (c == "`") { match($0, /^`+/) } else { match($0, /^~+/) }
@@ -482,12 +487,15 @@ check_rule_tags() {
 			if [ -L "$q" ]; then
 				echo "rule_files: $p: $q is a symlink; register the file it points to"; bad=1; continue
 			fi
-			if ! match=$(git ls-files -z -- ":(literal)$p" | tr '\0' '\n'); then
+			if ! match=$(git ls-files -s -z -- ":(literal)$p" | tr '\0' '\n'); then
 				echo "rule_files: $p: git ls-files failed"; bad=1; continue
 			fi
-			if [ "$match" != "$p" ]; then
+			if [ "${match#*$'\t'}" != "$p" ]; then
 				echo "rule_files: $p: not a tracked file with this exact spelling"; bad=1; continue
 			fi
+			case $match in 120000\ *)
+				echo "rule_files: $p: git records it as a symlink; register the file it points to"; bad=1; continue ;;
+			esac
 			if [ ! -f "$p" ] || [ ! -r "$p" ]; then
 				echo "rule_files: $p: not a readable file"; bad=1; continue
 			fi

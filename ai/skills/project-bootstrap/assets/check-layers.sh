@@ -34,7 +34,7 @@ if [ ! -f "$policy" ]; then
 fi
 
 if ! tmp=$(mktemp -d) || [ -z "$tmp" ]; then
-	echo "check-layers: cannot create a temporary directory"
+	echo "check-layers: cannot create a temporary directory; the layers are described in $doc"
 	exit 1
 fi
 trap 'rm -rf "$tmp"' EXIT
@@ -43,6 +43,11 @@ status=0
 "$@" >"$tmp/edges" || status=$?
 if [ "$status" -ne 0 ]; then
 	echo "check-layers: the extractor exited with status $status: $*; the layers are described in $doc"
+	exit 1
+fi
+# awk stops reading a record at a NUL byte, so reject it before parsing.
+if [ "$(tr -d '\000' <"$tmp/edges" | wc -c)" -ne "$(wc -c <"$tmp/edges")" ]; then
+	echo "check-layers: the extractor output holds a NUL byte; the layers are described in $doc"
 	exit 1
 fi
 
@@ -63,13 +68,13 @@ resolve_base() {
 	return 1
 }
 if ! base=$(resolve_base); then
-	echo "check-layers: no base commit to compare debt with; set CHECK_BASE to the commit before your changes"
+	echo "check-layers: no base commit to compare debt with; set CHECK_BASE to the commit before your changes; the layers are described in $doc"
 	exit 1
 fi
 # Only a successful listing that is empty proves the policy absent at the base;
 # any read error fails instead of opening a first adoption.
 if ! entry=$(git ls-tree "$base" -- "$policy"); then
-	echo "check-layers: cannot read $policy at $base; fetch that commit or set CHECK_BASE"
+	echo "check-layers: cannot read $policy at $base; fetch that commit or set CHECK_BASE; the layers are described in $doc"
 	exit 1
 fi
 first=0
@@ -77,7 +82,7 @@ if [ -z "$entry" ]; then
 	first=1
 	: >"$tmp/base"
 elif ! git show "$base:$policy" >"$tmp/base"; then
-	echo "check-layers: cannot read $policy at $base; fetch that commit or set CHECK_BASE"
+	echo "check-layers: cannot read $policy at $base; fetch that commit or set CHECK_BASE; the layers are described in $doc"
 	exit 1
 fi
 
@@ -88,11 +93,11 @@ CL_DOC=$doc CL_FIRST=$first CL_POLICY=$policy CL_BFILE=$tmp/base CL_EFILE=$tmp/e
 	# A canonical repository path: relative, no empty, . or .. segment, no
 	# control character (so no endpoint can contain SUBSEP), not an ext: name.
 	function canonical(p) {
-		return p != "" && p !~ /^\// && p !~ /\/$/ && p !~ /\/\// && p !~ /(^|\/)\.\.?(\/|$)/ && p !~ /[\001-\037]/ && p !~ /^ext:/
+		return p != "" && p !~ /^\// && p !~ /\/$/ && p !~ /\/\// && p !~ /(^|\/)\.\.?(\/|$)/ && p !~ /[\001-\037\177]/ && p !~ /^ext:/
 	}
-	function external(p) { return p ~ /^ext:[^\001-\037]+$/ }
+	function external(p) { return p ~ /^ext:[^\001-\037\177]+$/ }
 	# The supported glob subset: *, ? and [...] or [!...] without classes or escapes.
-	function glob_ok(g) { return g !~ /\\|\[:|\[[^]]*$|\[!?\]/ }
+	function glob_ok(g) { return g !~ /\\|\[:|\[[^]]*$|\[!?\]|\[[^]]*\[/ }
 	function name_ok(n) { return n ~ /^[A-Za-z0-9_.-]+$/ }
 	# A supported glob as a regular expression: * and ? also match /, and
 	# [...] or [!...] is a character class.

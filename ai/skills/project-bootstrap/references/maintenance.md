@@ -1,6 +1,6 @@
 # Maintenance after bootstrap
 
-After bootstrap the repository maintains its own floor. Write the loop below and the three responsibilities into the existing contributor or agent guidance, beside the standard commands, using the repository's own commands, check names and nouns. Create a separate lessons file or project skill only when there is an actual entry or a repeated procedure to hold.
+After bootstrap the repository maintains its own floor. Write the loop below and the three responsibilities, in the repository's own commands and nouns, into CONVENTIONS (rules) and the contributor guidance (commands); a generated entry point links them. Create a separate lessons file or project skill only when there is an actual entry or a repeated procedure to hold.
 
 ## The correction loop
 

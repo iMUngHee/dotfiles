@@ -687,7 +687,6 @@ test("rule tags: the closed grammar for registered documents", async (t) => {
     "(g) untagged 1) item": "1) Owned rule\n",
     "(j) one-space indented item": " - Indented rule\n",
     "(j) tab after the marker": "-\tTabbed rule\n",
-    "(j) a backtick fence with a backtick in its info string does not hide a rule": "``` a`b\n- Hidden rule\n",
     "(l) a marker-only item": "-\n  Rule on the next line\n",
     "(n) an indented marker right after an item": "- Parent [check: lint]\n  - Child\n",
     "(n) an indented marker after a blank line": "- Parent [check: lint]\n\n    - Child\n",
@@ -709,6 +708,16 @@ test("rule tags: the closed grammar for registered documents", async (t) => {
       assert.equal(r.status, 0, out(r));
     });
   }
+  await t.test("(j) a backtick fence with a backtick in its info string does not hide a rule", (t) => {
+    const r = doc(t, "``` a`b\n- Hidden rule\n");
+    assert.match(out(r), /CONVENTIONS\.md:2: end the rule/);
+    assert.doesNotMatch(out(r), /close this fence/);
+  });
+  await t.test("an HTML comment cannot hide a rule", (t) => {
+    const r = doc(t, "<!--\n~~~\n-->\n- Untagged rule\n~~~\n");
+    assert.equal(r.status, 1);
+    assert.match(out(r), /CONVENTIONS\.md:1: rule files take no HTML comments/);
+  });
   await t.test("(h) a closing fence with trailing text does not close", (t) => {
     const r = doc(t, "```\nexample\n``` more\n- After rule [check: lint]\n");
     assert.equal(r.status, 1);
@@ -790,7 +799,17 @@ test("rule tags: registered paths are canonical, tracked and not aliased", async
   await t.test("(s) a path through a symlinked directory is rejected", (t) => {
     const r = withPath(t, "alias/x.md", {}, (g) => fs.symlinkSync(".ai/rules", g.at("alias")));
     assert.equal(r.status, 1);
-    assert.match(out(r), /alias\/x\.md/);
+    assert.match(out(r), /alias\/x\.md: alias is a symlink/);
+  });
+  await t.test("a path Git records as a symlink is rejected even when checked out as a file", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo CONVENTIONS.md"), files: { "docs/rules.md": "- Untagged\n" } });
+    const blob = spawnSync("git", ["hash-object", "-w", "--stdin"], { cwd: g.root, env: vars(), input: "docs/rules.md", encoding: "utf8" }).stdout.trim();
+    g.git("update-index", "--add", "--cacheinfo", `120000,${blob},CONVENTIONS.md`);
+    g.git("commit", "-qm", "symlink entry");
+    g.put("CONVENTIONS.md", "docs/rules.md");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /CONVENTIONS\.md: git records it as a symlink/);
   });
   await t.test("(t) CONVENTIONS outside .ai/rules is strict; the same text under .ai/rules is legacy", (t) => {
     const strict = withPath(t, "CONVENTIONS.md", { "CONVENTIONS.md": "* untagged\n" });
@@ -931,6 +950,9 @@ test("layer policy outcomes", async (t) => {
   await fails("a nameless ext: endpoint", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\text:\\n'\n"), /neither ext:<name> nor a canonical repository path/);
   await fails("a control byte in an extractor endpoint", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/domain/a\\tsrc/http/b\\034src/http/z\\n'\n"), /neither ext:<name> nor a canonical repository path/);
   await fails("a control byte in a debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/a\x1csrc/http/b\tsrc/http/z\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
+  await fails("a NUL byte in the extractor output", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\tsrc/domain/model.js\\000\\textra\\n'\n"), /holds a NUL byte/);
+  await fails("a DEL byte in an extractor endpoint", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\tsrc/domain/model.js\\177\\n'\n"), /neither ext:<name> nor a canonical repository path/);
+  await fails("an equivalence-class glob, even with no edges", { policy: "layer\tdomain\tsrc/[[=d=]]omain/*\nlayer\thttp\tsrc/http/*\nempty-ok\n" }, silent, /globs take only/);
   await fails("a control byte in a layer name", { policy: LAYER_POLICY + "layer\ta\x1cb\tsrc/x/*\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
   await fails("a control byte in an allow field", { policy: LAYER_POLICY + "allow\thttp\tdomain\x1cx\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
   await fails("an empty negated class, even with no edges", { policy: "layer\tdomain\tsrc/[!]/*\nlayer\thttp\tsrc/http/*\nempty-ok\n" }, silent, /globs take only/);
@@ -1000,7 +1022,7 @@ test("layer debt only shrinks", async (t) => {
     g.commit("sneak debt");
     const r = g.run(["--fast"]);
     assert.equal(r.status, 1);
-    assert.match(out(r), /debt/);
+    assert.match(out(r), /debt grew/);
   });
 });
 
