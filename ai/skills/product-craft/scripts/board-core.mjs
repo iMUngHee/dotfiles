@@ -165,7 +165,8 @@ function sentSummary(action, controls) {
     const children = [`sentTitle${s}`, ...lines.map((_, l) => `sentLine${s}x${l}`)];
     components.push({ id: `sentSection${s}`, component: "Column", children });
     sectionParts.push({ id: `sentTitle${s}`, component: "Heading", level: 2, text: title });
-    lines.forEach((line, l) => sectionParts.push({ id: `sentLine${s}x${l}`, component: "Hint", text: line }));
+    lines.forEach((line, l) => sectionParts.push({ id: `sentLine${s}x${l}`, component: "Hint", text: line,
+      ...(title === "조정" && /#[0-9a-fA-F]{6}/.test(line) ? { swatches: true } : {}) }));
   });
   // A rule sets the closing line apart from the last section.
   components.push({ id: "sentRule", component: "Divider" });

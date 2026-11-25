@@ -74,10 +74,12 @@
   function measureContrast(names) {
     const values = {};
     const unmeasured = new Set();
-    // The background behind the least readable text, so the panel can suggest a fix, and a
-    // sample of text that could not be measured, so the panel can name it.
+    // The background behind the least readable text, so the panel can suggest a fix, that
+    // text, so the panel can name it, and a sample of text that could not be measured.
     const backgrounds = {};
+    const texts = {};
     const samples = {};
+    const textOf = el => (el.innerText ?? el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, L.text);
     const hex = rgb => `#${rgb.map(c => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
     for (const name of names) {
       const probe = document.createElement("span");
@@ -97,7 +99,7 @@
         const backgrounds_ = backgroundsOf(el);
         if (!backgrounds_) {
           unmeasured.add(name);
-          samples[name] ??= (el.innerText ?? el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, L.text);
+          samples[name] ??= textOf(el);
           continue;
         }
         for (const background of backgrounds_) {
@@ -106,13 +108,14 @@
           if (ratio < lowest) {
             lowest = ratio;
             backgrounds[name] = hex(background);
+            texts[name] = textOf(el);
           }
         }
       }
       if (Number.isFinite(lowest)) values[name] = Math.round(lowest * 1000) / 1000;
     }
     // Sent even when empty, so ratios from an earlier value do not linger in the panel.
-    post({ type: "contrast", values, unmeasured: [...unmeasured], backgrounds, samples });
+    post({ type: "contrast", values, unmeasured: [...unmeasured], backgrounds, texts, samples });
   }
 
   function selectorFor(el) {

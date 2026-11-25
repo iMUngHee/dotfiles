@@ -28,7 +28,13 @@ export const BOARD_COMPONENT_APIS = [
     }),
   },
   { name: "Heading", schema: strict({ text: text("Heading text."), level: z.number().int().min(1).max(2).optional().describe("1 or 2; 1 when omitted.") }) },
-  { name: "Hint", schema: strict({ text: text("Secondary text, upright.") }) },
+  {
+    name: "Hint",
+    schema: strict({
+      text: text("Secondary text, upright."),
+      swatches: z.boolean().optional().describe("true puts a chip of each #rrggbb colour in the text in front of it."),
+    }),
+  },
   {
     name: "SubmitButton",
     schema: strict({

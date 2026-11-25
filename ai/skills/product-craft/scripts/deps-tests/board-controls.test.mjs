@@ -243,7 +243,17 @@ test("reject all says it drops the chosen candidate, and pinning names its targe
   await card(page, "1").click();
   await page.getByLabel("코멘트", { exact: true }).fill("둘 다 아쉬워요");
   await page.getByText("다시 그리면 시안 1 채택과 조정값은 버려집니다.").waitFor();
-  assert.equal(await page.locator(".pcb-caution").evaluate(el => getComputedStyle(el).color), "rgb(255, 180, 168)", "the drop warning takes the caution colour");
+  const caution = () => page.locator(".pcb-caution").evaluate(el => getComputedStyle(el).color);
+  assert.equal(await caution(), "rgb(184, 190, 198)", "at rest the drop warning is secondary text");
+  const reject = page.locator("button.pcb-submit", { hasText: "다시 그려 주세요" });
+  await reject.hover();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector(".pcb-caution")).color === "rgb(255, 180, 168)");
+  await page.mouse.move(10, 10);
+  await page.waitForFunction(() => getComputedStyle(document.querySelector(".pcb-caution")).color === "rgb(184, 190, 198)");
+  await reject.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  assert.equal(await caution(), "rgb(255, 180, 168)", "keyboard focus on reject all turns the warning to caution");
   await viewer().locator("nav button").nth(1).click();
   await connected("2");
   await page.getByText("시안 2에 남깁니다.").waitFor();
@@ -264,7 +274,7 @@ test("a colour token warns when the text it colours falls below 4.5:1 on its bac
   await page.getByLabel("강조색 hex").fill("#a7f3d0");
   await page.getByLabel("강조색 hex").press("Enter");
   await warning.waitFor();
-  assert.match(await warning.textContent(), /이 색과 배경의 대비가 1\.\d:1입니다\.글자에는 4\.5:1 이상이 필요합니다\./);
+  assert.match(await warning.textContent(), /이 색과 배경의 대비가 1\.\d:1입니다\(“89,000원”\)\.글자에는 4\.5:1 이상이 필요합니다\./);
   await page.getByText("시안 1 · 조정 1개 · 대비 경고 1개", { exact: true }).waitFor();
   const fix = page.getByRole("button", { name: /^#[0-9a-f]{6}로 바꾸기$/ });
   const target = (await fix.textContent()).slice(0, 7);
@@ -617,7 +627,7 @@ test("a valid contrast report replaces the last one; foreign or malformed ones a
   await card(page, "1").click();
   await page.waitForTimeout(400);
   const post = data => candidate("1").evaluate(d => top.postMessage(d, "*"), data);
-  const report = { pcb: 1, type: "contrast", candidate: "1", values: {}, unmeasured: ["accent"], backgrounds: {}, samples: { accent: "가격" } };
+  const report = { pcb: 1, type: "contrast", candidate: "1", values: {}, unmeasured: ["accent"], backgrounds: {}, texts: {}, samples: { accent: "가격" } };
   await post(report);
   await unmeasuredNote(page, "accent").waitFor();
   await post({ ...report, values: { accent: 2 }, backgrounds: { accent: "#ffffff" } });
@@ -633,6 +643,8 @@ test("a valid contrast report replaces the last one; foreign or malformed ones a
     { ...report, unmeasured: "accent" },
     { ...report, backgrounds: { accent: "white" } },
     { ...report, samples: { accent: 7 } },
+    { ...report, texts: { accent: "가격" } },
+    (({ texts, ...rest }) => rest)(report),
     { ...report, unmeasured: [], samples: { accent: "가격" } },
     (({ unmeasured, ...rest }) => rest)(report),
   ]) await post(bad);
@@ -666,7 +678,7 @@ test("the viewer hides tools it cannot use, marks the chosen candidate, shows it
   await connected("1");
   assert.equal(await viewer().locator("#compare").isVisible(), false, "no reference, no compare button");
   assert.equal(await viewer().locator("#fit").isVisible(), false, "no image, no fit button");
-  const width = await viewer().evaluate(() => [document.getElementById("width").textContent, `${document.querySelector("iframe").clientWidth}px`]);
+  const width = await viewer().evaluate(() => [document.getElementById("width").textContent, `Preview width ${document.querySelector("iframe").clientWidth}px`]);
   assert.equal(width[0], width[1]);
   await card(page, "2").click();
   await viewer().waitForFunction(() => document.querySelectorAll("nav button")[1].hasAttribute("data-chosen"));
@@ -703,4 +715,70 @@ test("the answer area sits at the foot of the panel even when the content is sho
   await connected("1");
   const gap = await page.evaluate(() => innerHeight - document.querySelector("aside a2ui-basic-column:has(> a2ui-react-submitbutton)").getBoundingClientRect().bottom);
   assert.ok(Math.abs(gap) <= 1, `answer area bottom is ${gap}px above the window bottom`);
+});
+
+test("toggling pin mode never moves the rows below the pin toggle", async t => {
+  const { page, connected } = await open(t, await fullSurface(), two());
+  await connected("1");
+  const comment = page.getByLabel("코멘트", { exact: true });
+  const top = () => comment.evaluate(el => el.getBoundingClientRect().top);
+  const before = await top();
+  await page.getByRole("button", { name: "위치 지정" }).click();
+  await page.getByText("시안에서 위치를 눌러 주세요 · Esc 취소").waitFor();
+  assert.ok(Math.abs(await top() - before) <= 0.5, "pin mode on");
+  await page.getByRole("button", { name: "지정 취소" }).click();
+  await page.getByRole("button", { name: "위치 지정" }).waitFor();
+  assert.ok(Math.abs(await top() - before) <= 0.5, "pin mode off");
+  // Esc with focus still on the panel's toggle ends pin mode too.
+  await page.getByRole("button", { name: "위치 지정" }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "위치 지정" }).waitFor();
+});
+
+test("arrow keys in the AlignPicker move focus with the active segment", async t => {
+  const { page, connected } = await open(t, await fullSurface(), two());
+  await connected("1");
+  await card(page, "1").click();
+  await page.getByRole("radio", { name: "왼쪽" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "가운데");
+  assert.equal(await page.getByRole("radio", { name: "가운데" }).getAttribute("aria-checked"), "true");
+});
+
+test("the sent summary shows a colour chip beside each hex and spaces the closing rule evenly", async t => {
+  const { page, connected, send } = await open(t, await fullSurface(), two());
+  await connected("1");
+  await card(page, "1").click();
+  await page.getByLabel("강조색 hex").fill("#3b82f6");
+  await page.getByLabel("강조색 hex").press("Enter");
+  await page.getByLabel("간격 늘리기").click();
+  await send();
+  await page.getByText("시안 1 채택으로 보냈습니다.").waitFor();
+  const chips = await page.locator(".pcb-chip").evaluateAll(els => els.map(el => getComputedStyle(el).backgroundColor));
+  assert.deepEqual(chips, ["rgb(3, 199, 90)", "rgb(59, 130, 246)"]);
+  const line = page.locator(".pcb-hint", { hasText: "간격:" });
+  assert.equal(await line.locator(".pcb-chip").count(), 0, "a size line has no chip");
+  const gaps = await page.evaluate(() => {
+    const rule = document.querySelector("hr.a2ui-divider").getBoundingClientRect();
+    const hints = [...document.querySelectorAll(".pcb-hint")];
+    const above = hints.filter(h => h.getBoundingClientRect().bottom <= rule.top).pop().getBoundingClientRect();
+    const below = hints.find(h => h.getBoundingClientRect().top >= rule.bottom).getBoundingClientRect();
+    return { above: rule.top - above.bottom, below: below.top - rule.bottom };
+  });
+  assert.ok(Math.abs(gaps.above - gaps.below) <= 1, `rule gaps ${gaps.above} / ${gaps.below}`);
+});
+
+test("the viewer labels its width readout and shows where its arrows wrap", async t => {
+  const { viewer } = await open(t, await fullSurface(), two());
+  const v = viewer();
+  assert.match(await v.locator("#width").textContent(), /^Preview width \d+px$/);
+  assert.equal((await v.locator("#previous").textContent()).trim(), "2 ←");
+  assert.equal(await v.locator("#previous").getAttribute("aria-label"), "Previous candidate (wraps to 2)");
+  assert.equal((await v.locator("#next").textContent()).trim(), "→");
+  await v.locator("#next").click();
+  await v.waitForFunction(() => document.documentElement.dataset.candidate === "2");
+  assert.equal((await v.locator("#next").textContent()).trim(), "→ 1");
+  assert.equal(await v.locator("#next").getAttribute("aria-label"), "Next candidate (wraps to 1)");
+  assert.equal((await v.locator("#previous").textContent()).trim(), "←");
+  assert.equal(await v.locator("#previous").getAttribute("aria-label"), "Previous candidate");
 });
