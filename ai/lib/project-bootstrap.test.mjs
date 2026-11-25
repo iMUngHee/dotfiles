@@ -667,11 +667,12 @@ test("rule tags: registration and legacy compatibility", async (t) => {
     const r = g.run(["--fast"]);
     assert.equal(r.status, 0, out(r));
   });
-  await t.test("(q) --list still prints rule tags when rule_files fails", (t) => {
-    const g = gateRepo(t, { config: RULES_CONFIG("  return 1") });
+  await t.test("(q) --list prints rule tags without running a failing rule_files", (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  touch rule-files-ran\n  return 1") });
     const r = g.run(["--list"]);
     assert.equal(r.status, 0, out(r));
     assert.match(r.stdout, /^rule tags$/m);
+    assert.equal(fs.existsSync(g.at("rule-files-ran")), false);
   });
 });
 
@@ -833,7 +834,7 @@ done
 const LAYERS_CONFIG = `tool_versions() { echo fixture-tools; }
 register_checks() {
   check lint fast "run the linter" -- true
-  check layers fast "move the import or change the policy ARCHITECTURE.md describes" -- bash scripts/check-layers.sh --doc ARCHITECTURE.md -- bash scripts/edges.sh
+  check layers fast "move the import or change the layer policy" -- bash scripts/check-layers.sh --doc ARCHITECTURE.md -- bash scripts/edges.sh
 }
 rule_files() {
   echo CONVENTIONS.md
@@ -877,8 +878,7 @@ test("checkout example: the documented layer policy rejects a real forbidden imp
     g.commit("forbidden");
     const r = g.run(["--fast"]);
     assert.equal(r.status, 1);
-    assert.match(out(r), /src\/domain\/model\.js/);
-    assert.match(out(r), /ARCHITECTURE\.md/);
+    assert.match(out(r), /src\/domain\/model\.js \(domain\) depends on src\/http\/handler\.js \(http\).*described in ARCHITECTURE\.md/);
   });
   await t.test("an extractor failure cannot pass", (t) => {
     const g = layerRepo(t);
@@ -896,10 +896,12 @@ test("checkout example: the documented layer policy rejects a real forbidden imp
 });
 
 test("layer policy outcomes", async (t) => {
-  const fails = (name, opts, edit) => t.test(`fails: ${name}`, (t) => {
+  const fails = (name, opts, edit, why) => t.test(`fails: ${name}`, (t) => {
     const g = layerRepo(t, opts);
     if (edit) { edit(g); g.commit("edit"); }
-    assert.equal(g.run(["--fast"]).status, 1);
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), why);
   });
   const passes = (name, opts, edit) => t.test(`passes: ${name}`, (t) => {
     const g = layerRepo(t, opts);
@@ -907,21 +909,25 @@ test("layer policy outcomes", async (t) => {
     const r = g.run(["--fast"]);
     assert.equal(r.status, 0, out(r));
   });
-  await fails("unclassified internal file", {}, (g) => g.put("src/util/u.js", 'import { x } from "../domain/model.js";\n'));
-  await fails("ambiguous internal file", { policy: LAYER_POLICY + "layer\tall\tsrc/*\n" });
-  await fails("(m) unclassified file importing only an external package", {}, (g) => g.put("src/unowned/client.js", 'import k from "kafka";\n'));
+  await fails("unclassified internal file", {}, (g) => g.put("src/util/u.js", 'import { x } from "../domain/model.js";\n'), /src\/util\/u\.js belongs to no layer/);
+  await fails("ambiguous internal file", { policy: LAYER_POLICY + "layer\tall\tsrc/*\n" }, undefined, /matches more than one layer/);
+  await fails("(m) unclassified file importing only an external package", {}, (g) => g.put("src/unowned/client.js", 'import k from "kafka";\n'), /src\/unowned\/client\.js belongs to no layer/);
   await passes("an external import from a classified file", {}, (g) => g.put("src/http/client.js", 'import k from "kafka";\n'));
-  await fails("(m) malformed policy row", { policy: LAYER_POLICY + "layer\tbroken\n" });
-  await fails("(m) unknown layer in allow", { policy: LAYER_POLICY + "allow\thttp\tnowhere\n" });
-  await fails("(m) external-only output without empty-ok", { files: { "src/http/handler.js": 'import k from "kafka";\n' } });
+  await fails("(m) malformed policy row", { policy: LAYER_POLICY + "layer\tbroken\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
+  await fails("(m) unknown layer in allow", { policy: LAYER_POLICY + "allow\thttp\tnowhere\n" }, undefined, /allow names an unknown layer/);
+  await fails("(m) external-only output without empty-ok", { files: { "src/http/handler.js": 'import k from "kafka";\n' } }, undefined, /no dependency between internal files/);
   const silent = (g) => g.put("scripts/edges.sh", "#!/bin/bash\n");
-  await fails("(m) an allow row naming an unknown layer is reported even with no edges", { policy: LAYER_POLICY + "empty-ok\nallow\thttp\tnowhere\n" }, silent);
-  await fails("an empty extractor run without empty-ok", {}, silent);
+  await fails("(m) an allow row naming an unknown layer is reported even with no edges", { policy: LAYER_POLICY + "empty-ok\nallow\thttp\tnowhere\n" }, silent, /allow names an unknown layer/);
+  await fails("an empty extractor run without empty-ok", {}, silent, /no dependency between internal files/);
   await passes("an empty extractor run with empty-ok", { policy: LAYER_POLICY + "empty-ok\n" }, silent);
-  await fails("a tab-only extractor record", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf '\\t\\n'\n"));
-  await fails("a duplicated debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/model.js\tsrc/http/handler.js\ndebt\tsrc/domain/model.js\tsrc/http/handler.js\n", files: { "src/domain/model.js": 'import { h } from "../http/handler.js";\n' } });
-  await fails("a noncanonical debt row", { policy: LAYER_POLICY + "debt\t./src/domain/model.js\tsrc/http/handler.js\n" });
-  await fails("an empty glob member", { policy: "layer\tdomain\tsrc/domain/*,\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" });
+  await fails("a tab-only extractor record", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf '\\t\\n'\n"), /neither ext:<name> nor a canonical repository path/);
+  await fails("a nameless ext: endpoint", { policy: LAYER_POLICY + "empty-ok\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\text:\\n'\n"), /neither ext:<name> nor a canonical repository path/);
+  await fails("an endpoint holding a control character cannot alias a debt key", { policy: LAYER_POLICY + "debt\tsrc/domain/a\\034src/http/b\tsrc/http/z\n" }, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/domain/a\\tsrc/http/b\\034src/http/z\\n'\n"), /canonical repository path|not a layer, allow, debt/);
+  await fails("a glob with a character class name", { policy: "layer\tdomain\tsrc/[[:alpha:]]omain/*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" }, undefined, /globs take only/);
+  await fails("a glob with an escape", { policy: "layer\tdomain\tsrc/domain/\\*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" }, undefined, /globs take only/);
+  await fails("a duplicated debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/model.js\tsrc/http/handler.js\ndebt\tsrc/domain/model.js\tsrc/http/handler.js\n", files: { "src/domain/model.js": 'import { h } from "../http/handler.js";\n' } }, undefined, /repeats the debt row/);
+  await fails("a noncanonical debt row", { policy: LAYER_POLICY + "debt\t./src/domain/model.js\tsrc/http/handler.js\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
+  await fails("an empty glob member", { policy: "layer\tdomain\tsrc/domain/*,\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
   await passes("a bracket glob classifies its files", { policy: "layer\tdomain\tsrc/[d]omain/*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n" });
   await passes("(m) zero internal edges with empty-ok", { policy: LAYER_POLICY + "empty-ok\n", files: { "src/http/handler.js": 'import k from "kafka";\n' } });
   await t.test("(m) malformed extractor output fails", (t) => {
@@ -941,7 +947,9 @@ test("layer policy outcomes", async (t) => {
     real.put("src/domain/deep/a.js", 'import { h } from "../../http/handler.js";\n');
     real.put("scripts/check-data/layers.tsv", "layer\tdomain\tsrc/domain/*\nlayer\thttp\tsrc/http/*\nallow\thttp\tdomain\n");
     real.commit("deep forbidden");
-    assert.equal(real.run(["--fast"]).status, 1);
+    const deep = real.run(["--fast"]);
+    assert.equal(deep.status, 1);
+    assert.match(out(deep), /src\/domain\/deep\/a\.js \(domain\) depends on src\/http\/handler\.js \(http\)/);
   });
 });
 
@@ -987,6 +995,16 @@ test("layer debt: first adoption against a base without the policy", (t) => {
   g.commit("adopt with debt");
   const r = g.run(["--fast"]);
   assert.equal(r.status, 0, out(r));
+});
+
+test("check-layers.sh stops when it cannot create a temporary directory", (t) => {
+  const g = layerRepo(t);
+  const bin = path.join(g.root, "fake-bin");
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, "mktemp"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+  const r = spawnSync(BASH, [g.at("scripts/check-layers.sh"), "--doc", "ARCHITECTURE.md", "--", "true"], { cwd: g.root, env: vars({ PATH: `${bin}:${vars().PATH}` }), encoding: "utf8" });
+  assert.equal(r.status, 1);
+  assert.match(out(r), /cannot create a temporary directory/);
 });
 
 test("check-layers.sh rejects a missing --doc value instead of looping", (t) => {

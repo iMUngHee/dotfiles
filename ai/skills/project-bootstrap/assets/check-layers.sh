@@ -33,7 +33,10 @@ if [ ! -f "$policy" ]; then
 	exit 1
 fi
 
-tmp=$(mktemp -d)
+if ! tmp=$(mktemp -d) || [ -z "$tmp" ]; then
+	echo "check-layers: cannot create a temporary directory"
+	exit 1
+fi
 trap 'rm -rf "$tmp"' EXIT
 
 status=0
@@ -80,11 +83,16 @@ fi
 
 awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 	-v bfile="$tmp/base" -v efile="$tmp/edges" '
+	# A canonical repository path: relative, no empty, . or .. segment, no
+	# control character (so no endpoint can contain SUBSEP), not an ext: name.
 	function canonical(p) {
-		return p != "" && p !~ /^\// && p !~ /\/$/ && p !~ /\/\// && p !~ /(^|\/)\.\.?(\/|$)/
+		return p != "" && p !~ /^\// && p !~ /\/$/ && p !~ /\/\// && p !~ /(^|\/)\.\.?(\/|$)/ && p !~ /[\001-\037]/ && p !~ /^ext:/
 	}
-	# A shell glob as a regular expression: * and ? also match /, and [...] or
-	# [!...] is a character class.
+	function external(p) { return p ~ /^ext:[^\001-\037]+$/ }
+	# The supported glob subset: *, ? and [...] or [!...] without classes or escapes.
+	function glob_ok(g) { return g !~ /\\|\[:|\[[^]]*$|\[\]/ }
+	# A supported glob as a regular expression: * and ? also match /, and
+	# [...] or [!...] is a character class.
 	function g2r(g,   r, i, c, j) {
 		r = "^"
 		for (i = 1; i <= length(g); i++) {
@@ -94,7 +102,6 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 			else if (c == "[" && (j = index(substr(g, i + 1), "]")) > 1) {
 				c = substr(g, i + 1, j - 1)
 				if (substr(c, 1, 1) == "!") c = "^" substr(c, 2)
-				gsub(/\\/, "\\\\", c)
 				r = r "[" c "]"
 				i += j
 			} else if (index("\\^$.[]|()+{}", c)) r = r "\\" c
@@ -119,7 +126,7 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 		if (name == "" || list == "") return 0
 		n = split(list, globs, ",")
 		for (i = 1; i <= n; i++) {
-			if (globs[i] == "") return 0
+			if (globs[i] == "" || !glob_ok(globs[i])) return 0
 			re[name] = (re[name] == "" ? "" : re[name] "|") "(" g2r(globs[i]) ")"
 		}
 		return 1
@@ -139,14 +146,14 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 			next
 		}
 		if ($1 == "empty-ok" && NF == 1) { emptyok = 1; next }
-		fail(policy ":" FNR ": not a layer, allow, debt or empty-ok row: " $0)
+		fail(policy ":" FNR ": not a layer, allow, debt or empty-ok row (globs take only *, ? and [...]): " $0)
 		next
 	}
 	FILENAME == efile {
 		if ($0 == "") next
 		if (NF != 2) { fail("extractor line " FNR " is not from<TAB>to: " $0); next }
 		for (i = 1; i <= 2; i++)
-			if ($i !~ /^ext:./ && !canonical($i)) fail("extractor line " FNR ": \"" $i "\" is neither ext:<name> nor a canonical repository path")
+			if (!external($i) && !canonical($i)) fail("extractor line " FNR ": \"" $i "\" is neither ext:<name> nor a canonical repository path")
 		edges++; from[edges] = $1; to[edges] = $2
 	}
 	END {
@@ -158,9 +165,9 @@ awk -F'\t' -v doc="$doc" -v first="$first" -v policy="$policy" \
 		if (bad) exit 1
 		for (e = 1; e <= edges; e++) {
 			lf = lt = ""
-			if (from[e] !~ /^ext:/) lf = layer_of(from[e])
-			if (to[e] !~ /^ext:/) lt = layer_of(to[e])
-			if (from[e] ~ /^ext:/ || to[e] ~ /^ext:/ || lf == "" || lt == "") continue
+			if (!external(from[e])) lf = layer_of(from[e])
+			if (!external(to[e])) lt = layer_of(to[e])
+			if (external(from[e]) || external(to[e]) || lf == "" || lt == "") continue
 			internal++
 			if (lf == lt || (lf SUBSEP lt) in allow) continue
 			forbidden[from[e] SUBSEP to[e]] = 1

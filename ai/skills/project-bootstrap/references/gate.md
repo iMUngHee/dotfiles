@@ -20,7 +20,7 @@ Select a check when it protects an adopted contract precisely and at reasonable 
 
 - **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
 - **Surface inventory drift.** Extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when a reference document does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
-- **Layering.** Fail when a module imports across a boundary ARCHITECTURE forbids; the check reads the dependency policy ARCHITECTURE links ([architecture](architecture.md#the-dependency-policy)). Prefer the stack's dependency-graph or import-restriction tool; fall back to a manifest or import grep.
+- **Layering.** Fail when a module imports across a boundary ARCHITECTURE forbids, with the stack's native policy tool or else the bundled layer helper on the policy ARCHITECTURE links ([architecture](architecture.md#the-dependency-policy)).
 - **Generated sources.** Regenerate and fail when the committed output differs, so edits go to the source.
 - **Changelog and version.** Fail when the version owner and the changelog's released sections disagree, or when the unreleased section is missing.
 - **Dependency audit.** Known advisories, unused dependencies and disallowed licenses in `full`. Each ignore entry carries an id, a date and a reason, and a self-test proves the gate fails on an entry that lacks one.

@@ -32,10 +32,10 @@ Follow a normal extension through a real entry point or compile the smallest use
 
 ## The dependency policy
 
-The allowed directions live in data the gate reads; ARCHITECTURE explains them and links that data, and CONVENTIONS refers to the check that enforces them without restating any edge.
+The allowed directions live in data the gate reads; ARCHITECTURE explains them and links that data, and CONVENTIONS links that policy and names the check that enforces it, without restating any edge.
 
 1. Where the stack has a native policy tool (dependency-cruiser, import-linter, a check over `cargo metadata` or `go list`), its configuration is the policy.
 2. Where it has none and a real boundary exists, use `scripts/check-data/layers.tsv` with the bundled [`check-layers.sh`](../assets/check-layers.sh) installed as `scripts/check-layers.sh`. The repository supplies an extractor that prints its production dependencies as `from<TAB>to` lines, internal files as canonical repository-relative paths and external dependencies as `ext:<name>`. The rows and outcomes are in the [contract](../assets/check-contract.md#layer-policy).
 3. Where no boundary exists, install neither; ARCHITECTURE says so.
 
-Forbidden edges that already exist when the policy is adopted are recorded as debt, never as allowed directions: `debt` rows with the default policy, the tool's own baseline or exception mechanism with a native one. Debt can only shrink, and ARCHITECTURE's debt section points at it. If the debt is too large to activate the policy now, report the deferred activation as an incomplete requirement. Link ARCHITECTURE from the entry point; in a generated entry point write the link relative to the repository root ([harness](harness.md#agent-guidance-source-and-loaders)).
+Forbidden edges that already exist when the policy is adopted are recorded as debt, never as allowed directions: `debt` rows with the default policy, the tool's own baseline or exception mechanism with a native one. Debt can only shrink, and ARCHITECTURE's debt section points at it. Report a deferred activation as an incomplete requirement. Link ARCHITECTURE from the entry point; in a generated entry point write the link relative to the repository root ([harness](harness.md#agent-guidance-source-and-loaders)).
