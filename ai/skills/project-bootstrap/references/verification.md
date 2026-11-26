@@ -18,7 +18,7 @@ Time the check where contributors will run it: a quick one can run before a push
 
 ## Beyond ordinary tests
 
-Some risks survive structure, static checks and ordinary tests: a large input space, parsers of untrusted input, unsafe or foreign code, orderings among several actors, a costly algorithm, or a suite that passes when the code is broken. Report each as a candidate with the promise it would protect, the harm, and why existing evidence misses it. Choosing and installing property-based tests, fuzzing, mutation testing, model checking or proofs is a separate decision for the maintainer, made with a dedicated procedure such as the `advanced-verification` skill where available. Keep any such method the repository already runs working.
+A risk that survives structure, static checks and ordinary tests (a large input space, untrusted parsers, unsafe or foreign code, orderings among actors, a costly algorithm, a suite that passes on broken code) goes on the map with the promise it would protect and why existing evidence misses it. Installing property-based tests, fuzzing, mutation testing, model checking or proofs is the maintainer's decision, made with a procedure such as the `advanced-verification` skill; keep any such method the repository already runs.
 
 ## Runtime verification
 

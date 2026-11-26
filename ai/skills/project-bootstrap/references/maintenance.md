@@ -15,20 +15,12 @@ Seed all four items into the unconditional guidance, naming the actual place whe
 
 - **Review changes.** Follow the change through its code owner and public contract. Check new dependency edges, duplicated decisions, abstractions and changes in cost at actual callers. Run the repository gate. Review the mechanism that protects each consequential decision.
 - **Keep rules and documentation current.** Name the editable policy, its enforcing check and any command that syncs generated guidance. When a restriction gains an exception, update its owners and run the gate with two changes: the newly allowed case must pass, and the closest case still covered must fail with its repair hint. Retire obsolete checks and tags with their rule. Update the owning document in the same change: a change to a component's ownership, a boundary, a flow or an external contract updates ARCHITECTURE, with a new boundary's supported route and its dependency-policy entry where one applies, since a new boundary is also a new rule that CONVENTIONS tags with its check or audit row; a reversed decision records its successor and reason; and a new or retired rule updates its owning rule document, CONVENTIONS or a scoped rule file, a new rule arriving with its tag and, where a machine can decide it, a proved check. Any recorded reason for adopting, excluding or leaving a rule unchecked that the change makes untrue is corrected in it too.
-- **Garden.** Repair the example contributors keep copying when a small compatible change removes a recurring mistake, lower an applicable baseline as code is fixed, and keep the evidence and its scope for the next maintainer.
+- **Garden.** Repair the example contributors keep copying when a small compatible change removes a recurring mistake, lower an applicable baseline as code is fixed, work through ARCHITECTURE's open decisions, and keep the evidence and its scope for the next maintainer.
 
 ## Questions every harness piece must answer
 
 What goes wrong without it, could structure or an existing check cover that, and what is lost if it goes? A piece with no answer is a garden candidate.
 
-## Conditional skills
+## Project skills
 
-Start with the contributor guide. Create one of these only when a repeated project-specific procedure has a concrete check and benefits from an independent invocation; name it with the project's prefix and make it work with only the repository.
-
-| Skill | Create when | Does |
-| --- | --- | --- |
-| `<prefix>-security-review` | A security boundary: authentication, isolation, secrets, untrusted input reaching privileged code | Checks a change against each named boundary |
-| `<prefix>-change-checklist` | An inventory that must change together: environment variables, commands, routes, bindings, schema | Lists what else changes when one entry is added or renamed |
-| `<prefix>-feature-verify` | A repeated user journey with a reusable local driver | Drives it through the feature map and keeps the evidence |
-
-Mark deployment or production-touching skills as invoked only on request.
+A project skill is a map entry, not a default: propose one (a security review against named boundaries, a checklist for an inventory that must change together, a driver for a repeated user journey) only when a repeated procedure has a concrete check, name it with the project's prefix, and mark production-touching skills as invoked only on request.

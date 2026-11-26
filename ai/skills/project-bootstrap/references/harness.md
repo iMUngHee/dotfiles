@@ -9,7 +9,7 @@ The harness is what a contributor reads and runs to make a fitting change with o
 | Reference | Public surfaces: commands, configuration, environment variables, API, schema | Existing user or API docs | Consumers depend on a surface; keep each true with an inventory check |
 | Decisions and research | Why a design was chosen, measurements, sources, known limits | ARCHITECTURE's decisions section, or existing ADR or research records | Decisions outgrow the section, or one rests on evidence a later contributor must re-check |
 | Scoped agent rules | Short rules loaded while editing matching paths | None | The agent needs the rule exactly while editing those paths |
-| Project skills | A repeated project procedure with a concrete check | None | See [maintenance](maintenance.md#conditional-skills) |
+| Project skills | A repeated project procedure with a concrete check | None | A map entry ([maintenance](maintenance.md#project-skills)) |
 
 The two normative documents cost reading time in every session. Keep the entry point to a summary and links, and when a structural rule matters only while editing certain paths, give it a scoped agent rule that points into ARCHITECTURE instead of loading the whole document everywhere.
 

@@ -14,17 +14,28 @@ Identify the old control's effective scope, accepted exceptions and the failure 
 
 Preserve an effective control while its replacement's coverage is uncertain. Where checks or history are missing, recover the important promises from the code, tests, release artifacts and owner decisions, record the gaps with their owners, and weigh a supported contract's consumers and migration cost before changing it.
 
+## Choosing mechanisms
+
+Pick a mechanism by what the constraint is, in this order: the stack's native check with its own baseline or exceptions, a banned-pattern row for a precise line pattern, layer debt for a dependency edge, and an audit probe for a predicate that needs several files or language awareness ([contract](../assets/check-contract.md)). A check that implements an adopted rule belongs to the floor. One above the floor needs a real occurrence behind it (a past commit, issue or review finding) and is otherwise proposed on the map, since a planted violation proves a check works, not that it is needed.
+
+| Project | Usually fits |
+| --- | --- |
+| New | Native lints and the two documents; a layer policy once a real boundary exists |
+| Mature, with its own rules | Its existing gate and rules, extended in their native form |
+| Structurally regressed | Ratchets, layer debt and audit probes, so the debt only shrinks, with the larger moves on the map |
+| Harness already present | The existing documents and gate designated, and only the gaps filled |
+
 ## Repository checks
 
-Select a check when it protects an adopted contract precisely and at reasonable cost, in this order: the stack's native check with its own baseline or exceptions, a banned-pattern row for a precise line pattern, layer debt for a dependency edge, and an audit probe for a predicate that needs several files or language awareness. Add custom logic only for a concrete gap the existing checks miss, and name that failure in its hint or the rule it enforces; a check with no real occurrence behind it (a past commit, issue or review finding) is proposed in the report instead of installed, since a planted violation proves a check works, not that it is needed. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
+Select a check when it protects an adopted contract precisely and at reasonable cost. Add custom logic only for a concrete gap the existing checks miss, and name that failure in its hint or the rule it enforces. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
 
-- **Work-artifact references.** Comments and test messages pointing at plans, review rounds or agent scratch paths: a `ban` row whose hint says to write the reason itself.
-- **Surface inventory drift.** Where contributors rely on a reference document's completeness, extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when it does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
-- **Layering.** Fail when a module imports across a boundary ARCHITECTURE forbids, with the stack's native policy tool or else the bundled layer helper on the policy ARCHITECTURE links ([architecture](architecture.md#the-dependency-policy)).
-- **Generated sources.** Use the generator's read-only mode, or regenerate into a temporary location, and fail when the result differs from the tracked output, so edits go to the source; the check never rewrites tracked files.
-- **Changelog and version.** Fail when the version owner and the changelog's released sections disagree, or when the unreleased section is missing.
-- **Flaky tests fail.** A test that passes only on retry fails the run, in either tier.
-- **Dependency audit.** Known advisories, unused dependencies and disallowed licenses in `full`. Each ignore entry carries an id, a date and a reason, and a self-test proves the gate fails on an entry that lacks one.
+- **Work-artifact references:** a `ban` row for comments and test messages that point at plans or agent scratch paths.
+- **Surface inventories:** fail when the code exposes a name a relied-on reference document does not list.
+- **Layering:** the [dependency policy](architecture.md#the-dependency-policy) ARCHITECTURE links.
+- **Generated sources:** the generator's read-only mode or a regeneration into a temporary location, never a rewrite of tracked files.
+- **Changelog and version** agreeing with the version owner.
+- **Flaky tests:** a pass only on retry fails, in either tier.
+- **Dependency audit** in `full`, each ignore entry with an id, a date and a reason, proved by a self-test.
 
 Keep regression cases for custom check logic where a mistake could hide a violation or reject a legitimate change. Reuse existing coverage for thin wrappers around a tested tool.
 
