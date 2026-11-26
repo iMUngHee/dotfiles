@@ -16,7 +16,7 @@ Preserve an effective control while its replacement's coverage is uncertain. Whe
 
 ## Choosing mechanisms
 
-Pick a mechanism by what the constraint is, in this order: the stack's native check with its own baseline or exceptions, a banned-pattern row for a precise line pattern, layer debt for a dependency edge, and an audit probe for a predicate that needs several files or language awareness ([contract](../assets/check-contract.md)). A check that implements an adopted rule belongs to the floor. One above the floor needs a real occurrence behind it (a past commit, issue or review finding) and is otherwise proposed on the map, since a planted violation proves a check works, not that it is needed.
+Pick a mechanism by what the constraint is, in this order: the stack's native check with its own baseline or exceptions, a banned-pattern row for a precise line pattern, layer debt for a dependency edge, and an audit probe for a predicate that needs several files or language awareness ([contract](../assets/check-contract.md)). A check that implements an adopted rule belongs to the floor and is installed. A check above the floor is a map proposal, made only when a real occurrence (a past commit, issue or review finding) shows a gap in the existing controls, since a planted violation proves a check works, not that it is needed; installing it follows the skill's ask-first rule.
 
 | Project | Usually fits |
 | --- | --- |
@@ -32,10 +32,10 @@ Select a check when it protects an adopted contract precisely and at reasonable 
 - **Work-artifact references:** a `ban` row for comments and test messages that point at plans or agent scratch paths.
 - **Surface inventories:** fail when the code exposes a name a relied-on reference document does not list.
 - **Layering:** the [dependency policy](architecture.md#the-dependency-policy) ARCHITECTURE links.
-- **Generated sources:** the generator's read-only mode or a regeneration into a temporary location, never a rewrite of tracked files.
+- **Generated sources:** the generator's read-only check or a regeneration into a temporary location, failing when the tracked output differs and never rewriting it.
 - **Changelog and version** agreeing with the version owner.
 - **Flaky tests:** a pass only on retry fails, in either tier.
-- **Dependency audit** in `full`, each ignore entry with an id, a date and a reason, proved by a self-test.
+- **Dependency audit** in `full`, every ignore entry with an id, a date and a reason, and a self-test showing the gate rejects an entry missing one.
 
 Keep regression cases for custom check logic where a mistake could hide a violation or reject a legitimate change. Reuse existing coverage for thin wrappers around a tested tool.
 
