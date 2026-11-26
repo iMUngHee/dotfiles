@@ -81,8 +81,8 @@ scan_text() {
   match=$(printf '%s\n' "$text" | grep -Eo -- '-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----' | head -1 || true)
   [[ -z "$match" ]] || report_fail "$file" "private key block" "$match"
 
-  # SHA-256 names the digest algorithm; filter it before selecting a ticket.
-  match=$(printf '%s\n' "$text" | grep -Eo '\b[A-Z][A-Z0-9]+-[0-9]{2,}\b' | grep -Fxv 'SHA-256' | head -1 || true)
+  # Filter exact algorithm and encoding names before selecting a ticket.
+  match=$(printf '%s\n' "$text" | grep -Eo '\b[A-Z][A-Z0-9]+-[0-9]{2,}\b' | grep -Exv 'SHA-256|UTF-(16|32)' | head -1 || true)
   [[ -z "$match" ]] || report_warn "$file" "ticket-like identifier" "$match"
 }
 

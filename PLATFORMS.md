@@ -433,9 +433,9 @@ cannot run something; remove it in the commit that records the result.
 
 - [ ] **macOS / Windows (Git Bash)** — run
       `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs` for the
-      NUL-delimited staged-path fix. Unicode filenames run on both platforms;
-      quote and newline filenames are unsupported and skipped on Windows.
-      All 10 cases passed on Linux 2026-11-13.
+      NUL-delimited staged-path fix and the exact `UTF-16` and `UTF-32` ticket
+      exceptions. Unicode filenames run on both platforms. Windows skips
+      filenames containing quotes or newlines. All 11 cases passed on Linux.
 
 - [ ] **macOS and Linux (Bash)** — on a machine without pager and gaebu, run
       `bash -c '. ~/.config/lib/agent-clis.sh && ensure_pager && ensure_gaebu'`

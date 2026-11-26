@@ -24,30 +24,31 @@ async function fixture(t, content, filename = "notes.md") {
   };
 }
 
-test("SHA-256 in content and filenames is a hash algorithm, not a ticket", async (t) => {
-  const f = await fixture(t, "Verify the SHA-256 digest.\n", "SHA-256-notes.md");
+test("standard hash and encoding names pass in content and filenames", async (t) => {
+  const f = await fixture(t, "Verify the SHA-256 digest of UTF-16 and UTF-32 input.\n", "UTF-16-notes.md");
   const result = f.run();
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /PASS SensitiveInfo: 1 staged file/);
 });
 
-test("a real ticket after SHA-256 is still reported", async (t) => {
-  const f = await fixture(t, `SHA-256 ${ticket}\n`);
+test("a real ticket after standard hash and encoding names is still reported", async (t) => {
+  const f = await fixture(t, `SHA-256 UTF-16 UTF-32 ${ticket}\n`);
   const result = f.run();
   assert.equal(result.status, 2, result.stdout + result.stderr);
   assert.ok(result.stdout.includes(`ticket-like identifier (${ticket})`));
 });
 
-test("the algorithm exception matches exactly", async (t) => {
-  const candidate = "SHA-" + "2567";
-  const f = await fixture(t, `${candidate}\n`);
-  const result = f.run();
-  assert.equal(result.status, 2, result.stdout + result.stderr);
-  assert.ok(result.stdout.includes(`ticket-like identifier (${candidate})`));
-});
+for (const candidate of ["SHA-" + "2567", "UTF-" + "160"]) {
+  test(`the standard-name exceptions warn on ${candidate}`, async (t) => {
+    const f = await fixture(t, `${candidate}\n`);
+    const result = f.run();
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes(`ticket-like identifier (${candidate})`));
+  });
+}
 
-test("token detection remains fatal after an allowed hash algorithm", async (t) => {
-  const f = await fixture(t, "SHA-256 " + "AKIA" + "A".repeat(16) + "\n");
+test("token detection remains fatal after standard hash and encoding names", async (t) => {
+  const f = await fixture(t, "SHA-256 UTF-16 UTF-32 " + "AKIA" + "A".repeat(16) + "\n");
   const result = f.run();
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /token-like secret/);

@@ -162,10 +162,10 @@ Codex also auto-installs bundled system skills such as `skill-creator` under `~/
 
 Commit-time sensitive-info scanning uses `codex/scripts/pre-commit-sensitive-scan.sh`. Run it before `git commit` in 대협-owned repos and surface any `FAIL` or `WARN` before committing.
 
-The exact algorithm name `SHA-256` is excluded from ticket warnings before the
-first match is selected; actual ticket identifiers later in the same text still
-warn. Token and private-key checks are unchanged. Run its index-based regression
-suite with `node --test codex/scripts/pre-commit-sensitive-scan.test.mjs`.
+The names `SHA-256`, `UTF-16` and `UTF-32` are excluded from ticket warnings
+before the first match is selected. Actual ticket identifiers later in the same
+text still warn. Run the index-based regression suite with
+`node --test codex/scripts/pre-commit-sensitive-scan.test.mjs`.
 
 ## Hooks
 
