@@ -407,12 +407,12 @@ run_audit() {
 	return "$rc"
 }
 
-# Reads the audit record. A counting row's output lines become ratchet hits;
+# Reads the optional audit record. A counting row's output lines become ratchet hits;
 # check: and banned: rows must name an existing check; - rows are reported as
 # incomplete by whoever reads the record. Writes "id<TAB>command" for every
 # row to $tmp/audit-rows. Returns 2 for a malformed row or a failed probe.
 scan_audit() {
-	local status=0 setup=0 row id cat cmd reason fix seen=" " covered=" " banned_ids c missing='' n line
+	local status=0 setup=0 row id cat cmd reason fix seen=" " banned_ids n line
 	: >"$tmp/audit-ids"
 	: >"$tmp/audit-rows"
 	[ -f "$audit" ] || return 0
@@ -450,7 +450,6 @@ scan_audit() {
 			continue
 			;;
 		esac
-		covered="$covered$cat "
 		printf '%s\t%s\n' "$id" "$cmd" >>"$tmp/audit-rows"
 		case "$cmd" in
 		-) continue ;;
@@ -492,13 +491,6 @@ scan_audit() {
 			fi
 		done <"$tmp/out.$id"
 	done 3<"$tmp/audit-valid"
-	for c in $audit_categories; do
-		case "$covered" in *" $c "*) ;; *) missing="$missing${missing:+, }$c" ;; esac
-	done
-	if [ -n "$missing" ]; then
-		echo "audit: no row covers $missing; add a counting command, a check: or banned: reference, or a - row with its reason"
-		status=1
-	fi
 	[ "$setup" -eq 0 ] || return 2
 	return "$status"
 }

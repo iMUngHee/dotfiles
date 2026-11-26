@@ -594,7 +594,12 @@ test("audit: rows and commands are validated", async (t) => {
   await fails("output that is not path:line:text", auditRows([], ["casts", "boundary", "echo loose words", "r", "f"]), /audit casts: output line 1 is not path:line:text/);
   await fails("a row with a missing field", AUDIT_HEAD + "casts\tboundary\t" + CAST_CMD + "\n", /audit\.tsv:2: expected id, category, command, reason, fix/);
   await fails("an unknown category", auditRows([["odd", "style", "-", "r", "f"]]), /audit\.tsv:\d+: category must be one of/);
-  await fails("a missing category", AUDIT_HEAD + ["casts", "boundary", CAST_CMD, "r", "f"].join("\t") + "\n", /audit: no row covers layers, owner, hot-path, coupled, rule/);
+  await t.test("one row is enough; categories are not all required", (t) => {
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: AUDIT_HEAD + ["casts", "boundary", CAST_CMD, "r", "f"].join("\t") + "\n" } });
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
   await fails("a reference to an unregistered check", auditRows([["lint-ref", "rule", "check:nope", "r", "f"]]), /audit lint-ref: check:nope is not a registered check/);
   await fails("a reference to a missing banned id", auditRows([["ban-ref", "rule", "banned:gone", "r", "f"]]), /audit ban-ref: banned:gone is not a banned-patterns id/);
   await fails("an id shared with a banned pattern", auditRows(), /audit casts: the id is also a banned-patterns id/, { "scripts/check-data/banned-patterns.tsv": tsv(["casts", "LEGACY", "-", "ban", "-", "r", "f"]) });
@@ -605,7 +610,7 @@ test("audit: rows and commands are validated", async (t) => {
     const left = spawnSync("pgrep", ["-f", "sleep 41"], { encoding: "utf8" });
     assert.equal(left.stdout.trim(), "");
   });
-  await t.test("references and - rows cover categories; CRLF and a missing final newline are read", (t) => {
+  await t.test("references and - rows are accepted; CRLF and a missing final newline are read", (t) => {
     const rows = auditRows([["lint-ref", "rule", "check:lint", "the linter enforces it", "run the linter"]]).replace(/\n/g, "\r\n").replace(/\r\n$/, "");
     const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: rows } });
     assert.equal(g.run(["--write-baselines"]).status, 0);
@@ -722,8 +727,8 @@ test("audit: review fixes", async (t) => {
     const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: rows } });
     assert.match(out(g.run(["--fast"])), /audit\.tsv:\d+: expected id, category, command, reason, fix/);
   });
-  await t.test("--write-baselines writes nothing while a category is missing", (t) => {
-    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: AUDIT_HEAD + ["casts", "boundary", CAST_CMD, "r", "f"].join("\t") + "\n" } });
+  await t.test("--write-baselines writes nothing while a reference is unknown", (t) => {
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: auditRows([["ref", "rule", "check:nope", "r", "f"]]) } });
     const r = g.run(["--write-baselines"]);
     assert.notEqual(r.status, 0);
     assert.equal(fs.existsSync(g.at("scripts/check-data/ratchet/casts.txt")), false);
