@@ -1,6 +1,6 @@
 # What the repository holds
 
-The harness is what a contributor, human or agent, reads and runs to make a fitting change with only the checkout. Every repository holds the floor: an entry point, ARCHITECTURE ([architecture](architecture.md)), CONVENTIONS ([conventions](conventions.md#writing-conventions)) and a gate. Above it the range is wide: a small engine may add only a contributing guide beside a short gate, while a platform with isolation, security and release risk adds path-scoped agent rules, a development guide with each rule's reason, reference documents that checks keep true and a few project skills. Start small: a piece above the floor joins the document that already serves its readers and gets its own file only when maintained independently.
+The harness is what a contributor, human or agent, reads and runs to make a fitting change with only the checkout. Every repository holds the floor: an entry point, ARCHITECTURE ([architecture](architecture.md)), CONVENTIONS ([conventions](conventions.md#writing-conventions)) and a gate. Start small: a piece above the floor joins the document that already serves its readers and gets its own file only when maintained independently.
 
 | Piece | Holds | Default home | Own file when |
 | --- | --- | --- | --- |
@@ -25,7 +25,7 @@ Keep documents true with the checks in [gate](gate.md#repository-checks) (surfac
 
 ## Agent guidance source and loaders
 
-Reuse an existing manifest, handwritten entrypoint or generator first. A simple layout keeps AGENTS.md as the editable document and a CLAUDE.md containing `@AGENTS.md` where the installed Claude loader supports imports. Check that an entry point linked to its source is still a link; a content comparison passes a copy that will drift. Preserve any existing tool-specific instructions; for a handwritten AGENTS.md keep every byte and append only what is missing. With a concrete shared skill, expose the same source through both .agents/skills/<name> and .claude/skills/<name> using the repository's existing mechanism, and inspect both SKILL.md paths after wiring. If directory links are unavailable, use an existing copy or sync mechanism or report the missing discovery path.
+Reuse an existing manifest, handwritten entrypoint or generator first. A simple layout keeps AGENTS.md as the editable document and a CLAUDE.md containing `@AGENTS.md` where the installed Claude loader supports imports. For an entry point kept as a link, the drift check verifies the link and its target and is proved to reject an identical plain copy. Preserve any existing tool-specific instructions; for a handwritten AGENTS.md keep every byte and append only what is missing. With a concrete shared skill, expose the same source through both .agents/skills/<name> and .claude/skills/<name> using the repository's existing mechanism, and inspect both SKILL.md paths after wiring. If directory links are unavailable, use an existing copy or sync mechanism or report the missing discovery path.
 
 For a new two-tool layout that needs generated surfaces and already supports Node 22.16+ and relative symlinks:
 

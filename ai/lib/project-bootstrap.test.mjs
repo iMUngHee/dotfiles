@@ -190,7 +190,7 @@ register_checks() {
   });
   const r = g.run(["--fast"]);
   assert.equal(r.status, 1);
-  assert.match(out(r), /-- lint: FAILED \(\d+s\); exit 127: a command was not found; install it or fix PATH/);
+  assert.match(out(r), /-- lint: FAILED \(\d+s\); exit 127: if the output names a missing command or interpreter, install it or fix PATH/);
 });
 
 test("pass record needs a clean tree and is keyed by commit, base and date", (t) => {

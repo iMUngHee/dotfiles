@@ -664,8 +664,8 @@ while [ "$i" -lt ${#names[@]} ]; do
 	if [ "$rc" -eq 0 ]; then
 		echo "-- ${names[$i]}: ok ($((SECONDS - t))s)"
 	elif [ "$rc" -eq 127 ]; then
-		# The shell's status for a missing command: a setup problem, not a finding.
-		echo "-- ${names[$i]}: FAILED ($((SECONDS - t))s); exit 127: a command was not found; install it or fix PATH"
+		# 127 is how the shell reports a missing command, so point at setup first.
+		echo "-- ${names[$i]}: FAILED ($((SECONDS - t))s); exit 127: if the output names a missing command or interpreter, install it or fix PATH"
 		failed+=("$i")
 	else
 		echo "-- ${names[$i]}: FAILED ($((SECONDS - t))s)"
