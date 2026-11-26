@@ -37,6 +37,7 @@ esac
 
 data=scripts/check-data
 patterns=$data/banned-patterns.tsv
+audit=$data/audit.tsv
 today=${CHECK_TODAY:-$(date -u +%Y-%m-%d)}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -182,7 +183,7 @@ allowed() {
 # each ratchet id as "hash<TAB>path:line" to $tmp/hits.<id> and its id to
 # $tmp/ratchet-ids. Returns 1 when a line fails outright.
 scan_patterns() {
-	local status=0 row=0 id ere allow rmode deadline reason fix path line content where re note until
+	local status=0 setup=0 row=0 id ere allow rmode deadline reason fix path line content where re note until
 	: >"$tmp/ratchet-ids"
 	while IFS=$'\t' read -r id ere allow rmode deadline reason fix <&3; do
 		row=$((row + 1))
@@ -190,7 +191,7 @@ scan_patterns() {
 		if ! [[ $id =~ ^[A-Za-z0-9_-]+$ ]] || [ -z "$fix" ] ||
 			! [[ $rmode =~ ^(ban|ratchet)$ ]] || ! [[ $deadline =~ ^(-|[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
 			echo "$patterns:$row: expected id, ere, allow, ban|ratchet, YYYY-MM-DD|-, reason, fix separated by tabs"
-			status=1
+			setup=1
 			continue
 		fi
 		: >"$tmp/hits.$id"
@@ -238,20 +239,42 @@ scan_patterns() {
 			printf '%s\t%s\n' "$(trim "$content" | sha256)" "$where" >>"$tmp/hits.$id"
 		done 4<"$tmp/grep"
 	done 3<"$patterns"
+	[ "$setup" -eq 0 ] || return 2
 	return "$status"
 }
 
-# Compares each ratchet id's hits with its baseline and the baseline with the base.
+# The ids named by Ratchet-Reset trailers in base..HEAD. Only real trailers
+# count, and each needs a reason after its id.
+reset_ids() {
+	local range=$gate_base..HEAD
+	[ "$gate_base" != root ] || range=HEAD
+	git log --format='%(trailers:key=Ratchet-Reset,valueonly,separator=%x0A)' "$range" |
+		sed -n 's/^[[:space:]]*\([A-Za-z0-9_-][A-Za-z0-9_-]*\)[[:space:]][[:space:]]*[^[:space:]].*/\1/p'
+}
+
+# Validates a baseline file: sha256, positive count and path per line, no
+# repeated hash. Prints each bad line.
+baseline_ok() {
+	awk -F'\t' -v file="$2" '
+		NF != 3 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/ || $2 !~ /^[1-9][0-9]*$/ {
+			printf "%s:%d: a baseline line needs a sha256, a positive count and a path\n", file, FNR; bad = 1; next
+		}
+		$1 in seen { printf "%s:%d: repeats a hash\n", file, FNR; bad = 1; next }
+		{ seen[$1] = 1 }
+		END { exit bad }' "$1"
+}
+
+# check_ratchet <ids file> [audit] compares each id's hits with its baseline
+# and the baseline with the base. An audit id added after adoption must start
+# with an empty baseline.
 check_ratchet() {
-	local status=0 id baseline range resets reason fix entry
-	[ -s "$tmp/ratchet-ids" ] || return 0
+	local status=0 id baseline resets reason fix entry kind=${2:-}
+	[ -s "$1" ] || return 0
 	if [ -z "$gate_base" ]; then
 		echo "ratchet: no base commit to compare baselines with: $CHECK_BASE_ERROR"
 		return 1
 	fi
-	range=$gate_base..HEAD
-	[ "$gate_base" != root ] || range=HEAD
-	resets=$(git log --format=%B "$range" | sed -n 's/^Ratchet-Reset:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p')
+	resets=$(reset_ids)
 	while IFS= read -r id; do
 		{
 			IFS= read -r reason
@@ -260,6 +283,10 @@ check_ratchet() {
 		baseline=$data/ratchet/$id.txt
 		: >"$tmp/empty"
 		[ -f "$baseline" ] || baseline=$tmp/empty
+		if ! baseline_ok "$baseline" "$data/ratchet/$id.txt"; then
+			status=1
+			continue
+		fi
 		if ! REASON=$reason FIX=$fix awk -F'\t' -v id="$id" '
 			FILENAME == ARGV[1] { base[$1] = $2; next }
 			{ cur[$1]++; where[$1] = where[$1] "\n  " $2 }
@@ -284,7 +311,17 @@ check_ratchet() {
 			status=1
 			continue
 		fi
-		[ -n "$entry" ] || continue
+		if [ -z "$entry" ]; then
+			if [ "$kind" = audit ] && [ "$audit_first" != 1 ] && [ -s "$data/ratchet/$id.txt" ]; then
+				echo "audit $id: a row added after adoption starts with no baseline; fix its violations first"
+				status=1
+			fi
+			continue
+		fi
+		if ! baseline_ok "$tmp/base.$id" "$data/ratchet/$id.txt at $gate_base"; then
+			status=1
+			continue
+		fi
 		if ! awk -F'\t' -v id="$id" -v reset="$(printf '%s\n' "$resets" | grep -qx -- "$id" && echo 1)" '
 			FILENAME == ARGV[1] { base[$1] = $2; btotal += $2; next }
 			{ work[$1] = $2; wtotal += $2 }
@@ -300,27 +337,233 @@ check_ratchet() {
 			}' "$tmp/base.$id" "$data/ratchet/$id.txt"; then
 			status=1
 		fi
-	done <"$tmp/ratchet-ids"
+	done <"$1"
 	return "$status"
 }
 
 check_banned() {
 	local status=0
 	scan_patterns || status=1
-	check_ratchet || status=1
+	check_ratchet "$tmp/ratchet-ids" || status=1
 	return "$status"
 }
 
+# ── audit record ──
+
+audit_categories="layers owner boundary hot-path coupled rule"
+
+# run_audit <command> <stdout file> <stderr file> runs a probe in its own
+# process group: 124 past CHECK_AUDIT_TIMEOUT seconds (the group is killed),
+# 125 for more than 1 MiB on either stream, else the probe's status.
+run_audit() {
+	local limit=${CHECK_AUDIT_TIMEOUT:-60} pid ticks=0 rc=0
+	[[ $limit =~ ^[1-9][0-9]*$ ]] || limit=60
+	set -m
+	bash -c "$1" </dev/null >"$2" 2>"$3" &
+	pid=$!
+	set +m
+	while kill -0 "$pid" 2>/dev/null; do
+		if [ "$ticks" -ge $((limit * 10)) ]; then
+			kill -TERM -- "-$pid" 2>/dev/null || true
+			sleep 0.2
+			kill -KILL -- "-$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			return 124
+		fi
+		sleep 0.1
+		ticks=$((ticks + 1))
+	done
+	wait "$pid" || rc=$?
+	# Children the probe left running die with it.
+	kill -KILL -- "-$pid" 2>/dev/null || true
+	if [ "$(wc -c <"$2")" -gt 1048576 ] || [ "$(wc -c <"$3")" -gt 1048576 ]; then
+		return 125
+	fi
+	return "$rc"
+}
+
+# Reads the audit record. A counting row's output lines become ratchet hits;
+# check: and banned: rows must name an existing check; - rows are reported as
+# incomplete by whoever reads the record. Writes "id<TAB>command" for every
+# row to $tmp/audit-rows. Returns 2 for a malformed row or a failed probe.
+scan_audit() {
+	local status=0 setup=0 row=0 id cat cmd reason fix rest seen=" " covered=" " banned_ids c missing='' n line
+	: >"$tmp/audit-ids"
+	: >"$tmp/audit-rows"
+	[ -f "$audit" ] || return 0
+	banned_ids=" "
+	[ ! -f "$patterns" ] || banned_ids=" $(awk -F'\t' '!/^#/ && NF { printf "%s ", $1 }' "$patterns")"
+	while IFS=$'\t' read -r id cat cmd reason fix rest <&3 || [ -n "$id" ]; do
+		row=$((row + 1))
+		id=${id%$'\r'} fix=${fix%$'\r'} rest=${rest%$'\r'}
+		case "$id" in "" | "#"*) continue ;; esac
+		if [ -n "$rest" ] || [ -z "$fix" ] || [ -z "$cat" ] || [ -z "$cmd" ] || [ -z "$reason" ] || ! [[ $id =~ ^[A-Za-z0-9_-]+$ ]]; then
+			echo "$audit:$row: expected id, category, command, reason, fix separated by tabs"
+			setup=1
+			continue
+		fi
+		case " $audit_categories " in *" $cat "*) ;; *)
+			echo "$audit:$row: category must be one of $audit_categories"
+			setup=1
+			continue
+			;;
+		esac
+		case "$seen" in *" $id "*)
+			echo "$audit:$row: repeats the id $id"
+			setup=1
+			continue
+			;;
+		esac
+		seen="$seen$id "
+		case "$banned_ids" in *" $id "*)
+			echo "audit $id: the id is also a banned-patterns id; both share the Ratchet-Reset namespace"
+			setup=1
+			continue
+			;;
+		esac
+		covered="$covered$cat "
+		printf '%s\t%s\n' "$id" "$cmd" >>"$tmp/audit-rows"
+		case "$cmd" in
+		-) continue ;;
+		check:*)
+			listed "${cmd#check:}" "${names[@]}" || { echo "audit $id: $cmd is not a registered check"; status=1; }
+			continue
+			;;
+		banned:*)
+			case "$banned_ids" in *" ${cmd#banned:} "*) ;; *) echo "audit $id: $cmd is not a banned-patterns id"; status=1 ;; esac
+			continue
+			;;
+		esac
+		echo "$id" >>"$tmp/audit-ids"
+		printf '%s\n%s\n' "$reason" "$fix" >"$tmp/meta.$id"
+		: >"$tmp/hits.$id"
+		n=0
+		run_audit "$cmd" "$tmp/out.$id" "$tmp/err.$id" || n=$?
+		case $n in
+		0) ;;
+		124) echo "audit $id: the command ran past ${CHECK_AUDIT_TIMEOUT:-60}s; narrow it or raise CHECK_AUDIT_TIMEOUT"; setup=1; continue ;;
+		125) echo "audit $id: the command wrote more than 1 MiB; narrow it"; setup=1; continue ;;
+		*)
+			echo "audit $id: the command exited with status $n; it must exit 0 and report no match as success"
+			head -n 20 "$tmp/err.$id" | sed 's/^/  /'
+			setup=1
+			continue
+			;;
+		esac
+		n=0
+		while IFS= read -r line || [ -n "$line" ]; do
+			n=$((n + 1))
+			[ -n "$line" ] || continue
+			if [[ $line =~ ^([^:]+):([0-9]+):(.*)$ ]]; then
+				printf '%s\t%s\n' "$(trim "${BASH_REMATCH[3]}" | sha256)" "${BASH_REMATCH[1]}:${BASH_REMATCH[2]}" >>"$tmp/hits.$id"
+			else
+				echo "audit $id: output line $n is not path:line:text: $line"
+				setup=1
+				break
+			fi
+		done <"$tmp/out.$id"
+	done 3<"$audit"
+	for c in $audit_categories; do
+		case "$covered" in *" $c "*) ;; *) missing="$missing${missing:+, }$c" ;; esac
+	done
+	if [ -n "$missing" ]; then
+		echo "audit: no row covers $missing; add a counting command, a check: or banned: reference, or a - row with its reason"
+		status=1
+	fi
+	[ "$setup" -eq 0 ] || return 2
+	return "$status"
+}
+
+audit_at_base() {
+	[ -n "$gate_base" ] && [ "$gate_base" != root ] && [ -n "$(git ls-tree "$gate_base" -- "$audit" 2>/dev/null)" ]
+}
+
+# Compares the rows with the base: a row the base lists may not lose its
+# command or disappear without a Ratchet-Reset trailer for its id. Sets
+# audit_first when the record is adopted now: at a root commit, or when no
+# ancestor of the base ever had it.
+check_audit_base() {
+	local status=0 entry resets id bcmd cmd
+	audit_first=0
+	if [ -z "$gate_base" ]; then
+		echo "audit: no base commit to compare the record with: $CHECK_BASE_ERROR"
+		return 1
+	fi
+	if [ "$gate_base" = root ]; then
+		audit_first=1
+		return 0
+	fi
+	if ! entry=$(git ls-tree "$gate_base" -- "$audit"); then
+		echo "audit: cannot read $audit at $gate_base; fetch that commit or set CHECK_BASE"
+		return 1
+	fi
+	if [ -z "$entry" ]; then
+		if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+			echo "audit: this shallow clone cannot show whether $audit existed before $gate_base; fetch the full history or set CHECK_BASE"
+			return 1
+		fi
+		[ -n "$(git log -1 --format=%H "$gate_base" -- "$audit")" ] || audit_first=1
+		return 0
+	fi
+	if ! git show "$gate_base:$audit" >"$tmp/audit-base"; then
+		echo "audit: cannot read $audit at $gate_base; fetch that commit or set CHECK_BASE"
+		return 1
+	fi
+	resets=$(reset_ids)
+	while IFS=$'\t' read -r id _ bcmd _ <&3 || [ -n "$id" ]; do
+		id=${id%$'\r'}
+		case "$id" in "" | "#"*) continue ;; esac
+		printf '%s\n' "$resets" | grep -qx -- "$id" && continue
+		if ! cmd=$(awk -F'\t' -v id="$id" '$1 == id { print $2; found = 1; exit } END { exit !found }' "$tmp/audit-rows"); then
+			echo "audit $id: the row was removed since the base; keep it, or add a Ratchet-Reset: $id <reason> trailer"
+			status=1
+		elif [ "$cmd" != "$bcmd" ]; then
+			echo "audit $id: the command changed since the base; add a Ratchet-Reset: $id <reason> trailer and keep the baseline total"
+			status=1
+		fi
+	done 3<"$tmp/audit-base"
+	return "$status"
+}
+
+check_audit() {
+	local status=0
+	scan_audit || status=1
+	check_audit_base || status=1
+	check_ratchet "$tmp/audit-ids" audit || status=1
+	return "$status"
+}
+
+# Rewrites every ratchet baseline, banned-pattern and audit alike, but only
+# when every pattern row and audit probe ran cleanly; otherwise nothing changes.
 write_baselines() {
-	local id
-	scan_patterns >/dev/null || true
+	local id s=0
+	: >"$tmp/ratchet-ids"
+	: >"$tmp/audit-ids"
+	if [ -f "$patterns" ]; then
+		scan_patterns >/dev/null || s=$?
+		if [ "$s" -eq 2 ]; then
+			echo "write-baselines: fix the rows of $patterns first; nothing was written"
+			return 1
+		fi
+	fi
+	s=0
+	scan_audit || s=$?
+	if [ "$s" -eq 2 ]; then
+		echo "write-baselines: fix the audit rows or probes above first; nothing was written"
+		return 1
+	fi
+	mkdir -p "$tmp/new"
 	while IFS= read -r id; do
-		mkdir -p "$data/ratchet"
 		awk -F'\t' '{ sub(/:[0-9]+$/, "", $2); c[$1]++; if (!($1 in p)) p[$1] = $2 }
 			END { for (h in c) printf "%s\t%d\t%s\n", h, c[h], p[h] }' "$tmp/hits.$id" |
-			LC_ALL=C sort >"$data/ratchet/$id.txt"
-		echo "wrote $data/ratchet/$id.txt"
-	done <"$tmp/ratchet-ids"
+			LC_ALL=C sort >"$tmp/new/$id.txt"
+	done < <(cat "$tmp/ratchet-ids" "$tmp/audit-ids")
+	mkdir -p "$data/ratchet"
+	for id in "$tmp"/new/*.txt; do
+		[ -f "$id" ] || continue
+		mv "$id" "$data/ratchet/${id##*/}"
+		echo "wrote $data/ratchet/${id##*/}"
+	done
 }
 
 # ── formal verification record ──
@@ -576,6 +819,7 @@ EOF
 	CHECK_KNOWN=$(
 		printf '%s\n' "${names[@]}"
 		[ -f "$patterns" ] && awk -F'\t' '!/^#/ && NF { print "banned:" $1 }' "$patterns"
+		[ -f "$audit" ] && awk -F'\t' '!/^#/ && NF >= 3 { c = $3; sub(/\r$/, "", c); if (c != "-" && c !~ /^(check|banned):/) print "audit:" $1 }' "$audit"
 	) || true
 	export CHECK_KNOWN
 	if [ ${#legacy[@]} -gt 0 ]; then
@@ -624,6 +868,9 @@ fi
 if [ -f "$patterns" ]; then
 	check "banned patterns" fast "fix each listed line as its fix says; the patterns are in $patterns" -- check_banned
 fi
+if [ -f "$audit" ] || audit_at_base; then
+	check audit fast "fix each listed violation or audit row; the record is $audit" -- check_audit
+fi
 if [ -f "$formal" ]; then
 	check "formal drift" fast "rerun each listed formal check, then update its synced commit in $formal" -- check_formal
 	while IFS=$'\t' read -r f_name f_command _ _ f_tier _; do
@@ -644,7 +891,9 @@ if [ "$mode" = list ]; then
 	exit 0
 fi
 if [ "$mode" = baselines ]; then
-	[ -f "$patterns" ] && write_baselines
+	if [ -f "$patterns" ] || [ -f "$audit" ]; then
+		write_baselines || exit 1
+	fi
 	exit 0
 fi
 

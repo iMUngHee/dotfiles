@@ -1,8 +1,8 @@
 # Stack strictness
 
-Consult this table when an adopted convention needs a mechanical check. Prefer existing configuration and the smallest precise check. The tiers below are examples. Place each selected check according to its runtime and prerequisites in this repository ([verification](verification.md)).
+Consult this table when an adopted convention needs a mechanical check: prefer existing configuration and the smallest precise check, and place each by its runtime and prerequisites ([verification](verification.md)).
 
-Take every command and option from a source for the installed version: the stack's official documentation, else the tool's own `--help` or manual, else its documentation at the pinned release. Many stacks have only community tools; a flag seen in none of these sources is a guess, so leave it out. Run each wired command once and keep its output as evidence that it exists and does what the row asks.
+Take every command and option from a source for the installed version: the stack's official documentation, else the tool's own `--help` or manual, else its documentation at the pinned release. A flag seen in none of these sources is a guess, so leave it out. Run each wired command once and keep its output as evidence that it does what the row asks.
 
 A dependency rule between workspace packages is machine-decidable: read the resolved graph (`cargo metadata`, `go list -deps`, the package manager's workspace listing) and fail on the forbidden production edge while dev or test edges stay allowed. A manifest that merely declares today's edges does not stop the next one. ARCHITECTURE links whichever policy the gate reads ([architecture](architecture.md#the-dependency-policy)).
 

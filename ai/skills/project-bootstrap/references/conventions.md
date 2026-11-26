@@ -47,7 +47,7 @@ A formatter and a linter cover most of the last two; the floor's value is in the
 - its **enforcement**: the compiler, a native lint, a precise check, or the judgment left to review;
 - the **evidence** it needs, such as a measurement before and after a claimed speed-up.
 
-These are questions to settle, not fields to write down. Adopting Microsoft's M-HOTPATH for a request path, for example, names the failure (per-request allocation, cloning and logging), puts the decision in the API handlers call and enforces what a lint can see, while "borrow instead of clone" stays a reviewed rule with its source because no lint decides every case. Record the source and reason of a consequential rule, exclusion or override where contributors read it, and record nothing to pad the document.
+These are questions to settle, not fields to write down: adopting Microsoft's M-HOTPATH for a request path names the failure (per-request allocation, cloning and logging) and puts the decision in the API handlers call, while "borrow instead of clone" stays a reviewed rule because no lint decides every case. Record the source and reason of a consequential rule, exclusion or override where contributors read it, and record nothing to pad the document.
 
 ## Writing CONVENTIONS
 

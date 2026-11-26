@@ -535,6 +535,201 @@ test("base on the default branch", async (t) => {
   });
 });
 
+const AUDIT_HEAD = "# id\tcategory\tcommand\treason\tfix\n";
+const CAST_CMD = "git grep -n -E 'as T' -- 'src/*.js'; test $? -le 1";
+// Every category gets a row: one counting command plus "-" rows for the rest.
+const auditRows = (extra = [], cast = ["casts", "boundary", CAST_CMD, "a cast hides an unparsed input", "parse the input at the boundary"]) =>
+  AUDIT_HEAD + [cast, ...["layers", "owner", "hot-path", "coupled", "rule"].map((c) => [`none-${c}`, c, "-", `nothing in ${c} can be counted by a command yet`, "count it when a precise probe exists"]), ...extra]
+    .filter(Boolean).map((r) => r.join("\t")).join("\n") + "\n";
+const AUDIT = "scripts/check-data/audit.tsv";
+
+function auditRepo(t, { rows = auditRows(), files = {}, branch = "main" } = {}) {
+  const g = gateRepo(t, { branch, files: { "src/a.js": "const x = y as T;\n", [AUDIT]: rows, ...files } });
+  assert.equal(g.run(["--write-baselines"]).status, 0);
+  g.commit("adopt the audit");
+  g.git("checkout", "-q", "-b", "feat");
+  return g;
+}
+
+test("audit: a command's violations are a content ratchet", async (t) => {
+  await t.test("the adopted state passes", (t) => {
+    const r = auditRepo(t).run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("one more violation fails with its location", (t) => {
+    const g = auditRepo(t);
+    g.put("src/b.js", "const z = w as T;\n");
+    g.commit("another cast");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /ratchet casts: new violation[\s\S]*src\/b\.js:1/);
+  });
+  await t.test("the same count with different content fails", (t) => {
+    const g = auditRepo(t);
+    g.put("src/a.js", "const q = r as T;\n");
+    assert.equal(g.run(["--fast"]).status, 1);
+  });
+  await t.test("fewer violations ask for a lower baseline", (t) => {
+    const g = auditRepo(t);
+    g.put("src/a.js", "const x = parse(y);\n");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 1);
+    assert.match(out(r), /lower the baseline/);
+  });
+  await t.test("--write-baselines writes the audit baseline", (t) => {
+    const g = auditRepo(t);
+    assert.ok(fs.readFileSync(g.at("scripts/check-data/ratchet/casts.txt"), "utf8").includes("\t1\tsrc/a.js"));
+  });
+});
+
+test("audit: rows and commands are validated", async (t) => {
+  const fails = (name, rows, why, extra = {}) => t.test(`fails: ${name}`, (t) => {
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: rows, ...extra } });
+    const r = g.run(["--fast"], { CHECK_AUDIT_TIMEOUT: "2" });
+    assert.equal(r.status, 1);
+    assert.match(out(r), why);
+  });
+  await fails("a command that exits 2", auditRows([], ["casts", "boundary", "echo broken >&2; exit 2", "r", "f"]), /audit casts: the command exited with status 2[\s\S]*broken/);
+  await fails("a command over its time limit", auditRows([], ["casts", "boundary", "sleep 37 & sleep 37", "r", "f"]), /audit casts: the command ran past 2s/);
+  await fails("output that is not path:line:text", auditRows([], ["casts", "boundary", "echo loose words", "r", "f"]), /audit casts: output line 1 is not path:line:text/);
+  await fails("a row with a missing field", AUDIT_HEAD + "casts\tboundary\t" + CAST_CMD + "\n", /audit\.tsv:2: expected id, category, command, reason, fix/);
+  await fails("an unknown category", auditRows([["odd", "style", "-", "r", "f"]]), /audit\.tsv:\d+: category must be one of/);
+  await fails("a missing category", AUDIT_HEAD + ["casts", "boundary", CAST_CMD, "r", "f"].join("\t") + "\n", /audit: no row covers layers, owner, hot-path, coupled, rule/);
+  await fails("a reference to an unregistered check", auditRows([["lint-ref", "rule", "check:nope", "r", "f"]]), /audit lint-ref: check:nope is not a registered check/);
+  await fails("a reference to a missing banned id", auditRows([["ban-ref", "rule", "banned:gone", "r", "f"]]), /audit ban-ref: banned:gone is not a banned-patterns id/);
+  await fails("an id shared with a banned pattern", auditRows(), /audit casts: the id is also a banned-patterns id/, { "scripts/check-data/banned-patterns.tsv": tsv(["casts", "LEGACY", "-", "ban", "-", "r", "f"]) });
+  await fails("more than 1 MiB of output", auditRows([], ["casts", "boundary", "yes 'src/a.js:1:x' | head -c 1100000", "r", "f"]), /audit casts: the command wrote more than 1 MiB/);
+  await t.test("a timed-out command leaves no process behind", (t) => {
+    const g = gateRepo(t, { files: { [AUDIT]: auditRows([], ["casts", "boundary", "sleep 41 & sleep 41", "r", "f"]) } });
+    g.run(["--fast"], { CHECK_AUDIT_TIMEOUT: "1" });
+    const left = spawnSync("pgrep", ["-f", "sleep 41"], { encoding: "utf8" });
+    assert.equal(left.stdout.trim(), "");
+  });
+  await t.test("references and - rows cover categories; CRLF and a missing final newline are read", (t) => {
+    const rows = auditRows([["lint-ref", "rule", "check:lint", "the linter enforces it", "run the linter"]]).replace(/\n/g, "\r\n").replace(/\r\n$/, "");
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: rows } });
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+});
+
+test("audit: the record only shrinks against the base", async (t) => {
+  const reset = (g, msg) => g.git("commit", "-q", "--allow-empty", "-m", msg);
+  await t.test("a grown baseline fails", (t) => {
+    const g = auditRepo(t);
+    g.put("src/b.js", "const z = w as T;\n");
+    g.commit("another cast");
+    g.run(["--write-baselines"]);
+    g.commit("grow");
+    assert.match(out(g.run(["--fast"])), /the baseline grew relative to the base/);
+  });
+  await t.test("a new row cannot arrive with a baseline", (t) => {
+    const g = auditRepo(t);
+    g.put("src/c.js", "const n = m as U;\n");
+    g.commit("a U cast");
+    g.put(AUDIT, auditRows([["casts2", "boundary", "git grep -n -E 'as U' -- 'src/*.js'; test $? -le 1", "r", "f"]]));
+    g.run(["--write-baselines"]);
+    g.commit("new row with debt");
+    assert.match(out(g.run(["--fast"])), /audit casts2: a row added after adoption starts with no baseline/);
+  });
+  await t.test("a changed command, a removed row and a removed file fail", (t) => {
+    const changed = auditRepo(t);
+    changed.put(AUDIT, auditRows([], ["casts", "boundary", "true", "r", "f"]));
+    changed.put("scripts/check-data/ratchet/casts.txt", "");
+    changed.commit("weaken");
+    assert.match(out(changed.run(["--fast"])), /audit casts: the command changed since the base; add a Ratchet-Reset: casts <reason> trailer/);
+    const removed = auditRepo(t);
+    removed.put(AUDIT, auditRows([], ["casts-x", "boundary", "-", "r", "f"]));
+    removed.commit("drop row");
+    assert.match(out(removed.run(["--fast"])), /audit casts: the row was removed since the base/);
+    const gone = auditRepo(t);
+    fs.rmSync(gone.at(AUDIT));
+    gone.commit("drop file");
+    assert.match(out(gone.run(["--fast"])), /audit casts: the row was removed since the base/);
+  });
+  await t.test("a Ratchet-Reset trailer for the id allows a change within the base total", (t) => {
+    const g = auditRepo(t);
+    g.put(AUDIT, auditRows([], ["casts", "boundary", "git grep -n -E 'as [A-Z]' -- 'src/*.js'; test $? -le 1", "r", "f"]));
+    g.run(["--write-baselines"]);
+    g.git("add", "-A");
+    g.git("commit", "-q", "-m", "widen the probe\n\nRatchet-Reset: casts the probe now matches every capitalised cast");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("a reset for another id, or reset text outside the trailers, does not exempt", (t) => {
+    const g = auditRepo(t);
+    g.put(AUDIT, auditRows([], ["casts", "boundary", "true", "r", "f"]));
+    g.put("scripts/check-data/ratchet/casts.txt", "");
+    g.git("add", "-A");
+    g.git("commit", "-q", "-m", "weaken\n\nRatchet-Reset: casts quoted in prose, not a trailer\n\nSigned-off-by: x <x@example.invalid>\nRatchet-Reset: other unrelated");
+    assert.match(out(g.run(["--fast"])), /the command changed since the base/);
+  });
+  await t.test("first adoption on a branch passes; re-adoption after removal does not", (t) => {
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n" } });
+    g.git("checkout", "-q", "-b", "feat");
+    g.put(AUDIT, auditRows());
+    g.run(["--write-baselines"]);
+    g.commit("adopt");
+    assert.equal(g.run(["--fast"]).status, 0, out(g.run(["--fast"])));
+    const again = auditRepo(t);
+    fs.rmSync(again.at(AUDIT));
+    fs.rmSync(again.at("scripts/check-data/ratchet/casts.txt"));
+    again.git("add", "-A");
+    again.git("commit", "-q", "-m", "drop\n\nRatchet-Reset: casts retire the audit");
+    again.git("checkout", "-q", "main");
+    again.git("merge", "-q", "--ff-only", "feat");
+    again.git("checkout", "-q", "-b", "readopt");
+    again.put(AUDIT, auditRows());
+    again.run(["--write-baselines"]);
+    again.commit("readopt");
+    assert.match(out(again.run(["--fast"])), /audit casts: a row added after adoption starts with no baseline/);
+  });
+  await t.test("a root commit adopts its audit", (t) => {
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: auditRows() } });
+    g.run(["--write-baselines"]);
+    g.git("add", "-A");
+    g.git("commit", "-q", "--amend", "--no-edit");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+});
+
+test("ratchet baselines are validated and only written from a clean scan", async (t) => {
+  await t.test("a negative or duplicated count fails", (t) => {
+    const g = auditRepo(t);
+    const line = fs.readFileSync(g.at("scripts/check-data/ratchet/casts.txt"), "utf8").trim();
+    const [hash, , where] = line.split("\t");
+    g.put("scripts/check-data/ratchet/casts.txt", `${line}\n${"0".repeat(64)}\t-4\tnowhere\n`);
+    assert.match(out(g.run(["--fast"])), /casts\.txt:2: a baseline line needs a sha256, a positive count and a path/);
+    g.put("scripts/check-data/ratchet/casts.txt", `${line}\n${hash}\t1\t${where}\n`);
+    assert.match(out(g.run(["--fast"])), /casts\.txt:2: repeats a hash/);
+  });
+  await t.test("--write-baselines writes nothing when a command fails", (t) => {
+    const g = auditRepo(t);
+    const before = fs.readFileSync(g.at("scripts/check-data/ratchet/casts.txt"), "utf8");
+    g.put(AUDIT, auditRows([], ["casts", "boundary", "exit 3", "r", "f"]));
+    const r = g.run(["--write-baselines"]);
+    assert.notEqual(r.status, 0);
+    assert.equal(fs.readFileSync(g.at("scripts/check-data/ratchet/casts.txt"), "utf8"), before);
+  });
+});
+
+test("rule tags accept audit:<id> for a counting row", async (t) => {
+  const conv = (body) => (t) => {
+    const g = gateRepo(t, { config: RULES_CONFIG("  echo CONVENTIONS.md"), files: { "src/a.js": "const x = y as T;\n", [AUDIT]: auditRows(), "CONVENTIONS.md": body } });
+    g.run(["--write-baselines"]);
+    return g.run(["--fast"]);
+  };
+  await t.test("a known audit id passes", (t) => {
+    const r = conv("- Parse input at the boundary [check: audit:casts]\n")(t);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("an unknown audit id fails", (t) => {
+    assert.match(out(conv("- Parse input at the boundary [check: audit:nope]\n")(t)), /unknown check "audit:nope"/);
+  });
+});
+
 test("rule tags", async (t) => {
   const rules = (t, body) => {
     const g = gateRepo(t, {

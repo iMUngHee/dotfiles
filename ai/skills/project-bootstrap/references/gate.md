@@ -6,19 +6,19 @@ For a new gate, use the bundled [driver](../assets/check.sh) and [hook](../asset
 
 ## Contract
 
-The bundled driver, hook and layer helper are specified in [the contract](../assets/check-contract.md): registration, base, pass record, banned patterns, ratchet baseline, rule tags, the formal verification record, pre-push and the layer policy.
+The bundled driver, hook and layer helper are specified in [the contract](../assets/check-contract.md): registration, base, pass record, banned patterns, ratchet baseline, rule tags, the audit record, the formal verification record, pre-push and the layer policy.
 
 ## Replacing a protection
 
 Identify the old control's effective scope, accepted exceptions and the failure it prevents. Run it on the current checkout and on a realistic violation where feasible. Prove the replacement against the same failure and a nearby legitimate change. An import check over workspace packages and a resolved dependency graph may cover different risks. A renamed gate or shorter command needs the same comparison.
 
-Preserve an effective control while its replacement's coverage is uncertain. If checks or history are missing, recover important promises from the code, tests, release artifacts and owner decisions. Record gaps you cannot recover and who owns them. When deciding whether to change a supported contract, bring its consumers and the migration cost into the decision.
+Preserve an effective control while its replacement's coverage is uncertain. Where checks or history are missing, recover the important promises from the code, tests, release artifacts and owner decisions, record the gaps with their owners, and weigh a supported contract's consumers and migration cost before changing it.
 
 ## Repository checks
 
-Select a check when it protects an adopted contract precisely and at reasonable cost. Try the stack's existing inspection or test first. Add custom logic only for a concrete gap the existing checks miss, and name that failure in its hint or the rule it enforces; a check with no failure to name, or no occurrence or reproduction to show, is proposed in the report instead of installed. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
+Select a check when it protects an adopted contract precisely and at reasonable cost, in this order: the stack's native check with its own baseline or exceptions, a banned-pattern row for a precise line pattern, layer debt for a dependency edge, and an audit probe for a predicate that needs several files or language awareness. Add custom logic only for a concrete gap the existing checks miss, and name that failure in its hint or the rule it enforces; a check with no real occurrence behind it (a past commit, issue or review finding) is proposed in the report instead of installed, since a planted violation proves a check works, not that it is needed. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
 
-- **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
+- **Work-artifact references.** Comments and test messages pointing at plans, review rounds or agent scratch paths: a `ban` row whose hint says to write the reason itself.
 - **Surface inventory drift.** Where contributors rely on a reference document's completeness, extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when it does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
 - **Layering.** Fail when a module imports across a boundary ARCHITECTURE forbids, with the stack's native policy tool or else the bundled layer helper on the policy ARCHITECTURE links ([architecture](architecture.md#the-dependency-policy)).
 - **Generated sources.** Use the generator's read-only mode, or regenerate into a temporary location, and fail when the result differs from the tracked output, so edits go to the source; the check never rewrites tracked files.

@@ -10,7 +10,7 @@ Tests and measurements protect contracts that code structure and static checks c
 
 ## Choosing cases
 
-Choose a trigger and an observation at the public boundary. Exercise a meaningful limit or failure path when it changes the outcome. For a contract that limits side effects, observe what the entry point creates or changes as well as what it returns. Include first use when initialization can write state. Reproduce an escaped bug before its fix. A test should survive a behavior-preserving refactor and fail if its promise breaks.
+Choose a trigger and an observation at the public boundary, with a limit or failure path when it changes the outcome; for a side-effect contract observe what the entry point creates or changes, include first use when initialization writes state, and reproduce an escaped bug before its fix. A test survives a behavior-preserving refactor and fails if its promise breaks.
 
 ## Scheduling a selected check
 

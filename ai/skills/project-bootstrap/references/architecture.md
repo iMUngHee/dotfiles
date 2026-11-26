@@ -11,7 +11,7 @@ ARCHITECTURE is the repository's definition of its structure. A later contributo
 | Boundaries | Security and isolation boundaries, where external input is parsed, who may release each resource, and for each the supported route for a change that must cross it |
 | Extension paths | For each component, the supported way to extend it and a real example a contributor can copy |
 | Decisions | Each decision a later reader could undo by accident, with its reason; move them to a decisions directory only when they outgrow a section |
-| Current, target, debt | For an existing repository: the structure as the code shows it, the target the conventions and decisions set, and the departures between them, each with the command that counted it and its binding: a ratchet, debt rows, an incomplete requirement or a deferred decision |
+| Current, target, debt | For an existing repository: the structure as the code shows it, the target the conventions and decisions set, and the departures between them, each bound in the audit record, the layer debt or a deferred decision |
 
 Write it from the code: every claim names the file, module or type that makes it true, so a reviewer can open it. Keep what changes rarely; leave function-level detail to the code. Scale it to the project: a small app has two or three components and one line of dependencies, and a project with no boundary to enforce says "one component, no layer policy" and why. Mark the structure of a new project provisional and correct it in the change that proves it wrong. Link existing design documents and decision records instead of restating them.
 
@@ -28,7 +28,7 @@ Use this when a change can meet its visible requirements and still leave worse c
 
 For example, a state change that updates several records belongs in the operation that owns the transaction, and the HTTP handler translates the result and calls that operation like other adapters. A direct write in the handler may return the same response today and split the invariant: prove that visibility prevents it and show the supported API, or narrow access or check the import precisely. A scan that needs only a count consumes an iterator instead of collecting, while a caller that reuses the items may collect them; keep that distinction in the hot-path decision instead of banning collection project-wide.
 
-Follow a normal extension through a real entry point or compile the smallest useful caller. Exercise a nearby bad change through the relevant compiler, boundary check or behavior test, preserve a legitimate alternative and report the result. For a judgment-only claim, show the relevant callers, costs or responsibilities and explain what the reviewer must decide. Changing a central API, file format or deployment contract may cost more than the local improvement: preserve its consumers, document the current supported path and record the deferred migration with its trigger.
+Follow a normal extension through a real entry point or the smallest useful caller, exercise a nearby bad change through the compiler, boundary check or behavior test while a legitimate alternative still passes, and report the result; for a judgment-only claim, show the callers, costs or responsibilities the reviewer must weigh. When changing a central API, file format or deployment contract costs more than the local gain, preserve its consumers, document the current supported path and record the deferred migration with its trigger.
 
 ## The dependency policy
 
