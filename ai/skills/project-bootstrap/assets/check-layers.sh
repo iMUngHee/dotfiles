@@ -5,7 +5,7 @@
 #   scripts/check-layers.sh --doc <ARCHITECTURE path> -- <extractor command...>
 #
 # The extractor prints one `from<TAB>to` line per production dependency, and
-# each production file without one alone on its line: internal files as
+# `file<TAB><path>` for each production file without one: internal files as
 # canonical repository-relative paths, external dependencies as ext:<name>.
 # The rows and outcomes are described in check-contract.md ("Layer policy").
 # Debt is compared with the same base as scripts/check.sh.
@@ -226,10 +226,11 @@ CL_DOC=$doc CL_FIRST=$first CL_POLICY=$policy CL_BFILE=$tmp/base CL_EFILE=$tmp/e
 	}
 	FILENAME == efile {
 		if ($0 == "") next
-		# A file with no dependencies is listed alone, so it is still classified.
-		if (NF == 1) {
-			if (canonical($1)) { lone++; alone[lone] = $1 }
-			else fail("extractor line " FNR ": \"" $1 "\" is not a canonical repository path")
+		# A file with no dependencies is declared, so it is still classified; a
+		# bare path is rejected because a truncated edge would look the same.
+		if ($1 == "file" && NF == 2) {
+			if (canonical($2)) { lone++; alone[lone] = $2 }
+			else fail("extractor line " FNR ": \"" $2 "\" is not a canonical repository path")
 			next
 		}
 		if (NF != 2) { fail("extractor line " FNR " is not from<TAB>to: " $0); next }

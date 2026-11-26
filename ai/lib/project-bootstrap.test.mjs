@@ -983,12 +983,12 @@ const layersAsset = new URL("../skills/project-bootstrap/assets/check-layers.sh"
 
 // Prints `from<TAB>to` for each import in src/**/*.js: a relative import is
 // resolved to a canonical repository path, anything else becomes ext:<name>.
-// A file with no imports is printed alone so that it is still classified.
+// A file with no imports is declared as file<TAB>path so that it is still classified.
 const EDGES = `#!/bin/bash
 set -euo pipefail
 [ -z "\${EDGES_FAIL:-}" ] || exit 7
 git ls-files 'src/*.js' | while IFS= read -r f; do
-  grep -q 'from "' "$f" || { printf '%s\\n' "$f"; continue; }
+  grep -q 'from "' "$f" || { printf 'file\\t%s\\n' "$f"; continue; }
   { grep -oE 'from "[^"]+"' "$f" || true; } | sed -E 's/from "(.*)"/\\1/' | while IFS= read -r spec; do
     case "$spec" in
       ./*|../*) printf '%s\\t%s\\n' "$f" "$(awk -v d="$(dirname "$f")" -v s="$spec" 'BEGIN { n = split(d "/" s, p, "/"); o = 0; for (i = 1; i <= n; i++) { if (p[i] == "." || p[i] == "") continue; if (p[i] == "..") { o--; continue }; q[++o] = p[i] }; out = q[1]; for (i = 2; i <= o; i++) out = out "/" q[i]; print out }')" ;;
@@ -1095,7 +1095,8 @@ test("layer policy outcomes", async (t) => {
   await fails("a control byte in a debt row", { policy: LAYER_POLICY + "debt\tsrc/domain/a\x1csrc/http/b\tsrc/http/z\n" }, undefined, /not a layer, allow, debt or empty-ok row/);
   await fails("a production file with no dependencies outside every layer", {}, (g) => g.put("src/other/x.js", "export const z = 1;\n"), /src\/other\/x\.js belongs to no layer/);
   await passes("a production file with no dependencies inside a layer", {}, (g) => g.put("src/domain/y.js", "export const y = 1;\n"));
-  await fails("a lone external name", {}, (g) => g.put("scripts/edges.sh", EDGES + "printf 'ext:kafka\\n'\n"), /extractor line \d+: "ext:kafka" is not a canonical repository path/);
+  await fails("a declared external name", {}, (g) => g.put("scripts/edges.sh", EDGES + "printf 'file\\text:kafka\\n'\n"), /extractor line \d+: "ext:kafka" is not a canonical repository path/);
+  await fails("a truncated edge, a bare path, beside valid edges", {}, (g) => g.put("scripts/edges.sh", EDGES + "printf 'src/domain/model.js\\n'\n"), /extractor line \d+ is not from<TAB>to: src\/domain\/model\.js/);
   await fails("a NUL byte in the extractor output", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\tsrc/domain/model.js\\000\\textra\\n'\n"), /holds a NUL byte/);
   await fails("a DEL byte in an extractor endpoint", {}, (g) => g.put("scripts/edges.sh", "#!/bin/bash\nprintf 'src/http/handler.js\\tsrc/domain/model.js\\177\\n'\n"), /neither ext:<name> nor a canonical repository path/);
   await fails("an equivalence-class glob, even with no edges", { policy: "layer\tdomain\tsrc/[[=d=]]omain/*\nlayer\thttp\tsrc/http/*\nempty-ok\n" }, silent, /globs take only/);

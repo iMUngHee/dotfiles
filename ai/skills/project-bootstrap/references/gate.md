@@ -23,6 +23,7 @@ Select a check when it protects an adopted contract precisely and at reasonable 
 - **Layering.** Fail when a module imports across a boundary ARCHITECTURE forbids, with the stack's native policy tool or else the bundled layer helper on the policy ARCHITECTURE links ([architecture](architecture.md#the-dependency-policy)).
 - **Generated sources.** Use the generator's read-only mode, or regenerate into a temporary location, and fail when the result differs from the tracked output, so edits go to the source; the check never rewrites tracked files.
 - **Changelog and version.** Fail when the version owner and the changelog's released sections disagree, or when the unreleased section is missing.
+- **Flaky tests fail.** A test that passes only on retry fails the run, in either tier.
 - **Dependency audit.** Known advisories, unused dependencies and disallowed licenses in `full`. Each ignore entry carries an id, a date and a reason, and a self-test proves the gate fails on an entry that lacks one.
 
 Keep regression cases for custom check logic where a mistake could hide a violation or reject a legitimate change. Reuse existing coverage for thin wrappers around a tested tool.
