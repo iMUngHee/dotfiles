@@ -51,7 +51,7 @@ Passing tests, a clean lint run or rising coverage say little about structure or
 
 ## Proof before reporting
 
-1. Run the fast and full tiers on the checkout.
+1. Run the fast and full tiers on the checkout, and again once every fixture below is removed.
 2. For each new check and audit probe, plant a realistic violation and confirm it fails with its hint; confirm the closest legitimate change passes; remove both. Then list every rule CONVENTIONS owns and every boundary ARCHITECTURE states with its tag or audit row, and report an unmatched one as incomplete.
 3. Rerun any generator or builder and its `--check`; inspect the working-tree diff including untracked files.
 4. From the checkout alone, follow the documented setup, including the hook, and the documented extension path, and confirm the repository's guidance carries every correction-loop item and same-change duty in [maintenance](references/maintenance.md).

@@ -695,6 +695,56 @@ test("audit: the record only shrinks against the base", async (t) => {
   });
 });
 
+test("audit: review fixes", async (t) => {
+  await t.test("a reintroduced probe does not inherit a baseline left behind", (t) => {
+    const g = auditRepo(t);
+    g.put(AUDIT, auditRows([], ["casts-x", "boundary", "-", "retired probe", "f"]));
+    g.git("add", "-A");
+    g.git("commit", "-q", "-m", "retire\n\nRatchet-Reset: casts the probe is retired");
+    g.git("checkout", "-q", "main");
+    g.git("merge", "-q", "--ff-only", "feat");
+    g.git("checkout", "-q", "-b", "again");
+    g.put(AUDIT, auditRows());
+    g.commit("reintroduce");
+    assert.match(out(g.run(["--fast"])), /audit casts: a row added after adoption starts with no baseline/);
+  });
+  await t.test("a folded trailer line does not reset another id", (t) => {
+    const g = auditRepo(t);
+    g.put(AUDIT, auditRows([], ["casts", "boundary", "true", "r", "f"]));
+    g.put("scripts/check-data/ratchet/casts.txt", "");
+    fs.rmSync(g.at("scripts/check-data/ratchet/casts.txt"));
+    g.git("add", "-A");
+    g.git("commit", "-q", "-m", "weaken\n\nRatchet-Reset: other rearrange the parser\n casts will move separately");
+    assert.match(out(g.run(["--fast"])), /audit casts: the command changed since the base/);
+  });
+  await t.test("a row with an empty field is rejected even when tabs collapse", (t) => {
+    const rows = auditRows().replace(/^none-rule\trule\t-\t/m, "none-rule\trule\t\t-\t");
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: rows } });
+    assert.match(out(g.run(["--fast"])), /audit\.tsv:\d+: expected id, category, command, reason, fix/);
+  });
+  await t.test("--write-baselines writes nothing while a category is missing", (t) => {
+    const g = gateRepo(t, { files: { "src/a.js": "const x = y as T;\n", [AUDIT]: AUDIT_HEAD + ["casts", "boundary", CAST_CMD, "r", "f"].join("\t") + "\n" } });
+    const r = g.run(["--write-baselines"]);
+    assert.notEqual(r.status, 0);
+    assert.equal(fs.existsSync(g.at("scripts/check-data/ratchet/casts.txt")), false);
+  });
+});
+
+test("banned patterns: scan errors fail instead of matching nothing", async (t) => {
+  await t.test("an invalid pattern fails the check and leaves baselines alone", (t) => {
+    const g = ratchetRepo(t);
+    const before = fs.readFileSync(g.at("scripts/check-data/ratchet/leg.txt"), "utf8");
+    g.put("scripts/check-data/banned-patterns.tsv", tsv(["leg", "LEGACY(", "-", "ratchet", "-", "old style", "use the new API"]));
+    assert.match(out(g.run()), /banned-patterns\.tsv:2: git grep failed with status \d+/);
+    assert.notEqual(g.run(["--write-baselines"]).status, 0);
+    assert.equal(fs.readFileSync(g.at("scripts/check-data/ratchet/leg.txt"), "utf8"), before);
+  });
+  await t.test("a last row without a newline is scanned", (t) => {
+    const g = gateRepo(t, { files: { "src/a.txt": "LEGACY\n", "scripts/check-data/banned-patterns.tsv": tsv(["leg", "LEGACY", "-", "ban", "-", "r", "f"]).replace(/\n$/, "") } });
+    assert.match(out(g.run()), /src\/a\.txt:1: \[leg\]/);
+  });
+});
+
 test("ratchet baselines are validated and only written from a clean scan", async (t) => {
   await t.test("a negative or duplicated count fails", (t) => {
     const g = auditRepo(t);

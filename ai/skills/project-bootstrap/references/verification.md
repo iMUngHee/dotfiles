@@ -3,7 +3,7 @@
 Tests and measurements protect contracts that code structure and static checks cannot; they do not set the quality bar.
 
 - Before adding one, name the observable contract, the harm if it breaks and the gap in existing evidence. Reuse the cheapest working check. Preserve effective existing suites, crash corpora, formal records and their repository-owned upkeep.
-- Coverage, test counts and the number of methods in use are not goals.
+- Coverage and test counts are not goals.
 - Do not test what the types or the structure already rule out; when a test would only guard against a misuse, first try to make the misuse unrepresentable.
 - Test code is held to the same standard as product code. A test tied to internals blocks the refactors that remove slop.
 - Back a performance claim with a measurement on a representative workload under the same build and conditions, after checking the results are equivalent. Do not install a benchmark suite or profiler where no costly path is at stake.

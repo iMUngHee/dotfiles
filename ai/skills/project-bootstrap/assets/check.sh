@@ -40,7 +40,15 @@ patterns=$data/banned-patterns.tsv
 audit=$data/audit.tsv
 today=${CHECK_TODAY:-$(date -u +%Y-%m-%d)}
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+probe_group=
+# A probe still running when the gate stops dies with it.
+cleanup() {
+	[ -z "$probe_group" ] || kill -KILL -- "-$probe_group" 2>/dev/null || true
+	rm -rf "$tmp"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 names=()
 modes=()
@@ -183,9 +191,9 @@ allowed() {
 # each ratchet id as "hash<TAB>path:line" to $tmp/hits.<id> and its id to
 # $tmp/ratchet-ids. Returns 1 when a line fails outright.
 scan_patterns() {
-	local status=0 setup=0 row=0 id ere allow rmode deadline reason fix path line content where re note until
+	local status=0 setup=0 row=0 rc id ere allow rmode deadline reason fix path line content where re note until
 	: >"$tmp/ratchet-ids"
-	while IFS=$'\t' read -r id ere allow rmode deadline reason fix <&3; do
+	while IFS=$'\t' read -r id ere allow rmode deadline reason fix <&3 || [ -n "$id" ]; do
 		row=$((row + 1))
 		case "$id" in "" | "#"*) continue ;; esac
 		if ! [[ $id =~ ^[A-Za-z0-9_-]+$ ]] || [ -z "$fix" ] ||
@@ -200,7 +208,13 @@ scan_patterns() {
 			printf '%s\n%s\n' "$reason" "$fix" >"$tmp/meta.$id"
 		fi
 		# -z ends the path and the line number with NUL, so a path holding ":" stays whole.
-		git grep -z -n -I --untracked -E -e "$ere" -- . ":(exclude)$data" >"$tmp/grep" || true
+		rc=0
+		git grep -z -n -I --untracked -E -e "$ere" -- . ":(exclude)$data" >"$tmp/grep" || rc=$?
+		if [ "$rc" -gt 1 ]; then
+			echo "$patterns:$row: git grep failed with status $rc; check the pattern"
+			setup=1
+			continue
+		fi
 		re="check-allow\\($id\\):(.*)until=([0-9]{4}-[0-9]{2}-[0-9]{2})"
 		while IFS= read -r -d '' path <&4 && IFS= read -r -d '' line <&4 && IFS= read -r content <&4; do
 			where="$path:$line"
@@ -248,7 +262,7 @@ scan_patterns() {
 reset_ids() {
 	local range=$gate_base..HEAD
 	[ "$gate_base" != root ] || range=HEAD
-	git log --format='%(trailers:key=Ratchet-Reset,valueonly,separator=%x0A)' "$range" |
+	git log --format='%(trailers:key=Ratchet-Reset,valueonly,unfold,separator=%x0A)' "$range" |
 		sed -n 's/^[[:space:]]*\([A-Za-z0-9_-][A-Za-z0-9_-]*\)[[:space:]][[:space:]]*[^[:space:]].*/\1/p'
 }
 
@@ -311,13 +325,16 @@ check_ratchet() {
 			status=1
 			continue
 		fi
-		if [ -z "$entry" ]; then
-			if [ "$kind" = audit ] && [ "$audit_first" != 1 ] && [ -s "$data/ratchet/$id.txt" ]; then
+		# A probe the base record did not run is new, whatever baseline file was
+		# left behind, and starts empty unless the record is adopted now.
+		if [ "$kind" = audit ] && [ "$audit_first" != 1 ] && ! grep -qx -- "$id" "$tmp/audit-base-probes"; then
+			if [ -s "$data/ratchet/$id.txt" ]; then
 				echo "audit $id: a row added after adoption starts with no baseline; fix its violations first"
 				status=1
 			fi
 			continue
 		fi
+		[ -n "$entry" ] || continue
 		if ! baseline_ok "$tmp/base.$id" "$data/ratchet/$id.txt at $gate_base"; then
 			status=1
 			continue
@@ -359,15 +376,18 @@ run_audit() {
 	local limit=${CHECK_AUDIT_TIMEOUT:-60} pid ticks=0 rc=0
 	[[ $limit =~ ^[1-9][0-9]*$ ]] || limit=60
 	set -m
-	bash -c "$1" </dev/null >"$2" 2>"$3" &
+	# ulimit -f stops a probe that writes past the limit while it runs.
+	bash -c 'ulimit -f 1025 2>/dev/null; eval "$1"' probe "$1" </dev/null >"$2" 2>"$3" &
 	pid=$!
 	set +m
+	probe_group=$pid
 	while kill -0 "$pid" 2>/dev/null; do
 		if [ "$ticks" -ge $((limit * 10)) ]; then
 			kill -TERM -- "-$pid" 2>/dev/null || true
 			sleep 0.2
 			kill -KILL -- "-$pid" 2>/dev/null || true
 			wait "$pid" 2>/dev/null || true
+			probe_group=
 			return 124
 		fi
 		sleep 0.1
@@ -376,7 +396,8 @@ run_audit() {
 	wait "$pid" || rc=$?
 	# Children the probe left running die with it.
 	kill -KILL -- "-$pid" 2>/dev/null || true
-	if [ "$(wc -c <"$2")" -gt 1048576 ] || [ "$(wc -c <"$3")" -gt 1048576 ]; then
+	probe_group=
+	if [ "$rc" -eq 153 ] || [ "$(wc -c <"$2")" -gt 1048576 ] || [ "$(wc -c <"$3")" -gt 1048576 ]; then
 		return 125
 	fi
 	return "$rc"
@@ -387,21 +408,25 @@ run_audit() {
 # incomplete by whoever reads the record. Writes "id<TAB>command" for every
 # row to $tmp/audit-rows. Returns 2 for a malformed row or a failed probe.
 scan_audit() {
-	local status=0 setup=0 row=0 id cat cmd reason fix rest seen=" " covered=" " banned_ids c missing='' n line
+	local status=0 setup=0 row id cat cmd reason fix seen=" " covered=" " banned_ids c missing='' n line
 	: >"$tmp/audit-ids"
 	: >"$tmp/audit-rows"
 	[ -f "$audit" ] || return 0
 	banned_ids=" "
-	[ ! -f "$patterns" ] || banned_ids=" $(awk -F'\t' '!/^#/ && NF { printf "%s ", $1 }' "$patterns")"
-	while IFS=$'\t' read -r id cat cmd reason fix rest <&3 || [ -n "$id" ]; do
-		row=$((row + 1))
-		id=${id%$'\r'} fix=${fix%$'\r'} rest=${rest%$'\r'}
-		case "$id" in "" | "#"*) continue ;; esac
-		if [ -n "$rest" ] || [ -z "$fix" ] || [ -z "$cat" ] || [ -z "$cmd" ] || [ -z "$reason" ] || ! [[ $id =~ ^[A-Za-z0-9_-]+$ ]]; then
-			echo "$audit:$row: expected id, category, command, reason, fix separated by tabs"
-			setup=1
-			continue
-		fi
+	[ ! -f "$patterns" ] || banned_ids=" $(awk -F'\t' '{ sub(/\r$/, "") } !/^#/ && NF { printf "%s ", $1 }' "$patterns")"
+	# awk keeps empty fields, which a tab-separated read would collapse.
+	awk -F'\t' -v file="$audit" '
+		{ sub(/\r$/, "") }
+		/^#/ || $0 == "" { next }
+		NF != 5 || $1 == "" || $2 == "" || $3 == "" || $4 == "" || $5 == "" || $1 !~ /^[A-Za-z0-9_-]+$/ {
+			printf "%s:%d: expected id, category, command, reason, fix separated by tabs\n", file, FNR > "/dev/stderr"; next
+		}
+		{ print FNR "\t" $0 }' "$audit" >"$tmp/audit-valid" 2>"$tmp/audit-invalid"
+	if [ -s "$tmp/audit-invalid" ]; then
+		cat "$tmp/audit-invalid"
+		setup=1
+	fi
+	while IFS=$'\t' read -r row id cat cmd reason fix <&3; do
 		case " $audit_categories " in *" $cat "*) ;; *)
 			echo "$audit:$row: category must be one of $audit_categories"
 			setup=1
@@ -462,7 +487,7 @@ scan_audit() {
 				break
 			fi
 		done <"$tmp/out.$id"
-	done 3<"$audit"
+	done 3<"$tmp/audit-valid"
 	for c in $audit_categories; do
 		case "$covered" in *" $c "*) ;; *) missing="$missing${missing:+, }$c" ;; esac
 	done
@@ -483,8 +508,9 @@ audit_at_base() {
 # audit_first when the record is adopted now: at a root commit, or when no
 # ancestor of the base ever had it.
 check_audit_base() {
-	local status=0 entry resets id bcmd cmd
+	local status=0 entry resets id bcmd cmd hist
 	audit_first=0
+	: >"$tmp/audit-base-probes"
 	if [ -z "$gate_base" ]; then
 		echo "audit: no base commit to compare the record with: $CHECK_BASE_ERROR"
 		return 1
@@ -502,17 +528,22 @@ check_audit_base() {
 			echo "audit: this shallow clone cannot show whether $audit existed before $gate_base; fetch the full history or set CHECK_BASE"
 			return 1
 		fi
-		[ -n "$(git log -1 --format=%H "$gate_base" -- "$audit")" ] || audit_first=1
+		# --full-history also sees a record added and removed on a merged branch.
+		if ! hist=$(git log -1 --full-history --format=%H "$gate_base" -- "$audit"); then
+			echo "audit: cannot read the history of $audit before $gate_base"
+			return 1
+		fi
+		[ -n "$hist" ] || audit_first=1
 		return 0
 	fi
 	if ! git show "$gate_base:$audit" >"$tmp/audit-base"; then
 		echo "audit: cannot read $audit at $gate_base; fetch that commit or set CHECK_BASE"
 		return 1
 	fi
+	awk -F'\t' '{ sub(/\r$/, "") } !/^#/ && NF == 5 { print $1 "\t" $3 }' "$tmp/audit-base" >"$tmp/audit-base-rows"
+	awk -F'\t' '$2 != "-" && $2 !~ /^(check|banned):/ { print $1 }' "$tmp/audit-base-rows" >"$tmp/audit-base-probes"
 	resets=$(reset_ids)
-	while IFS=$'\t' read -r id _ bcmd _ <&3 || [ -n "$id" ]; do
-		id=${id%$'\r'}
-		case "$id" in "" | "#"*) continue ;; esac
+	while IFS=$'\t' read -r id bcmd <&3; do
 		printf '%s\n' "$resets" | grep -qx -- "$id" && continue
 		if ! cmd=$(awk -F'\t' -v id="$id" '$1 == id { print $2; found = 1; exit } END { exit !found }' "$tmp/audit-rows"); then
 			echo "audit $id: the row was removed since the base; keep it, or add a Ratchet-Reset: $id <reason> trailer"
@@ -521,7 +552,7 @@ check_audit_base() {
 			echo "audit $id: the command changed since the base; add a Ratchet-Reset: $id <reason> trailer and keep the baseline total"
 			status=1
 		fi
-	done 3<"$tmp/audit-base"
+	done 3<"$tmp/audit-base-rows"
 	return "$status"
 }
 
@@ -548,8 +579,8 @@ write_baselines() {
 	fi
 	s=0
 	scan_audit || s=$?
-	if [ "$s" -eq 2 ]; then
-		echo "write-baselines: fix the audit rows or probes above first; nothing was written"
+	if [ "$s" -ne 0 ]; then
+		echo "write-baselines: fix the audit record above first; nothing was written"
 		return 1
 	fi
 	mkdir -p "$tmp/new"

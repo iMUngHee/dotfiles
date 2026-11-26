@@ -1,6 +1,6 @@
 # What the repository holds
 
-The harness is what a contributor, human or agent, reads and runs to make a fitting change with only the checkout. Every repository holds the floor: an entry point, ARCHITECTURE ([architecture](architecture.md)), CONVENTIONS ([conventions](conventions.md#writing-conventions)) and a gate. Start small: a piece above the floor joins the document that already serves its readers and gets its own file only when maintained independently.
+The harness is what a contributor reads and runs to make a fitting change with only the checkout. Every repository holds the floor: an entry point, ARCHITECTURE ([architecture](architecture.md)), CONVENTIONS ([conventions](conventions.md#writing-conventions)) and a gate. Start small: a piece above the floor joins the document that already serves its readers and gets its own file only when maintained independently.
 
 | Piece | Holds | Default home | Own file when |
 | --- | --- | --- | --- |
