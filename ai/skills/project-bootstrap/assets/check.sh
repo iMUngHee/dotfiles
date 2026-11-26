@@ -334,7 +334,11 @@ check_ratchet() {
 			fi
 			continue
 		fi
-		[ -n "$entry" ] || continue
+		if [ -z "$entry" ]; then
+			# A probe the base ran with no violations has no baseline file: zero.
+			[ "$kind" = audit ] && [ "$audit_first" != 1 ] || continue
+			: >"$tmp/base.$id"
+		fi
 		if ! baseline_ok "$tmp/base.$id" "$data/ratchet/$id.txt at $gate_base"; then
 			status=1
 			continue
@@ -479,7 +483,7 @@ scan_audit() {
 		while IFS= read -r line || [ -n "$line" ]; do
 			n=$((n + 1))
 			[ -n "$line" ] || continue
-			if [[ $line =~ ^([^:]+):([0-9]+):(.*)$ ]]; then
+			if [[ $line =~ ^([^:]+):([1-9][0-9]*):(.*)$ ]] && canonical_path "${BASH_REMATCH[1]}"; then
 				printf '%s\t%s\n' "$(trim "${BASH_REMATCH[3]}" | sha256)" "${BASH_REMATCH[1]}:${BASH_REMATCH[2]}" >>"$tmp/hits.$id"
 			else
 				echo "audit $id: output line $n is not path:line:text: $line"
@@ -497,6 +501,11 @@ scan_audit() {
 	fi
 	[ "$setup" -eq 0 ] || return 2
 	return "$status"
+}
+
+# A repository-relative path: not absolute, no empty, . or .. segment.
+canonical_path() {
+	case "/$1/" in //* | *//* | */./* | */../*) return 1 ;; esac
 }
 
 audit_at_base() {
@@ -545,7 +554,7 @@ check_audit_base() {
 	resets=$(reset_ids)
 	while IFS=$'\t' read -r id bcmd <&3; do
 		printf '%s\n' "$resets" | grep -qx -- "$id" && continue
-		if ! cmd=$(awk -F'\t' -v id="$id" '$1 == id { print $2; found = 1; exit } END { exit !found }' "$tmp/audit-rows"); then
+		if ! cmd=$(awk -F'\t' -v id="$id" '("" $1) == ("" id) { print $2; found = 1; exit } END { exit !found }' "$tmp/audit-rows"); then
 			echo "audit $id: the row was removed since the base; keep it, or add a Ratchet-Reset: $id <reason> trailer"
 			status=1
 		elif [ "$cmd" != "$bcmd" ]; then

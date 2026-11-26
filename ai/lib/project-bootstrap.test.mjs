@@ -730,6 +730,34 @@ test("audit: review fixes", async (t) => {
   });
 });
 
+test("audit: review fixes, round 2", async (t) => {
+  await t.test("a probe with no violations at the base cannot gain a baseline", (t) => {
+    const g = gateRepo(t, { files: { "src/a.js": "const x = parse(y);\n", [AUDIT]: auditRows() } });
+    assert.equal(g.run(["--write-baselines"]).status, 0);
+    g.commit("adopt with zero casts");
+    g.git("checkout", "-q", "-b", "feat");
+    g.put("src/b.js", "const z = w as T;\n");
+    g.commit("a cast");
+    g.run(["--write-baselines"]);
+    g.commit("baseline it");
+    assert.match(out(g.run(["--fast"])), /the baseline grew relative to the base/);
+  });
+  await t.test("ids that look numeric are compared as text", (t) => {
+    const rows = auditRows([["1", "rule", "-", "first", "f"], ["001", "rule", "check:lint", "second", "f"]]);
+    const g = auditRepo(t, { rows });
+    g.put("src/c.js", "// touch\n");
+    g.commit("unrelated");
+    const r = g.run(["--fast"]);
+    assert.equal(r.status, 0, out(r));
+  });
+  await t.test("probe output needs a canonical path and a positive line", (t) => {
+    for (const bad of ["./src/a.js:1:x", "src/a.js:0:x", "/abs/a.js:1:x"]) {
+      const g = gateRepo(t, { files: { [AUDIT]: auditRows([], ["casts", "boundary", `echo '${bad}'`, "r", "f"]) } });
+      assert.match(out(g.run(["--fast"])), /audit casts: output line 1 is not path:line:text/, bad);
+    }
+  });
+});
+
 test("banned patterns: scan errors fail instead of matching nothing", async (t) => {
   await t.test("an invalid pattern fails the check and leaves baselines alone", (t) => {
     const g = ratchetRepo(t);
