@@ -19,7 +19,7 @@ Seed all four items into the unconditional guidance, naming the actual place whe
 
 ## Questions every harness piece must answer
 
-What goes wrong without it, could structure remove that failure, does a cheaper or existing check, test or document already cover it, and what is lost if it is deleted? A piece that cannot answer is a candidate for removal in the garden.
+What goes wrong without it, could structure or an existing check cover that, and what is lost if it goes? A piece with no answer is a garden candidate.
 
 ## Conditional skills
 
