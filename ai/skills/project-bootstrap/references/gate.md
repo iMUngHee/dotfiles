@@ -16,7 +16,7 @@ Preserve an effective control while its replacement's coverage is uncertain. If 
 
 ## Repository checks
 
-Select a check when it protects an adopted contract precisely and at reasonable cost. Try the stack's existing inspection or test first. Add custom logic only for a concrete gap the existing checks miss, and name that failure in its hint or the rule it enforces; a check with no failure to name stays out. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
+Select a check when it protects an adopted contract precisely and at reasonable cost. Try the stack's existing inspection or test first. Add custom logic only for a concrete gap the existing checks miss, and name that failure in its hint or the rule it enforces; a check with no failure to name, or no occurrence or reproduction to show, is proposed in the report instead of installed. For public command or schema checks, exercise the compatibility promise and allow unrelated output or implementation changes. Examples:
 
 - **Work-artifact references.** Comments and test messages that point at plans, review rounds or agent scratch paths. A `ban` pattern with a hint that says to write the reason in the comment itself.
 - **Surface inventory drift.** Where contributors rely on a reference document's completeness, extract the names the code exposes (environment variables, commands and options, routes, configuration keys) and fail when it does not list one. Keep build- or test-only names in a reasoned exception list inside the check.
@@ -30,9 +30,4 @@ Keep regression cases for custom check logic where a mistake could hide a violat
 
 ## Turning a correction into a check
 
-When a recurring or costly mistake warrants work, use the evidence from the affected change:
-
-1. Remove the mistake with structure where possible: one owner for each piece of state, one supported way to do a task, internals that cannot be imported, a type that cannot hold the invalid value.
-2. Otherwise make it fail: the stack's own ban-with-message facility, or a `banned-patterns.tsv` line. Before adding the check, show it failing on the real past mistake or a reproduction of it.
-3. Baseline existing occurrences if gradual removal fits the adopted rule. Set a deadline when there is a supported migration and a reason to enforce it.
-4. Tag the rule in its owning guidance with the actual check. A recurring mistake that only judgment can catch becomes a rule tagged `unchecked`; record its evidence where [maintenance](maintenance.md#the-correction-loop) says corrections are kept.
+When a recurring or costly mistake warrants work, follow the [correction loop](maintenance.md#the-correction-loop) with the evidence from the affected change. Prefer structure (one owner for each piece of state, internals that cannot be imported, a type that cannot hold the invalid value); otherwise use the stack's ban-with-message facility or a `banned-patterns.tsv` line, shown failing on the real mistake first. Baseline existing occurrences when gradual removal fits, with a deadline when a supported migration exists, and tag the rule with the actual check.

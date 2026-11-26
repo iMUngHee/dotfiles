@@ -659,8 +659,14 @@ while [ "$i" -lt ${#names[@]} ]; do
 	fi
 	t=$SECONDS
 	echo "== ${names[$i]}"
-	if eval "${commands[$i]}"; then
+	rc=0
+	eval "${commands[$i]}" || rc=$?
+	if [ "$rc" -eq 0 ]; then
 		echo "-- ${names[$i]}: ok ($((SECONDS - t))s)"
+	elif [ "$rc" -eq 127 ]; then
+		# The shell's status for a missing command: a setup problem, not a finding.
+		echo "-- ${names[$i]}: FAILED ($((SECONDS - t))s); exit 127: a command was not found; install it or fix PATH"
+		failed+=("$i")
 	else
 		echo "-- ${names[$i]}: FAILED ($((SECONDS - t))s)"
 		failed+=("$i")

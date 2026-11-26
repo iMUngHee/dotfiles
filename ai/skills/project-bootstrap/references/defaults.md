@@ -14,4 +14,4 @@ Use the decisions that affect this repository. Resolve ordinary preferences from
 
 A runner that exits successfully with zero applicable tests proves only that the runner starts. Record actual and proposed checks separately. Put each check in fast or full by its cost.
 
-Official support indicates a compatible default. Describe a choice as measurably more efficient only with a relevant comparison.
+Official support indicates a compatible default, not a measurably better one.

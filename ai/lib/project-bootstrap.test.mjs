@@ -180,6 +180,19 @@ register_checks() {
   assert.equal(fs.existsSync(g.at("ran-full")), false);
 });
 
+test("a check whose command is missing says so apart from a violation", (t) => {
+  const g = gateRepo(t, {
+    config: `tool_versions() { :; }
+register_checks() {
+  check lint fast "run the linter" -- no-such-command-pb-test --strict
+}
+`,
+  });
+  const r = g.run(["--fast"]);
+  assert.equal(r.status, 1);
+  assert.match(out(r), /-- lint: FAILED \(\d+s\); exit 127: a command was not found; install it or fix PATH/);
+});
+
 test("pass record needs a clean tree and is keyed by commit, base and date", (t) => {
   const g = gateRepo(t);
   g.put("a.txt", "one\n");

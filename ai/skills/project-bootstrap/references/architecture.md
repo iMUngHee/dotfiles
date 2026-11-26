@@ -17,14 +17,14 @@ Write it from the code: every claim names the file, module or type that makes it
 
 ## Decisions carried by code
 
-Use this when a change can meet its visible requirements and still leave worse code for the next contributor. Start at a real entry point and read the implementation and its callers. Look for a shared decision that is easy to reimplement incorrectly, a boundary that callers can bypass, or work whose cost multiplies on a common path.
+Use this when a change can meet its visible requirements and still leave worse code for the next contributor, starting at a real entry point and reading the implementation and its callers. Look for a shared decision that is easy to reimplement incorrectly, a boundary that callers can bypass, or work whose cost multiplies on a common path.
 
 | Decision | Inspect | Put the decision here |
 | --- | --- | --- |
 | Responsibility and dependencies | The files a feature touches, the state or resource it changes, and which code may depend on which | The module that owns the invariant. Keep protocol adapters and presentation at their edges. Use package visibility or the dependency graph where available. |
 | Types and errors | The valid states or inputs, their construction sites, conversion points, retry or rollback and the consumer's error contract | The narrow API or type that can represent the valid choices. Parse external input at its boundary and preserve distinctions the caller can act on. |
 | Abstraction and duplication | Actual callers and which decisions must change together | The smallest implemented path with a real responsibility. Share decisions that must stay consistent. Let independent choices vary. A wrapper earns its place with a responsibility its callers need. |
-| Execution cost | The actual workload, request frequency or input bounds, and ownership, allocation, I/O or concurrency along that path | An API that makes the affordable path natural. Borrow when it fits the lifetime, copy when ownership really transfers, and move blocking work to the boundary designed for it. Confirm the measured cost under equivalent results and conditions when making a performance claim. |
+| Execution cost | The actual workload, request frequency or input bounds, and ownership, allocation, I/O or concurrency along that path | An API that makes the affordable path natural: borrow when it fits the lifetime, copy when ownership really transfers, move blocking work to the boundary designed for it, and measure under equivalent results and conditions before claiming a speed-up. |
 
 For example, a state change that updates several records belongs in the operation that owns the transaction, and the HTTP handler translates the result and calls that operation like other adapters. A direct write in the handler may return the same response today and split the invariant: prove that visibility prevents it and show the supported API, or narrow access or check the import precisely. A scan that needs only a count consumes an iterator instead of collecting, while a caller that reuses the items may collect them; keep that distinction in the hot-path decision instead of banning collection project-wide.
 

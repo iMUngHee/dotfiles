@@ -22,4 +22,4 @@ Some risks survive structure, static checks and ordinary tests: a large input sp
 
 ## Runtime verification
 
-For a critical interaction, exercise its normal entrypoint and observe the user-visible outcome. Reuse a feature map or driver where available; build a reusable driver only when repeated verification justifies its upkeep.
+Exercise a critical interaction through its normal entrypoint and observe the user-visible outcome, reusing an existing driver; build one only when repeated verification justifies its upkeep.

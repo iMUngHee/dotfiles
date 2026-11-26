@@ -14,18 +14,12 @@ Seed all four items into the unconditional guidance, naming the actual place whe
 ## Responsibilities
 
 - **Review changes.** Follow the change through its code owner and public contract. Check new dependency edges, duplicated decisions, abstractions and changes in cost at actual callers. Run the repository gate. Review the mechanism that protects each consequential decision.
-- **Keep rules and documentation current.** Name the editable policy, its enforcing check and any command that syncs generated guidance. When a restriction gains an exception, update its owners and run the gate with two changes: the newly allowed case must pass, and the closest case still covered must fail with its repair hint. Retire obsolete checks and tags with their rule. Update the owning document in the same change: a change to a component's ownership, a boundary, a flow or an external contract updates ARCHITECTURE, with a new boundary's supported route and its dependency-policy entry where one applies; a reversed decision records its successor and reason; and a new or retired rule updates its owning rule document, CONVENTIONS or a scoped rule file, a new rule arriving with its tag and, where a machine can decide it, a proved check.
+- **Keep rules and documentation current.** Name the editable policy, its enforcing check and any command that syncs generated guidance. When a restriction gains an exception, update its owners and run the gate with two changes: the newly allowed case must pass, and the closest case still covered must fail with its repair hint. Retire obsolete checks and tags with their rule. Update the owning document in the same change: a change to a component's ownership, a boundary, a flow or an external contract updates ARCHITECTURE, with a new boundary's supported route and its dependency-policy entry where one applies; a reversed decision records its successor and reason; and a new or retired rule updates its owning rule document, CONVENTIONS or a scoped rule file, a new rule arriving with its tag and, where a machine can decide it, a proved check; and a change that makes a recorded reason for adopting, excluding or leaving a rule unchecked untrue corrects it.
 - **Garden.** Repair the example contributors keep copying when a small compatible change removes a recurring mistake, lower an applicable baseline as code is fixed, and keep the evidence and its scope for the next maintainer.
 
 ## Questions every harness piece must answer
 
-- What goes wrong without it?
-- Could structure remove that failure instead?
-- Is there a cheaper mechanism that already enforces it?
-- Does it repeat an existing check, test or document?
-- What knowledge is lost if it is deleted?
-
-A piece that cannot answer is a candidate for removal in the garden.
+What goes wrong without it, could structure remove that failure, does a cheaper or existing check, test or document already cover it, and what is lost if it is deleted? A piece that cannot answer is a candidate for removal in the garden.
 
 ## Conditional skills
 
