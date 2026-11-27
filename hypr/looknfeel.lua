@@ -49,7 +49,7 @@
 --   },
 -- })
 
--- Scroll zoom (SUPER+CTRL+scroll in bindings.lua) inherits the 1s global
+-- Scroll zoom (SUPER+SHIFT+scroll in bindings.lua) inherits the 1s global
 -- animation, which makes each wheel tick feel sluggish; 0.2s keeps it smooth.
 hl.animation({ leaf = "zoomFactor", enabled = true, speed = 2, bezier = "easeOutQuint" })
 

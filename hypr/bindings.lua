@@ -84,15 +84,15 @@ hl.unbind("SUPER + SHIFT + ALT + X")    -- X Post
 -- tmux prefix is C-s, so nothing needs that pass-through.
 hl.unbind("CTRL + SPACE")
 
--- ── Screen zoom on SUPER + CTRL + scroll ───────────────────────────────────
+-- ── Screen zoom on SUPER + SHIFT + scroll ──────────────────────────────────
 -- Omarchy only zooms from the keyboard (SUPER+CTRL+Z in, +ALT+Z reset). Plain
 -- CTRL+scroll is left alone because browsers and terminals use it for their
 -- own zoom; adding SUPER keeps the compositor zoom from stealing it.
-o.bind("SUPER + CTRL + mouse_up", "Zoom in", function()
+o.bind("SUPER + SHIFT + mouse_up", "Zoom in", function()
   local zoom = hl.get_config("cursor.zoom_factor") or 1
   hl.config({ cursor = { zoom_factor = zoom + 1 } })
 end)
-o.bind("SUPER + CTRL + mouse_down", "Zoom out", function()
+o.bind("SUPER + SHIFT + mouse_down", "Zoom out", function()
   local zoom = hl.get_config("cursor.zoom_factor") or 1
   hl.config({ cursor = { zoom_factor = math.max(1, zoom - 1) } })
 end)
