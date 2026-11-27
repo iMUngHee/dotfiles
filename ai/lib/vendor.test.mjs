@@ -260,6 +260,42 @@ test("npm substitutes the resolved version, records it, and strips carriage retu
   assert.deepEqual([r.installed, r.upstream, r.status], ["1.5.0", "1.5.0", "ok (pinned), latest 2.1.0"]);
 });
 
+test("REA sync runs setup from the same installation path across versions", () => {
+  const f = fixture();
+  const realManifest = readFileSync(join(repo, "ai", "scripts", "vendor.manifest"), "utf8");
+  const entry = realManifest.split("\n").find((line) => /^rea\s/.test(line));
+  assert.ok(entry);
+  f.manifest([entry]);
+  const program = join(f.root, "rea.mjs");
+  const resultFile = join(f.root, "rea-setup.json");
+  writeFileSync(program, `
+    import { readFileSync, writeFileSync } from "node:fs";
+    const entrypoint = process.argv[1];
+    writeFileSync(process.env.REA_TEST_RESULT, JSON.stringify({
+      entrypoint, args: process.argv.slice(2), version: readFileSync(entrypoint + ".version", "utf8"),
+    }));
+  `);
+  const bin = shim(join(f.root, "bin"), "npm", `
+    [ "$1" = install ] && [ "$2" = --prefix ] || exit 2
+    entrypoint="$3/node_modules/rea-agents/scripts/rea.mjs"
+    mkdir -p "$(dirname "$entrypoint")" || exit 2
+    cp "$REA_TEST_PROGRAM" "$entrypoint" || exit 2
+    printf '%s' "$6" | cut -d@ -f2 | tr -d '\\r\\n' > "$entrypoint.version"
+  `);
+  shim(bin, "npx", "exit 2");
+  const extra = { ...withPath(bin), AI_VENDOR_DIR: "~/vendor packages", REA_TEST_PROGRAM: program, REA_TEST_RESULT: resultFile };
+
+  ok(f.run(["sync", "rea@6.9.0"], extra));
+  const before = JSON.parse(readFileSync(resultFile, "utf8"));
+  ok(f.run(["sync", "rea@6.10.1"], extra));
+  const after = JSON.parse(readFileSync(resultFile, "utf8"));
+  assert.deepEqual(before, { ...after, version: "6.9.0" });
+  assert.equal(after.version, "6.10.1");
+  assert.deepEqual(after.args, ["setup", "--client", "claude_code", "--client", "codex", "--yes"]);
+  assert.equal(after.entrypoint, join(f.home, "vendor packages", "rea", "node_modules", "rea-agents", "scripts", "rea.mjs"));
+  assert.equal(readFileSync(join(f.home, "vendor packages", "rea", "VERSION"), "utf8"), "6.10.1\n");
+});
+
 test("source clones once, then only builds, keeping local work", () => {
   const f = fixture();
   const up = f.upstream("src", [{ file: "a.txt", content: "a\n" }]);

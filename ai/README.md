@@ -157,13 +157,32 @@ Machine-only entries — internal hosts, MCP servers carrying local patches — 
 
 `statechart` keeps `disable-model-invocation: true`, so it runs only when named (`/statechart`). It model-checks TLA+ with TLC: on first use it installs Temurin 25 and a checksum-pinned `tla2tools.jar` through mise (in the Brewfile and `windows/packages.ps1`; on Arch the Omarchy base provides it and `arch/bootstrap.sh` uses it when present), or uses `TLA2TOOLS` when that is set, with `JAVA` or else the `java` on PATH. mise here only pins toolchains; it is not activated in the shell, and fnm still owns node.
 
-`bootstrap.sh` never calls it, so deploys stay offline-safe. Every pull does: `githooks/post-merge` (and `post-rewrite` after a rebase pull) runs `check`, prints the table and syncs the `update` and `missing` rows by name. A pinned entry moves only when the manifest does, with one exception: when upstream re-points the pinned tag itself the row reads `update (tag moved)` and the hook syncs it like any other update. Otherwise an `upstream moved` or `latest` note in its row is the cue to edit the manifest. An automatic rea update therefore runs `setup --yes` unreviewed too, and without `GHIDRA_INSTALL_DIR`, `JAVA_HOME` and `REA_JADX_MCP_JAR` exported (see step 3 below). A new machine needs the entries synced once after bootstrap; until then the diagram router falls back to Mermaid and eli5, a2ui and rea are simply absent. `sync --all` includes rea, whose `setup --yes` edits `~/.claude.json` and `~/.codex/config.toml` with no review step — to look first, sync the others by name and preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (a positive whole number, default 20) and print `unreachable` instead of hanging; `AI_VENDOR_DIR` must be absolute. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
+`bootstrap.sh` never calls it, so deploys stay offline-safe. Every pull does: `githooks/post-merge` (and `post-rewrite` after a rebase pull) runs `check`, prints the table and syncs the `update` and `missing` rows by name. A pinned entry moves only when the manifest does, with one exception: when upstream re-points the pinned tag itself the row reads `update (tag moved)` and the hook syncs it like any other update. Otherwise an `upstream moved` or `latest` note in its row is the cue to edit the manifest. A new machine needs the entries synced once after bootstrap. Until then the diagram router falls back to Mermaid, and eli5, a2ui and REA are absent. Lookups in `check` give up after `AI_VENDOR_TIMEOUT` seconds (a positive whole number, default 20) and print `unreachable` instead of hanging; `AI_VENDOR_DIR` must be absolute. On Windows run `windows\scripts\vendor.ps1`, which runs the same script under Git Bash.
+
+REA installs under `${AI_VENDOR_DIR:-$HOME/.local/share/ai-vendor}/rea`. The sync runs
+`setup --yes` from that installed package, so both MCP clients use the same
+entrypoint after an update. To preview registration after the package is
+installed, run `node` with `node_modules/rea-agents/scripts/rea.mjs` from that
+prefix, followed by `setup --client claude_code --client codex --dry-run`.
+Automatic sync uses the hook's environment. Export provider variables when
+syncing explicitly if setup needs them.
+
+A registration created by `npx` may still point into its version-specific
+cache. Verify that the launcher resolves to the expected `rea-agents`
+package, then point its first argument at the installed entrypoint once.
+Keep the runtime, `mcp` argument, provider environment and client options.
+REA's setup checks ownership before refreshing either registration.
 
 ### Bringing another machine up to date
 
 1. Before pulling, on a machine bootstrapped after 50d31bd: `git -C ~/.config config filter.machine-local.smudge cat` (why: the machine-local filter note in the root README). The pull's post-merge hook then re-runs bootstrap, which drops the old link to the removed `ai/skills/eli5`.
 2. `vendor.sh sync archify eli5` — on Windows `windows\scripts\vendor.ps1 sync archify eli5`, with Developer Mode on so the eli5 links can be real symlinks.
-3. Preview rea with `npx -y rea-agents@<version> setup --client claude_code --client codex --dry-run`, then `vendor.sh sync rea`. rea brings no analysis engine of its own: setup records `GHIDRA_INSTALL_DIR`, `JAVA_HOME` and `REA_JADX_MCP_JAR` into both MCP registrations only when they are exported while it runs. A later sync keeps the Ghidra and JADX paths but re-detects Java, replacing `JAVA_HOME` with the `java` on `PATH`, so export all three for every rea sync. For native and APK analysis install Ghidra 12.1.x (Arch: `pacman -S ghidra`, giving `/opt/ghidra`) and a full JDK 21+, download `jadx-headless-mcp-0.7.1-all.jar` with the SHA-256 that rea's `docs/android-analysis.md` pins, export the three variables and run the setup command again with `--yes`. `npx -y rea-agents@<version> doctor --client claude_code --client codex` then reports ghidra and jadx `available: true`.
+3. Run `vendor.sh sync rea` with `GHIDRA_INSTALL_DIR`, `JAVA_HOME` and
+   `REA_JADX_MCP_JAR` exported when configuring those providers. For native and
+   APK analysis, install a Ghidra release supported by the installed REA version,
+   a full JDK 21 or newer, and the JADX MCP JAR pinned by REA's Android guide.
+   Use the installed REA command with `doctor --client claude_code --client codex`
+   to check provider availability and version requirements.
 4. Confirm: `vendor.sh` shows archify `ok`, rea `ok` and eli5 `ok (pinned)`; `node --test ~/.config/ai/lib/vendor.test.mjs` passes (on Windows run it from Git Bash, so `bash` is not WSL's); on Windows `Get-Item ~\.claude\skills\eli5` reports `LinkType` `SymbolicLink`.
 
 If `sync eli5` reports `~/.claude/skills/eli5` or `~/.agents/skills/eli5` as "not a working link to this skill", that path is a real directory left by an older deploy (a Windows deploy without symlink rights copies instead of linking): delete it and sync again. rea keeps `~/.claude.json.rea.backup*` and `~/.codex/config.toml.rea.backup*` — full copies of those files, MCP tokens included — so guard them like the originals; rea 6.7.0 creates the Codex ones world-readable on Linux, so `chmod 600` both after every sync. `~/.local/share/diagram-engines/`, left behind by the retired `diagram-engines.sh`, is no longer read and can be deleted.

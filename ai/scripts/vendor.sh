@@ -651,7 +651,7 @@ sync_npm() { # <name> <source> <ref> <post>
     }
     cmd="${post//\{ver\}/$ver}"
     echo "$name: $source@$ver"
-    (cd "$HOME" && bash -c "$cmd") || {
+    (cd "$HOME" && AI_VENDOR_DIR="$VENDOR_DIR" bash -c "$cmd") || {
         echo "$name: post command failed" >&2
         return 1
     }

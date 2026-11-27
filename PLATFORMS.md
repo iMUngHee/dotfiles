@@ -380,6 +380,10 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **macOS / Windows (Git Bash)** — run `node --test ai/lib/vendor.test.mjs`
+      and sync two supported REA versions with `vendor.sh sync rea@<version>`.
+      Both MCP registrations should keep the same installed entrypoint.
+
 - [ ] **macOS / Windows (Git Bash)** — run `node --test ai/lib/stop-hooks.test.mjs`:
       the Stop gate pass cache keys `git hash-object --stdin-paths` and
       `command -v` output, so check that both hooks still skip an unchanged

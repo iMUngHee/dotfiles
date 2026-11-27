@@ -18,11 +18,11 @@
 #   dest    release/npm: `-` (the vendor root) · skill: the skill dir inside the clone
 #           source: the checkout path
 #   post    command run after a sync — in the clone (release/skill), in $HOME with
-#           {ver} replaced (npm), in the checkout (source)
+#           {ver} replaced and AI_VENDOR_DIR resolved (npm), in the checkout (source)
 #
 # name    kind     source                              ref                                       dest         post
 archify   release  https://github.com/tt-a1i/archify   v*                                        -            node archify/bin/archify.mjs doctor
-rea       npm      rea-agents                          latest                                    -            npx -y rea-agents@{ver} setup --client claude_code --client codex --yes
+rea       npm      rea-agents                          latest                                    -            npm install --prefix "$AI_VENDOR_DIR/rea" --no-save --no-package-lock rea-agents@{ver} && node "$AI_VENDOR_DIR/rea/node_modules/rea-agents/scripts/rea.mjs" setup --client claude_code --client codex --yes
 eli5      skill    https://github.com/DreambigOu/ELI5  a766623b062331fdde53467001379b4ddf3acc2f  skills/eli5  -
 a2ui      skill    https://github.com/a2ui-project/a2ui  c33d629d2a31595585d04bd059cf1d4fe93bdb85  skills/a2ui  -
 statechart  skill  https://github.com/cursor/plugins  005d8f6e8ec057b738adcd08a08b30db0478402d  pstack/skills/statechart  -
