@@ -180,7 +180,7 @@ On Windows, every shell hook uses `command_windows` to pass stdin through `run-b
 - `Stop` → `stop-gate.sh` runs the final quality gate and then sends task completion or review-needed notifications.
 - `PermissionRequest` → `codex/hooks/notify.sh approval` sends approval notifications.
 
-The Stop gate uses staged, unstaged, and untracked files to select suites; only tracked changes may be auto-formatted. Selected suites share a 300-second budget, within the 360-second hook registration. No type checker runs for any language: checking belongs to each project and to the language skills. Repository matching compares directory identity so Git's Windows paths and Git Bash paths select the same checks.
+The Stop gate uses staged, unstaged, and untracked files to select suites; only tracked changes may be auto-formatted. Selected suites share a 300-second budget, within the 360-second hook registration. A tree state that already passed skips the suites; the key and its limits are described under "Gate stages" in `claude/README.md`. No type checker runs for any language: checking belongs to each project and to the language skills. Repository matching compares directory identity so Git's Windows paths and Git Bash paths select the same checks.
 
 Hook stdout follows the Codex 0.163.0 event schemas. PostToolUse returns one JSON
 object with `hookSpecificOutput.hookEventName = "PostToolUse"` and

@@ -7,7 +7,8 @@
 #
 # Flow:
 #   1. Check for modified files (unstaged + staged + untracked)
-#   2. Auto-format, then the suites the changed paths select, with a budget
+#   2. Auto-format, then the suites the changed paths select, with a budget,
+#      unless this exact tree state already passed
 #   3. If a suite fails + retries < 2 → exit 2 (block, no notification)
 #   4. If pass or retries exhausted → notify + exit 0
 
@@ -97,6 +98,38 @@ done <<< "$TRACKED_FILES"
 
 TMPOUT="/tmp/claude-final-gate-output-${SESSION_ID}"
 
+# --- Skip suites for a tree state that already passed ---
+# The changed set is the whole working tree, so another session's uncommitted
+# edits select the same suites on every Stop (ai/lib alone is ~80s). The key
+# covers what selects the suites (the path list, read before keying so another
+# session's edit can fall between, and which runners are on PATH), HEAD, the
+# unstaged and staged diffs apart and every untracked file's content, so any
+# edit by any session runs the suites again. Gitignored inputs such as
+# node_modules and runner versions are not keyed. Computed after formatting,
+# which may change files, and only in ~/.config, the one root with suites.
+tree_key() {
+  local untracked runner
+  printf '%s\n' "$CHANGED_FILES"
+  for runner in node go claude nvim; do printf '%s=%s\n' "$runner" "$(command -v "$runner")"; done
+  git rev-parse HEAD || return
+  git diff --binary || return
+  git diff --cached --binary || return
+  untracked=$(git -c core.quotePath=false ls-files --others --exclude-standard) || return
+  printf '%s\n' "$untracked"
+  [[ -z "$untracked" ]] || git hash-object --stdin-paths <<< "$untracked"
+}
+current_key() { (set -o pipefail; tree_key 2>/dev/null | git hash-object --stdin); }
+TREE_KEY=""
+if [[ "$PROJECT_ROOT" -ef "$HOME/.config" ]]; then
+  PASS_FILE=$(git rev-parse --git-path claude-final-gate-pass 2>/dev/null)
+  TREE_KEY=$(current_key) || TREE_KEY=""
+  if [[ -n "$TREE_KEY" && -f "$PASS_FILE" && "$(cat "$PASS_FILE" 2>/dev/null)" == "$TREE_KEY" ]]; then
+    echo "[final-gate] suites skipped: this tree state already passed"
+    rm -f "$COUNTER_FILE"
+    run_notify_and_exit
+  fi
+fi
+
 # --- Helper: run one suite from a subdirectory, failing the gate on nonzero ---
 run_suite() {
   local label="$1" dir="$2"; shift 2
@@ -161,6 +194,11 @@ if [[ "$PROJECT_ROOT" -ef "$HOME/.config" ]] && command -v node &>/dev/null; the
   fi
 fi
 
-# All stages passed — clean up counter, notify, allow stop
+# All stages passed — remember this tree state, clean up counter, notify, allow stop.
+# Another session can edit the tree while the suites run, so record only when
+# it still matches the state keyed before them.
+if [[ -n "$TREE_KEY" && -n "$PASS_FILE" && "$(current_key)" == "$TREE_KEY" ]]; then
+  { printf '%s\n' "$TREE_KEY" > "$PASS_FILE"; } 2>/dev/null
+fi
 rm -f "$COUNTER_FILE"
 run_notify_and_exit

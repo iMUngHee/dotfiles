@@ -79,6 +79,42 @@ if (( formatted > 0 )); then
   jq -n --arg message "[codex final-gate] auto-formatted ${formatted} file(s)" '{systemMessage: $message}'
 fi
 
+# Skip suites for a tree state that already passed. Mirrors the same stage in
+# claude/hooks/stop-handler.sh: the changed set is the whole working tree, so
+# another session's uncommitted edits select the same suites on every Stop
+# (ai/lib alone is ~80s). The key covers what selects the suites (the path
+# list, read before keying so another session's edit can fall between, and
+# which runners are on PATH), HEAD, the unstaged and staged diffs apart and
+# every untracked file's content, so any edit by any session runs the suites
+# again. Gitignored inputs such as node_modules and runner versions are not
+# keyed. Computed only in ~/.config, the one root with suites.
+tree_key() {
+  local untracked runner
+  printf '%s\n' "$changed_files"
+  for runner in node go; do printf '%s=%s\n' "$runner" "$(command -v "$runner" || true)"; done
+  git rev-parse HEAD || return
+  git diff --binary || return
+  git diff --cached --binary || return
+  untracked=$(git -c core.quotePath=false ls-files --others --exclude-standard) || return
+  printf '%s\n' "$untracked"
+  [[ -z "$untracked" ]] || git hash-object --stdin-paths <<< "$untracked"
+}
+current_key() { tree_key 2>/dev/null | git hash-object --stdin; }
+pass_file=""
+passed_key=""
+if [[ "$project_root" -ef "$HOME/.config" ]]; then
+  pass_file=$(git rev-parse --git-path codex-final-gate-pass 2>/dev/null || true)
+  passed_key=$(current_key) || passed_key=""
+  if [[ -n "$passed_key" && -f "$pass_file" && "$(cat "$pass_file" 2>/dev/null)" == "$passed_key" ]]; then
+    # stdout carries one JSON object; a format notice above already used it.
+    if (( formatted == 0 )); then
+      jq -n --arg message "[codex final-gate] suites skipped: this tree state already passed" '{systemMessage: $message}'
+    fi
+    rm -f "$counter_file"
+    notify_and_exit
+  fi
+fi
+
 # Run one suite from a subdirectory, failing the gate on nonzero.
 run_suite() {
   local label="$1" dir="$2"; shift 2
@@ -128,5 +164,10 @@ fi
 
 # No type checker runs here: that belongs to each project and to the
 # language skills.
+# Another session can edit the tree while the suites run, so record only when
+# it still matches the state keyed before them.
+if [[ -n "$passed_key" && -n "$pass_file" && "$(current_key)" == "$passed_key" ]]; then
+  { printf '%s\n' "$passed_key" > "$pass_file"; } 2>/dev/null || true
+fi
 rm -f "$counter_file"
 notify_and_exit

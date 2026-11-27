@@ -380,6 +380,11 @@ shared server through `/daemon` and check again; connected sessions may be inter
 Checks a change still owes on a platform it was not run on. Add one when you
 cannot run something; remove it in the commit that records the result.
 
+- [ ] **macOS / Windows (Git Bash)** — run `node --test ai/lib/stop-hooks.test.mjs`:
+      the Stop gate pass cache keys `git hash-object --stdin-paths` and
+      `command -v` output, so check that both hooks still skip an unchanged
+      tree and re-run after an edit. Verified on Linux 2026-11-28.
+
 - [ ] **Linux / Windows** — install elan (Arch: the `elan` script from
       https://github.com/leanprover/elan; Windows: its `elan-init.ps1`), then open
       a `.lean` file in a Lake project: `lean.nvim` must attach `leanls` and report

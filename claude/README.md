@@ -112,6 +112,8 @@ Both gates run the same stages, and both are scoped to `$HOME/.config` so other 
 
 Staged, unstaged, and untracked files select suites; only tracked changes may be auto-formatted. Repository matching uses directory identity so Windows Git and Git Bash path spellings agree. Selected suites share 300 seconds in total, within the 360-second hook registration (both tools specify seconds). No type checker runs for any language: checking belongs to each project and to the language skills.
 
+In `$HOME/.config`, both gates skip the suites when the tree state already passed, so another session's unchanged uncommitted edits do not re-run the same suites on every Stop. The key covers what selected the suites (the path list and which runners are on PATH), HEAD, the unstaged and staged diffs apart, and the content of every untracked file that is not ignored. It is stored at `git rev-parse --git-path {claude,codex}-final-gate-pass`. A run records its key only when every selected suite passed and the tree still matches after them, so an edit made while the suites run is checked on the next Stop; a failing or retry-exhausted run records nothing. Gitignored inputs such as `node_modules` and runner versions are not keyed: after an `npm install` or a toolchain upgrade that leaves the tree unchanged, delete the pass file to force a run.
+
 | Changed path | Suite | Approx |
 |---|---|---|
 | `{ai,claude,codex}/**/*.{md,sh}` | contract tests (`session-routing-consumers`, `inject-context-hooks`) | 15s |

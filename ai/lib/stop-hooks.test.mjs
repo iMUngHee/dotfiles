@@ -146,6 +146,104 @@ for (const tool of ["codex", "claude"]) {
   });
 }
 
+// The changed set is the whole working tree, so another session's unchanged
+// uncommitted edits would select the same suites on every Stop (ai/lib alone
+// is ~80s); a tree state that passed is not run again until it changes.
+for (const tool of ["codex", "claude"]) {
+test(`${tool} Stop skips suites for a tree state that already passed`, () => {
+  const f = fixture(tool);
+  const calls = () => readFileSync(f.env.STOP_AUDIT_CALLS, "utf8").trim().split(/\r?\n/).length;
+  assert.equal(f.run().status, 0);
+  const first = calls();
+  const again = f.run();
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(calls(), first, "an unchanged tree runs no suite");
+  assert.match(again.stdout, /already passed/);
+  writeFileSync(join(f.root, "ai", "lib", "untracked.test.mjs"), "changed\n");
+  assert.equal(f.run().status, 0);
+  assert.equal(calls(), first * 2, "any content change runs the suites again");
+});
+
+// Suites are selected from the staged and unstaged lists separately, so a
+// staged edit reverted in the work tree selects suites while `git diff HEAD`
+// is empty; the key must still differ from the earlier passing state.
+test(`${tool} Stop keys staged and unstaged changes separately`, () => {
+  const f = fixture(tool, true);
+  assert.equal(f.run().status, 0);
+  const git = (...args) => assert.equal(spawnSync("git", args, { cwd: f.root, env: f.env, encoding: "utf8" }).status, 0);
+  writeFileSync(join(f.root, "ai", "rule.md"), "staged\n");
+  git("add", "ai/rule.md");
+  writeFileSync(join(f.root, "ai", "rule.md"), "before\n");
+  const r = f.run({ STOP_AUDIT_EXIT: "17" });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /contract tests failed/);
+});
+
+// Another session can edit a file after the path lists are read and before
+// the key is computed; the key must not credit suites chosen from the old
+// lists to the edited content.
+test(`${tool} Stop keys the paths it selected suites from`, () => {
+  const f = fixture(tool, true);
+  const realGit = spawnSync("bash", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  const shim = join(f.home, "bin", "git");
+  writeFileSync(shim, `#!/bin/bash\nif [ "$1 $2" = "rev-parse HEAD" ] && [ -n "$STOP_RACE_FILE" ]; then printf 'raced\\n' > "$STOP_RACE_FILE"; fi\nexec "${realGit}" "$@"\n`);
+  chmodSync(shim, 0o755);
+  assert.equal(f.run({ STOP_RACE_FILE: join(f.root, "ai", "rule.md") }).status, 0);
+  const r = f.run({ STOP_AUDIT_EXIT: "17" });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /contract tests failed/);
+});
+
+// A session without node on PATH selects no suite; its tree state must not
+// count as passed for a session that has node.
+test(`${tool} Stop keys which suite runners are on PATH`, () => {
+  const f = fixture(tool);
+  const noNode = join(f.home, "no-node.sh");
+  writeFileSync(noNode, 'command() { [ "$1" = -v ] && [ "$2" = node ] && return 1; builtin command "$@"; }\n');
+  assert.equal(f.run({ BASH_ENV: noNode }).status, 0);
+  assert.ok(!existsSync(f.env.STOP_AUDIT_CALLS), "without node no suite runs");
+  const r = f.run({ STOP_AUDIT_EXIT: "17" });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /contract tests failed/);
+});
+
+test(`${tool} Stop does not remember a failing tree state as passed`, () => {
+  const f = fixture(tool);
+  assert.equal(f.run({ STOP_AUDIT_EXIT: "17" }).status, 2);
+  const failedCalls = readFileSync(f.env.STOP_AUDIT_CALLS, "utf8").trim().split(/\r?\n/).length;
+  const r = f.run();
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /already passed/);
+  assert.ok(readFileSync(f.env.STOP_AUDIT_CALLS, "utf8").trim().split(/\r?\n/).length > failedCalls);
+});
+
+test(`${tool} Stop does not remember a retry-exhausted tree state as passed`, () => {
+  const f = fixture(tool);
+  for (const status of [2, 2, 0]) assert.equal(f.run({ STOP_AUDIT_EXIT: "17" }).status, status);
+  const r = f.run({ STOP_AUDIT_EXIT: "17" });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+});
+
+// Suites take minutes and another session can edit the tree meanwhile, so the
+// state they tested may not be the one keyed before they started.
+test(`${tool} Stop records nothing when the tree changes while suites run`, () => {
+  const f = fixture(tool);
+  const rule = join(f.root, "ai", "rule.md");
+  writeFileSync(join(f.home, "bin", "node"), `#!/bin/bash\necho "$*" >> "$STOP_AUDIT_CALLS"\n[ -n "$STOP_RACE_FILE" ] && printf 'raced\\n' > "$STOP_RACE_FILE"\nexit "\${STOP_AUDIT_EXIT:-0}"\n`);
+  assert.equal(f.run({ STOP_RACE_FILE: rule }).status, 0);
+  writeFileSync(rule, "after\n");
+  const r = f.run({ STOP_AUDIT_EXIT: "17" });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+});
+
+// The suites exist only in ~/.config, so another repository gets no pass file.
+test(`${tool} Stop leaves repositories outside ~/.config untouched`, () => {
+  const f = fixture(tool);
+  assert.equal(f.run({ HOME: tempDir("stop-other-home-") }).status, 0);
+  assert.ok(!existsSync(join(f.root, ".git", `${tool}-final-gate-pass`)));
+});
+}
+
 test("Stop hook registrations outlive the suite budget", () => {
   const template = readFileSync(join(repo, "codex", "config.toml.template"), "utf8");
   const codex = template.split("[[hooks.Stop.hooks]]")[1].split("[[hooks.PermissionRequest]]")[0];
